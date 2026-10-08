@@ -9,6 +9,7 @@ import 'activity_time.dart';
 import 'compact_activity_row.dart';
 import 'profile_transcript_disclosure.dart';
 import 'tool_activity_details.dart';
+import 'resource_filename.dart';
 
 /// One action, shared by live receipts and passive saved transcript outputs.
 class ProfileToolCall extends StatelessWidget {
@@ -99,16 +100,23 @@ class ProfileToolCall extends StatelessWidget {
             height: 1.3,
           ),
         ),
-        Text(
-          call.notice ?? call.subtitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 12,
-            height: 1.5,
-            color: call.notice == null ? colors.muted : statusColor,
+        if (call.notice == null && call.filenameTarget != null)
+          ResourceFilename(
+            target: call.filenameTarget!,
+            label: call.subtitle,
+            style: TextStyle(fontSize: 12, height: 1.5, color: colors.muted),
+          )
+        else
+          Text(
+            call.notice ?? call.subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.5,
+              color: call.notice == null ? colors.muted : statusColor,
+            ),
           ),
-        ),
       ],
       time: ActivityTime(
         durationSeconds: call.durationSeconds,

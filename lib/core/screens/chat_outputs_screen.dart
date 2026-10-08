@@ -10,6 +10,7 @@ import '../services/file_open_error_message.dart';
 import '../services/remote_files_client.dart';
 import '../widgets/chat_image_preview.dart';
 import '../widgets/read_recovery.dart';
+import '../widgets/resource_filename.dart';
 import '../theme/wing_theme.dart';
 import '../widgets/markdown_code_block.dart';
 import '../widgets/markdown_message_content.dart';
@@ -147,6 +148,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
               source: source,
               format: WebOutputFormat.svg,
               title: output.label,
+              resourceTarget: path,
               actionLabel: 'Save or share',
               onAction: () async {
                 try {
@@ -166,9 +168,13 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
             uri: uri,
             bytes: imageFile?.bytes,
             title: output.label,
+            resourceTarget: path,
             actionLabel: imageFile == null
                 ? 'Open in browser'
                 : 'Save or share',
+            actionIcon: imageFile == null
+                ? Icons.open_in_new
+                : Icons.share_outlined,
             onOpenExternal: () async {
               try {
                 if (imageFile != null) {
@@ -275,27 +281,38 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
               }
             }
 
-            final stackActions =
-                isMarkdown &&
-                MediaQuery.textScalerOf(previewContext).scale(14) > 21;
             final actions = <Widget>[
               if (isMarkdown) ...[
-                IconButton(
-                  tooltip: showMarkdownSource
+                ResourceViewerAction(
+                  label: showMarkdownSource
                       ? 'Show formatted content'
                       : 'Show Raw content',
-                  icon: Icon(
-                    showMarkdownSource
-                        ? Icons.notes_outlined
-                        : Icons.code_rounded,
-                  ),
+                  icon: showMarkdownSource
+                      ? Icons.notes_outlined
+                      : Icons.code_rounded,
                   onPressed: () => setPreviewState(
                     () => showMarkdownSource = !showMarkdownSource,
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Copy content',
-                  icon: const Icon(Icons.copy_outlined),
+              ],
+              ResourceViewerAction(
+                label: 'Download',
+                icon: Icons.download_outlined,
+                onPressed: delivering
+                    ? null
+                    : () => deliverFile(_FileAction.save),
+              ),
+              if (isMarkdown) ...[
+                ResourceViewerAction(
+                  label: 'Share file',
+                  icon: Icons.share_outlined,
+                  onPressed: delivering
+                      ? null
+                      : () => deliverFile(_FileAction.share),
+                ),
+                ResourceViewerAction(
+                  label: 'Copy content',
+                  icon: Icons.copy_outlined,
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: preview.text));
                     if (!previewContext.mounted) return;
@@ -304,46 +321,18 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                     );
                   },
                 ),
-                IconButton(
-                  tooltip: 'Share file',
-                  icon: const Icon(Icons.share_outlined),
-                  onPressed: delivering
-                      ? null
-                      : () => deliverFile(_FileAction.share),
-                ),
               ],
-              IconButton(
-                tooltip: 'Download',
-                icon: const Icon(Icons.download_outlined),
-                onPressed: delivering
-                    ? null
-                    : () => deliverFile(_FileAction.save),
-              ),
             ];
 
             return Scaffold(
-              appBar: AppBar(
-                title: Text(
-                  output.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                actions: stackActions ? null : actions,
-                bottom: stackActions
-                    ? PreferredSize(
-                        preferredSize: const Size.fromHeight(48),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: actions,
-                          ),
-                        ),
-                      )
-                    : null,
+              appBar: ResourceViewerAppBar(
+                context: previewContext,
+                title: output.label,
+                target: preview.path,
+                actions: actions,
               ),
               body: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(WingSpacing.sm),
                 children: [
                   if (preview.binary)
                     Text(
@@ -351,84 +340,117 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                           ? 'Open this file in a compatible app, or save/share a copy.'
                           : 'Use Save or share to open this file in another app.',
                     )
-                  else ...[
+                  else if (!isMarkdown) ...[
                     if (preview.truncated)
                       const Text(
                         'Preview shortened by Hermes. Save the file to read it all.',
                       ),
-                    if (isMarkdown && !showMarkdownSource)
-                      MarkdownMessageContent(
-                        data: preview.text,
-                        documentPath: preview.path,
-                        initialFragment: output.fragment,
-                        onOpenRemoteFile: _preview,
-                        loadImage: (path) async =>
-                            (await _session.download(path)).bytes,
-                        onDownloadRemoteFile: (output) async => _session.save(
-                          await _session.download(output.path!),
+                    MarkdownCodeBlock(
+                      code: preview.text,
+                      language: preview.language,
+                    ),
+                  ] else
+                    DecoratedBox(
+                      key: const ValueKey('resource-document-sheet'),
+                      decoration: BoxDecoration(
+                        color: WingTokens.of(previewContext).raised,
+                        borderRadius: WingRadius.card,
+                        border: Border.all(
+                          color: WingTokens.of(previewContext).border,
                         ),
-                      )
-                    else
-                      isMarkdown
-                          ? SelectableText(
-                              preview.text,
-                              style: WingTokens.of(
-                                previewContext,
-                              ).typography.mono,
-                            )
-                          : MarkdownCodeBlock(
-                              code: preview.text,
-                              language: preview.language,
-                            ),
-                  ],
-                  if (isPdf)
-                    FilledButton.icon(
-                      icon: const Icon(Icons.picture_as_pdf_outlined),
-                      label: const Text('Read PDF'),
-                      onPressed: delivering
-                          ? null
-                          : () async {
-                              if (delivering) return;
-                              setPreviewState(() => delivering = true);
-                              try {
-                                await Navigator.of(previewContext).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => PdfPreviewScreen(
-                                      title: output.label,
-                                      download: () => _session.download(path!),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(WingSpacing.sm),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (preview.truncated)
+                              const Text(
+                                'Preview shortened by Hermes. Save the file to read it all.',
+                              ),
+                            if (!showMarkdownSource)
+                              MarkdownMessageContent(
+                                data: preview.text,
+                                documentPath: preview.path,
+                                initialFragment: output.fragment,
+                                onOpenRemoteFile: _preview,
+                                loadImage: (path) async =>
+                                    (await _session.download(path)).bytes,
+                                onDownloadRemoteFile: (output) async =>
+                                    _session.save(
+                                      await _session.download(output.path!),
                                     ),
-                                  ),
-                                );
-                              } finally {
-                                if (previewContext.mounted) {
-                                  setPreviewState(() => delivering = false);
-                                }
-                              }
-                            },
+                              )
+                            else
+                              SelectableText(
+                                preview.text,
+                                style: WingTokens.of(
+                                  previewContext,
+                                ).typography.mono,
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                  if (canPlay)
-                    FilledButton.icon(
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Play media'),
-                      onPressed: delivering
-                          ? null
-                          : () => deliverFile(_FileAction.play),
-                    ),
-                  if (canOpen)
-                    FilledButton.icon(
-                      icon: const Icon(Icons.open_in_new),
-                      label: const Text('Open in app'),
-                      onPressed: delivering
-                          ? null
-                          : () => deliverFile(_FileAction.open),
-                    ),
-                  if (!isMarkdown)
-                    FilledButton.icon(
-                      icon: const Icon(Icons.ios_share),
-                      label: const Text('Save or share'),
-                      onPressed: delivering
-                          ? null
-                          : () => deliverFile(_FileAction.share),
+                  if (isPdf || canPlay || canOpen || !isMarkdown)
+                    Wrap(
+                      spacing: WingSpacing.sm,
+                      runSpacing: WingSpacing.sm,
+                      children: [
+                        if (isPdf)
+                          ResourceViewerAction(
+                            icon: Icons.picture_as_pdf_outlined,
+                            label: 'Read PDF',
+                            onPressed: delivering
+                                ? null
+                                : () async {
+                                    if (delivering) return;
+                                    setPreviewState(() => delivering = true);
+                                    try {
+                                      await Navigator.of(previewContext).push(
+                                        MaterialPageRoute<void>(
+                                          builder: (_) => PdfPreviewScreen(
+                                            title: output.label,
+                                            resourceTarget: path,
+                                            download: () =>
+                                                _session.download(path!),
+                                          ),
+                                        ),
+                                      );
+                                    } finally {
+                                      if (previewContext.mounted) {
+                                        setPreviewState(
+                                          () => delivering = false,
+                                        );
+                                      }
+                                    }
+                                  },
+                          ),
+                        if (canPlay)
+                          ResourceViewerAction(
+                            icon: Icons.play_arrow,
+                            label: 'Play media',
+                            onPressed: delivering
+                                ? null
+                                : () => deliverFile(_FileAction.play),
+                          ),
+                        if (canOpen)
+                          ResourceViewerAction(
+                            icon: Icons.open_in_new,
+                            label: 'Open in app',
+                            onPressed: delivering
+                                ? null
+                                : () => deliverFile(_FileAction.open),
+                          ),
+                        if (!isMarkdown)
+                          ResourceViewerAction(
+                            icon: Icons.share_outlined,
+                            label: 'Save or share',
+                            onPressed: delivering
+                                ? null
+                                : () => deliverFile(_FileAction.share),
+                          ),
+                      ],
                     ),
                 ],
               ),
@@ -444,6 +466,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
       MaterialPageRoute<void>(
         builder: (_) => HtmlPreviewScreen(
           title: output.label,
+          resourceTarget: path,
           download: () => _session.download(path),
           share: _share,
         ),
@@ -465,7 +488,11 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
   Widget _buildContent(BuildContext context) {
     if (widget.initialOutput != null) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.initialOutput!.label)),
+        appBar: ResourceViewerAppBar(
+          context: context,
+          title: widget.initialOutput!.label,
+          target: widget.initialOutput!.path,
+        ),
         body: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -549,7 +576,8 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                         }),
                         title: Text(
                           output.label,
-                          maxLines: 2,
+                          maxLines: 1,
+                          softWrap: false,
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(

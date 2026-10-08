@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import '../widgets/anchored_expansion_tile.dart';
 
 /// Corrects disclosure movement during layout, before a frame is painted.
@@ -252,12 +253,27 @@ class TranscriptAnchorBox extends RenderProxyBox {
   double _height;
   void Function(TranscriptAnchorBox row, double height)? onHeightChanged;
   final _pendingContent = <Object>{};
+  bool _pendingLayoutScheduled = false;
 
   void setContentPending(Object source, bool pending) {
     final changed = pending
         ? _pendingContent.add(source)
         : _pendingContent.remove(source);
-    if (changed && attached) markNeedsLayout();
+    if (!changed || !attached) return;
+    // A bounded Markdown viewport can rebuild during its own layout after this
+    // ancestor has finished. Keep pending geometry synchronous, but invalidate
+    // the row outside that layout pass so retained heights also release.
+    final scheduler = SchedulerBinding.instance;
+    if (scheduler.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      if (_pendingLayoutScheduled) return;
+      _pendingLayoutScheduled = true;
+      scheduler.addPostFrameCallback((_) {
+        _pendingLayoutScheduled = false;
+        if (attached) markNeedsLayout();
+      });
+    } else {
+      markNeedsLayout();
+    }
   }
 
   double get leadingOffset {

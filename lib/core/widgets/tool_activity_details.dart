@@ -12,6 +12,7 @@ import '../services/file_open_error_message.dart';
 import '../theme/wing_theme.dart';
 import 'chat_inline_image.dart';
 import 'markdown_message_content.dart';
+import 'resource_filename.dart';
 import 'studio_error.dart';
 
 // Read options is the owner's reference for every activity section's frame.
@@ -446,15 +447,19 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SelectableText(
-                  widget.target.startsWith('data:')
-                      ? 'Attached image'
-                      : widget.target,
-                  style: colors.typography.mono.copyWith(
-                    fontSize: 12,
-                    color: colors.muted,
+                if (widget.target.startsWith('data:'))
+                  Text('Attached image', style: colors.typography.label)
+                else
+                  ResourceFilename(
+                    target: widget.target,
+                    label: output?.kind == ChatOutputKind.link
+                        ? Uri.tryParse(widget.target)?.host
+                        : null,
+                    style: colors.typography.mono.copyWith(
+                      fontSize: 12,
+                      color: colors.muted,
+                    ),
                   ),
-                ),
                 if (widget.facts.isNotEmpty)
                   Text(
                     widget.facts.join(' · '),

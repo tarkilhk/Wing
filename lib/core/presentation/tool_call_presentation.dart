@@ -4,6 +4,7 @@ import '../models/gateway_activity.dart';
 import '../models/transcript_message.dart';
 import 'desktop_tool_labels.dart';
 import 'tool_activity_details.dart';
+import 'resource_identity.dart';
 
 enum ToolCallOutcome { running, completed, success, warning, error }
 
@@ -25,6 +26,7 @@ final class ToolCallPresentation {
     this.summary,
     this.durationSeconds,
     this.startedAt,
+    this.filenameTarget,
   });
 
   final String name;
@@ -36,6 +38,9 @@ final class ToolCallPresentation {
   final String status;
   final ToolCallOutcome outcome;
   final ToolActivityDetails activityDetails;
+
+  /// Exact supplied resource for inspecting a compact filename subtitle.
+  final String? filenameTarget;
   final String? arguments;
   final String? result;
   final List<ToolCallLabel> labels;
@@ -187,6 +192,31 @@ final class ToolCallPresentation {
     if (completed && activityDetails.receiptStatus != null) {
       status = activityDetails.receiptStatus!;
     }
+    final inputSummary =
+        labels.isNotEmpty && labels.first.preview.trim().isNotEmpty
+        ? _inputDetail(name, args, data, labels, context)
+        : _intentLine(
+            activityDetails.intent ??
+                _inputDetail(name, args, data, labels, context),
+          );
+    final suppliedPath = _firstText(args, const ['path', 'file_path']);
+    final fileOperation = const [
+      'read_file',
+      'write_file',
+      'patch',
+    ].contains(name);
+    final filenameTarget =
+        suppliedPath != null &&
+            (fileOperation ||
+                inputSummary == suppliedPath ||
+                inputSummary.endsWith(' · $suppliedPath'))
+        ? activityDetails.resourceTarget ?? suppliedPath
+        : null;
+    final subtitle = filenameTarget == null
+        ? inputSummary
+        : fileOperation || inputSummary == suppliedPath
+        ? resourceFileName(suppliedPath!)
+        : '${inputSummary.substring(0, inputSummary.length - suppliedPath!.length)}${resourceFileName(suppliedPath)}';
     return ToolCallPresentation._(
       name: name,
       callId: callId,
@@ -194,12 +224,8 @@ final class ToolCallPresentation {
       summary: summary,
       title: title,
       target: target == null ? null : _oneLine(target),
-      subtitle: labels.isNotEmpty && labels.first.preview.trim().isNotEmpty
-          ? _inputDetail(name, args, data, labels, context)
-          : _intentLine(
-              activityDetails.intent ??
-                  _inputDetail(name, args, data, labels, context),
-            ),
+      subtitle: subtitle,
+      filenameTarget: filenameTarget,
       status: status,
       outcome: outcome,
       activityDetails: activityDetails,

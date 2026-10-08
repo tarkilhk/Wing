@@ -1,11 +1,15 @@
 import 'package:wing/core/services/chat_outputs_session.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:wing/core/models/chat_output.dart';
 import 'package:wing/core/screens/chat_outputs_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -18,6 +22,9 @@ import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/chat_inline_image.dart';
 import 'package:wing/core/widgets/web_output_preview.dart';
+import 'chat_inline_image_test.dart' show settleImages;
+import 'package:wing/core/widgets/resource_filename.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 
 class _FileDelivery extends AndroidFileDeliveryService {
   final Future<bool> Function(RemoteFileDownload file, String? mimeType) open;
@@ -86,7 +93,209 @@ RemoteTextPreview _textPreview(String path) => RemoteTextPreview(
   truncated: false,
 );
 
+Finder _viewerAction(String label) => find.byWidgetPredicate(
+  (widget) => widget is ResourceViewerAction && widget.label == label,
+);
+
 void main() {
+  const capture = bool.fromEnvironment('CAPTURE_RESOURCE_VIEWERS');
+  setUpAll(() async {
+    if (!capture) return;
+    const root = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final (family, file) in [
+      ('Roboto', 'Roboto-Regular.ttf'),
+      ('MaterialIcons', 'MaterialIcons-Regular.otf'),
+      ('monospace', 'DejaVuSansMono.ttf'),
+    ]) {
+      await (FontLoader(family)..addFont(
+            File(
+              '$root/$file',
+            ).readAsBytes().then((b) => b.buffer.asByteData()),
+          ))
+          .load();
+    }
+  });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('resource document header and sheet ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 780);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        const target =
+            '/srv/projects/australia/sources/2026-10-08-perth-return-hotel-flight-gate.md';
+        const source =
+            '# Perth return-night hotel — wait for flight timing\n\nDecision recorded. **Wait for the flight timing** before selecting the hotel.\n\n- Early departure: check airport access.\n- Later departure: confirm transfer time.\n\n## Evidence\n\nKeep the recorded decision separate from assumptions.\n\nFurther details remain available by scrolling.\n\n';
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        final boundaryKey = GlobalKey();
+        Future<void> captureViewer(String suffix) async {
+          if (!capture) return;
+          await tester.runAsync(() async {
+            final boundary =
+                boundaryKey.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary;
+            final rendered = await boundary.toImage(pixelRatio: 1);
+            final png = await rendered.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            await File(
+                  'build/resource-viewers/${brightness.name}-${scale.toInt()}$suffix.png',
+                )
+                .create(recursive: true)
+                .then((file) => file.writeAsBytes(png!.buffer.asUint8List()));
+            rendered.dispose();
+          });
+        }
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: RepaintBoundary(key: boundaryKey, child: child),
+            ),
+            home: ChatOutputsScreen(
+              chatTitle: 'Fixture',
+              initialOutput: const ChatOutput(
+                kind: ChatOutputKind.file,
+                path: target,
+                url: null,
+                label: '2026-10-08-perth-return-hotel-flight-gate.md',
+              ),
+              createSession: () => ChatOutputsSession(
+                loadHistory: (offset) async => ProfileHistoryPage(
+                  'fixture',
+                  const [],
+                  offset,
+                  500,
+                  isComplete: true,
+                ),
+                download: (_) async => throw StateError('No fixture download'),
+                readText: (path) async => RemoteTextPreview(
+                  path: target,
+                  text: source,
+                  language: 'markdown',
+                  mimeType: 'text/markdown',
+                  binary: false,
+                  truncated: false,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final name = find.descendant(
+          of: find.byType(ResourceFilename),
+          matching: find.byType(Text),
+        );
+        expect(
+          tester.widget<Text>(name).data,
+          '2026-10-08-perth-return-hotel-flight-gate.md',
+        );
+        expect(tester.widget<Text>(name).maxLines, 1);
+        final toolbarActions = find.byType(ResourceViewerAction);
+        expect(toolbarActions, findsNWidgets(4));
+        for (final action in toolbarActions.evaluate()) {
+          final button = find.byWidget(action.widget);
+          expect(tester.getSize(button), const Size(32, 32));
+          expect(
+            tester
+                .widget<Icon>(
+                  find.descendant(of: button, matching: find.byType(Icon)),
+                )
+                .size,
+            16,
+          );
+        }
+        final sheet = tester.widget<DecoratedBox>(
+          find.byKey(const ValueKey('resource-document-sheet')),
+        );
+        expect(
+          (sheet.decoration as BoxDecoration).border,
+          Border.all(color: WingTokens.forBrightness(brightness).border),
+        );
+        expect(find.byType(MarkdownMessageContent), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await captureViewer('');
+        await tester.tap(find.byTooltip('Show file path').last);
+        await tester.pumpAndSettle();
+        expect(find.text(target), findsOneWidget);
+        await captureViewer('-path');
+        await tester.tapAt(const Offset(300, 700));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Copy content'));
+        await tester.pump();
+        expect(copied, source);
+        await tester.tap(find.byTooltip('Show Raw content'));
+        await tester.pump();
+        expect(find.byType(MarkdownMessageContent), findsNothing);
+        expect(find.text(source), findsOneWidget);
+        await tester.pump();
+        await captureViewer('-raw');
+        await tester.tap(find.byTooltip('Copy content'));
+        await tester.pump();
+        expect(copied, source);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+  testWidgets('downloaded image shares its exact bytes with a share glyph', (
+    tester,
+  ) async {
+    final file = RemoteFileDownload(
+      filename: 'server-photo.png',
+      bytes: img.encodePng(
+        img.Image(width: 4, height: 4)..clear(img.ColorRgb8(10, 30, 40)),
+      ),
+    );
+    RemoteFileDownload? delivered;
+    final downloads = <String>[];
+    await tester.pumpWidget(
+      _screen(
+        loadHistory: () async => [
+          {'role': 'assistant', 'content': 'Saved /srv/original/photo.png'},
+        ],
+        download: (path) async {
+          downloads.add(path);
+          return file;
+        },
+        readText: (_) async => throw StateError('Unexpected text read'),
+        deliver: (value) async => delivered = value,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('photo.png'));
+    await settleImages(tester);
+    final action = tester.widget<ResourceViewerAction>(
+      _viewerAction('Save or share'),
+    );
+    expect(action.icon, Icons.share_outlined);
+    expect(find.text('Save or share'), findsNothing);
+    await tester.tap(find.byTooltip('Save or share'));
+    await tester.pumpAndSettle();
+    expect(downloads, ['/srv/original/photo.png']);
+    expect(delivered, same(file));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('report appendix resolves beside the document', (tester) async {
     const folder =
         '/home/tarkil/projects/memory-maintenance/reports/monthly-pilot-20260927';
@@ -466,7 +675,7 @@ void main() {
     await tester.tap(find.text('report.pdf'));
     await tester.pumpAndSettle();
     expect(downloadedPath, isNull);
-    await tester.tap(find.text('Read PDF'));
+    await tester.tap(find.byTooltip('Read PDF'));
     await tester.pumpAndSettle();
     expect(downloadedPath, '/srv/current/report.pdf');
     expect(calls.first.arguments, {
@@ -480,8 +689,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(calls.last.method, 'close');
     expect(calls.last.arguments, {'documentId': 'from-output'});
-    expect(find.text('Open in app'), findsOneWidget);
-    expect(find.text('Save or share'), findsOneWidget);
+    expect(find.byTooltip('Open in app'), findsOneWidget);
+    expect(find.byTooltip('Save or share'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -522,7 +731,7 @@ void main() {
     await tester.tap(find.text('report.pdf'));
     await tester.pumpAndSettle();
     expect(opened, isNull);
-    await tester.tap(find.text('Open in app'));
+    await tester.tap(find.byTooltip('Open in app'));
     await tester.pumpAndSettle();
     expect(path, '/srv/current/report.pdf');
     expect(opened?.filename, 'actual.pdf');
@@ -532,7 +741,7 @@ void main() {
       find.text('No compatible app was found. Use Save or share instead.'),
       findsOneWidget,
     );
-    expect(find.text('Save or share'), findsOneWidget);
+    expect(find.byTooltip('Save or share'), findsOneWidget);
   });
 
   testWidgets('closing preview during download prevents a late app launch', (
@@ -563,13 +772,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('report.pdf'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Open in app'));
+    await tester.tap(find.byTooltip('Open in app'));
     await tester.pump();
     expect(
       tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Open in app'),
-          )
+          .widget<ResourceViewerAction>(_viewerAction('Open in app'))
           .onPressed,
       isNull,
     );
@@ -621,7 +828,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('clip.mp4'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Play media'));
+    await tester.tap(find.byTooltip('Play media'));
     await tester.pumpAndSettle();
 
     expect(downloadedPath, '/srv/current/clip.mp4');
@@ -629,7 +836,7 @@ void main() {
     expect(played?.bytes, orderedEquals([1, 2, 3]));
     expect(title, 'clip.mp4');
     expect(mimeType, 'video/mp4');
-    expect(find.text('Save or share'), findsOneWidget);
+    expect(find.byTooltip('Save or share'), findsOneWidget);
   });
 
   testWidgets('media playback guard blocks duplicates and closed previews', (
@@ -665,7 +872,7 @@ void main() {
     await tester.tap(find.text('clip.mp4'));
     await tester.pumpAndSettle();
     final play = tester
-        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Play media'))
+        .widget<ResourceViewerAction>(_viewerAction('Play media'))
         .onPressed!;
     play();
     play();
@@ -673,7 +880,7 @@ void main() {
     expect(downloads, 1);
     expect(
       tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Play media'))
+          .widget<ResourceViewerAction>(_viewerAction('Play media'))
           .onPressed,
       isNull,
     );
@@ -1150,7 +1357,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('notes.md'));
     await tester.pumpAndSettle();
-    expect(tester.getSize(find.text('notes.md')).width, greaterThan(200));
+    expect(
+      tester.getRect(find.text('notes.md')).bottom,
+      lessThan(tester.getRect(find.byTooltip('Share file')).top),
+    );
     final share = find.byTooltip('Share file');
     IconButton button() => tester.widget<IconButton>(
       find.ancestor(of: share, matching: find.byType(IconButton)).first,

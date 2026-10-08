@@ -8,6 +8,48 @@ ToolActivityDetails project(
 ) => ToolActivityDetails.project(name: name, input: args, output: data);
 
 void main() {
+  test('stock context parsing cannot turn code dates into file resources', () {
+    const actualPath = 'tests/test_current_plan.py';
+    const corruptedPath =
+        "tests/test_current_plan.py-28-self.assertEqual(['2027-10-02', '2027-10-03', '2027-10-04', '2027";
+    const format =
+        "path-grouped: each file path on its own line, followed by indented '<line>: <content>' rows for matches in that file";
+    for (final receipt in [
+      {
+        'matches': [
+          {'path': corruptedPath, 'line': 10, 'content': "05'], actual)"},
+          {'path': actualPath, 'line': 29, 'content': 'linked = items'},
+        ],
+      },
+      {
+        'matches_format': format,
+        'matches_text':
+            "$corruptedPath\n  10: 05'], actual)\n$actualPath\n  29: linked = items",
+      },
+    ]) {
+      final detail = project('search_files', {
+        'path': actualPath,
+        'pattern': 'stay-H03',
+        'context': 2,
+      }, receipt);
+      expect(
+        detail.response
+            .where((b) => b.resourceTarget != null)
+            .map((b) => b.resourceTarget),
+        [actualPath],
+      );
+      expect(
+        detail.response.any((b) => b.label == 'Search context warning'),
+        isTrue,
+      );
+      expect(detail.receiptState, ToolReceiptState.warning);
+      expect(
+        detail.response.any((b) => b.text.contains('linked = items')),
+        isTrue,
+      );
+    }
+  });
+
   test(
     'read Markdown preserves exact receipt and deliberate empty content',
     () {

@@ -60,6 +60,9 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
       MaterialPageRoute<void>(
         builder: (_) => ChatImagePreview(
           title: widget.title,
+          resourceTarget: widget.target.startsWith('data:')
+              ? null
+              : widget.target,
           bytes: provider is MemoryImage ? provider.bytes : null,
           uri: provider is NetworkImage ? Uri.parse(provider.url) : null,
           onOpenExternal: provider is NetworkImage

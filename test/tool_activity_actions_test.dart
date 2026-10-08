@@ -8,6 +8,8 @@ import 'package:wing/core/presentation/tool_call_presentation.dart';
 import 'package:wing/core/services/owned_remote_files.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/tool_activity_details.dart';
+import 'package:wing/core/widgets/resource_filename.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
 
 import 'helpers/pump_markdown_widget.dart';
 
@@ -35,6 +37,45 @@ Future<void> pump(WidgetTester tester, Widget child) async {
 }
 
 void main() {
+  testWidgets('all file headers keep one-line names and exact resource targets', (
+    tester,
+  ) async {
+    const target =
+        '/workspace/sources/research/a-very-long-file-name-that-must-stay-on-one-line.md';
+    final opened = <String?>[];
+    await pump(
+      tester,
+      ProfileToolCall(
+        initiallyExpanded: true,
+        call: call('read_file', {'path': target}, {'content': '1|# Report'}),
+        onOpenResource: (output) async => opened.add(output.path),
+        onShareResource: (_) async {},
+      ),
+    );
+    final names = tester.widgetList<ResourceFilename>(
+      find.byType(ResourceFilename),
+    );
+    expect(names, hasLength(2));
+    for (final name in names) {
+      final text = tester.widget<Text>(
+        find.descendant(of: find.byWidget(name), matching: find.byType(Text)),
+      );
+      expect(text.data, 'a-very-long-file-name-that-must-stay-on-one-line.md');
+      expect(text.maxLines, 1);
+      expect(text.overflow, TextOverflow.ellipsis);
+      expect(text.softWrap, isFalse);
+      expect(name.target, target);
+    }
+    await tester.tap(find.byType(ResourceFilename).last);
+    await tester.pumpAndSettle();
+    expect(find.text(target), findsOneWidget);
+    await tester.tapAt(const Offset(385, 1050));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Preview file'));
+    await tester.pumpAndSettle();
+    expect(opened, [target]);
+  });
+
   testWidgets('passive short acknowledgement earns no controls', (
     tester,
   ) async {

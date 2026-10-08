@@ -352,7 +352,12 @@ its real content height. The scroll controller also includes measured changes in
 newer rows while a disclosure is anchored, including first-time Markdown growth.
 Sliver-applied corrections are accounted for once. Loading registrations end on
 completion, failure, reparenting or disposal; no rendered content is retained
-outside its normal widget lifetime. This is a behavioral guard: static analysis cannot establish
+outside its normal widget lifetime. Bounded Markdown may rebuild during a nested
+layout pass while the outer transcript row is clean. Pending flags change
+immediately, but row invalidation coalesces after that frame; it must not mutate a
+clean ancestor during layout or leave a retained height stranded. The bounded
+completion/failure/removal regressions in `test/background_markdown_content_test.dart`
+protect both properties. This is a behavioral guard: static analysis cannot establish
 sliver height estimates or painted tab position.
 
 Inspect production widgets at 360 dp with ordinary and enlarged text in both
@@ -533,3 +538,22 @@ ban cannot establish these properties. Existing `ARCH_ACTIVITY_DENSITY` retains
 the canonical compact header seam. Review the actual rendered family as well as
 those regressions before declaring visual acceptance. Renewed owner feedback
 reopens the affected field/action decision and render check.
+
+`SEARCH_RESOURCE_SCOPE` protects current stock context receipts against file
+actions for locations that contradict the supplied search scope. Stock's
+rightmost `-<number>-` context separator can consume dates in source text and
+place code in `path`. Wing retains that exact receipt in Raw details, surfaces
+the unreliable-context qualification, and renders valid excerpts without
+creating or reconstructing a resource from the contradictory row. This is a
+behavioral guard: source analysis cannot establish the received path's meaning.
+`test/tool_activity_files_test.dart` reproduces both structured and dense shapes.
+
+`resourceFileName` owns compact display names; `ResourceFilename` owns one-line
+ellipsis and the anchored full-target popup. It never resolves a path against
+the Android/client filesystem. `ResourceViewerAppBar` and `ResourceViewerAction`
+share viewer framing and compact control geometry. File preview owners retain
+the original target and backend-resolved path. `test/resource_filename_test.dart`,
+`test/tool_activity_actions_test.dart` and `test/chat_outputs_screen_test.dart`
+protect exact targets, popup identity, action scopes and the viewer document
+surface in both themes and at enlarged text. Runtime identity and layout need
+these behavioral checks rather than a static string/path pattern ban.

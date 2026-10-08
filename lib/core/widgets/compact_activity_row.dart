@@ -18,7 +18,7 @@ class CompactActivityRow extends StatelessWidget {
   });
 
   final IconData icon;
-  final List<Text> lines;
+  final List<Widget> lines;
   final ActivityTime time;
   final List<Widget> details;
   final bool initiallyExpanded;

@@ -1057,7 +1057,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       extraTail = [ProfileReasoningDisclosure(text: 'Reasoning line\n' * 100)];
       await show(tester);
       await toggleInPlace(tester, find.text('Activity'));
-      final tool = find.text('Delegate task');
+      final tool = find.text('Delegated tasks');
       await tester.ensureVisible(tool);
       await tester.pumpAndSettle();
       await toggleInPlace(tester, tool);

@@ -562,7 +562,7 @@ Use the following placement rules when making the exhaustive decision table:
 | Skipped lint / no linter available, routine status booleans and other diagnostic plumbing | Raw details; surface a concrete actionable diagnostic when one is actually reported |
 | Supplied extra/unknown fields | Assess individually against user value; retain exact technical evidence in Raw details |
 
-Treat repeated facts as one item. File paths belong to their resource header,
+Treat repeated facts as one item. File identity belongs to its resource header,
 not a repeated options card and content heading. File-search matches group by
 supplied path and line labels; the excerpts carry the useful result. File checks
 keep actual write verification, syntax findings and semantic diagnostics
@@ -572,6 +572,17 @@ meaningful request/result content with exact Raw details available.
 
 The maintained [field decisions](design/activity-field-policy.md) account for each
 stock tool contract; use them before changing selection.
+
+File labels show **the filename only, on one line with end ellipsis**, across
+activity summaries, resource headers and viewer titles. Tap the name to reveal
+the exact full supplied path in a small popup anchored to that name or tap.
+Use a backend-supplied absolute path when available; a relative locator stays
+relative until the backend resolves it. Display shortening never changes the
+identity used for opening, loading, sharing or copying. Keep full paths in the
+popup and Raw details, rather than expanding routine labels across several rows.
+URLs retain meaningful source/host identity. Backend fields still require
+semantic validation: source text or contradictory search locations do not earn
+file actions merely because they appear in a path slot.
 
 This policy covers tools, Tasks, live/saved Agents, reasoning, goals, loops,
 heartbeats and background processes. Keep task states and parent indentation
@@ -618,6 +629,13 @@ for Markdown display and retain the exact numbered receipt for copy. A viewer
 copies its exact supplied content in either mode and preserves save/download,
 share recovery and supplied partial-file facts. Opening or scrolling received
 content does not imply fetching content omitted by the server.
+
+Full file viewers use the same compact 32 dp action targets and 16 dp glyphs as
+activity details. Keep the filename on one line and move actions below it at
+enlarged text. Separate viewer chrome from authored content with a neutral header
+rule and a document surface using Studio's shared border, corners and 8 dp
+framing. Formatted Markdown and its raw mode share that document frame; avoid
+adding another frame around source/image renderers that already own one.
 
 ### Accepted activity detail family
 

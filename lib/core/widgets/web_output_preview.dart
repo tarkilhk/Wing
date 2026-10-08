@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../services/remote_files_client.dart';
 import 'source_code_block.dart';
+import 'resource_filename.dart';
 
 enum WebOutputFormat { mermaid, svg, html }
 
@@ -17,6 +18,7 @@ class WebOutputPreview extends StatefulWidget {
   final String source;
   final WebOutputFormat format;
   final String? title;
+  final String? resourceTarget;
   final String? actionLabel;
   final VoidCallback? onAction;
 
@@ -25,6 +27,7 @@ class WebOutputPreview extends StatefulWidget {
     required this.source,
     required this.format,
     this.title,
+    this.resourceTarget,
     this.actionLabel,
     this.onAction,
   });
@@ -60,27 +63,26 @@ class _WebOutputPreviewState extends State<WebOutputPreview> {
     };
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.title ??
-              (widget.format == WebOutputFormat.mermaid
-                  ? 'Diagram'
-                  : '$label preview'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+      appBar: ResourceViewerAppBar(
+        context: context,
+        title:
+            widget.title ??
+            (widget.format == WebOutputFormat.mermaid
+                ? 'Diagram'
+                : '$label preview'),
+        target: widget.resourceTarget,
         actions: [
-          if (widget.onAction != null)
-            IconButton(
-              tooltip: widget.actionLabel,
-              icon: const Icon(Icons.ios_share),
-              onPressed: widget.onAction,
-            ),
           if (canRender)
-            IconButton(
-              tooltip: _showSource ? 'Show $label' : 'Show source',
-              icon: Icon(_showSource ? previewIcon : Icons.code),
+            ResourceViewerAction(
+              label: _showSource ? 'Show $label' : 'Show source',
+              icon: _showSource ? previewIcon : Icons.code,
               onPressed: () => setState(() => _showSource = !_showSource),
+            ),
+          if (widget.onAction != null)
+            ResourceViewerAction(
+              label: widget.actionLabel ?? 'Share resource',
+              icon: Icons.ios_share,
+              onPressed: widget.onAction,
             ),
         ],
       ),

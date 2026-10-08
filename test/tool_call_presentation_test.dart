@@ -281,9 +281,9 @@ void main() {
       (
         'search_files',
         {'pattern': 'mileage', 'path': 'trip/sources'},
-        'mileage · trip/sources',
+        'mileage · sources',
       ),
-      ('read_file', {'path': 'trip/items.json'}, 'trip/items.json'),
+      ('read_file', {'path': 'trip/items.json'}, 'items.json'),
       ('skill_view', {'name': 'hermes-agent'}, 'hermes-agent'),
       (
         'execute_code',

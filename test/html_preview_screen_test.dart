@@ -171,7 +171,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining("can't be read here"), findsOneWidget);
       expect(find.byType(WebOutputPreview), findsNothing);
-      await tester.tap(find.text('Save or share'));
+      await tester.tap(find.byTooltip('Save or share'));
       await tester.pumpAndSettle();
       expect(shared, same(file));
       expect(downloads, 1);

@@ -4323,6 +4323,21 @@
         "calls": []
       },
       "output": "The received result could not be decoded as structured JSON."
+    },
+    {
+      "id": "search-contradictory-context-location",
+      "name": "search_files",
+      "input": {
+        "path": "/workspace/demo/report.py",
+        "pattern": "booking",
+        "context": 2,
+        "limit": 15
+      },
+      "output": {
+        "matches_format": "path-grouped: each file path on its own line, followed by indented '<line>: <content>' rows for matches in that file",
+        "matches_text": "/workspace/demo/report.py-28-assert dates == ['2030-10-03', '2030\n  10: 05']\n/workspace/demo/report.py\n  29: booking = records[0]",
+        "total_count": 2
+      }
     }
   ]
 }

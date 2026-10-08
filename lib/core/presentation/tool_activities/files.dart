@@ -399,6 +399,23 @@ void _fileSearchGroup(
   List<({int line, String content})> rows, {
   List<String>? exactRows,
 }) {
+  // Current stock parses context at the rightmost -<number>- separator, even
+  // inside source dates. A sibling of an explicitly searched file/directory
+  // cannot be a result inside that scope. Keep its original fields in Raw;
+  // neither reconstruct a filename nor offer I/O for the contradictory locator.
+  final scope = _text(p.args['path']);
+  if ((p.args['context'] is num && (p.args['context'] as num) > 0) &&
+      scope != null &&
+      path.startsWith('$scope-') &&
+      RegExp(r'^-[1-9]\d*-').hasMatch(path.substring(scope.length))) {
+    if (!p.response.any((block) => block.label == 'Search context warning')) {
+      p.warning(
+        'Some context rows have unreliable file locations; inspect Raw details.',
+        label: 'Search context warning',
+      );
+    }
+    return;
+  }
   final text = rows.map((row) => '${row.line}|${row.content}').join('\n');
   p.response.add(
     ToolDetailBlock(

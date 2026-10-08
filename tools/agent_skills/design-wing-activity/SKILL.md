@@ -30,7 +30,9 @@ rules before choosing a layout.
    duplicated meaning/actions, metadata weight, taps, reachability and enlarged
    text. Select the arrangement that makes intent and achievement clearest.
    Done when each main item has a stated user value and each icon has a useful
-   distinct scope. An implementation request authorizes continuing to build;
+   distinct scope. Resource labels follow the charter's one-line filename/path
+   popup rule; validate locator semantics separately from compact display.
+   An implementation request authorizes continuing to build;
    present a proposal only when the user requested one.
 
 ## Build and verify
@@ -45,7 +47,10 @@ rules before choosing a layout.
    at ordinary phone size and 320 dp/200% text. Include short and overflowing
    payloads, actionable resources, long metadata, failures and partial results.
    Check all visible insets, source/prose typography, neutral completion,
-   icon order/scope/eligibility, scrolling and viewer recovery. Verify preview
+   icon order/scope/eligibility, scrolling and viewer recovery. Include long
+   filenames, exact path popups and malformed locators; verify that shortening
+   names leaves resource actions pointed at the original backend identity.
+   Verify preview
    image bytes come from those renders. Revise discrepancies, run focused
    behavioral checks and record remaining limits. Done when the decision table
    and render matrix account for every affected family; passing tests or a

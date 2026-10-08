@@ -13918,6 +13918,21 @@
       "path": "test/tool_activity_actions_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/resource_identity.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/resource_filename.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/resource_filename_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

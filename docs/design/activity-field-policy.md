@@ -53,6 +53,16 @@ path/line rows. Context rows are not necessarily hits. Counts may precede omitte
 path filtering; they do not establish the exact number of visible global matches.
 A malformed dense receipt remains accessible without fabricated grouping.
 
+The filename/locator follow-up inspected current stock
+[`38880bd2f1e90dbc9a1aeec03af62539ee64719a`](https://github.com/NousResearch/hermes-agent/commit/38880bd2f1e90dbc9a1aeec03af62539ee64719a)
+on 8 October; its search parser and common receipt formatter are unchanged from
+the review above. The context parser takes the rightmost `-<number>-` separator,
+including one inside a date in source text. A returned context path formed as
+the supplied scope followed by a numeric context separator contradicts that
+scope; it cannot identify a file inside it. Wing keeps the exact malformed row
+Raw, qualifies unreliable context and renders valid excerpts. It does not infer
+a corrected filename/line or offer file I/O for that row.
+
 ## Execution and images
 
 Sources: [`terminal_tool.py`](https://github.com/NousResearch/hermes-agent/blob/25a71a744cb9ef06950a91638e6229b4f808d461/tools/terminal_tool.py),

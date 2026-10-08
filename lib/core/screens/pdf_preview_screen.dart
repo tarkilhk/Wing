@@ -5,15 +5,18 @@ import 'package:flutter/material.dart';
 
 import '../services/pdf_preview_service.dart';
 import '../services/remote_files_client.dart';
+import '../widgets/resource_filename.dart';
 
 class PdfPreviewScreen extends StatefulWidget {
   final String title;
+  final String? resourceTarget;
   final Future<RemoteFileDownload> Function() download;
   final PdfPreviewService service;
 
   const PdfPreviewScreen({
     super.key,
     required this.title,
+    this.resourceTarget,
     required this.download,
     this.service = const PdfPreviewService(),
   });
@@ -43,12 +46,10 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
     builder: (context, _) {
       final observation = _reader.observation;
       return Scaffold(
-        appBar: AppBar(
-          title: Text(
-            widget.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+        appBar: ResourceViewerAppBar(
+          context: context,
+          title: widget.title,
+          target: widget.resourceTarget,
         ),
         body: SafeArea(
           child: Center(
@@ -92,12 +93,12 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
                   padding: const EdgeInsets.all(8),
                   child: Row(
                     children: [
-                      IconButton(
-                        tooltip: 'Previous page',
+                      ResourceViewerAction(
+                        label: 'Previous page',
                         onPressed: observation.loading || observation.page == 0
                             ? null
                             : () => _reader.showPage(observation.page - 1),
-                        icon: const Icon(Icons.chevron_left),
+                        icon: Icons.chevron_left,
                       ),
                       Expanded(
                         child: Text(
@@ -105,14 +106,14 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
                           textAlign: TextAlign.center,
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Next page',
+                      ResourceViewerAction(
+                        label: 'Next page',
                         onPressed:
                             observation.loading ||
                                 observation.page + 1 >= observation.pageCount!
                             ? null
                             : () => _reader.showPage(observation.page + 1),
-                        icon: const Icon(Icons.chevron_right),
+                        icon: Icons.chevron_right,
                       ),
                     ],
                   ),

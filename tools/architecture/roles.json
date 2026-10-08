@@ -1915,6 +1915,16 @@
       "role": "presentation",
       "feature": "chat-activity",
       "library": "lib/core/presentation/tool_activity_details.dart"
+    },
+    "lib/core/presentation/resource_identity.dart": {
+      "role": "presentation",
+      "feature": "outputs-and-viewers",
+      "library": "lib/core/presentation/resource_identity.dart"
+    },
+    "lib/core/widgets/resource_filename.dart": {
+      "role": "view",
+      "feature": "outputs-and-viewers",
+      "library": "lib/core/widgets/resource_filename.dart"
     }
   }
 }

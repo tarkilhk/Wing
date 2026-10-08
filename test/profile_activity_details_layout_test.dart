@@ -147,7 +147,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         expect(wrappedLabel, findsOneWidget);
         expect(
           tester.getSize(wrappedLabel).height,
-          tester.getSize(find.text('Browser exec').first).height,
+          tester.getSize(find.text('Ran browser code').first).height,
         );
         final headers = tester.widgetList<CompactActivityRow>(
           find.byType(CompactActivityRow),
@@ -155,8 +155,18 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         expect(headers, hasLength(rows.length));
         for (final header in headers) {
           expect(header.lines, hasLength(2));
-          expect(header.lines.every((line) => line.maxLines == 1), isTrue);
-          expect(header.lines.last.data!.trim(), isNotEmpty);
+          final texts = [
+            for (final line in header.lines)
+              tester.widget<Text>(
+                find.descendant(
+                  of: find.byWidget(line),
+                  matching: find.byType(Text),
+                  matchRoot: true,
+                ),
+              ),
+          ];
+          expect(texts.every((text) => text.maxLines == 1), isTrue);
+          expect(texts.last.data!.trim(), isNotEmpty);
         }
         final heights = toolRows
             .map((row) => tester.getSize(row).height)
@@ -183,17 +193,17 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           for (final element in agentRows.evaluate())
             find.byWidget(element.widget),
         ], 'agents');
-        // Only delivered, nonblank detail gets a disclosure or tap semantics.
+        // Each delivered task is inspectable, including tasks without output.
         expect(
           find.descendant(of: agentPanel, matching: find.byType(ExpansionTile)),
-          findsOneWidget,
+          findsNWidgets(3),
         );
         expect(
           find.descendant(
             of: agentPanel,
             matching: find.byIcon(Icons.expand_more),
           ),
-          findsOneWidget,
+          findsNWidgets(3),
         );
         expect(find.text(goal), findsOneWidget);
         final semantics = tester.ensureSemantics();
@@ -202,7 +212,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
               .getSemantics(find.text(goal))
               .getSemanticsData()
               .hasAction(SemanticsAction.tap),
-          isFalse,
+          isTrue,
         );
         semantics.dispose();
         if (capture != null) {
