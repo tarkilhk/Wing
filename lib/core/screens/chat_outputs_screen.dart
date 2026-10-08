@@ -275,6 +275,52 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
               }
             }
 
+            final stackActions =
+                isMarkdown &&
+                MediaQuery.textScalerOf(previewContext).scale(14) > 21;
+            final actions = <Widget>[
+              if (isMarkdown) ...[
+                IconButton(
+                  tooltip: showMarkdownSource
+                      ? 'Show formatted content'
+                      : 'Show Raw content',
+                  icon: Icon(
+                    showMarkdownSource
+                        ? Icons.notes_outlined
+                        : Icons.code_rounded,
+                  ),
+                  onPressed: () => setPreviewState(
+                    () => showMarkdownSource = !showMarkdownSource,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Copy content',
+                  icon: const Icon(Icons.copy_outlined),
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: preview.text));
+                    if (!previewContext.mounted) return;
+                    ScaffoldMessenger.of(previewContext).showSnackBar(
+                      const SnackBar(content: Text('Content copied')),
+                    );
+                  },
+                ),
+                IconButton(
+                  tooltip: 'Share file',
+                  icon: const Icon(Icons.share_outlined),
+                  onPressed: delivering
+                      ? null
+                      : () => deliverFile(_FileAction.share),
+                ),
+              ],
+              IconButton(
+                tooltip: 'Download',
+                icon: const Icon(Icons.download_outlined),
+                onPressed: delivering
+                    ? null
+                    : () => deliverFile(_FileAction.save),
+              ),
+            ];
+
             return Scaffold(
               appBar: AppBar(
                 title: Text(
@@ -282,50 +328,19 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                actions: [
-                  if (isMarkdown) ...[
-                    IconButton(
-                      tooltip: showMarkdownSource
-                          ? 'Show formatted content'
-                          : 'Show Raw content',
-                      icon: Icon(
-                        showMarkdownSource
-                            ? Icons.notes_outlined
-                            : Icons.code_rounded,
-                      ),
-                      onPressed: () => setPreviewState(
-                        () => showMarkdownSource = !showMarkdownSource,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Copy content',
-                      icon: const Icon(Icons.copy_outlined),
-                      onPressed: () async {
-                        await Clipboard.setData(
-                          ClipboardData(text: preview.text),
-                        );
-                        if (!previewContext.mounted) return;
-                        ScaffoldMessenger.of(previewContext).showSnackBar(
-                          const SnackBar(content: Text('Content copied')),
-                        );
-                      },
-                    ),
-                    IconButton(
-                      tooltip: 'Share file',
-                      icon: const Icon(Icons.share_outlined),
-                      onPressed: delivering
-                          ? null
-                          : () => deliverFile(_FileAction.share),
-                    ),
-                  ],
-                  IconButton(
-                    tooltip: 'Download',
-                    icon: const Icon(Icons.download_outlined),
-                    onPressed: delivering
-                        ? null
-                        : () => deliverFile(_FileAction.save),
-                  ),
-                ],
+                actions: stackActions ? null : actions,
+                bottom: stackActions
+                    ? PreferredSize(
+                        preferredSize: const Size.fromHeight(48),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: actions,
+                          ),
+                        ),
+                      )
+                    : null,
               ),
               body: ListView(
                 padding: const EdgeInsets.all(16),

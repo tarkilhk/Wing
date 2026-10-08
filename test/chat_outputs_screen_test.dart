@@ -1111,6 +1111,12 @@ void main() {
   testWidgets('Markdown share icon retains pending and retry behavior', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(320, 780);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final firstDownload = Completer<RemoteFileDownload>();
     var downloads = 0;
     RemoteFileDownload? delivered;
@@ -1144,6 +1150,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('notes.md'));
     await tester.pumpAndSettle();
+    expect(tester.getSize(find.text('notes.md')).width, greaterThan(200));
     final share = find.byTooltip('Share file');
     IconButton button() => tester.widget<IconButton>(
       find.ancestor(of: share, matching: find.byType(IconButton)).first,

@@ -624,7 +624,9 @@ visible; formatting does not mean the whole file was read. No mode switch, raw
 toolbar, inline expansion or duplicate fullscreen action belongs in this card.
 The eye opens the existing file viewer; raw/formatted switching belongs there,
 alongside icon-only copy and share. The viewer copies its exact supplied file
-text in either mode and retains save/download and share error recovery.
+text in either mode and retains save/download and share error recovery. At enlarged
+text, move the viewer action icons into a compact row below its full-width title
+instead of squeezing the filename between navigation and four actions.
 
 Review the activity family together before accepting any card: compare actual
 code, read, edit and vision renders side by side, then compare their dark and
