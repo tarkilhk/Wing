@@ -196,6 +196,7 @@ void main() {
             text: text,
             format: format,
             markdown: markdown,
+            copyable: true,
           );
           final outer = ScrollController();
           final boundary = GlobalKey();
@@ -226,6 +227,7 @@ void main() {
             ),
           );
           await tester.settleMarkdown();
+          await tester.pumpAndSettle();
           await tester.pumpAndSettle();
           if (_capture) {
             await tester.runAsync(() async {
@@ -277,6 +279,7 @@ void main() {
           await tester.tap(find.byTooltip('Open Content'));
           await tester.pumpAndSettle();
           await tester.settleMarkdown();
+          await tester.pumpAndSettle();
           final full = find.byWidgetPredicate(
             (widget) => widget is ActivityDetailSection && widget.full,
           );
@@ -336,7 +339,11 @@ void main() {
                 'id': 1,
                 'role': 'tool',
                 'tool_name': 'delegate_task',
-                'args': {'goal': 'Review the report'},
+                'args': {
+                  'tasks': [
+                    {'goal': 'Review the report'},
+                  ],
+                },
                 'content': jsonEncode({
                   'results': [
                     {
@@ -416,7 +423,8 @@ void main() {
                 'bytes_written': 22,
                 'verified': true,
                 'lint': {'status': 'ok', 'output': 'Syntax checked'},
-                'lsp_diagnostics': 'No diagnostics returned.',
+                'lsp_diagnostics':
+                    'LSP diagnostics introduced by this edit:\n<diagnostics file="/workspace/report.py">Unknown report type.</diagnostics>',
               },
             ),
           ),
@@ -479,6 +487,7 @@ void main() {
             await tester.pumpAndSettle();
           }
           await tester.settleMarkdown();
+          await tester.pumpAndSettle();
           expect(find.text('Preview'), findsNothing, reason: entry.key);
           expect(find.text('Full text'), findsNothing, reason: entry.key);
           expect(
@@ -506,30 +515,58 @@ void main() {
             expect(decoration.borderRadius, WingRadius.card);
           }
           for (final section in find.byType(ActivityDetailSection).evaluate()) {
-            final frame = find
-                .descendant(
-                  of: find.byWidget(section.widget),
-                  matching: find.byType(Container),
-                )
-                .first;
-            final header = tester.getRect(frame);
             final sectionWidget = section.widget as ActivityDetailSection;
-            final heading = find
-                .descendant(
-                  of: frame,
+            if (sectionWidget.showHeader &&
+                sectionWidget.headerBuilder == null) {
+              final frame = find
+                  .descendant(
+                    of: find.byWidget(section.widget),
+                    matching: find.byType(Container),
+                  )
+                  .first;
+              final header = tester.getRect(frame);
+              final heading = find
+                  .descendant(
+                    of: frame,
+                    matching: find.text(sectionWidget.block.label),
+                  )
+                  .first;
+              expect(
+                tester.getTopLeft(heading).dx,
+                closeTo(header.left + 32, 0.1),
+                reason: entry.key,
+              );
+              expect(
+                tester.getTopLeft(heading).dy,
+                closeTo(header.top + 9, 0.1),
+                reason: entry.key,
+              );
+            } else {
+              // The resource header owns all actions for this payload. The body
+              // must not repeat a section heading or a second copy/viewer row.
+              expect(
+                find.descendant(
+                  of: find.descendant(
+                    of: find.byWidget(section.widget),
+                    matching: find.byType(ActivityDetailContent),
+                  ),
                   matching: find.text(sectionWidget.block.label),
-                )
-                .first;
-            expect(
-              tester.getTopLeft(heading).dx,
-              closeTo(header.left + 32, 0.1),
-              reason: entry.key,
-            );
-            expect(
-              tester.getTopLeft(heading).dy,
-              closeTo(header.top + 9, 0.1),
-              reason: entry.key,
-            );
+                ),
+                findsNothing,
+                reason: entry.key,
+              );
+              expect(
+                find.descendant(
+                  of: find.descendant(
+                    of: find.byWidget(section.widget),
+                    matching: find.byType(ActivityDetailContent),
+                  ),
+                  matching: find.byType(IconButton),
+                ),
+                findsNothing,
+                reason: entry.key,
+              );
+            }
             final contents = find.descendant(
               of: find.byWidget(section.widget),
               matching: find.byType(ActivityDetailContent),

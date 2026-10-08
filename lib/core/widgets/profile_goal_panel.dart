@@ -440,34 +440,58 @@ class _GoalDetails extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       ActivityDetailSection(
-        block: ToolDetailBlock(label: 'Objective', text: goal.title),
+        block: ToolDetailBlock(
+          label: 'Objective',
+          text: goal.title,
+          copyable: true,
+        ),
       ),
       _Field(label: 'Outcome', value: goal.contract.outcome),
       _Field(label: 'Verification', value: goal.contract.verification),
       _Field(label: 'Constraints', value: goal.contract.constraints),
       _Field(label: 'Boundaries', value: goal.contract.boundaries),
       _Field(label: 'Stop when', value: goal.contract.stopWhen),
-      if (goal.gates.isNotEmpty)
+      for (var index = 0; index < goal.gates.length; index++)
         ActivityDetailSection(
           block: ToolDetailBlock(
-            label: 'Verification gates',
+            label: 'Verification gate ${index + 1}',
+            role: ToolDetailRole.command,
             format: ToolDetailFormat.source,
-            text: goal.gates
-                .map(
-                  (gate) =>
-                      '${gate.command} · ${gate.attempts} attempts · ${gate.maxRetries} retries allowed · ${gate.timeoutSeconds}s timeout · ${gate.lastExitCode == null ? 'not run' : 'exit ${gate.lastExitCode}'}',
-                )
-                .join('\n'),
+            text: goal.gates[index].command,
+            copyable: true,
           ),
+          facts: [
+            '${goal.gates[index].attempts} attempts',
+            '${goal.gates[index].maxRetries} retries allowed',
+            '${goal.gates[index].timeoutSeconds}s timeout',
+            goal.gates[index].lastExitCode == null
+                ? goal.gates[index].attempts == 0
+                      ? 'Not run'
+                      : 'Exit code not supplied'
+                : 'Exit ${goal.gates[index].lastExitCode}',
+          ],
         ),
       if (goal.pausedReason case final reason?)
-        _Field(label: 'Paused', value: reason),
-      if (goal.lastVerdict case final verdict?)
-        _Field(label: 'Last verdict', value: _verdictText(verdict)),
+        _Field(label: 'Paused', value: reason, copyable: false),
       if (goal.lastReason case final reason?)
-        _Field(label: 'Reason', value: reason),
+        ActivityDetailSection(
+          block: ToolDetailBlock(
+            label: 'Latest decision',
+            text: reason,
+            copyable: false,
+          ),
+          facts: [
+            if (goal.lastVerdict case final verdict?) _verdictText(verdict),
+          ],
+        )
+      else if (goal.lastVerdict case final verdict?)
+        ActivityDetailFacts(facts: ['Last verdict: ${_verdictText(verdict)}']),
       if (goal.waitBarrier case final barrier?)
-        _Field(label: 'Waiting', value: _barrierText(context, barrier)),
+        ActivityDetailStatus(
+          label: 'Waiting',
+          icon: Icons.schedule_outlined,
+          contextFacts: [_barrierText(context, barrier)],
+        ),
     ],
   );
 
@@ -501,14 +525,19 @@ class _GoalDetails extends StatelessWidget {
 class _Field extends StatelessWidget {
   final String label;
   final String value;
+  final bool copyable;
 
-  const _Field({required this.label, required this.value});
+  const _Field({
+    required this.label,
+    required this.value,
+    this.copyable = true,
+  });
 
   @override
   Widget build(BuildContext context) => value.trim().isEmpty
       ? const SizedBox.shrink()
       : ActivityDetailSection(
-          block: ToolDetailBlock(label: label, text: value),
+          block: ToolDetailBlock(label: label, text: value, copyable: copyable),
         );
 }
 
@@ -550,9 +579,11 @@ class _CriteriaSection extends StatelessWidget {
       ),
       for (var index = 0; index < goal.subgoals.length; index++)
         ActivityDetailSection(
+          copyable: false,
+          viewable: false,
           block: ToolDetailBlock(
             label: 'Criterion ${index + 1}',
-            text: '${index + 1}. ${goal.subgoals[index]}',
+            text: goal.subgoals[index],
           ),
           actions: [
             ActivityDetailAction(

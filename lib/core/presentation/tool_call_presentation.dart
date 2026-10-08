@@ -54,7 +54,24 @@ final class ToolCallPresentation {
   /// Shared desktop captions for a tool name delivered by Hermes.
   static String titleFor(String name, {required bool completed}) {
     final catalog = desktopToolLabels[name];
-    if (name == 'skill_view') return completed ? 'Read skill' : 'Reading skill';
+    final caption = switch (name) {
+      'skill_view' => ('Read skill', 'Reading skill'),
+      'skill_manage' => ('Managed skills', 'Managing skills'),
+      'todo_list' => ('Checked tasks', 'Checking tasks'),
+      'delegate_task' => ('Delegated tasks', 'Delegating tasks'),
+      'cronjob_manage' => (
+        'Managed scheduled tasks',
+        'Managing scheduled tasks',
+      ),
+      'session_search' => ('Searched conversations', 'Searching conversations'),
+      'tool_search' => ('Searched tools', 'Searching tools'),
+      'tool_describe' => ('Inspected tools', 'Inspecting tools'),
+      'tool_call' => ('Called tools', 'Calling tools'),
+      'browser_exec' => ('Ran browser code', 'Running browser code'),
+      'image_generate' => ('Generated images', 'Generating images'),
+      _ => null,
+    };
+    if (caption != null) return completed ? caption.$1 : caption.$2;
     if (catalog != null) return completed ? catalog.done : catalog.pending;
     return _humanize(name);
   }
@@ -120,9 +137,7 @@ final class ToolCallPresentation {
     var outcome = completed
         ? ToolCallOutcome.completed
         : ToolCallOutcome.running;
-    var status = completed
-        ? (summary == null ? 'Completed' : _oneLine(summary))
-        : 'Running';
+    var status = completed ? 'Completed' : 'Running';
     if (completed) {
       final error = _firstText(data, const ['error']);
       final exit = data['exit_code'];
@@ -153,108 +168,24 @@ final class ToolCallPresentation {
           data['status'] == 'success' ||
           data['verified'] == true) {
         outcome = ToolCallOutcome.success;
-        status = summary == null ? 'Completed' : _oneLine(summary);
+        status = 'Completed';
       }
     }
-    final details = <({String label, String text, bool markdown, Uri? link})>[];
-    if (args['question'] is String) {
-      details.add(_detail('Question', args['question'] as String));
+    final activityDetails = ToolActivityDetails.project(
+      name: name,
+      input: input,
+      output: output,
+    );
+    if (completed && activityDetails.receiptState != null) {
+      final state = activityDetails.receiptState!;
+      outcome = switch (state) {
+        ToolReceiptState.completed => ToolCallOutcome.completed,
+        ToolReceiptState.warning => ToolCallOutcome.warning,
+        ToolReceiptState.error => ToolCallOutcome.error,
+      };
     }
-    if (output is Map) {
-      for (final key in const [
-        'analysis',
-        'text',
-        'message',
-        'error',
-        'output',
-        'stdout',
-        'stderr',
-        'content',
-        'scale_note',
-      ]) {
-        final value = output[key];
-        if (value is String && value.trim().isNotEmpty) {
-          details.add(
-            _detail(
-              _humanize(key),
-              value,
-              allowMarkdown: !const [
-                'stdout',
-                'stderr',
-                'output',
-              ].contains(key),
-            ),
-          );
-        }
-      }
-      if (output['content'] case final List parts) {
-        for (final part in parts) {
-          if (part is Map &&
-              part['type'] == 'text' &&
-              part['text'] is String &&
-              (part['text'] as String).trim().isNotEmpty) {
-            details.add(_detail('Result', part['text'] as String));
-          }
-        }
-      }
-      final nested = output['data'];
-      final sources = [
-        if (output['results'] is List) ...output['results'] as List,
-        if (nested is Map) ...[
-          if (nested['results'] is List) ...nested['results'] as List,
-          if (nested['web'] is List) ...nested['web'] as List,
-        ],
-      ];
-      if (sources.isNotEmpty) {
-        for (final source in sources) {
-          if (source is! Map) continue;
-          final sourceTitle =
-              _firstText(source, const ['title', 'url', 'name']) ?? 'Result';
-          final content = _firstText(source, const [
-            'content',
-            'snippet',
-            'description',
-            'text',
-          ]);
-          final url = _firstText(source, const ['url']);
-          // Results also contain structured operation receipts, not just web
-          // sources. Render their delivered scalar facts rather than an empty
-          // source block. Unprojected nested data stays available in raw details.
-          final text = url != null || content != null
-              ? _sourceText(url, content)
-              : _scalarFacts(source, heading: sourceTitle);
-          if (text.trim().isNotEmpty) {
-            details.add(_detail(sourceTitle, text, link: _sourceUri(url)));
-          }
-        }
-      }
-      // Generic structured tools retain scalar facts without exposing JSON as
-      // their default content. Nested structures remain in full raw details.
-      if (details.isEmpty) {
-        for (final entry in output.entries) {
-          if ((entry.value is String &&
-                  (entry.value as String).trim().isNotEmpty) ||
-              entry.value is num ||
-              entry.value is bool) {
-            details.add(
-              _detail(_humanize(entry.key.toString()), entry.value.toString()),
-            );
-          }
-        }
-      }
-    } else if (output is String && output.trim().isNotEmpty) {
-      details.add(
-        _detail(
-          'Result',
-          output,
-          allowMarkdown: name != 'terminal' && name != 'execute_code',
-        ),
-      );
-    }
-    if (details.isEmpty && (summary ?? context) != null) {
-      details.add(
-        _detail(summary != null ? 'Summary' : 'Context', (summary ?? context)!),
-      );
+    if (completed && activityDetails.receiptStatus != null) {
+      status = activityDetails.receiptStatus!;
     }
     return ToolCallPresentation._(
       name: name,
@@ -263,16 +194,15 @@ final class ToolCallPresentation {
       summary: summary,
       title: title,
       target: target == null ? null : _oneLine(target),
-      subtitle: _inputDetail(name, args, data, labels, context),
+      subtitle: labels.isNotEmpty && labels.first.preview.trim().isNotEmpty
+          ? _inputDetail(name, args, data, labels, context)
+          : _intentLine(
+              activityDetails.intent ??
+                  _inputDetail(name, args, data, labels, context),
+            ),
       status: status,
       outcome: outcome,
-      activityDetails: ToolActivityDetails.project(
-        name: name,
-        input: input,
-        output: output,
-        details: details,
-        context: context,
-      ),
+      activityDetails: activityDetails,
       arguments: arguments,
       result: result,
       labels: labels,
@@ -280,6 +210,18 @@ final class ToolCallPresentation {
       startedAt: completed ? null : startedAt,
     );
   }
+}
+
+String _intentLine(String value) {
+  var text = _oneLine(
+    value,
+  ).replaceAll(RegExp(r'https?://', caseSensitive: false), '');
+  if (RegExp(
+    r'^(open|close|read|click|type|elements|wait|run|create|update|delete|list) · ',
+  ).hasMatch(text)) {
+    text = '${text[0].toUpperCase()}${text.substring(1)}';
+  }
+  return text;
 }
 
 String _inputDetail(
@@ -416,37 +358,6 @@ String? _listTarget(Object? value) => value is List && value.isNotEmpty
     ? value.whereType<String>().join(' · ')
     : null;
 String _oneLine(String text) => text.replaceAll(RegExp(r'\s+'), ' ').trim();
-String _scalarFacts(Map data, {required String heading}) {
-  final facts = [
-    for (final entry in data.entries)
-      if ((entry.value is String &&
-              (entry.value as String).trim().isNotEmpty) ||
-          entry.value is num ||
-          entry.value is bool)
-        entry,
-  ];
-  final body = facts.where(
-    (entry) =>
-        !((entry.key == 'name' || entry.key == 'title') &&
-            entry.value == heading),
-  );
-  return (body.isEmpty ? facts : body)
-      .map((entry) => '${_humanize(entry.key.toString())}: ${entry.value}')
-      .join('\n');
-}
-
-Uri? _sourceUri(String? url) {
-  final uri = url == null ? null : Uri.tryParse(url);
-  return uri != null &&
-          (uri.scheme == 'https' || uri.scheme == 'http') &&
-          uri.host.isNotEmpty
-      ? uri
-      : null;
-}
-
-String _sourceText(String? url, String? content) =>
-    _sourceUri(url) != null ? content ?? url! : [?url, ?content].join('\n\n');
-
 String _humanize(String text) {
   final words = text.replaceAll(RegExp(r'[_-]+'), ' ').trim();
   return words.isEmpty
@@ -480,17 +391,3 @@ String formatToolDuration(double seconds) {
   final whole = seconds.floor();
   return '${whole ~/ 60}m ${whole % 60}s';
 }
-
-({String label, String text, bool markdown, Uri? link}) _detail(
-  String label,
-  String text, {
-  bool allowMarkdown = true,
-  Uri? link,
-}) => (
-  label: label,
-  text: text,
-  link: link,
-  markdown:
-      allowMarkdown &&
-      RegExp(r'(^|\n)(#{1,6} |[-*] |```)|\[[^\]]+\]\(|\*\*').hasMatch(text),
-);

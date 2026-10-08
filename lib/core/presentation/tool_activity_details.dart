@@ -1,5 +1,30 @@
+import 'dart:convert';
+
 import '../models/chat_output.dart';
 import '../services/web_preview.dart' show externalWebLink;
+
+part 'tool_activities/files.dart';
+part 'tool_activities/browser_web.dart';
+part 'tool_activities/execution_media.dart';
+part 'tool_activities/state.dart';
+part 'tool_activities/discovery.dart';
+
+enum ToolDetailRole {
+  text,
+  code,
+  command,
+  output,
+  question,
+  search,
+  skill,
+  task,
+  warning,
+  diff,
+}
+
+enum ToolActivityLayout { sections, file, search }
+
+enum ToolReceiptState { completed, warning, error }
 
 enum ToolDetailFormat { prose, source, diff }
 
@@ -14,6 +39,11 @@ final class ToolDetailBlock {
     this.numberedLines = false,
     this.secondary = false,
     this.resourceTarget,
+    this.facts = const [],
+    this.copyable = false,
+    this.role = ToolDetailRole.text,
+    this.exactCopyText,
+    this.showEmpty = false,
   });
 
   final String label;
@@ -24,6 +54,12 @@ final class ToolDetailBlock {
   final bool numberedLines;
   final bool secondary;
   final String? resourceTarget;
+  final List<String> facts;
+  final bool copyable;
+  final ToolDetailRole role;
+  final String? exactCopyText;
+  final bool showEmpty;
+  String get copyText => exactCopyText ?? text;
 
   bool get isReadContent => numberedLines && format == ToolDetailFormat.source;
 
@@ -34,27 +70,31 @@ final class ToolDetailBlock {
       : text;
 }
 
-/// Pure tool-specific layout facts shared by live and saved activities.
+/// One pure semantic owner: exact tool identity chooses fields; views only render.
 final class ToolActivityDetails {
-  ToolActivityDetails._({
-    required this.request,
-    required this.response,
-    required this.metadata,
-    required this.images,
-    required this.nativeVision,
-    required this.exitCode,
-    required this.resourceTarget,
-    required this.readOptions,
-  });
+  ToolActivityDetails._(_ToolProjection p)
+    : request = List.unmodifiable(p.request),
+      response = List.unmodifiable(p.response),
+      metadata = List.unmodifiable(p.metadata),
+      images = List.unmodifiable(p.images),
+      nativeVision = p.nativeVision,
+      exitCode = p.exitCode,
+      resourceTarget = p.resourceTarget,
+      headerFacts = List.unmodifiable(p.headerFacts),
+      layout = p.layout,
+      receiptState = p.state,
+      receiptStatus = p.status,
+      intent = p.intent;
 
-  final List<ToolDetailBlock> request;
-  final List<ToolDetailBlock> response;
-  final List<String> metadata;
+  final List<ToolDetailBlock> request, response;
+  final List<String> metadata, headerFacts;
   final List<({String label, String target})> images;
   final bool nativeVision;
   final num? exitCode;
   final String? resourceTarget;
-  final List<String> readOptions;
+  final ToolActivityLayout layout;
+  final ToolReceiptState? receiptState;
+  final String? receiptStatus, intent;
 
   ChatOutput? resourceFor(String target) {
     final image = images.any((image) => image.target == target);
@@ -86,406 +126,263 @@ final class ToolActivityDetails {
     required String name,
     required Object? input,
     required Object? output,
-    required List<({String label, String text, bool markdown, Uri? link})>
-    details,
-    required String? context,
   }) {
-    final args = input is Map ? input : const {};
-    final data = output is Map ? output : const {};
-    final request = <ToolDetailBlock>[];
-    final response = <ToolDetailBlock>[];
-    final metadata = <String>[];
-    final images = <({String label, String target})>[];
-    final consumed = <String>{};
-    final readOptions = <String>[];
-    final nativeVision = data['_multimodal'] == true;
-    final resourceTarget = [
-      for (final key in ['image_url', 'video_url', 'path', 'file_path', 'url'])
-        if (args[key] case final String value when value.isNotEmpty) value,
-    ].firstOrNull;
-
-    void requested(String key, String label, ToolDetailFormat format) {
-      if (args[key] case final String value) {
-        request.add(ToolDetailBlock(label: label, text: value, format: format));
-        consumed.add(key);
-      }
-    }
-
-    // File/image paths have their own selectable, copyable header. All other
-    // request fields still appear below; no unknown inputs are silently dropped.
-    for (final key in ['path', 'file_path', 'image_url', 'video_url', 'url']) {
-      if (args[key] is String) consumed.add(key);
-    }
+    final p = _ToolProjection(name, input, output);
     switch (name) {
-      case 'terminal':
-        requested('command', 'Command', ToolDetailFormat.source);
-      case 'execute_code' || 'browser_exec':
-        requested('code', 'Code', ToolDetailFormat.source);
-      case 'patch':
-        requested('old_string', 'Find', ToolDetailFormat.source);
-        requested('new_string', 'Replace with', ToolDetailFormat.source);
-        requested('patch', 'Requested patch', ToolDetailFormat.diff);
+      case 'read_file':
+        _readFile(p);
       case 'write_file':
-        requested('content', 'Content to write', ToolDetailFormat.source);
-      case 'vision_analyze' || 'video_analyze':
-        requested('question', 'Question', ToolDetailFormat.prose);
-      case 'web_search':
-        requested('query', 'Query', ToolDetailFormat.prose);
+        _writeFile(p);
+      case 'patch':
+        _patchFile(p);
       case 'search_files':
-        requested('pattern', 'Pattern', ToolDetailFormat.source);
+        _searchFiles(p);
+      case 'terminal':
+        _terminal(p);
+      case 'execute_code':
+        _executeCode(p);
+      case 'browser_exec':
+        _browserExec(p);
+      case 'image_generate':
+        _imageGenerate(p);
+      case 'vision_analyze':
+        _visionAnalyze(p);
+      case 'browser_navigate':
+        _browserNavigate(p);
+      case 'browser_snapshot':
+        _browserSnapshot(p);
+      case 'browser_click':
+        _browserClick(p);
+      case 'browser_type':
+        _browserType(p);
+      case 'web_search':
+        _webSearch(p);
+      case 'web_extract':
+        _webExtract(p);
+      case 'desktop_preview':
+        _desktopPreview(p);
+      case 'drive_preview':
+        _drivePreview(p);
+      case 'memory':
+        _memory(p);
+      case 'skill_view':
+        _skillView(p);
+      case 'skill_manage':
+        _skillManage(p);
+      case 'todo_list':
+        _todoList(p);
+      case 'delegate_task':
+        _delegateTask(p);
+      case 'cronjob_manage':
+        _cronjobManage(p);
+      case 'session_search':
+        _sessionSearch(p);
+      case 'tool_search':
+        _toolSearch(p);
+      case 'tool_describe':
+        _toolDescribe(p);
+      case 'tool_call':
+        _toolCall(p);
+      case 'clarify':
+        _clarify(p);
+      default:
+        _unknownTool(p);
     }
-    if (name == 'read_file') {
-      for (final key in ['offset', 'limit']) {
-        if (args.containsKey(key)) {
-          readOptions.add('${_label(key)}: ${args[key]}');
-          consumed.add(key);
-        }
-      }
-    }
-    final otherInputs = Map.fromEntries(
-      args.entries.where((entry) => !consumed.contains(entry.key)),
-    );
-    if (otherInputs.isNotEmpty) {
-      request.add(
-        ToolDetailBlock(
-          label: name == 'read_file'
-              ? 'Read options'
-              : request.isEmpty
-              ? 'Request'
-              : 'Options',
-          text: _readable(otherInputs),
-          secondary: name == 'read_file' || request.isNotEmpty,
-        ),
-      );
-    } else if (input is String && input.isNotEmpty) {
-      request.add(ToolDetailBlock(label: 'Request', text: input));
-    } else if (input == null && context != null && context.isNotEmpty) {
-      request.add(ToolDetailBlock(label: 'Request context', text: context));
-    }
-
-    if (name == 'read_file') {
-      for (final (key, label) in [
-        ('total_lines', 'Total lines'),
-        ('file_size', 'File bytes'),
-        ('next_offset', 'Next offset'),
-      ]) {
-        if (data[key] case final num value) metadata.add('$label: $value');
-      }
-      if (data['truncated'] == true) metadata.add('Partial file returned');
-    }
-    if (data['stdout_truncated'] == true) {
-      metadata.add('Output truncated by server');
-    }
-    if (data['truncated'] == true && name != 'read_file') {
-      metadata.add('Partial results returned');
-    }
-    if (name == 'search_files') {
-      if (data['total_count'] case final num count) {
-        metadata.add('Reported matches: $count');
-      }
-      if (data['total_count_is_lower_bound'] == true) {
-        metadata.add('Count is a lower bound');
-      }
-    }
-    if (name == 'write_file') {
-      if (data['bytes_written'] case final num bytes) {
-        metadata.add('Bytes written: $bytes');
-      }
-      if (data['verified'] case final bool verified) {
-        metadata.add(
-          verified ? 'Write verified by server' : 'Write not verified',
-        );
-      }
-    }
-    if (name == 'write_file' || name == 'patch') {
-      if (data['lint'] case final Map lint) {
-        if (lint['status'] case final String status) {
-          metadata.add(
-            'Syntax check: ${switch (status) {
-              'ok' => 'Passed',
-              'error' => 'Failed',
-              'skipped' => 'Skipped',
-              _ => status,
-            }}',
-          );
-        }
-        for (final key in ['output', 'message']) {
-          if (lint[key] case final String text when text.isNotEmpty) {
-            response.add(
-              ToolDetailBlock(
-                label: 'Syntax check ${key == 'output' ? 'output' : 'details'}',
-                text: text,
-                format: ToolDetailFormat.source,
-              ),
-            );
-          }
-        }
-      }
-      if (data['lsp_diagnostics'] case final String diagnostics
-          when diagnostics.isNotEmpty) {
-        response.add(
-          ToolDetailBlock(
-            label: 'Semantic diagnostics',
-            text: diagnostics,
-            format: ToolDetailFormat.source,
-          ),
-        );
-      }
-    }
-    final groupedMatches = <String, List<Map>>{};
-    final otherMatches = <Object?>[];
-    if (name == 'search_files' && data['matches'] is List) {
-      for (final match in data['matches'] as List) {
-        if (match is Map &&
-            match['path'] is String &&
-            match['content'] is String) {
-          groupedMatches
-              .putIfAbsent(match['path'] as String, () => [])
-              .add(match);
-        } else {
-          otherMatches.add(match);
-        }
-      }
-      for (final entry in groupedMatches.entries) {
-        for (var i = 0; i < entry.value.length; i++) {
-          final match = entry.value[i];
-          response.add(
-            ToolDetailBlock(
-              label: match['line'] is num ? 'Line: ${match['line']}' : 'Match',
-              text: match['content'] as String,
-              format: ToolDetailFormat.source,
-              resourceTarget: i == 0 ? entry.key : null,
-            ),
-          );
-        }
-      }
-    }
-    if (name == 'vision_analyze') {
-      if (args['image_url'] case final String image when image.isNotEmpty) {
-        images.add((label: 'Analyzed image', target: image));
-      }
-    }
-    if (name == 'image_generate') {
-      if (data['image'] case final String image when image.isNotEmpty) {
-        images.add((label: 'Generated image', target: image));
-      }
-    }
-
-    // The native vision receipt hands pixels to the model. It is not an
-    // analysis. Show the receipt verbatim under a truthful caption.
-    for (final detail in details) {
-      if (detail.label == 'Question') continue;
-      if (detail.label == 'Context' && output == null) continue;
-      if (name == 'read_file' &&
-          const [
-            'Total lines',
-            'File size',
-            'Next offset',
-            'Truncated',
-          ].contains(detail.label)) {
-        continue;
-      }
-      if (const ['Success', 'Ok', 'Exit code'].contains(detail.label)) continue;
-      if ((name == 'write_file' || name == 'patch') &&
-          const ['Lint', 'Lsp diagnostics'].contains(detail.label)) {
-        continue;
-      }
-      if (name == 'search_files' &&
-          const [
-            'Total count',
-            'Total count is lower bound',
-            'Truncated',
-          ].contains(detail.label)) {
-        continue;
-      }
-      if (name == 'write_file' &&
-          const ['Bytes written', 'Verified'].contains(detail.label)) {
-        continue;
-      }
-      final text = detail.text;
-      final format = switch (name) {
-        'read_file'
-            when detail.label == 'Content' || detail.label == 'Result' =>
-          ToolDetailFormat.source,
-        'terminal' || 'execute_code' || 'browser_exec'
-            when const [
-              'Output',
-              'Stdout',
-              'Stderr',
-              'Result',
-            ].contains(detail.label) =>
-          ToolDetailFormat.source,
-        _ => ToolDetailFormat.prose,
-      };
-      response.add(
-        ToolDetailBlock(
-          label: nativeVision && detail.label == 'Result'
-              ? 'Image receipt'
-              : name == 'read_file' && format == ToolDetailFormat.source
-              ? 'Raw content'
-              : detail.label,
-          text: text,
-          format: format,
-          markdown: name == 'read_file' && format == ToolDetailFormat.source
-              ? RegExp(
-                  r'\.(?:md|markdown)$',
-                  caseSensitive: false,
-                ).hasMatch(resourceTarget ?? '')
-              : format == ToolDetailFormat.prose && detail.markdown,
-          link: detail.link,
-          numberedLines: name == 'read_file',
-        ),
-      );
-    }
-    for (final key in ['content', 'output', 'stdout', 'stderr']) {
-      final label = name == 'read_file' && key == 'content'
-          ? 'Raw content'
-          : _label(key);
-      if (data[key] == '' && !response.any((block) => block.label == label)) {
-        response.add(
-          ToolDetailBlock(
-            label: label,
-            text: '',
-            numberedLines: name == 'read_file' && key == 'content',
-            format:
-                const [
-                  'read_file',
-                  'terminal',
-                  'execute_code',
-                  'browser_exec',
-                ].contains(name)
-                ? ToolDetailFormat.source
-                : ToolDetailFormat.prose,
-          ),
-        );
-      }
-    }
-    if (data['diff'] case final String diff when diff.isNotEmpty) {
-      response.removeWhere((block) => block.label == 'Diff');
-      response.insert(
-        0,
-        ToolDetailBlock(
-          label: 'Reported diff',
-          text: diff,
-          format: ToolDetailFormat.diff,
-        ),
-      );
-    }
-    // Structured file-search results and nested operation receipts must be
-    // readable even when the general text projection has no content field.
-    for (final key in [
-      'matches',
-      'matches_text',
-      'files',
-      'counts',
-      'lint',
-      'lsp_diagnostics',
-      'warning',
-      '_warning',
-      '_hint',
-      'note',
-    ]) {
-      if ((name == 'write_file' || name == 'patch') &&
-          const ['lint', 'lsp_diagnostics'].contains(key)) {
-        continue;
-      }
-      if (key == 'matches' && groupedMatches.isNotEmpty) {
-        if (otherMatches.isNotEmpty) {
-          response.add(
-            ToolDetailBlock(
-              label: 'Other matches',
-              text: _readable(otherMatches),
-              format: ToolDetailFormat.source,
-            ),
-          );
-        }
-        continue;
-      }
-      final value = data[key];
-      if (value != null &&
-          _readable(value).isNotEmpty &&
-          !response.any((block) => block.label == _label(key))) {
-        response.add(
-          ToolDetailBlock(
-            label: _label(key),
-            text: _readable(value),
-            format: name == 'search_files'
-                ? ToolDetailFormat.source
-                : ToolDetailFormat.prose,
-          ),
-        );
-      }
-    }
-    for (final entry in data.entries) {
-      if ((entry.value is Map || entry.value is List) &&
-          !const [
-            'content',
-            'results',
-            'data',
-            'matches',
-            'files',
-            'counts',
-            'lint',
-            'lsp_diagnostics',
-          ].contains(entry.key) &&
-          !response.any(
-            (block) => block.label == _label(entry.key.toString()),
-          )) {
-        response.add(
-          ToolDetailBlock(
-            label: _label(entry.key.toString()),
-            text: _readable(entry.value),
-          ),
-        );
-      }
-    }
-    if (response.isEmpty &&
-        output != null &&
-        output is! String &&
-        !(output is Map && output.length == 1 && data['content'] is List) &&
-        details.isEmpty) {
-      final text = _readable(output);
-      if (text.isNotEmpty) {
-        response.add(ToolDetailBlock(label: 'Result', text: text));
-      }
-    }
-    final exit = data['exit_code'];
-    return ToolActivityDetails._(
-      request: List.unmodifiable(request),
-      response: List.unmodifiable(response),
-      metadata: List.unmodifiable(metadata),
-      images: List.unmodifiable(images),
-      nativeVision: nativeVision,
-      exitCode: exit is num && exit.isFinite ? exit : null,
-      resourceTarget: resourceTarget,
-      readOptions: List.unmodifiable(readOptions),
-    );
+    p.finish();
+    return ToolActivityDetails._(p);
   }
 }
 
-String _label(String key) {
-  final words = key.replaceAll(RegExp(r'[_-]+'), ' ').trim();
-  return words.isEmpty
-      ? 'Value'
-      : '${words[0].toUpperCase()}${words.substring(1)}';
+/// Private builders share formatting, never automatic field promotion or I/O.
+final class _ToolProjection {
+  _ToolProjection(this.name, Object? input, this.output)
+    : args = input is Map ? input : const {},
+      data = output is Map ? output : const {};
+  final String name;
+  final Map args, data;
+  final Object? output;
+  final request = <ToolDetailBlock>[], response = <ToolDetailBlock>[];
+  final metadata = <String>[], headerFacts = <String>[];
+  final images = <({String label, String target})>[];
+  String? resourceTarget, status, intent;
+  ToolActivityLayout layout = ToolActivityLayout.sections;
+  ToolReceiptState? state;
+  bool nativeVision = false;
+  num? exitCode;
+  void addRequest(
+    String label,
+    Object? value, {
+    ToolDetailFormat format = ToolDetailFormat.prose,
+    ToolDetailRole role = ToolDetailRole.text,
+    bool markdown = false,
+    bool copyable = false,
+    List<String> facts = const [],
+    String? target,
+    String? exactCopyText,
+  }) {
+    if (value is! String) return;
+    request.add(
+      ToolDetailBlock(
+        showEmpty: value.isEmpty,
+        label: label,
+        text: value,
+        format: format,
+        role: role,
+        markdown: markdown,
+        copyable: copyable,
+        facts: facts,
+        resourceTarget: target,
+        exactCopyText: exactCopyText,
+      ),
+    );
+  }
+
+  void addResponse(
+    String label,
+    Object? value, {
+    ToolDetailFormat format = ToolDetailFormat.prose,
+    ToolDetailRole role = ToolDetailRole.text,
+    bool markdown = false,
+    bool copyable = false,
+    List<String> facts = const [],
+    String? target,
+    Uri? link,
+    bool numberedLines = false,
+    bool secondary = false,
+    String? exactCopyText,
+  }) {
+    if (value is! String || value.trim().isEmpty) return;
+    response.add(
+      ToolDetailBlock(
+        label: label,
+        text: value,
+        format: format,
+        role: role,
+        markdown: markdown,
+        copyable: copyable,
+        facts: facts,
+        resourceTarget: target,
+        link: link,
+        numberedLines: numberedLines,
+        secondary: secondary,
+        exactCopyText: exactCopyText,
+      ),
+    );
+  }
+
+  void fact(String label, Object? value, {bool result = false}) {
+    if (value == null || (value is String && value.trim().isEmpty)) return;
+    (result ? metadata : headerFacts).add('$label: ${_display(value)}');
+  }
+
+  void options(Map source, Map<String, String> labels) {
+    for (final entry in labels.entries) {
+      fact(entry.value, source[entry.key]);
+    }
+  }
+
+  void warning(Object? value, {String label = 'Warning'}) {
+    if (value is! String || value.trim().isEmpty) return;
+    addResponse(label, value, role: ToolDetailRole.warning, secondary: true);
+    if (state != ToolReceiptState.error) {
+      state = ToolReceiptState.warning;
+      status ??= 'Completed with a warning';
+    }
+  }
+
+  void image(String label, Object? target) {
+    if (target is String &&
+        target.trim().isNotEmpty &&
+        !images.any((i) => i.target == target)) {
+      images.add((label: label, target: target));
+    }
+  }
+
+  void finish() {
+    // Stock delivery can retain a literal textual receipt rather than its map.
+    // Keep that received evidence cohesive; never reconstruct missing fields.
+    if (output is String && response.isEmpty && !nativeVision) {
+      addResponse(
+        'Result',
+        output,
+        format: ToolDetailFormat.source,
+        role: ToolDetailRole.output,
+        copyable: true,
+      );
+    }
+    final error = _text(data['error']);
+    if (error != null) {
+      if (!response.any((b) => b.text.contains(error))) {
+        addResponse('Error', error, role: ToolDetailRole.warning);
+      }
+      state = ToolReceiptState.error;
+      status ??= 'Failed';
+    } else if (data['success'] == false ||
+        data['ok'] == false ||
+        data['isError'] == true) {
+      state = ToolReceiptState.error;
+      status ??= 'Failed';
+    }
+    if (data['no_change'] == true && state == null) {
+      status = 'No change';
+    }
+  }
 }
 
-String _readable(Object? value, [String indent = '']) {
-  if (value is Map) {
-    return value.entries
-        .map((entry) {
-          final nested = entry.value is Map || entry.value is List;
-          return '$indent${_label(entry.key.toString())}:${nested ? '\n${_readable(entry.value, '$indent  ')}' : ' ${entry.value ?? 'null'}'}';
-        })
-        .join('\n');
+String? _text(Object? value) =>
+    value is String && value.trim().isNotEmpty ? value : null;
+List<Map> _maps(Object? value) =>
+    value is List ? value.whereType<Map>().toList() : const [];
+String _display(Object? value) => value is String
+    ? value
+    : value is List
+    ? value.map(_display).join(' · ')
+    : value is Map
+    ? const JsonEncoder.withIndent('  ').convert(value)
+    : '$value';
+String _literal(Object? value) =>
+    value is String ? value : const JsonEncoder.withIndent('  ').convert(value);
+Uri? _web(Object? value) => value is String ? externalWebLink(value) : null;
+void _unknownTool(_ToolProjection p) {
+  for (final key in [
+    'code',
+    'command',
+    'prompt',
+    'question',
+    'content',
+    'query',
+  ]) {
+    if (p.args[key] is String) {
+      p.addRequest(
+        'Request',
+        p.args[key],
+        format: const ['code', 'command'].contains(key)
+            ? ToolDetailFormat.source
+            : ToolDetailFormat.prose,
+        copyable: const ['code', 'command', 'prompt', 'content'].contains(key),
+      );
+      break;
+    }
   }
-  if (value is List) {
-    return value
-        .map(
-          (item) =>
-              '$indent${item is Map || item is List ? '\n${_readable(item, '$indent  ')}' : item ?? 'null'}',
-        )
-        .join('\n');
+  p.image('Returned image', _nativeImage(p.output));
+  // Unknown contracts get one meaningful receipt, never a toolbar per JSON key.
+  if (p.output is String) {
+    p.addResponse('Result', p.output, copyable: true);
+    return;
   }
-  return value?.toString() ?? '';
+  for (final key in ['result', 'text', 'content', 'output', 'message']) {
+    if (p.data[key] is String) {
+      p.addResponse('Result', p.data[key], copyable: key != 'message');
+      break;
+    }
+  }
+  if (p.data['content'] case final List parts) {
+    final text = parts
+        .whereType<Map>()
+        .where((v) => v['type'] == 'text')
+        .map((v) => _text(v['text']))
+        .whereType<String>()
+        .join('\n\n');
+    p.addResponse('Result', text, copyable: true);
+  }
 }

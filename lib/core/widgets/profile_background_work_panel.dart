@@ -308,9 +308,9 @@ class _WorkSection extends StatelessWidget {
     children: [
       ActivityDetailSection(
         leading: Icon(icon, size: 16),
-        block: ToolDetailBlock(label: 'Prompt', text: prompt),
+        block: ToolDetailBlock(label: 'Prompt', text: prompt, copyable: true),
+        facts: details,
       ),
-      ActivityDetailFacts(facts: details),
       ActivityDetailStatus(label: title, icon: icon, actions: actions),
     ],
   );
@@ -350,28 +350,48 @@ class _ProcessTile extends StatelessWidget {
             ActivityDetailSection(
               block: ToolDetailBlock(
                 label: 'Command',
+                role: ToolDetailRole.command,
                 text: command,
+                copyable: true,
                 format: ToolDetailFormat.source,
               ),
+              facts: [
+                if (process.cwd case final cwd?) 'Folder: $cwd',
+                if (process.pid case final pid?) 'PID $pid',
+                if (process.detached) 'Detached',
+                if (process.notifyOnComplete) 'Completion notice enabled',
+              ],
             ),
-          if (process.outputTail case final output?)
+          if (process.outputTail case final output? when output.isNotEmpty)
             ActivityDetailSection(
               block: ToolDetailBlock(
                 label: 'Recent output',
+                role: ToolDetailRole.output,
                 text: output,
+                copyable: true,
                 format: ToolDetailFormat.source,
               ),
-            ),
-          ActivityDetailFacts(
-            facts: [
-              if (process.cwd case final cwd?) 'Folder: $cwd',
-              if (process.pid case final pid?) 'PID $pid',
-              if (process.detached) 'Detached',
-              if (process.notifyOnComplete) 'Completion notice enabled',
-              if (process.outputTail != null)
+              facts: const [
                 'Latest received output; not a complete transcript',
-            ],
-          ),
+              ],
+            ),
+          if (process.outputTail?.isEmpty == true)
+            const ActivityDetailFacts(
+              facts: ['Latest received output is empty'],
+            ),
+          if (process.commandSource == null &&
+              (process.cwd != null ||
+                  process.pid != null ||
+                  process.detached ||
+                  process.notifyOnComplete))
+            ActivityDetailFacts(
+              facts: [
+                if (process.cwd case final cwd?) 'Folder: $cwd',
+                if (process.pid case final pid?) 'PID $pid',
+                if (process.detached) 'Detached',
+                if (process.notifyOnComplete) 'Completion notice enabled',
+              ],
+            ),
           if (error case final message?)
             ActivityDetailStatus(
               label: message,
@@ -383,6 +403,8 @@ class _ProcessTile extends StatelessWidget {
                 ? 'Running'
                 : process.exitCode != null && process.exitCode != 0
                 ? 'Failed'
+                : process.exitCode == null
+                ? 'Exited'
                 : 'Completed',
             error:
                 !process.isRunning &&

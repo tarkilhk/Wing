@@ -2,7 +2,6 @@ import 'package:wing/core/services/profile_supervision_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/activity_time.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -266,40 +265,45 @@ void main() {
   }
 
   testWidgets(
-    'details expose copyable backend metadata beside existing controls',
+    'a terminal tool name is activity context, not a reported result',
     (tester) async {
-      String? copied;
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (call) async {
-          if (call.method == 'Clipboard.setData') {
-            copied = (call.arguments as Map)['text'] as String;
-          }
-          return null;
+      fixture.rows = [
+        {
+          'subagent_id': 'child-1',
+          'goal': 'Inspect the release',
+          'status': 'completed',
+          'last_tool': 'read_file',
         },
-      );
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          null,
-        ),
-      );
+      ];
       await openDetails(tester);
-      await tester.ensureVisible(find.byTooltip('Expand Details'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Expand Details'));
-      await tester.pumpAndSettle();
-      final copy = find.byTooltip('Copy Details');
-      await tester.ensureVisible(copy);
-      await tester.pumpAndSettle();
-      final copyElement = tester.element(copy);
-      await tester.tap(copy);
-      await tester.pump();
-      expect(copied, 'Agent ID: child-1\nModel: test-model\nTool calls: 3');
-      Navigator.of(copyElement).pop();
+      expect(find.text('Reported result'), findsNothing);
+      expect(find.textContaining('Last activity:'), findsOneWidget);
+      expect(find.byTooltip('Copy Current activity'), findsNothing);
+      expect(find.byTooltip('Steer'), findsNothing);
+      expect(find.byTooltip('Interrupt'), findsNothing);
+      Navigator.of(tester.element(find.text('Task'))).pop();
       await tester.pumpAndSettle();
     },
   );
+
+  testWidgets('backend metadata remains passive beside existing controls', (
+    tester,
+  ) async {
+    await openDetails(tester);
+    await tester.ensureVisible(find.byTooltip('Expand Raw details'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Expand Raw details'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Copy Raw details'), findsNothing);
+    expect(find.byTooltip('Open Raw details'), findsNothing);
+    expect(find.byTooltip('Wrap Raw details'), findsNothing);
+    expect(find.textContaining('Agent ID: child-1'), findsOneWidget);
+    expect(find.byTooltip('Copy Task'), findsOneWidget);
+    expect(find.byTooltip('Copy Live output'), findsOneWidget);
+    Navigator.of(tester.element(find.text('Raw details'))).pop();
+    await tester.pumpAndSettle();
+  });
 
   testWidgets('refresh retains two live event children beside a failed child', (
     tester,
@@ -351,6 +355,11 @@ void main() {
             .first,
       );
       expect(find.text('Recent activity'), findsOneWidget);
+      expect(find.byTooltip('Copy Live output'), findsNothing);
+      expect(find.byTooltip('Open Live output'), findsNothing);
+      expect(find.byTooltip('Copy Current activity'), findsNothing);
+      expect(find.byTooltip('Refresh live output'), findsOneWidget);
+      expect(find.byTooltip('Copy Recent activity'), findsNothing);
       expect(
         find.textContaining('Checking android/app/build.gradle.kts').last,
         findsOneWidget,

@@ -98,6 +98,20 @@ Future<ImageResource> acquireConversationImage(
   allowWindowsPaths: true,
 );
 
+/// Actual tool image parts may contain embedded pixels. Other locators retain
+/// the conversation admission policy and captured remote-file owner.
+Future<ImageResource> acquireToolReceiptImage(
+  String target,
+  Future<Uint8List> Function(String)? loadRemote,
+) => target.startsWith('data:')
+    ? _acquireImageResource(
+        target,
+        loadRemote: loadRemote,
+        allowEmbedded: true,
+        allowWindowsPaths: false,
+      )
+    : acquireConversationImage(target, loadRemote);
+
 Future<ImageResource> acquireUserAttachmentImage(
   String target,
   Future<Uint8List> Function(String)? loadRemote,

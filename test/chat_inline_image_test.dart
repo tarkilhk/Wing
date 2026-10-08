@@ -205,7 +205,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('This image could not be previewed.'), findsOneWidget);
-    await tester.tap(find.text('Retry image'));
+    await tester.tap(find.byTooltip('Retry image'));
     await tester.pump();
     expect(calls, 2);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
@@ -231,11 +231,11 @@ void main() {
       ),
     );
     await settleImages(tester);
-    expect(find.text('Retry image'), findsOneWidget);
-    await tester.tap(find.text('Retry image'));
+    expect(find.byTooltip('Retry image'), findsOneWidget);
+    await tester.tap(find.byTooltip('Retry image'));
     await settleImages(tester);
     expect(calls, 2);
-    expect(find.text('Retry image'), findsNothing);
+    expect(find.byTooltip('Retry image'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -317,9 +317,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        final retry = tester.getRect(
-          find.widgetWithText(OutlinedButton, 'Retry image'),
-        );
+        final retry = tester.getRect(find.byTooltip('Retry image'));
         final download = tester.getRect(find.byTooltip('Download image'));
         expect(retry.overlaps(download), isFalse);
         expect(download.height, greaterThanOrEqualTo(48));

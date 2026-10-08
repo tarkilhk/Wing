@@ -12155,6 +12155,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "tools/agent_skills/design-wing-activity/SKILL.md",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "tools/agent_skills/maintain-feature-architecture/SKILL.md",
       "area": "tools",
       "provenance": "intentional-untracked"
@@ -13841,6 +13846,76 @@
     },
     {
       "path": "test/activity_family_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activities/discovery.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activities/files.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activities/state.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activities/execution_media.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activities/browser_web.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_browser_web_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_execution_media_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_discovery_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_state_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_catalog_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_files_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/fixtures/stock_activity_shapes.json",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "docs/design/activity-field-policy.md",
+      "area": "docs",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_actions_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     }

@@ -17,12 +17,16 @@ class ChatInlineImage extends StatefulWidget {
     required this.title,
     this.loadImage,
     this.downloadAction,
+    this.toolReceipt = false,
+    this.headerBuilder,
   });
 
   final String target;
   final String title;
   final Future<Uint8List> Function(String path)? loadImage;
   final Widget? downloadAction;
+  final bool toolReceipt;
+  final Widget Function(BuildContext, VoidCallback?)? headerBuilder;
 
   @override
   State<ChatInlineImage> createState() => _ChatInlineImageState();
@@ -33,10 +37,9 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
   int _attempt = 0;
 
   Future<ImageProvider> _imageProvider() async {
-    final resource = await acquireConversationImage(
-      widget.target,
-      widget.loadImage,
-    );
+    final resource = await (widget.toolReceipt
+        ? acquireToolReceiptImage
+        : acquireConversationImage)(widget.target, widget.loadImage);
     return resource.bytes != null
         ? MemoryImage(resource.bytes!)
         : NetworkImage(resource.uri.toString());
@@ -74,24 +77,33 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
   );
 
   Widget _unavailable() => Padding(
-    padding: EdgeInsets.fromLTRB(
-      WingSpacing.sm,
-      WingSpacing.sm,
-      WingSpacing.sm,
-      widget.downloadAction == null ? WingSpacing.sm : 60,
-    ),
+    padding: widget.headerBuilder != null
+        ? EdgeInsets.zero
+        : EdgeInsets.fromLTRB(
+            WingSpacing.sm,
+            WingSpacing.sm,
+            WingSpacing.sm,
+            widget.downloadAction == null ? WingSpacing.sm : 60,
+          ),
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         const StudioError('This image could not be previewed.'),
         const SizedBox(height: WingSpacing.xs),
-        OutlinedButton.icon(
+        IconButton(
+          tooltip: 'Retry image',
+          constraints: widget.toolReceipt
+              ? const BoxConstraints.tightFor(width: 32, height: 32)
+              : null,
+          padding: widget.toolReceipt
+              ? EdgeInsets.zero
+              : const EdgeInsets.all(8),
+          visualDensity: widget.toolReceipt ? VisualDensity.compact : null,
           onPressed: () => setState(() {
             _attempt++;
             _image = _imageProvider();
           }),
-          icon: const Icon(Icons.refresh),
-          label: const Text('Retry image'),
+          icon: Icon(Icons.refresh, size: widget.toolReceipt ? 16 : null),
         ),
       ],
     ),
@@ -99,6 +111,34 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.headerBuilder != null) {
+      return FutureBuilder<ImageProvider>(
+        future: _image,
+        builder: (context, snapshot) {
+          final provider = snapshot.data;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              widget.headerBuilder!(
+                context,
+                provider == null ? null : () => _open(provider),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(WingSpacing.sm),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _preview(context),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    }
+    return _preview(context);
+  }
+
+  Widget _preview(BuildContext context) {
     // Desktop caps previews without cropping or upscaling. A 4:3 cold frame
     // reserves loading space; the decoded preview hugs the image. Avoid
     // LayoutBuilder because Markdown table cells measure intrinsic dimensions.
@@ -111,7 +151,9 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
         child: Material(
           color: Theme.of(context).colorScheme.surfaceContainerLow,
           child: Stack(
-            alignment: Alignment.center,
+            alignment: widget.toolReceipt
+                ? Alignment.centerLeft
+                : Alignment.center,
             children: [
               FutureBuilder<ImageProvider>(
                 key: ValueKey((widget.target, _attempt)),

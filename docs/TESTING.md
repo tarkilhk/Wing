@@ -493,3 +493,10 @@ the QA fixture after the run, including on failure.
 For manual checks against stock Hermes, generate supported notification events one scenario at a time. Record backend outcomes separately from observations on the phone.
 
 Activity history regression: run `flutter test --no-pub test/saved_activity_test.dart test/profile_combined_activity_test.dart test/profile_tool_call_test.dart test/profile_subagents_test.dart`. Check restored Tasks/Agents, exact child-index input joins, empty task snapshots, background dispatch, roster discovery on reopen, exception-only tool headers and delivered timing. Inspect saved rows at 360 dp in both themes and 200% text; saved agents never offer steering or interruption.
+
+The stock activity catalog in `test/tool_activity_catalog_test.dart` exercises
+all source-shaped variants in `test/fixtures/stock_activity_shapes.json` through
+the actual shared renderer. Capture with `CAPTURE_ACTIVITY_CATALOG=true` and the
+same real font directory; inspect `build/activity-catalog/` with the family
+images. The [field policy](design/activity-field-policy.md) owns each tool's
+selection and action scope; fixtures do not claim live executions.

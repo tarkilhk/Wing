@@ -87,6 +87,8 @@ class ProfileTodoPanel extends StatelessWidget {
             Padding(
               padding: EdgeInsets.only(left: todo.parent == null ? 0 : 12),
               child: ActivityDetailSection(
+                copyable: false,
+                viewable: false,
                 leading: _TodoStatusIcon(status: todo.status),
                 block: ToolDetailBlock(
                   label:
@@ -215,6 +217,7 @@ class ProfileReasoningDisclosure extends StatelessWidget {
                 label: running ? 'Thinking' : 'Thought',
                 text: text,
                 markdown: true,
+                copyable: true,
               ),
             ),
           ],

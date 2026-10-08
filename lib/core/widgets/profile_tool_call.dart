@@ -59,6 +59,7 @@ class ProfileToolCall extends StatelessWidget {
     'skill_view': Icons.menu_book_outlined,
     'skill_manage': Icons.library_books_outlined,
     'tool_get': Icons.build_outlined,
+    'tool_describe': Icons.build_outlined,
     'tool_search': Icons.manage_search_outlined,
     'tool_call': Icons.extension_outlined,
     'image_generate': Icons.image_outlined,
@@ -66,6 +67,7 @@ class ProfileToolCall extends StatelessWidget {
     'todo_list': Icons.playlist_add_check_outlined,
     'delegate_task': Icons.account_tree_outlined,
     'cronjob': Icons.calendar_month_outlined,
+    'cronjob_manage': Icons.calendar_month_outlined,
     'clarify': Icons.help_outline,
     'session_search': Icons.manage_search_outlined,
   };
@@ -128,18 +130,6 @@ class ProfileToolCall extends StatelessWidget {
           onOpenResource: onOpenResource,
           onShareResource: onShareResource,
         ),
-        if (call.labels.length > 1)
-          ActivityDetailsCard(
-            children: [
-              for (final label in call.labels.skip(1))
-                ActivityDetailSection(
-                  block: ToolDetailBlock(
-                    label: label.text,
-                    text: label.preview,
-                  ),
-                ),
-            ],
-          ),
         ProfileTranscriptDisclosure(
           label: 'Raw details',
           icon: Icons.data_object,
@@ -148,6 +138,8 @@ class ProfileToolCall extends StatelessWidget {
             ActivityDetailsCard(
               children: [
                 _RawToolValue(label: 'Tool', value: call.name),
+                for (final label in call.labels.skip(1))
+                  _RawToolValue(label: label.text, value: label.preview),
                 if (call.callId case final id?)
                   _RawToolValue(label: 'Call ID', value: id),
                 if (call.context case final context?)
@@ -183,6 +175,8 @@ class _RawToolValue extends StatelessWidget {
       label: label,
       text: value,
       format: ToolDetailFormat.source,
+      copyable: label == 'Inputs' || label == 'Output',
     ),
+    viewable: label == 'Inputs' || label == 'Output',
   );
 }

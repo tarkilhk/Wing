@@ -611,6 +611,7 @@ void main() {
         expect(find.text('Pending'), findsOneWidget);
         expect(find.text('Cancelled'), findsOneWidget);
         expect(find.byType(Checkbox), findsNothing);
+        expect(find.byType(IconButton), findsNothing);
         expect(find.byType(SelectableText), findsNWidgets(4));
         final texts = tester
             .widgetList<SelectableText>(find.byType(SelectableText))

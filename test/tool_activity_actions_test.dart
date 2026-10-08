@@ -1,0 +1,186 @@
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/models/gateway_activity.dart';
+import 'package:wing/core/presentation/tool_activity_details.dart';
+import 'package:wing/core/presentation/tool_call_presentation.dart';
+import 'package:wing/core/services/owned_remote_files.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/tool_activity_details.dart';
+
+import 'helpers/pump_markdown_widget.dart';
+
+ToolCallPresentation call(String name, Map args, Map result) =>
+    ToolCallPresentation.live(
+      GatewayToolActivity.fromGatewayEvent('tool.complete', {
+        'tool_id': 'call',
+        'name': name,
+        'args': args,
+        'result': result,
+      })!,
+    );
+Future<void> pump(WidgetTester tester, Widget child) async {
+  tester.view.physicalSize = const Size(390, 1100);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: wingTheme(Brightness.dark),
+      home: Scaffold(body: SingleChildScrollView(child: child)),
+    ),
+  );
+  await tester.settleMarkdown();
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  testWidgets('passive short acknowledgement earns no controls', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      const ActivityDetailsCard(
+        children: [
+          ActivityDetailSection(
+            block: ToolDetailBlock(label: 'Result', text: 'Patch applied'),
+          ),
+        ],
+      ),
+    );
+    expect(find.byType(IconButton), findsNothing);
+    expect(find.text('Patch applied'), findsOneWidget);
+  });
+  testWidgets('resource header retains wrap before eye share and exact copy', (
+    tester,
+  ) async {
+    final receipt = '1|${'code ' * 100}';
+    await pump(
+      tester,
+      ToolActivityDetailsView(
+        call: call('read_file', {'path': 'report.py'}, {'content': receipt}),
+        onOpenResource: (_) async {},
+        onShareResource: (_) async {},
+      ),
+    );
+    final buttons = tester
+        .widgetList<IconButton>(find.byType(IconButton))
+        .map((b) => b.tooltip)
+        .toList();
+    expect(buttons, [
+      'Scroll Result horizontally',
+      'Preview file',
+      'Share file',
+      'Copy content',
+    ]);
+    expect(find.byTooltip('Open Result'), findsNothing);
+    expect(find.byTooltip('Copy Result'), findsNothing);
+    await tester.tap(find.byTooltip('Scroll Result horizontally'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Wrap Result'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('overflowing web excerpt has one source eye and one copy', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      ToolActivityDetailsView(
+        call: call(
+          'web_extract',
+          {
+            'urls': ['https://example.org/report'],
+          },
+          {
+            'results': [
+              {
+                'url': 'https://example.org/report',
+                'title': 'Report',
+                'content': 'Paragraph.\n\n' * 40,
+              },
+            ],
+          },
+        ),
+      ),
+    );
+    expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+    expect(find.byTooltip('Open source'), findsOneWidget);
+    expect(find.byTooltip('Open Report'), findsNothing);
+    expect(find.byTooltip('Copy Report'), findsOneWidget);
+  });
+  testWidgets(
+    'identity-only search rows omit empty bodies and repeated paths',
+    (tester) async {
+      await pump(
+        tester,
+        ToolActivityDetailsView(
+          call: call(
+            'search_files',
+            {'pattern': 'name', 'output_mode': 'count'},
+            {
+              'total_count': 5,
+              'counts': {'a.py': 2, 'b.py': 3},
+            },
+          ),
+          onOpenResource: (_) async {},
+        ),
+      );
+      expect(find.text('Empty text'), findsNothing);
+      expect(find.text('a.py'), findsOneWidget);
+      expect(find.text('b.py'), findsOneWidget);
+      expect(
+        find.byIcon(Icons.copy_outlined),
+        findsOneWidget,
+      ); // reusable pattern only
+      expect(find.byTooltip('Copy Counts'), findsNothing);
+    },
+  );
+  test(
+    'unknown native MCP result preserves received text without field promotion',
+    () {
+      final projected = ToolActivityDetails.project(
+        name: 'mcp__tracker__lookup',
+        input: {},
+        output: {
+          'result': 'Two matching notes are available.',
+          'structuredContent': {'internal': true},
+        },
+      );
+      expect(
+        projected.response.single.copyText,
+        'Two matching notes are available.',
+      );
+      expect(projected.response.single.copyable, isTrue);
+    },
+  );
+  test(
+    'embedded tool pixels use received bytes without a remote-file read',
+    () async {
+      var reads = 0;
+      final image = await acquireToolReceiptImage(
+        'data:image/png;base64,AQID',
+        (_) async {
+          reads++;
+          return Uint8List(0);
+        },
+      );
+      expect(image.bytes, [1, 2, 3]);
+      expect(reads, 0);
+    },
+  );
+  test(
+    'tool image admission keeps unsupported and credential URLs closed',
+    () async {
+      for (final target in [
+        'data:text/plain;base64,AQID',
+        'javascript:alert(1)',
+        'https://user:secret@example.org/image.png',
+      ]) {
+        await expectLater(
+          acquireToolReceiptImage(target, (_) async => Uint8List(0)),
+          throwsFormatException,
+        );
+      }
+    },
+  );
+}

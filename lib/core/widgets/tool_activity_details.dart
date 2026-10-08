@@ -2,6 +2,7 @@ import '../models/chat_output.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../presentation/tool_activity_details.dart';
@@ -204,101 +205,92 @@ class ToolActivityDetailsView extends StatelessWidget {
     final readContent = blocks
         .where((block) => block.isReadContent)
         .firstOrNull;
+    final writtenContent =
+        details.layout == ToolActivityLayout.file && readContent == null
+        ? details.request.firstOrNull
+        : null;
+    final fileContent = readContent ?? writtenContent;
+    final resource = details.resourceTarget;
+    final groupedSearch = details.layout == ToolActivityLayout.search;
+    final showResource = resource != null && !groupedSearch;
     return ActivityDetailsCard(
       children: [
-        if (readContent != null)
-          _ReadFileContent(
-            block: readContent,
+        if (fileContent != null && showResource)
+          _FileActivityContent(
+            block: fileContent,
             details: details,
             loadImage: loadImage,
             onOpen: onOpenResource,
             onShare: onShareResource,
+          )
+        else if (showResource)
+          _ToolResourceRow(
+            target: resource,
+            output: details.resourceFor(resource),
+            facts: details.headerFacts,
+            onOpen: onOpenResource,
+            onShare: onShareResource,
           ),
-        if (readContent == null)
-          if (details.resourceTarget case final target?)
-            _ToolResourceRow(
-              target: target,
-              output: details.resourceFor(target),
-              onOpen: onOpenResource,
-              onShare: onShareResource,
-            ),
-        for (final image in details.images) ...[
-          if (image.target != details.resourceTarget)
-            _ToolResourceRow(
+        for (final image in details.images)
+          ChatInlineImage(
+            target: image.target,
+            title: image.label,
+            loadImage: loadImage,
+            toolReceipt: true,
+            headerBuilder: (context, onView) => _ToolResourceRow(
               target: image.target,
               output: details.resourceFor(image.target),
-              onOpen: onOpenResource,
+              onViewImage: onView,
               onShare: onShareResource,
-            ),
-          ActivityDetailContent(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: ChatInlineImage(
-                target: image.target,
-                title: image.label,
-                loadImage: loadImage,
-              ),
+              facts: [image.label],
             ),
           ),
-        ],
-        if (readContent == null && details.readOptions.isNotEmpty)
-          Container(
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: colors.border)),
-            ),
-            padding: _toolInsets,
-            child: Wrap(
-              spacing: WingSpacing.sm,
-              runSpacing: WingSpacing.xs,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Icon(Icons.tune, size: 16, color: colors.muted),
-                Text(
-                  'Read options',
-                  style: colors.typography.label.copyWith(
-                    color: colors.onSurface,
-                  ),
-                ),
-                Text(
-                  details.readOptions.join(' · '),
-                  style: colors.typography.label.copyWith(color: colors.muted),
-                ),
-              ],
-            ),
-          ),
-        if (details.request.isEmpty && details.resourceTarget == null)
-          _Message('No request details supplied'),
         for (var i = 0; i < blocks.length; i++)
-          if (!identical(blocks[i], readContent)) ...[
-            if (blocks[i].resourceTarget case final target?)
-              _ToolResourceRow(
-                target: target,
-                output: details.resourceFor(target),
-                onOpen: onOpenResource,
-                onShare: onShareResource,
-              ),
+          if (!(resource != null && identical(blocks[i], fileContent))) ...[
             ActivityDetailSection(
               key: ValueKey((i, blocks[i].label)),
               block: blocks[i],
+              leading: Icon(
+                _sectionIcon(
+                  call.name,
+                  blocks[i],
+                  details.request.contains(blocks[i]),
+                ),
+                size: 16,
+                color: colors.muted,
+              ),
               loadImage: loadImage,
+              copyable: blocks[i].resourceTarget == null,
+              resourceViewer:
+                  blocks[i].resourceTarget != null &&
+                  details.resourceFor(blocks[i].resourceTarget!) != null &&
+                  onOpenResource != null,
+              headerBuilder: blocks[i].resourceTarget == null
+                  ? null
+                  : (context, actions) => _ToolResourceRow(
+                      target: blocks[i].resourceTarget!,
+                      output: details.resourceFor(blocks[i].resourceTarget!),
+                      onOpen: onOpenResource,
+                      onShare: onShareResource,
+                      leadingActions: actions,
+                      copyText: blocks[i].copyable ? blocks[i].copyText : null,
+                      copyLabel: 'Copy ${blocks[i].label}',
+                      facts: [
+                        blocks[i].label,
+                        ...blocks[i].facts.where(
+                          (f) => f != blocks[i].resourceTarget,
+                        ),
+                      ],
+                    ),
+              facts: !showResource && i == 0 ? details.headerFacts : const [],
             ),
           ],
-        if (details.response.isEmpty)
-          _Message(
-            call.outcome == ToolCallOutcome.running
-                ? 'Waiting for result'
-                : call.result == null
-                ? 'No result supplied'
-                : 'No text returned',
-          ),
+        if (details.response.isEmpty && call.outcome == ToolCallOutcome.running)
+          const _Message('Waiting for result'),
+        if (blocks.isEmpty && !showResource && details.headerFacts.isNotEmpty)
+          ActivityDetailFacts(facts: details.headerFacts),
         if (details.metadata.isNotEmpty)
-          Padding(
-            padding: _toolInsets,
-            child: Text(
-              details.metadata.join(' · '),
-              style: colors.typography.label.copyWith(color: colors.muted),
-            ),
-          ),
+          ActivityDetailFacts(facts: details.metadata),
         ActivityDetailStatus(
           label: call.status,
           icon: statusIcon,
@@ -318,20 +310,41 @@ class ToolActivityDetailsView extends StatelessWidget {
   }
 }
 
+IconData _sectionIcon(String tool, ToolDetailBlock block, bool request) =>
+    switch (block.role) {
+      ToolDetailRole.code => Icons.code_rounded,
+      ToolDetailRole.command || ToolDetailRole.output => Icons.terminal_rounded,
+      ToolDetailRole.question => Icons.help_outline,
+      ToolDetailRole.search => Icons.search,
+      ToolDetailRole.skill => Icons.menu_book_outlined,
+      ToolDetailRole.task => Icons.assignment_outlined,
+      ToolDetailRole.warning => Icons.warning_amber_outlined,
+      ToolDetailRole.diff => Icons.difference_outlined,
+      ToolDetailRole.text => switch (block.format) {
+        ToolDetailFormat.diff => Icons.difference_outlined,
+        ToolDetailFormat.source => Icons.code_rounded,
+        ToolDetailFormat.prose => Icons.notes_outlined,
+      },
+    };
+
 class _ToolResourceRow extends StatefulWidget {
   const _ToolResourceRow({
     required this.target,
     required this.output,
     this.onOpen,
     this.onShare,
+    this.onViewImage,
+    this.leadingActions = const [],
     this.facts = const [],
     this.copyText,
-    this.copyLabel = 'Copy path',
+    this.copyLabel = 'Copy content',
   });
   final String target;
   final ChatOutput? output;
   final Future<void> Function(ChatOutput)? onOpen;
   final Future<void> Function(ChatOutput)? onShare;
+  final VoidCallback? onViewImage;
+  final List<Widget> leadingActions;
   final List<String> facts;
   final String? copyText;
   final String copyLabel;
@@ -373,21 +386,27 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
   @override
   Widget build(BuildContext context) {
     final colors = WingTokens.of(context);
-    final image = widget.output?.kind == ChatOutputKind.image;
+    final image =
+        widget.output?.kind == ChatOutputKind.image ||
+        widget.target.startsWith('data:image/');
     final output = widget.output;
     final busy = _opening || _sharing;
     final actions = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (output != null && widget.onOpen != null)
+        ...widget.leadingActions,
+        if (widget.onViewImage != null ||
+            (output != null && widget.onOpen != null))
           IconButton(
             style: _toolActionStyle,
             tooltip: image
                 ? 'Preview image'
-                : output.kind == ChatOutputKind.link
+                : output?.kind == ChatOutputKind.link
                 ? 'Open link'
                 : 'Preview file',
-            onPressed: busy ? null : () => _run(share: false),
+            onPressed: busy
+                ? null
+                : widget.onViewImage ?? () => _run(share: false),
             icon: _opening
                 ? const SizedBox(
                     width: 16,
@@ -409,10 +428,8 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
                   )
                 : const Icon(Icons.share_outlined, size: 16),
           ),
-        ToolDetailCopyButton(
-          label: widget.copyLabel,
-          text: widget.copyText ?? widget.target,
-        ),
+        if (widget.copyText case final text? when text.isNotEmpty)
+          ToolDetailCopyButton(label: widget.copyLabel, text: text),
       ],
     );
     final path = Padding(
@@ -473,8 +490,8 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
 
 /// One compact file header and a bounded receipt. Only the full file viewer
 /// switches Markdown/source; the eye forwards the captured file intent.
-class _ReadFileContent extends StatelessWidget {
-  const _ReadFileContent({
+class _FileActivityContent extends StatelessWidget {
+  const _FileActivityContent({
     required this.block,
     required this.details,
     this.loadImage,
@@ -489,35 +506,39 @@ class _ReadFileContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final formatted = block.markdown;
+    final formatted = block.isReadContent && block.markdown;
     final target = details.resourceTarget;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (target != null)
-          _ToolResourceRow(
-            target: target,
-            output: details.resourceFor(target),
-            facts: details.readOptions,
-            onOpen: onOpen,
-            onShare: onShare,
-            copyText: block.text,
-            copyLabel: 'Copy content',
-          ),
-        ActivityDetailSection(
-          block: formatted
-              ? ToolDetailBlock(
-                  label: 'Content',
-                  text: block.documentText,
-                  markdown: true,
-                )
-              : block,
-          loadImage: loadImage,
-          documentPath: target,
-          onOpenRemoteFile: onOpen,
-          showHeader: target == null,
-        ),
-      ],
+    return ActivityDetailSection(
+      block: formatted
+          ? ToolDetailBlock(
+              label: block.label,
+              text: block.documentText,
+              markdown: true,
+              copyable: block.copyable,
+              exactCopyText: block.copyText,
+              showEmpty: block.showEmpty,
+            )
+          : block,
+      loadImage: loadImage,
+      documentPath: target,
+      onOpenRemoteFile: onOpen,
+      copyable: target == null,
+      resourceViewer:
+          target != null &&
+          details.resourceFor(target) != null &&
+          onOpen != null,
+      headerBuilder: target == null
+          ? null
+          : (context, actions) => _ToolResourceRow(
+              target: target,
+              output: details.resourceFor(target),
+              facts: [...details.headerFacts, ...block.facts],
+              leadingActions: actions,
+              onOpen: onOpen,
+              onShare: onShare,
+              copyText: block.copyable ? block.copyText : null,
+              copyLabel: 'Copy content',
+            ),
     );
   }
 }
@@ -559,6 +580,11 @@ class ActivityDetailSection extends StatefulWidget {
     this.actions = const [],
     this.initiallyCollapsed = false,
     this.showHeader = true,
+    this.copyable = true,
+    this.viewable = true,
+    this.resourceViewer = false,
+    this.headerBuilder,
+    this.facts = const [],
     this.documentPath,
     this.onOpenRemoteFile,
   });
@@ -569,6 +595,11 @@ class ActivityDetailSection extends StatefulWidget {
   final Future<Uint8List> Function(String)? loadImage;
   final bool full;
   final bool showHeader;
+  final bool copyable;
+  final bool viewable;
+  final bool resourceViewer;
+  final Widget Function(BuildContext, List<Widget>)? headerBuilder;
+  final List<String> facts;
   final String? documentPath;
   final Future<void> Function(ChatOutput)? onOpenRemoteFile;
   @override
@@ -577,6 +608,7 @@ class ActivityDetailSection extends StatefulWidget {
 
 class _ActivityDetailSectionState extends State<ActivityDetailSection> {
   bool _wrap = true;
+  bool _contentOverflows = false;
   late bool _collapsed = widget.initiallyCollapsed;
   final _scroll = ScrollController();
 
@@ -586,194 +618,272 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
     super.dispose();
   }
 
+  void _observeContent(Size size) {
+    final overflows = size.height > 160;
+    if (mounted && overflows != _contentOverflows) {
+      setState(() => _contentOverflows = overflows);
+    }
+  }
+
+  void _openContent() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _ActivityTextViewer(
+          block: widget.block,
+          loadImage: widget.loadImage,
+          documentPath: widget.documentPath,
+          onOpenRemoteFile: widget.onOpenRemoteFile,
+          copyable: widget.copyable || widget.headerBuilder != null,
+        ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
-    final block = widget.block;
-    final colors = WingTokens.of(context);
-    final source = block.format != ToolDetailFormat.prose;
-    final text = block.text;
-    final icon = switch (block.format) {
-      ToolDetailFormat.diff => Icons.difference_outlined,
-      ToolDetailFormat.source =>
-        block.label.toLowerCase().contains('output') ||
-                block.label == 'Stdout' ||
-                block.label == 'Stderr'
-            ? Icons.terminal_rounded
-            : Icons.code_rounded,
-      ToolDetailFormat.prose =>
-        block.label == 'Question' ? Icons.help_outline : Icons.notes_outlined,
-    };
-    Widget body;
-    if (text.isEmpty) {
-      body = Text(
-        'Empty text',
-        style: TextStyle(fontSize: 12, color: colors.muted),
-      );
-    } else if (block.markdown) {
-      body = MarkdownMessageContent(
-        data: text,
-        loadImage: widget.loadImage,
-        documentPath: widget.documentPath,
-        onOpenRemoteFile: widget.onOpenRemoteFile,
-      );
-    } else {
-      final displayLines = text.split('\n');
-      final content = SelectableText.rich(
-        TextSpan(
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final block = widget.block;
+      final colors = WingTokens.of(context);
+      final source = block.format != ToolDetailFormat.prose;
+      final text = block.text;
+      final style =
+          (source
+                  ? colors.typography.mono
+                  : block.secondary
+                  ? colors.typography.label
+                  : colors.typography.body)
+              .copyWith(
+                color: block.secondary ? colors.muted : colors.onSurface,
+              );
+      final icon = switch (block.format) {
+        ToolDetailFormat.diff => Icons.difference_outlined,
+        ToolDetailFormat.source => Icons.code_rounded,
+        ToolDetailFormat.prose => Icons.notes_outlined,
+      };
+      var canWrap = false;
+      if (source && text.isNotEmpty) {
+        final measure = TextPainter(
+          text: TextSpan(text: text, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout();
+        canWrap = measure.width > constraints.maxWidth - 16;
+        measure.dispose();
+      }
+      Widget body;
+      if (text.isEmpty) {
+        body = Text(
+          'Empty text',
+          style: colors.typography.label.copyWith(color: colors.muted),
+        );
+      } else if (block.markdown) {
+        body = MarkdownMessageContent(
+          data: text,
+          loadImage: widget.loadImage,
+          documentPath: widget.documentPath,
+          onOpenRemoteFile: widget.onOpenRemoteFile,
+        );
+      } else {
+        final lines = text.split('\n');
+        final content = SelectableText.rich(
+          TextSpan(
+            children: [
+              for (var i = 0; i < lines.length; i++)
+                _lineSpan(lines[i], i == 0, block, colors),
+            ],
+          ),
+          style: style,
+        );
+        body = _wrap
+            ? content
+            : SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: content,
+              );
+      }
+      if (!widget.full) {
+        body = ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 160),
+          child: Scrollbar(
+            controller: _scroll,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              key: const ValueKey('activity-content-scroll'),
+              controller: _scroll,
+              primary: false,
+              child: _ActivityBodyMeasure(
+                onLayout: _observeContent,
+                child: body,
+              ),
+            ),
+          ),
+        );
+      }
+      final actions = <Widget>[
+        ...widget.actions,
+        if (widget.initiallyCollapsed && !widget.full)
+          ActivityDetailAction(
+            label: '${_collapsed ? 'Expand' : 'Collapse'} ${block.label}',
+            icon: _collapsed ? Icons.chevron_right : Icons.expand_more,
+            onPressed: () => setState(() => _collapsed = !_collapsed),
+          ),
+        if (widget.viewable && canWrap)
+          ActivityDetailAction(
+            label: _wrap
+                ? 'Scroll ${block.label} horizontally'
+                : 'Wrap ${block.label}',
+            icon: _wrap ? Icons.swap_horiz : Icons.wrap_text,
+            onPressed: () => setState(() => _wrap = !_wrap),
+          ),
+        if (block.link case final link?)
+          ActivityDetailAction(
+            label: 'Open source',
+            icon: Icons.visibility_outlined,
+            onPressed: () async {
+              final opened = await openWebPreview(link);
+              if (!opened && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: StudioError('Could not open this source.'),
+                  ),
+                );
+              }
+            },
+          ),
+        if (widget.viewable &&
+            !widget.full &&
+            block.link == null &&
+            !widget.resourceViewer &&
+            _contentOverflows)
+          ActivityDetailAction(
+            label: 'Open ${block.label}',
+            icon: Icons.visibility_outlined,
+            onPressed: _openContent,
+          ),
+        if (widget.copyable && block.copyable && text.isNotEmpty)
+          ToolDetailCopyButton(
+            label: 'Copy ${block.label}',
+            text: block.copyText,
+          ),
+      ];
+      final facts = [...block.facts, ...widget.facts];
+      final title = Padding(
+        padding: _toolVerticalInsets,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (var i = 0; i < displayLines.length; i++)
-              _lineSpan(displayLines[i], i == 0, block, colors),
+            widget.leading ?? Icon(icon, size: 16, color: colors.muted),
+            const SizedBox(width: WingSpacing.sm),
+            Expanded(
+              child: Wrap(
+                spacing: WingSpacing.sm,
+                runSpacing: WingSpacing.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    block.label,
+                    style: colors.typography.label.copyWith(
+                      color: colors.onSurface,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  for (final fact in facts)
+                    Text(
+                      fact,
+                      style: colors.typography.label.copyWith(
+                        color: colors.muted,
+                      ),
+                    ),
+                  if (block.link case final link?)
+                    Text(
+                      link.host,
+                      style: colors.typography.label.copyWith(
+                        color: colors.muted,
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ],
         ),
-        style:
-            (source
-                    ? colors.typography.mono
-                    : block.secondary
-                    ? colors.typography.label
-                    : colors.typography.body)
-                .copyWith(
-                  color: block.secondary ? colors.muted : colors.onSurface,
-                ),
       );
-      body = _wrap
-          ? content
-          : SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: content,
-            );
-    }
-    if (!widget.full) {
-      body = ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 160),
-        child: Scrollbar(
-          controller: _scroll,
-          thumbVisibility: true,
-          child: SingleChildScrollView(
-            key: const ValueKey('activity-content-scroll'),
-            controller: _scroll,
-            primary: false,
-            child: body,
-          ),
-        ),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (widget.showHeader)
-          Container(
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: colors.border)),
-            ),
-            padding: _toolHorizontalInsets,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: _toolVerticalInsets,
-                    child: Row(
+      final stackActions =
+          actions.isNotEmpty &&
+          (MediaQuery.textScalerOf(context).scale(12) > 18 ||
+              constraints.maxWidth - actions.length * 32 - 32 < 100);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.headerBuilder != null)
+            widget.headerBuilder!(context, actions)
+          else if (widget.showHeader)
+            Container(
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: colors.border)),
+              ),
+              padding: actions.isEmpty
+                  ? _toolInsets.copyWith(top: 0, bottom: 0)
+                  : _toolHorizontalInsets,
+              child: stackActions
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        widget.leading ??
-                            Icon(icon, size: 16, color: colors.muted),
-                        const SizedBox(width: WingSpacing.sm),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                block.label,
-                                style: colors.typography.label.copyWith(
-                                  color: colors.onSurface,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              if (block.link case final link?)
-                                Text(
-                                  link.host,
-                                  style: colors.typography.label.copyWith(
-                                    color: colors.muted,
-                                  ),
-                                ),
-                            ],
+                        title,
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: actions,
                           ),
                         ),
                       ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(child: title),
+                        ...actions,
+                      ],
                     ),
-                  ),
-                ),
-                ...widget.actions,
-                if (widget.initiallyCollapsed && !widget.full)
-                  ActivityDetailAction(
-                    label:
-                        '${_collapsed ? 'Expand' : 'Collapse'} ${block.label}',
-                    icon: _collapsed ? Icons.chevron_right : Icons.expand_more,
-                    onPressed: () => setState(() => _collapsed = !_collapsed),
-                  ),
-                if (block.link case final link?)
-                  IconButton(
-                    style: _toolActionStyle,
-                    tooltip: 'Open source',
-                    icon: const Icon(Icons.open_in_new, size: 16),
-                    onPressed: () async {
-                      final opened = await openWebPreview(link);
-                      if (!opened && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: StudioError('Could not open this source.'),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                if (block.link case final link?)
-                  ToolDetailCopyButton(
-                    label: 'Copy source link',
-                    text: link.toString(),
-                  ),
-                if (source)
-                  IconButton(
-                    style: _toolActionStyle,
-                    tooltip: _wrap
-                        ? 'Scroll ${block.label} horizontally'
-                        : 'Wrap ${block.label}',
-                    icon: Icon(
-                      _wrap ? Icons.swap_horiz : Icons.wrap_text,
-                      size: 16,
-                    ),
-                    onPressed: () => setState(() => _wrap = !_wrap),
-                  ),
-                if (!widget.full)
-                  IconButton(
-                    style: _toolActionStyle,
-                    tooltip: 'Open ${block.label}',
-                    icon: const Icon(Icons.fullscreen, size: 16),
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => Scaffold(
-                          appBar: AppBar(title: Text(block.label)),
-                          body: SingleChildScrollView(
-                            child: ActivityDetailSection(
-                              block: block,
-                              loadImage: widget.loadImage,
-                              documentPath: widget.documentPath,
-                              onOpenRemoteFile: widget.onOpenRemoteFile,
-                              full: true,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ToolDetailCopyButton(
-                  label: 'Copy ${block.label}',
-                  text: block.text,
-                ),
-              ],
             ),
-          ),
-        if (!_collapsed || widget.full) ActivityDetailContent(child: body),
-      ],
-    );
+          if ((!_collapsed || widget.full) &&
+              (text.isNotEmpty || block.showEmpty))
+            ActivityDetailContent(child: body),
+        ],
+      );
+    },
+  );
+}
+
+/// Report the actual laid-out body height, including Markdown and text scaling.
+/// View actions depend on hidden content, never character-count guesses.
+class _ActivityBodyMeasure extends SingleChildRenderObjectWidget {
+  const _ActivityBodyMeasure({required this.onLayout, required super.child});
+  final ValueChanged<Size> onLayout;
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _ActivityBodyRender(onLayout);
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _ActivityBodyRender renderObject,
+  ) {
+    renderObject.onLayout = onLayout;
+  }
+}
+
+class _ActivityBodyRender extends RenderProxyBox {
+  _ActivityBodyRender(this.onLayout);
+  ValueChanged<Size> onLayout;
+  Size? _reported;
+  @override
+  void performLayout() {
+    super.performLayout();
+    if (_reported == size) return;
+    _reported = size;
+    final laidOutSize = size;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (attached && _reported == laidOutSize) onLayout(laidOutSize);
+    });
   }
 }
 
@@ -850,4 +960,64 @@ class _ToolDetailCopyButtonState extends State<ToolDetailCopyButton> {
       });
     },
   );
+}
+
+class _ActivityTextViewer extends StatefulWidget {
+  const _ActivityTextViewer({
+    required this.block,
+    this.loadImage,
+    this.documentPath,
+    this.onOpenRemoteFile,
+    required this.copyable,
+  });
+  final ToolDetailBlock block;
+  final Future<Uint8List> Function(String)? loadImage;
+  final String? documentPath;
+  final Future<void> Function(ChatOutput)? onOpenRemoteFile;
+  final bool copyable;
+  @override
+  State<_ActivityTextViewer> createState() => _ActivityTextViewerState();
+}
+
+class _ActivityTextViewerState extends State<_ActivityTextViewer> {
+  bool _raw = false;
+  @override
+  Widget build(BuildContext context) {
+    final block = widget.block;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(block.label),
+        actions: [
+          if (block.markdown)
+            ActivityDetailAction(
+              label: _raw ? 'Show formatted content' : 'Show raw content',
+              icon: _raw ? Icons.article_outlined : Icons.code_rounded,
+              onPressed: () => setState(() => _raw = !_raw),
+            ),
+          if (widget.copyable && block.copyable && block.copyText.isNotEmpty)
+            ToolDetailCopyButton(
+              label: 'Copy ${block.label}',
+              text: block.copyText,
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: ActivityDetailSection(
+          block: _raw
+              ? ToolDetailBlock(
+                  label: block.label,
+                  text: block.copyText,
+                  format: ToolDetailFormat.source,
+                )
+              : block,
+          loadImage: widget.loadImage,
+          documentPath: widget.documentPath,
+          onOpenRemoteFile: widget.onOpenRemoteFile,
+          full: true,
+          showHeader: false,
+          copyable: false,
+        ),
+      ),
+    );
+  }
 }

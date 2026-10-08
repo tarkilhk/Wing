@@ -36,6 +36,8 @@ final class SavedActivity {
             agents.add(
               SavedAgentResult._(
                 goal: goals[index] as String,
+                goalSupplied: true,
+                rawDetails: call.rawResult,
                 result: byIndex.remove(index) ?? const {'status': 'dispatched'},
               ),
             );
@@ -47,14 +49,14 @@ final class SavedActivity {
         final tasks = args['tasks'];
         final task = tasks is List && index < tasks.length
             ? tasks[index]
-            : index == 0
-            ? args
             : null;
         agents.add(
           SavedAgentResult._(
             goal: task is Map && task['goal'] is String
                 ? task['goal'] as String
                 : 'Delegated task',
+            goalSupplied: task is Map && task['goal'] is String,
+            rawDetails: call.rawResult,
             result: entry.value,
           ),
         );
@@ -71,37 +73,95 @@ final class SavedActivity {
 /// A saved child result has no guaranteed live subagent ID. No fabricated ID,
 /// clock, steering, interruption or runtime adoption is possible here.
 final class SavedAgentResult {
-  SavedAgentResult._({required this.goal, required Map result})
-    : status = result['status'] as String,
-      summary = result['summary'] is String
-          ? result['summary'] as String
-          : null,
-      error = result['error'] is String ? result['error'] as String : null,
-      model = result['model'] is String ? result['model'] as String : null,
-      apiCalls = result['api_calls'] is int && (result['api_calls'] as int) >= 0
-          ? result['api_calls'] as int
-          : null,
-      durationSeconds =
-          result['duration_seconds'] is num &&
-              (result['duration_seconds'] as num).isFinite &&
-              (result['duration_seconds'] as num) >= 0
-          ? (result['duration_seconds'] as num).toDouble()
-          : null;
+  SavedAgentResult._({
+    required this.goal,
+    required this.goalSupplied,
+    required this.rawDetails,
+    required Map result,
+  }) : status = result['status'] as String,
+       exitReason = result['exit_reason'] is String
+           ? result['exit_reason'] as String
+           : null,
+       truncated = result['truncated'] is bool
+           ? result['truncated'] as bool
+           : null,
+       summaryTruncated = result['summary_truncated'] is bool
+           ? result['summary_truncated'] as bool
+           : null,
+       schemaValid = result['schema_valid'] is bool
+           ? result['schema_valid'] as bool
+           : null,
+       schemaNote = result['schema_note'] is String
+           ? result['schema_note'] as String
+           : null,
+       schemaErrors = List<String>.unmodifiable(
+         result['schema_errors'] is List
+             ? (result['schema_errors'] as List).whereType<String>()
+             : const <String>[],
+       ),
+       summary = result['summary'] is String
+           ? result['summary'] as String
+           : null,
+       error = result['error'] is String ? result['error'] as String : null,
+       model = result['model'] is String ? result['model'] as String : null,
+       apiCalls =
+           result['api_calls'] is int && (result['api_calls'] as int) >= 0
+           ? result['api_calls'] as int
+           : null,
+       durationSeconds =
+           result['duration_seconds'] is num &&
+               (result['duration_seconds'] as num).isFinite &&
+               (result['duration_seconds'] as num) >= 0
+           ? (result['duration_seconds'] as num).toDouble()
+           : null;
 
   final String goal;
+  final bool goalSupplied;
+  final String rawDetails;
   final String status;
+  final String? exitReason;
+  final bool? truncated;
+  final bool? summaryTruncated;
+  final bool? schemaValid;
+  final String? schemaNote;
+  final List<String> schemaErrors;
   final String? summary;
   final String? error;
   final String? model;
   final int? apiCalls;
   final double? durationSeconds;
 
-  String? get notice => switch (status) {
-    'completed' => null,
+  bool get failed => status == 'failed' || status == 'timeout';
+  bool get warning =>
+      status == 'interrupted' ||
+      exitReason == 'max_iterations' ||
+      truncated == true ||
+      summaryTruncated == true ||
+      schemaValid == false;
+  bool get terminal =>
+      const ['completed', 'failed', 'timeout', 'interrupted'].contains(status);
+
+  String get statusLabel => switch (status) {
+    'completed' => 'Completed',
     'dispatched' => 'Dispatched in background',
-    'failed' => error ?? 'Failed',
+    'failed' => 'Failed',
     'timeout' => 'Timed out',
     'interrupted' => 'Interrupted',
     _ => status.replaceAll('_', ' '),
   };
+
+  List<String> get qualifications => List.unmodifiable([
+    if (exitReason == 'max_iterations')
+      'Stopped at the iteration limit'
+    else if (truncated == true)
+      'Partial result supplied',
+    if (summaryTruncated == true) 'Summary shortened by the server',
+    if (schemaValid == false) 'Output does not meet the requested schema',
+  ]);
+
+  String? get notice => qualifications.isNotEmpty
+      ? qualifications.join(' · ')
+      : status == 'completed'
+      ? null
+      : statusLabel;
 }

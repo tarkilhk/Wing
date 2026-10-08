@@ -452,149 +452,84 @@ timing in `test/profile_tool_call_test.dart`.
 
 ## Inline requests and receipts
 
-Expanded Tools use a single detail card aligned with the leading activity icon.
-Code and command requests are paired with literal output; read-file requests
-show the exact path/range, supplied numbered content and reported file limits.
-Writes expose requested content and server verification when supplied. Patch
-requests expose Find/Replace or the requested patch separately from the returned
-unified diff; the client never synthesizes an applied diff from intent. Vision
-shows the exact requested image/question and backend analysis or native image
-receipt. Search matches and other structured tool records use readable fields.
-Both live and saved calls use the same pure `ToolActivityDetails` projection.
+Expanded Tools show one card aligned with the leading activity icon. The
+[Studio charter](DESIGN_SYSTEM.md#user-value-first-activity) owns appearance and
+useful-only action policy. The [field decisions](design/activity-field-policy.md)
+account for all 32 catalog identities, the 28 current dedicated contracts and
+non-tool families, against inspected stock main
+[`25a71a744cb9ef06950a91638e6229b4f808d461`](https://github.com/NousResearch/hermes-agent/commit/25a71a744cb9ef06950a91638e6229b4f808d461).
+Six catalog names have no current stock contract and receive restrained unknown
+presentation; no alias supplies invented capability.
 
-Every activity text body uses the same vertically scrollable inline viewport
-of up to 160 dp, retaining all received text. There is no 12-line/character
-preview truncation, Preview row, Full text row or content-expansion control.
-Copy and the existing full-view icon remain in the section header. The full view
-shows the same received content in a page scroll; it never reruns the activity.
-Markdown is used for explanatory prose and Markdown file receipts; code files,
-logs and diffs remain literal. Wrapping and horizontal source/table scrolling
-stay within their own region. Server truncation and partial-file observations
-remain distinct from local scrolling. Raw details retain exact input/output
-values and use the same scrolling component, as do additional backend labels.
-The existing profile-scoped image loader owns image access and original viewing.
+`ToolActivityDetails.project(name,input,output)` is the single pure selection
+owner. Private file, execution/media, browser/web, state and discovery projectors
+select intent, actual payloads, quiet title facts, useful resources and reported
+outcome qualifications. `ToolCallPresentation` retains receipt decoding, backend
+labels, one-line summaries, completion/timing and final outcome composition.
+The former duplicate generic detail extraction and per-key payload promotion
+are removed. Raw retains exact input/output and extra delivered labels.
 
-Read-file receipts have one compact path/range header with eye, copy and share
-icons. Markdown receipts render inline in the shared 160 dp viewport, removing
-only the stock numbered-line prefixes for display; copy retains the original
-receipt. Other files use the literal viewport. There is no separate Read options
-or content toolbar. Raw/formatted switching lives only in the full Markdown
-file viewer, with icon-only copy/share. That viewer retains its own backend
-file read, truncation disclosure, relative links, download and delivery owner.
+The shared renderer consumes semantic blocks/layouts, not tool-specific JSON.
+`ActivityDetailsCard`, `ActivityDetailContent`, `ActivityDetailSection`,
+`ActivityDetailStatus` and `ActivityDetailAction` own framing and controls across
+Tools, Tasks, reasoning, live/saved Agents, goals, recurring work and processes.
+Short content hugs its text; long received text stays within one capped scrolling
+viewport. Actual laid-out overflow enables a text eye. Copy eligibility defaults
+to false; an explicit reusable payload owns one exact clipboard scope. Passive
+Tasks/criteria/context do not acquire reading/copy controls just from length.
+Full text viewers keep one toolbar and Markdown raw/formatted switching there.
 
-Latest unmodified upstream main inspected on 8 October 2026:
-[`dde8800ed91c6e128064a17d5db914d74622594b`](https://github.com/NousResearch/hermes-agent/commit/dde8800ed91c6e128064a17d5db914d74622594b).
-`tools/file_tools.py`, `tools/file_operations.py`, `tools/file_operations_common.py`,
-`tools/vision_tools.py`, `tools/image_generation_tool.py` and
-`tui_gateway/tool_progress.py` establish these request/receipt fields. The stock
-file editor is `patch`; no new legacy tool alias is introduced. Native vision's
-`_multimodal` receipt confirms pixels supplied to the agent, not a returned
-analysis. Exit codes and server verification are shown only when supplied.
+Read/write file content has a single resource header and headerless body.
+Markdown reads remove only stock gutters for formatted display and preserve
+original received text for copy. Current-file viewing and sharing retain the
+captured profile/session resource owner; they do not replace historical receipts
+or rerun tools. Search excerpts group by actual supplied path. Web sources own
+one source eye and one exact excerpt copy. Options and routine metadata remain
+passive; normal completion is neutral Completed.
 
-Behavioral guards in `test/tool_call_presentation_test.dart` protect request/result
-fidelity, empty replacements/files, failed patches, reported limits, structured
-matches, native vision and absent exit codes. `test/profile_tool_call_test.dart`
-protects icon-only exact copy, leading-icon alignment, Markdown scrolling/full
-view and rendered 390 dp/320 dp doubled-text cards in both themes. Runtime payload
-semantics, clipboard values and rendered reachability cannot be established by
-source linting alone. Existing compact-header, disclosure and live/history tests
-remain applicable. Capture with `CAPTURE_TOOL_RESULTS=true` and
-`CAPTURE_FONT_DIR` containing Roboto, MaterialIcons and DejaVuSansMono font files.
+Actual tool image parts use `acquireToolReceiptImage`: embedded image data is
+bounded before decoding; other locators retain conversation admission and the
+captured remote loader. `ChatInlineImage` shares a header with its loaded-image
+viewer, preserving original pixels, retry and supported resource sharing without
+base64/path copy. Native vision attachment is not analysis. Crops display actual
+received pixels when available and retain source/received distinction. Generated
+resources come only from returned locators, not requested image counts.
 
+Saved Agents retain requested task and reported status even without output.
+Truncation, iteration limits and schema validation failures qualify actual
+results. Unknown state remains neutral. Process launch is distinct from finished
+execution, absent exit code stays absent, and connector dispatch counts do not
+establish provider-domain success. Existing approval/question/supervision owners
+retain their controls, admission and lifecycle; this change adds no transport,
+execution cache, backend endpoint or profile setting.
 
-### Resource action refinement
+### Regression and render verification
 
-File/image headers retain Preview (eye), Share and Copy icons. Generated images
-receive the same actions on their returned target. Preview opens the existing
-scoped output viewer; Share downloads original bytes and opens the platform
-share sheet. The actions use exact supplied resource targets and never rerun the
-tool or replace the stored receipt with current file contents. The workspace
-captures the original chat/profile file owner and rechecks current chat/route
-admission after a held share download. Views only forward these resource intents.
-External links offer preview and copy; unsupported URI schemes do not gain file
-or share actions.
+The five `test/tool_activity_*_test.dart` family projector suites exercise actual
+public observations, intent/result selection, omissions, errors, partial results
+and exact copy scopes. `test/tool_call_presentation_test.dart` retains labels,
+wrappers, timing, one-line intent and final outcome composition.
+`test/tool_activity_catalog_test.dart` renders the sanitized source-shaped corpus
+from `test/fixtures/stock_activity_shapes.json` across all current contracts and
+dormant captions. These fixtures are contract examples, not executed backend
+operations or private conversation records.
 
-Read offset/limit are passive facts in the compact Read options row, alongside
-its label, with no separate body or full-view/copy toolbar. Both are omitted
-when not supplied. Unknown read arguments remain separately inspectable, and
-Raw details keeps every exact argument. The charter's
-[accepted activity family](DESIGN_SYSTEM.md#accepted-activity-detail-family)
-owns the Read options spacing reference, compact control geometry, typography,
-surfaces and completion presentation for every tool. There is no read-only
-density branch. Large-text resource controls reflow below the readable path.
-Exit codes and native image receipts add quiet context without replacing the
-status or implying success.
+Capture with `CAPTURE_ACTIVITY_CATALOG=true`, `CAPTURE_ACTIVITY_FAMILY=true`,
+`CAPTURE_TOOL_RESULTS=true` and `CAPTURE_FONT_DIR=/path/to/review/fonts`, containing
+Roboto-Regular.ttf, MaterialIcons-Regular.otf and DejaVuSansMono.ttf. Actual
+renders go to ignored `build/activity-catalog/`, `build/activity-family/` and
+`build/tool-results/`. Compare light/dark at 390 dp/100% and 320 dp/200%.
 
-Latest stock main inspected for these actions on 8 October 2026:
-[`0240fa4a84123406a0e5e6e7262e5b772b43f0bd`](https://github.com/NousResearch/hermes-agent/commit/0240fa4a84123406a0e5e6e7262e5b772b43f0bd).
-`hermes_cli/web_routers/files.py` retains `/api/fs/read-text` and
-`/api/fs/download`, including profile-scoped reads and session-owned download
-resolution. Existing client file readers and native sharing implement the UI;
-no backend modifications are needed.
+`test/profile_tool_call_test.dart` and `test/activity_family_test.dart` protect
+four-sided content framing, enlarged toolbar reflow, exact clipboard values,
+resource intent/recovery, Markdown scrolling, useful viewer scope and neutral
+completion. Saved/goal/subagent/process owner tests retain lifecycle/control
+admission and partial results. Image tests retain bounded acquisition and
+original-byte viewing; sharing tests retain held-download admission.
 
-At the same stock commit, `SearchResult.to_dict` in
-`tools/file_operations_common.py` supplies `total_count_is_lower_bound` when a
-search is truncated; the active file-search tool invokes that serializer in
-`tools/file_tools.py`. Display that qualification beside the reported match
-count. A partial result must not present a lower-bound count as a complete total.
-`test/tool_call_presentation_test.dart` guards true, false and absent qualifications.
-
-`test/profile_tool_call_test.dart` guards preview/share forwarding, exact
-punctuation-bearing paths, pending/retry behavior, icon-only controls and compact
-read-option alignment in both themes and text sizes. `test/remote_file_saver_test.dart`
-guards exact original bytes and held-download share admission after navigation or
-owner disposal. These rendered and asynchronous properties require behavioral
-checks; static source inspection cannot establish their outcomes.
-
-The rich-render cases also compare each section's actual label/body positions
-against the same card edge, top/bottom content framing and actual image left
-edge, and require shared Completed wording, icon and neutral color across
-code/read/edit/vision. They reproduce the previous green/neutral footer mismatch
-and 10 dp extra centered-image gutter, and require all four content insets to
-match the Read options reference, including actual compact toolbar height and
-icon targets. Rendered geometry cannot be established by source linting;
-the behavioral guard and visual family review are required together.
-
-
-### Complete activity family
-
-The accepted detail frame is shared by Tools, Tasks, live/saved Agents, reasoning
-and Work, including goals, loops, heartbeats and background processes. The public
-`ActivityDetailsCard`, `ActivityDetailContent`, `ActivityDetailSection`, `ActivityDetailStatus` and
-`ActivityDetailAction` in `lib/core/widgets/tool_activity_details.dart` own one
-surface, section padding, exact copy, local preview, full view and action geometry.
-Views continue forwarding control intents to the captured supervision owner;
-no second task, process or agent cache is introduced. Last-received/unavailable
-agent output and process tail scope remain explicit. `GatewayProcessActivity`
-keeps a bounded display command and its exact received source; output-tail data
-is retained for copying/expansion instead of being clipped in the model.
-
-Current stock main rechecked on 8 October 2026 remains
-[`0240fa4a84123406a0e5e6e7262e5b772b43f0bd`](https://github.com/NousResearch/hermes-agent/commit/0240fa4a84123406a0e5e6e7262e5b772b43f0bd).
-This refinement uses existing stock process, subagent, todo and session-control
-observations/commands. Stock `tools/file_operations_common.py` and
-`tools/file_tools.py` establish grouped search paths/lines/excerpts and independent
-write/patch verification, lint status/output/message and semantic diagnostics.
-Supplied web-source URLs retain exact link copy separately from excerpt copy.
-Nothing adds a backend endpoint or derives an omitted execution result.
-
-`test/activity_family_test.dart` reviews actual production Tasks, saved/live
-Agents, Work, goals, reasoning, search, writes and web results in both themes at
-390 dp/100% and 320 dp/200%. It checks shared surfaces, content framing and 32 dp
-icon-only controls. Capture with `CAPTURE_ACTIVITY_FAMILY=true` and
-`CAPTURE_FONT_DIR=/path/to/review/fonts` (Roboto, MaterialIcons, DejaVuSansMono);
-images are written to ignored `build/activity-family/`. Review alongside the
-code/read/edit/vision captures. Owner-level goal, process and subagent tests
-retain confirmations, admission, rejection feedback and last-received data.
-
-`test/profile_transcript_test.dart` and
-`test/profile_disclosure_layout_test.dart` protect disclosure anchoring and
-expansion through the shared frame, including 100%/200%/300% text. They target
-the outer reasoning ListTile separately from its repeated section label, wait
-for background Markdown completion before asserting prose, and inspect the
-full received rich-text output inside a bounded scrolling pane.
-`test/activity_family_test.dart` also guards source, diff, plain prose and
-Markdown together: identical viewport caps, no Preview rows, independent scrolling,
-exact copy, retained full view and four-sided framing across all activity families.
-These are rendered and asynchronous properties requiring widget regressions;
-source linting cannot establish tap targets, scroll positions or worker completion.
+Field value, contract uncertainty, rendered overflow, clipboard values and
+asynchronous resource admission require behavioral evidence; a static source
+ban cannot establish these properties. Existing `ARCH_ACTIVITY_DENSITY` retains
+the canonical compact header seam. Review the actual rendered family as well as
+those regressions before declaring visual acceptance. Renewed owner feedback
+reopens the affected field/action decision and render check.

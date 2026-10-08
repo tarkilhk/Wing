@@ -134,7 +134,12 @@ void main() {
 
     expect(find.text('Ship the release'), findsOneWidget);
     expect(find.text('Run checks'), findsOneWidget);
-    expect(find.text('1. Implement'), findsOneWidget);
+    expect(find.text('Implement'), findsOneWidget);
+    expect(find.byTooltip('Copy Criterion 1'), findsNothing);
+    expect(find.byTooltip('Open Criterion 1'), findsNothing);
+    expect(find.byTooltip('Remove criterion 1'), findsOneWidget);
+    expect(find.byTooltip('Copy Objective'), findsOneWidget);
+    expect(find.byTooltip('Open Objective'), findsNothing);
     await tester.ensureVisible(find.byTooltip('Pause'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Pause'));
@@ -180,7 +185,7 @@ void main() {
     expect(request.$2['action'], 'subgoal.add');
     expect(request.$2['args'], {'text': 'Release is verified'});
     expect(request.$2['session_id'], 'runtime');
-    expect(find.text('3. Release is verified'), findsOneWidget);
+    expect(find.text('Release is verified'), findsOneWidget);
   });
 
   testWidgets('retains the add draft when the server rejects it', (
@@ -227,7 +232,7 @@ void main() {
     expect(find.text('Remove criterion 2?'), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await tester.pumpAndSettle();
-    expect(find.text('2. Verify'), findsOneWidget);
+    expect(find.text('Verify'), findsOneWidget);
 
     await tester.ensureVisible(find.byTooltip('Remove criterion 2'));
     await tester.pumpAndSettle();
@@ -241,7 +246,7 @@ void main() {
           request.$2['action'] == 'subgoal.remove',
     );
     expect(remove.$2['args'], {'index': 2});
-    expect(find.text('2. Verify'), findsNothing);
+    expect(find.text('Verify'), findsNothing);
 
     await tester.ensureVisible(find.byTooltip('Clear criteria'));
     await tester.pumpAndSettle();

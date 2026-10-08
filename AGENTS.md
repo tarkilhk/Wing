@@ -53,9 +53,11 @@ regression contracts.
 
 For UI work, read [the Studio design charter](docs/DESIGN_SYSTEM.md) before changing screens, components, themes, or interaction layouts. It owns the selected appearance, component rules, and behavior-preservation contract. Use its shared tokens for new and existing controls, including light and dark states.
 
-For activity details, use the charter's
-[accepted activity family](docs/DESIGN_SYSTEM.md#accepted-activity-detail-family)
-as the reference, including visible spacing and compact control geometry.
+For Activity tools, Tasks, Agents, reasoning, goals, recurring work, processes,
+or their viewers, read and follow
+[design-wing-activity](tools/agent_skills/design-wing-activity/SKILL.md) before
+planning or editing. It applies USER-VALUE-FIRST selection and the charter's
+shared activity family, with field/action decisions and actual render checks.
 
 For administration UI, also read [the ownership handoff](docs/design/2026-09-14-administration-handoff.md). It defines profile-owned provider credentials and defaults, server operations, and runtime versus profile health. Planned capabilities and generated mockups are not evidence that a backend operation is implemented.
 
@@ -67,8 +69,9 @@ and critique process within Studio's established visual language.
 1. State the user's task and primary action. Separate editable controls, passive
    context and temporary status before choosing components.
 2. Sketch at least two plausible arrangements; compare visual weight, repeated
-   information, taps and reachability. Present the recommended design when the
-   user asks for a proposal; a proposal request authorizes design work only.
+   information, taps and reachability. Compare internally when implementation is
+   requested and continue through delivery. Present the recommended design when
+   the user asks for a proposal; a proposal request authorizes design work only.
 3. Challenge every heading, card, label and sentence: retain it only if it helps
    the user decide, act or recover. Keep provider/context metadata subordinate
    to controls. Show sample speech through playback; keep its script out of the

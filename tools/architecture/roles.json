@@ -1890,6 +1890,31 @@
       "role": "view",
       "feature": "app-shell",
       "library": "lib/main.dart"
+    },
+    "lib/core/presentation/tool_activities/discovery.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_activity_details.dart"
+    },
+    "lib/core/presentation/tool_activities/files.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_activity_details.dart"
+    },
+    "lib/core/presentation/tool_activities/state.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_activity_details.dart"
+    },
+    "lib/core/presentation/tool_activities/execution_media.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_activity_details.dart"
+    },
+    "lib/core/presentation/tool_activities/browser_web.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_activity_details.dart"
     }
   }
 }

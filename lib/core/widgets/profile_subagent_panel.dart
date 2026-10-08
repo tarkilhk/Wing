@@ -213,16 +213,34 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                       ActivityDetailSection(
                         block: ToolDetailBlock(
                           label: 'Task',
+                          role: ToolDetailRole.task,
                           text: _goal(current),
+                          copyable: current.goal.trim().isNotEmpty,
                         ),
+                        facts: [
+                          ?current.model,
+                          if (current.toolCount case final count?)
+                            '$count ${count == 1 ? 'tool call' : 'tool calls'}',
+                        ],
                       ),
                       if (_activityText(current) case final text?)
-                        ActivityDetailSection(
-                          block: ToolDetailBlock(
-                            label: 'Current activity',
-                            text: text,
+                        if (current.isTerminal &&
+                            current.detail?.trim().isNotEmpty == true)
+                          ActivityDetailSection(
+                            block: ToolDetailBlock(
+                              label: 'Reported result',
+                              role: ToolDetailRole.output,
+                              text: text,
+                              markdown: true,
+                              copyable: true,
+                            ),
+                          )
+                        else
+                          ActivityDetailFacts(
+                            facts: [
+                              '${current.isTerminal ? 'Last activity' : 'Current activity'}: $text',
+                            ],
                           ),
-                        ),
                       if (current.acceptingSteer && canControl)
                         Padding(
                           padding: const EdgeInsets.all(WingSpacing.sm),
@@ -269,7 +287,6 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                               ? Icons.error_outline
                               : Icons.info_outline,
                         ),
-                      _SubagentMetadata(activity: current),
                       _tailBody(current),
                       ActivityDetailStatus(
                         label: _statusLabel(current, unconfirmed),
@@ -300,6 +317,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                           ),
                         ],
                       ),
+                      _SubagentMetadata(activity: current),
                     ],
                   ),
                 ],
@@ -338,30 +356,25 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ActivityDetailSection(
-          block: ToolDetailBlock(
-            label: 'Live output',
-            text: readableTail?.text ?? messages.join('\n'),
-            format: ToolDetailFormat.source,
-          ),
-          actions: [
-            ActivityDetailAction(
-              label: 'Refresh live output',
-              icon: Icons.refresh,
-              busy: widget.session.state.loadingTail,
-              onPressed: widget.session.refreshTail,
+        if (readableTail != null)
+          ActivityDetailSection(
+            block: ToolDetailBlock(
+              label: 'Live output',
+              role: ToolDetailRole.output,
+              text: readableTail.text,
+              copyable: true,
+              format: ToolDetailFormat.source,
             ),
-            if (widget.session.state.tailError != null &&
-                widget.session.state.tailFailures >= 3)
-              ActivityDetailAction(
-                label: 'Retry',
-                icon: Icons.refresh,
-                onPressed: widget.session.retryTail,
-              ),
-          ],
-        ),
-        if (readableTail != null && messages.isNotEmpty)
-          ActivityDetailFacts(facts: messages),
+            facts: messages,
+            actions: _tailActions(),
+          )
+        else
+          ActivityDetailStatus(
+            label: 'Live output',
+            icon: Icons.notes_outlined,
+            contextFacts: messages,
+            actions: _tailActions(),
+          ),
         if (widget.session.state.tailError case final error?)
           ActivityDetailStatus(
             label: error,
@@ -370,6 +383,8 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
           ),
         if (activity.recentActivity.isNotEmpty)
           ActivityDetailSection(
+            copyable: false,
+            viewable: false,
             block: ToolDetailBlock(
               label: 'Recent activity',
               text: activity.recentActivity.map(_recentActivityText).join('\n'),
@@ -378,6 +393,22 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
       ],
     );
   }
+
+  List<Widget> _tailActions() => [
+    ActivityDetailAction(
+      label: 'Refresh live output',
+      icon: Icons.refresh,
+      busy: widget.session.state.loadingTail,
+      onPressed: widget.session.refreshTail,
+    ),
+    if (widget.session.state.tailError != null &&
+        widget.session.state.tailFailures >= 3)
+      ActivityDetailAction(
+        label: 'Retry',
+        icon: Icons.refresh,
+        onPressed: widget.session.retryTail,
+      ),
+  ];
 }
 
 String _statusLabel(GatewaySubagentActivity activity, bool unconfirmed) {
@@ -548,7 +579,14 @@ class _SubagentMetadata extends StatelessWidget {
     ].join('\n');
     return ActivityDetailSection(
       initiallyCollapsed: true,
-      block: ToolDetailBlock(label: 'Details', text: values, secondary: true),
+      viewable: false,
+      block: ToolDetailBlock(
+        label: 'Raw details',
+        text: values,
+        format: ToolDetailFormat.source,
+        copyable: false,
+        secondary: true,
+      ),
     );
   }
 }

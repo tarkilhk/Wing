@@ -20,6 +20,8 @@ class _BackgroundFixture extends ProfileActionsFixture {
   String loopStatus = 'active';
   String heartbeatStatus = 'active';
   bool heartbeatPresent = true;
+  bool exitCodeSupplied = true;
+  String runningOutput = 'waiting for work\n';
 
   List<Map<String, dynamic>> get processes => [
     if (running)
@@ -27,7 +29,7 @@ class _BackgroundFixture extends ProfileActionsFixture {
         'session_id': 'proc-running',
         'command': 'dart run worker.dart',
         'cwd': '/workspace',
-        'output_tail': 'waiting for work\n',
+        'output_tail': runningOutput,
         'status': 'running',
         'uptime_seconds': 125,
         'pid': 4321,
@@ -39,7 +41,7 @@ class _BackgroundFixture extends ProfileActionsFixture {
       'command': 'dart test',
       'output_tail': 'All tests passed.\n',
       'status': 'exited',
-      'exit_code': 0,
+      if (exitCodeSupplied) 'exit_code': 0,
       'uptime_seconds': 9,
     },
   ];
@@ -234,6 +236,53 @@ void main() {
       fixture.requests.where((request) => request.$1 == 'process.kill'),
       hasLength(1),
     );
+  });
+
+  testWidgets('process text actions serve command and output, not metadata', (
+    tester,
+  ) async {
+    await showPanel(tester);
+    await tester.tap(find.text('dart run worker.dart'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Copy Command'), findsOneWidget);
+    expect(find.byTooltip('Copy Recent output'), findsOneWidget);
+    expect(find.byTooltip('Open Command'), findsNothing);
+    expect(find.byTooltip('Open Recent output'), findsNothing);
+    expect(find.byTooltip('Copy PID'), findsNothing);
+    expect(find.byTooltip('Stop process'), findsOneWidget);
+    expect(
+      find.text('Latest received output; not a complete transcript'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an exited process without an exit code stays unqualified', (
+    tester,
+  ) async {
+    fixture.exitCodeSupplied = false;
+    await showPanel(tester);
+    await tester.tap(find.text('dart test'));
+    await tester.pumpAndSettle();
+    expect(find.text('Exited'), findsWidgets);
+    expect(find.text('Completed'), findsNothing);
+    expect(find.text('Process exited; exit code not supplied'), findsOneWidget);
+    expect(find.byTooltip('Dismiss'), findsOneWidget);
+    expect(find.byTooltip('Stop process'), findsNothing);
+  });
+
+  testWidgets('an empty process receipt has no text action toolbar', (
+    tester,
+  ) async {
+    fixture.runningOutput = '';
+    await showPanel(tester);
+    await tester.tap(find.text('dart run worker.dart'));
+    await tester.pumpAndSettle();
+    expect(find.text('Latest received output is empty'), findsOneWidget);
+    expect(find.text('Empty text'), findsNothing);
+    expect(find.byTooltip('Copy Recent output'), findsNothing);
+    expect(find.byTooltip('Open Recent output'), findsNothing);
+    expect(find.byTooltip('Stop process'), findsOneWidget);
   });
 
   testWidgets('keeps recurring controls usable on a narrow large-text phone', (

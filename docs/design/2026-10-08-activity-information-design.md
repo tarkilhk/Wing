@@ -1,7 +1,7 @@
 # Activity information design
 
 Research inspected on 8 October 2026 for Wing's compact, inline tool details.
-The [Studio charter](../DESIGN_SYSTEM.md) owns implementation choices. This note
+The [Studio charter](../DESIGN_SYSTEM.md) owns presentation policy. This note
 separates external evidence from Wing's accepted rules; it does not establish that
 a screen or backend capability has been implemented.
 
@@ -90,51 +90,42 @@ principles to native software. Wing's 320 dp/200% checks are practical native
 verification targets; screenshots alone do not demonstrate WCAG conformance.
 [W3C: WCAG2ICT](https://www.w3.org/TR/wcag2ict-22/)
 
-## Accepted Studio rules
+## Applying the evidence in Wing
 
-These are Wing design choices informed by the findings and the owner's requests.
+The authoritative Wing rules live in the charter's
+[USER-VALUE-FIRST Activity policy](../DESIGN_SYSTEM.md#user-value-first-activity),
+[action/viewer decisions](../DESIGN_SYSTEM.md#activity-actions-and-viewers) and
+[shared activity family](../DESIGN_SYSTEM.md#accepted-activity-detail-family).
+The repository-local
+[design-wing-activity skill](../../tools/agent_skills/design-wing-activity/SKILL.md)
+turns those rules into field/action decisions and actual render checks. This
+research note supplies evidence and design rationale rather than a second set
+of accepted rules.
 
-- Use Roboto for human prose and section labels; use the shared monospace style
-  for code, commands, paths, source text and literal console output. Keep body
-  passages comfortably spaced. Use weight, proximity and selective emphasis
-  before adding another font family. Use tabular figures for aligned timings
-  and counts. A future code-font change needs phone rendering comparisons,
-  including punctuation and ambiguous characters, rather than a brand-based
-  choice.
-- Render Markdown for authored explanations and analyses where its headings,
-  lists, emphasis, links or tables help reading. Preserve code fences. Render
-  Markdown file receipts formatted; other file contents, replacement strings,
-  patches and console output literally. Markdown-looking characters in those values are data.
-- Give each expanded activity one grouped surface aligned with its leading
-  icon. Use short, specific section labels for the requested operation and the
-  reported result. Keep paths, timing, counts and status subordinate. Separate
-  sections with thin rules or compact spacing instead of more nested cards.
-- Show enough content to understand the request and response. Offer icon-only
-  wrapping and full-view actions for lengthy text, plus secondary raw details.
-  The owner's subsequent refinement uses one 160 dp scrollable region for all
-  received activity text, including Markdown, with no separate Preview or
-  expansion footer. Server truncation remains explicit; scrolling does not
-  imply that omitted backend content has been fetched.
-- Keep copy and other icon-represented actions icon-only everywhere. Provide
-  precise tooltips and accessible names, reachable targets and temporary
-  feedback. Wrap or reposition toolbars when space is tight. Follow the charter's
-  [accepted activity family](../DESIGN_SYSTEM.md#accepted-activity-detail-family)
-  for compact detail controls; keep their chosen targets while text reflows.
-- Use semantic color sparingly for actual errors, reported outcomes and diff
-  additions/deletions. Retain text or glyph cues and readable contrast in both
-  themes. Ordinary activity completion footers use the accepted family's neutral
-  convention, including backend-confirmed success; errors/warnings and supplied
-  diff changes carry their explicit accents.
-- Preserve exact supplied values for selection and copying, regardless of
-  display wrapping or viewport limits. Requested changes and reported changes
-  are separate facts. Show totals, exit codes, verification, diffs and analysis
-  only when supplied by the backend; tool completion alone establishes none
-  of them. Treat a native-vision image receipt as an image loaded for the agent,
-  rather than inventing an analysis result.
-- Inspect rendered phone layouts in both themes at ordinary size and at
-  320 dp/200% text. Check long paths, Markdown structure, dense toolbars, literal
-  output, errors and independent content scrolling. Keep horizontal scrolling inside the
-  code or table region that needs it; prose and its surrounding controls reflow.
+The progressive-disclosure findings support deliberately selecting the content
+that helps a user understand intent and actual achievement. Wing applies that
+principle by keeping useful payloads in the main card, execution options as
+quiet title metadata and diagnostic plumbing in Raw details. Assigning these
+particular fields to those levels is a Wing design decision, not a conclusion
+measured by the cited studies.
+
+Typography and scanning findings support stable roles and proximity: source
+stays literal and monospace, authored prose can retain Markdown structure, and
+controls sit beside the payload they affect. Wing's one eye vocabulary and
+useful-only copy/viewer eligibility similarly follow the owner's directions;
+external sources do not establish a particular icon order or action count.
+
+The shared 8 dp framing and neutral Completed treatment are accepted Wing
+choices. The current 160 dp inline text cap is a revisable implementation
+default. Neither the research nor the owner's spacing feedback establishes
+blanket acceptance of the earlier information hierarchy, every visible backend
+field or every viewer/copy action.
+
+A decision table and normal/enlarged light/dark renders test whether the actual
+arrangement communicates the intended hierarchy and keeps actions reachable.
+Behavioral checks separately establish exact copying, action eligibility and
+recovery. Test totals or one isolated screenshot do not establish uniformity,
+user value or accessibility conformance.
 
 ## Scope and limits
 

@@ -16,8 +16,10 @@ import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/presentation/tool_call_presentation.dart';
+import 'package:wing/core/presentation/tool_activity_details.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_inline_image.dart';
+import 'package:wing/core/widgets/chat_image_preview.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/activity_time.dart';
 import 'package:wing/core/widgets/tool_activity_details.dart';
@@ -27,6 +29,36 @@ import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 
 void main() {
+  testWidgets('short payload keeps copy without a redundant viewer action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: const Scaffold(
+          body: ActivityDetailsCard(
+            children: [
+              ActivityDetailSection(
+                block: ToolDetailBlock(
+                  label: 'Result',
+                  text: 'Patch applied',
+                  copyable: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Patch applied'), findsOneWidget);
+    expect(find.byTooltip('Copy Result'), findsOneWidget);
+    expect(find.byTooltip('Open Result'), findsNothing);
+    expect(find.byIcon(Icons.fullscreen), findsNothing);
+    expect(find.byIcon(Icons.visibility_outlined), findsNothing);
+    expect(find.byTooltip('Wrap Result'), findsNothing);
+    expect(find.byTooltip('Scroll Result horizontally'), findsNothing);
+  });
   const capture = bool.fromEnvironment('CAPTURE_TOOL_RESULTS');
   setUpAll(() async {
     if (!capture) return;
@@ -207,9 +239,15 @@ void main() {
               : name == 'vision_analyze'
               ? {'image_url': path, 'question': 'Review it'}
               : {'path': path},
-          'result': name == 'image_generate'
-              ? {'image': path}
-              : {'content': 'Exact receipt'},
+          'result': switch (name) {
+            'image_generate' => {'image': path},
+            'vision_analyze' => {'success': true, 'analysis': 'Exact receipt'},
+            'patch' => {
+              'success': true,
+              'diff': '--- a/file\n+++ b/file\n+Exact receipt',
+            },
+            _ => {'content': '1|Exact receipt'},
+          },
         })!,
       );
       final pixels = img.Image(width: 4, height: 4);
@@ -245,8 +283,19 @@ void main() {
       expect(find.byIcon(Icons.share_outlined), findsOneWidget);
       await tester.tap(find.byTooltip(previewLabel));
       await tester.pumpAndSettle();
-      expect(opened?.path, path);
-      expect(opened?.kind, image ? ChatOutputKind.image : ChatOutputKind.file);
+      if (image) {
+        expect(opened, isNull);
+        final viewer = tester.widget<ChatImagePreview>(
+          find.byType(ChatImagePreview),
+        );
+        expect(viewer.bytes, png);
+        expect(viewer.uri, isNull);
+        Navigator.of(tester.element(find.byType(ChatImagePreview))).pop();
+        await tester.pumpAndSettle();
+      } else {
+        expect(opened?.path, path);
+        expect(opened?.kind, ChatOutputKind.file);
+      }
       await tester.tap(find.byTooltip(shareLabel));
       await tester.pump();
       expect(shared?.path, path);
@@ -465,7 +514,11 @@ void main() {
               expect(tester.getSize(viewport).height, lessThanOrEqualTo(160));
               continue;
             }
-            expect(find.byTooltip('Copy ${block.label}'), findsOneWidget);
+            expect(
+              find.byTooltip('Copy ${block.label}'),
+              block.copyable ? findsOneWidget : findsNothing,
+            );
+            if (!block.copyable) continue;
             expect(find.text('Copy ${block.label}'), findsNothing);
             expect(tester.getTopLeft(find.text(block.label)).dx, cardLeft + 33);
             final headerRow = find
@@ -482,7 +535,9 @@ void main() {
             expect(rowRect.left - frameRect.left, 8);
             // The section separator occupies one dp above its inset.
             expect(rowRect.top - frameRect.top, 9);
-            expect(frameRect.bottom - rowRect.bottom, 8);
+            // Enlarged titles keep full width; their separate 32 dp action row
+            // sits below the same eight-dp label framing.
+            expect(frameRect.bottom - rowRect.bottom, scale == 2 ? 40 : 8);
             final copyButton = find
                 .ancestor(
                   of: find.byTooltip('Copy ${block.label}'),
@@ -490,6 +545,7 @@ void main() {
                 )
                 .first;
             expect(tester.getSize(copyButton), const Size(32, 32));
+            expect(frameRect.bottom - tester.getBottomRight(copyButton).dy, 0);
             final copyIcon = find.descendant(
               of: copyButton,
               matching: find.byIcon(Icons.copy_outlined),
@@ -603,9 +659,9 @@ void main() {
     final call = ToolCallPresentation.live(
       GatewayToolActivity.fromGatewayEvent('tool.complete', {
         'tool_id': 'long',
-        'name': 'connector_query',
-        'args': {'query': 'Recent records'},
-        'result': {'text': text},
+        'name': 'skill_view',
+        'args': {'name': 'record-review'},
+        'result': {'content': text},
       })!,
     );
     await tester.pumpWidget(
@@ -621,7 +677,7 @@ void main() {
     await tester.settleMarkdown();
     expect(find.text('Preview'), findsNothing);
     expect(find.text('Full text'), findsNothing);
-    expect(find.byTooltip('Expand Text'), findsNothing);
+    expect(find.byTooltip('Expand Result'), findsNothing);
     expect(find.byType(MarkdownMessageContent), findsOneWidget);
     expect(
       tester
@@ -661,13 +717,13 @@ void main() {
         null,
       ),
     );
-    await tester.ensureVisible(find.byTooltip('Copy Text'));
-    await tester.tap(find.byTooltip('Copy Text'));
+    await tester.ensureVisible(find.byTooltip('Copy Result'));
+    await tester.tap(find.byTooltip('Copy Result'));
     await tester.pump();
     expect(copied, text);
     await tester.pump(const Duration(seconds: 2));
-    await tester.ensureVisible(find.byTooltip('Open Text'));
-    await tester.tap(find.byTooltip('Open Text'));
+    await tester.ensureVisible(find.byTooltip('Open Result'));
+    await tester.tap(find.byTooltip('Open Result'));
     await tester.pumpAndSettle();
     expect(
       find.byType(MarkdownMessageContent).evaluate().length,
@@ -893,11 +949,29 @@ void main() {
                   },
               ],
             });
+            final args = {
+              'operations': [
+                for (final (index, file) in [
+                  null,
+                  'references/accommodation-search-quality.md',
+                  'references/flight-search-quality.md',
+                  'references/trip-preferences.md',
+                ].indexed)
+                  {
+                    'name': 'business-trip-policy-research',
+                    'action': 'patch',
+                    'file_path': ?file,
+                    'old_string': 'Previous policy $index',
+                    'new_string': 'Updated policy $index',
+                  },
+              ],
+            };
             final call = saved
                 ? ToolCallPresentation.saved(
                     TranscriptToolResult.fromRow({
                       'role': 'tool',
                       'tool_name': 'skill_manage',
+                      'args': args,
                       'content': raw,
                     }),
                   )
@@ -905,6 +979,7 @@ void main() {
                     GatewayToolActivity.fromGatewayEvent('tool.complete', {
                       'tool_id': 'skill-batch',
                       'name': 'skill_manage',
+                      'args': args,
                       'result': raw,
                     })!,
                   );
@@ -945,18 +1020,27 @@ void main() {
                 ),
               ),
             );
-            await tester.tap(find.text('Skill manage'));
+            await tester.tap(find.text('Managed skills'));
             await tester.pumpAndSettle();
             expect(find.text('Result'), findsNothing);
-            expect(call.activityDetails.response, hasLength(4));
-            for (final detail in call.activityDetails.response) {
+            expect(call.activityDetails.response, isEmpty);
+            expect(call.activityDetails.metadata, ['Operations applied: 4']);
+            expect(find.text('Operations applied: 4'), findsOneWidget);
+            expect(call.activityDetails.request, hasLength(8));
+            for (final detail in call.activityDetails.request) {
+              expect(detail.copyable, isTrue);
               expect(find.text(detail.text), findsOneWidget);
-              expect(detail.text, contains('Action: patch'));
-              expect(detail.text, contains('Success: true'));
+              expect(
+                detail.label == 'business-trip-policy-research' ||
+                    detail.facts.contains('business-trip-policy-research'),
+                isTrue,
+              );
+              expect(detail.facts, contains('patch'));
               final size = tester.getSize(find.text(detail.text));
               expect(size.width, greaterThan(0));
               expect(size.height, greaterThan(0));
             }
+            expect(find.textContaining('Success: true'), findsNothing);
             if (capture && saved) {
               final boundary = tester.renderObject<RenderRepaintBoundary>(
                 find.byKey(const ValueKey('skill-results-capture')),
@@ -1137,7 +1221,9 @@ void main() {
                               'role': 'tool',
                               'tool_name': 'read_file',
                               'tool_call_id': 'file-call',
-                              'content': 'Readable file content',
+                              'content': jsonEncode({
+                                'content': 'Readable file content',
+                              }),
                               'duration_s': .42,
                             }),
                           ],
@@ -1151,7 +1237,11 @@ void main() {
                               phase: complete
                                   ? GatewayToolActivityPhase.completed
                                   : GatewayToolActivityPhase.running,
-                              result: complete ? 'Readable file content' : null,
+                              result: complete
+                                  ? jsonEncode({
+                                      'content': 'Readable file content',
+                                    })
+                                  : null,
                               durationSeconds: complete ? .42 : null,
                             ),
                           ],
@@ -1298,8 +1388,25 @@ void main() {
             '/tmp/map.png',
           );
           expect(images, ['/tmp/map.png']);
-          expect(find.text('Where can I drive?'), findsOneWidget);
-          expect(find.text('Inside the yellow region.'), findsOneWidget);
+          await tester.settleMarkdown();
+          for (final text in [
+            'Where can I drive?',
+            'Inside the yellow region.',
+          ]) {
+            final body = find.byWidgetPredicate(
+              (widget) =>
+                  widget is MarkdownMessageContent && widget.data == text,
+            );
+            expect(body, findsOneWidget);
+            expect(tester.getSize(body).height, greaterThan(0));
+            expect(
+              find.descendant(
+                of: body,
+                matching: find.text(text, findRichText: true),
+              ),
+              findsOneWidget,
+            );
+          }
           await tester.ensureVisible(find.text('Raw details'));
           await tester.tap(find.text('Raw details'));
           await tester.pumpAndSettle();
