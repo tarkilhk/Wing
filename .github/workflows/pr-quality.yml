@@ -16,7 +16,8 @@ concurrency:
 
 jobs:
   quality:
-    name: Analyze, Test & Compile Android
+    # This check name must match the required status in the main ruleset.
+    name: Analyze & Test
     runs-on: ubuntu-24.04
     timeout-minutes: 45
 
