@@ -9,6 +9,7 @@ This charter owns the appearance of new and existing UI. [Feature guides](FEATUR
 - Use Studio's restrained sans typography, grouped lists and small rectangular controls.
 - Keep search at the top of Chats. Put New chat at the bottom for reach on large phones. While a saved profile needs repair, put its notices and profile choices in the list scroll area below search and filters so the full repair action remains reachable at 320 dp/200% text. Preserve the ordinary fixed progress and retry presentation once a profile is admitted. `test/profile_selection_repair_view_test.dart` exercises direct choice reachability, 48 dp targets, held saves and failed-save recovery in both themes and text sizes; rendered reachability needs behavioral verification.
 - Preserve the refined Activity and tool-call presentation and interaction. Restyle cautiously without rebuilding its information structure.
+- Activity details follow the [accepted activity family](#accepted-activity-detail-family). Extend its shared components and verify the family together.
 - Use the compact context ring beside the model selector, confirmed by the owner after comparing it with the fuse. Do not allocate a row to token-count text or retain the fuse alongside it. The owner's 7 October refinement selects option A: show the percentage inside a 32 dp ring (up to 40 dp at enlarged text), in a 48 dp target, and open a 320 dp anchored popover above it. Center the digits and percent sign together using Roboto's cap-height baseline on the ring's canvas. Keep used/max tokens, percentage full, a 6 dp composition bar, aligned estimated category counts and supplied compression count compact. The bar represents category estimates; it never replaces measured occupancy. At enlarged text, put each category count below its full-width label and scroll the panel when needed. Preserve composer focus/keyboard, outside-tap dismissal and keyboard access; a chat change retires its open panel. Unknown occupancy uses a centered dash and broken neutral ring. The design exploration and owner selection are archived on local branch `prototype/context-window-studio` at `c655aa4`, under `plans/prototypes/context-window-studio`. Do not repeat the model or introduce a large duplicate gauge/account-limit card.
 - Keep familiar model/reasoning selection and Queue, Steer and Fork flows.
 - Design dark mode fully and use coherent accents throughout.
@@ -230,7 +231,8 @@ starting point. Prefer aligned label/value/meter rows and short metadata lines
 over spreading the same observation across several padded blocks. Keep one
 timestamp at its owning section and remove repeated headings and captions.
 Passive observations do not need the height of interactive controls. Preserve
-48 dp action targets, readable typography and full values; at narrow widths or
+the documented control targets (48 dp generally, with the accepted compact
+activity-detail exception), readable typography and full values; at narrow widths or
 enlarged text, wrap and grow the content rather than shrinking it or clipping it.
 Whitespace must support grouping, reading or action reachability. Review the
 actual phone layout for unnecessary vertical gaps in both themes.
@@ -256,7 +258,7 @@ inside the detail content. The [density guard](../tools/architecture/rules/activ
 and rendered activity-tab tests enforce this exception without banning padding
 in settings, forms or action controls.
 
-Use Android's Roboto sans typography explicitly across component themes and monospace for code. Keep the existing compact Activity geometry. Its tabs, badges and disclosures are deliberate density exceptions to the general control dimensions.
+Use Android's Roboto sans typography explicitly across component themes and monospace for code. Keep the existing compact Activity geometry. Its tabs, badges, disclosures and [accepted detail toolbars](#accepted-activity-detail-family) are deliberate density exceptions to the general control dimensions.
 
 ## Selection controls
 
@@ -518,3 +520,148 @@ output, steer/interrupt controls and a copyable backend Details disclosure.
 Preserve loading, refresh, retry, uncertainty and control eligibility. Use Studio
 semantic tokens and at least 48 dp rows; enlarged text wraps statuses/metadata
 without hiding reachable controls. See [the activity contract](TOOL_ACTIVITY.md).
+
+
+## Activity information and typography, 8 October 2026
+
+The [information-design research](design/2026-10-08-activity-information-design.md)
+records primary sources and separates their findings from Wing's choices.
+Apply these rules to information-rich UI throughout Wing:
+
+- Use the shared Roboto body style for explanations and the monospace style for
+  code, commands, paths, source and console output. Establish hierarchy through
+  descriptive labels, weight and spacing before adding font families. Keep
+  metadata quieter than content; use tabular figures for comparable timings.
+- Render meaningful Markdown in explanations and analysis, retaining headings,
+  lists, tables, links and code fences. Source files, replacement text, patches
+  and logs remain literal, including Markdown-looking characters. Copy always
+  preserves the supplied original rather than the formatted or shortened view.
+- Group related information on one surface. Expanded tool details start at the
+  leading activity icon and use the available row width. Separate sections with
+  compact spacing or thin rules. Keep paths, counts and status subordinate;
+  avoid nested cards, repeated filenames and decorative emphasis.
+- Make the requested operation and reported result distinguishable. Show code
+  with its output, file contents with requested ranges and reported limits,
+  edits with Find/Replace and only backend-reported diffs, and vision questions
+  with the actual image and receipt or returned analysis. Unknown tools retain
+  readable request/result data and exact Raw details.
+- Bound long inline text with an explicit Preview and icon-only expansion/full
+  view controls. Expansion reveals already returned data; server truncation is
+  reported separately. Code can wrap or scroll within its own region while
+  surrounding prose reflows. Do not shrink text to make a long line fit.
+- Actions represented by icons are icon-only, including every copy action.
+  Provide precise accessible names/tooltips, temporary feedback and 48 dp
+  targets, with the compact activity exceptions defined below. Reflow toolbars
+  at narrow widths instead of hiding actions. Preserve the compact
+  activity-header geometry exception.
+- Use semantic color sparingly for actual outcomes, errors and diff changes;
+  retain text, outcome icons and literal +/- markers. Only backend observations
+  establish totals, timings, verification, changes, exit codes and analyses.
+  A completed call is not proof of success; a native vision receipt is not an
+  analysis. Unknown observations remain neutral.
+- Inspect real rendered layouts at ordinary phone size and at 320 dp/200% in
+  both themes. Check long paths, punctuation, readable Markdown, literal source,
+  independent code/table scrolling, errors and reachable icon controls. Contrast
+  and assistive-technology behavior need their own checks; captures alone do not
+  establish accessibility conformance.
+
+
+### Accepted activity detail family
+
+The owner approved this rendered family on 8 October 2026. **Read options is
+the visual spacing reference for every activity detail**, including code,
+commands, reads, writes, edits, vision, search and unknown tools. This is the
+accepted baseline for further work, not a set of independent tool designs.
+
+| Property | Accepted rule |
+| --- | --- |
+| Visible insets | 8 dp on all four sides, matching Read options, for resource/section headers, content, images, metadata, preview rows and footers |
+| Compact toolbars | 32 dp high at ordinary text size, plus the 1 dp section separator; grow for wrapped/enlarged text |
+| Detail icon controls | 32 × 32 dp targets with 16 dp glyphs and 8 dp icon insets; this is the scoped exception to Studio's general 48 dp control rule |
+| Inset ownership | Labels own their 8 dp vertical framing; buttons own their icon inset. Add neither a second vertical toolbar inset nor an extra trailing inset after the final icon |
+| Outer geometry | 4 dp vertical spacing around expanded details; full available width, aligned with the activity's leading icon |
+| Surface and separators | Shared Studio raised/content surfaces, card corners and thin section rules across every tool |
+| Typography | Shared label style for section headings and quiet facts, Roboto body style for explanations, monospace for code, paths, source and console output |
+| Ordinary completion | Completed with the same muted color and outlined check icon, including calls with backend-confirmed success |
+| Exceptions and result context | Explicit errors/warnings keep semantic accents; reported diff lines keep +/- markers and their colors. Supplied exit codes and native image receipts remain quiet context beside the status |
+| Actions | Icon-only preview, share, copy, wrapping, expansion and full view where applicable, with precise tooltips/accessibility names and preserved pending/retry behavior |
+
+Shared framing belongs to `ActivityDetailsCard`, `ActivityDetailContent`, `ActivityDetailSection`,
+`ActivityDetailStatus` and `ActivityDetailAction` in
+[the activity renderer](../lib/core/widgets/tool_activity_details.dart).
+`ToolActivityDetailsView` composes tool facts inside that same frame. Different content formats
+select their renderer inside that family. Measure visible text and icon edges
+as well as widget bounds: matching Padding values alone does not establish
+matching appearance. Align an image's actual left edge with text content rather
+than centering a smaller image inside an additional gutter.
+
+The owner's 8 October refinement retains the useful actions from the supplied
+references: an eye icon opens the named file/image, a share icon shares the file,
+and a copy icon copies the exact target or section text. Use Wing glyphs and
+Studio tokens; labels belong in tooltips and accessibility names. These actions
+remain adjacent to the resource while text styling and density evolve. Original
+image tapping and section copy/wrap/full-view controls remain available.
+
+Only backend observations establish requested operations and reported results.
+Keep backend error/warning/no-change facts explicit. Completion establishes
+neither successful execution nor a vision analysis; display neither unless
+the backend supplies it.
+
+Read-file cards use one compact Read options row with the supplied offset and
+limit beside its label. Remove the separate options body and its redundant
+section toolbar. At enlarged text, wrap options and move resource actions below
+the full-width path. Do not squeeze paths or reduce targets to force the ordinary
+single-row arrangement.
+
+Review the activity family together before accepting any card: compare actual
+code, read, edit and vision renders side by side, then compare their dark and
+enlarged-text variants. Individual screenshots and passing tests do not establish
+cross-card consistency. Extend shared components and this charter as refinements
+are agreed; do not create one-off interpretations of Studio per activity.
+
+The family also covers Tasks, live and saved Agents, reasoning, goals, loops,
+heartbeats and background processes. Backend task states and parent indentation
+remain passive; their established status glyphs are retained, with neutral
+completion text. Agent detail output, process tails, goal contracts and recurring
+prompts use the same section actions and framing as tool text. Technical tails
+stay literal; authored summaries and reasoning can render Markdown. Compact
+state/control rows preserve the owner's action eligibility and confirmations.
+Unavailable or last-received output stays qualified; an exited process without
+an exit code never becomes a claimed successful command. Process command headers
+may be bounded, but their detail/copy source and the received output tail retain
+the exact supplied text. Long bodies use local previews rather than discarding
+received data.
+
+Structured file-search matches group by supplied path with supplied line labels;
+copy preserves each exact excerpt. File checks distinguish write verification,
+syntax check status and separate semantic diagnostics. Web-source headers retain
+quiet host identity, open-source and exact-link copy actions alongside excerpt
+copy. All use the shared family instead of independently styled result cards.
+
+### Family acceptance procedure
+
+For a change spanning repeated UI components, complete these steps before
+claiming uniformity:
+
+1. Translate the owner's request into a small acceptance table covering each
+   member of the family. Include all four content edges, image alignment,
+   surfaces, font roles, header/control geometry, footer wording/icon/color and
+   retained interactions. Use the accepted component as the reference.
+2. Give shared framing one production owner. Inspect nested renderers and
+   inherited defaults as well as the outer widget. Content may legitimately
+   contain paragraph/list spacing or aspect-ratio constraints; those do not
+   authorize extra framing or a different footer convention.
+3. For a reported inconsistency, reproduce the exact symptom with a failing
+   family-level check before fixing it. Assert all relevant axes, including
+   top/bottom framing and colors. A matching left coordinate alone is partial
+   evidence. Retain warnings, errors, loading and original-data actions in the
+   same review.
+4. Compare actual rendered family members together at ordinary phone size,
+   then in both themes at enlarged text. Verify served preview image bytes
+   match the newly generated captures; use a versioned asset URL when refreshing
+   a review page. Test that phone-width comparison layouts do not resize members
+   unevenly or overflow.
+5. Report the specific checked properties and remaining discrepancies. Test
+   counts, skill usage and token usage are not evidence of visual uniformity.
+   A renewed owner report reopens acceptance; remeasure it rather than repeating
+   the earlier claim.

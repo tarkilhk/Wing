@@ -123,4 +123,36 @@ void main() {
       expect(releases, 1);
     },
   );
+  for (final scenario in ['admitted', 'changed route', 'disposed owner']) {
+    test(
+      'resource sharing rechecks captured owner after download: $scenario',
+      () async {
+        final source = _Files();
+        final owner = OwnedRemoteFiles(
+          source: source,
+          profileName: 'captured-profile',
+          storedSessionId: 'captured-chat',
+          release: () {},
+        );
+        var current = true;
+        RemoteFileDownload? delivered;
+        final pending = owner.downloadAndShare(
+          'report.txt',
+          admitPresentation: () => current,
+          deliver: (file) async {
+            delivered = file;
+          },
+        );
+        if (scenario == 'changed route') current = false;
+        if (scenario == 'disposed owner') owner.dispose();
+        final completion = scenario == 'disposed owner'
+            ? expectLater(pending, throwsStateError)
+            : pending;
+        source.pending.complete(file);
+        await completion;
+        expect(delivered, scenario == 'admitted' ? same(file) : isNull);
+        owner.dispose();
+      },
+    );
+  }
 }

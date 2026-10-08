@@ -157,6 +157,7 @@ void main() {
   Future<void> openDetails(WidgetTester tester) async {
     await showPanel(tester);
     await tester.ensureVisible(find.text('Inspect the release'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Inspect the release'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -284,14 +285,18 @@ void main() {
         ),
       );
       await openDetails(tester);
-      await tester.tap(find.text('Details'));
+      await tester.ensureVisible(find.byTooltip('Expand Details'));
       await tester.pumpAndSettle();
-      final copy = find.text('Copy details');
+      await tester.tap(find.byTooltip('Expand Details'));
+      await tester.pumpAndSettle();
+      final copy = find.byTooltip('Copy Details');
       await tester.ensureVisible(copy);
+      await tester.pumpAndSettle();
+      final copyElement = tester.element(copy);
       await tester.tap(copy);
       await tester.pump();
       expect(copied, 'Agent ID: child-1\nModel: test-model\nTool calls: 3');
-      Navigator.of(tester.element(copy)).pop();
+      Navigator.of(copyElement).pop();
       await tester.pumpAndSettle();
     },
   );
@@ -398,8 +403,8 @@ void main() {
     );
     expect(find.text('latest child output'), findsOneWidget);
     expect(find.byType(SelectableText), findsWidgets);
-    expect(find.text('Steer'), findsOneWidget);
-    expect(find.text('Interrupt'), findsOneWidget);
+    expect(find.byTooltip('Steer'), findsOneWidget);
+    expect(find.byTooltip('Interrupt'), findsOneWidget);
 
     tester.view.viewInsets = const FakeViewPadding(bottom: 260);
     await tester.pump();
@@ -414,8 +419,9 @@ void main() {
           .first,
     );
     await tester.enterText(find.byType(TextField), 'Check the Android path');
-    final steerButton = find.widgetWithText(FilledButton, 'Steer');
+    final steerButton = find.byTooltip('Steer');
     await tester.ensureVisible(steerButton);
+    await tester.pumpAndSettle();
     await tester.tap(steerButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -466,12 +472,13 @@ void main() {
       expect(fixture.listCalls, 1);
       expect(chat.subagents.single.acceptingSteer, isTrue);
       await tester.ensureVisible(find.text('Inspect the release'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Inspect the release'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('Steer'), findsOneWidget);
+      expect(find.byTooltip('Steer'), findsOneWidget);
 
-      Navigator.of(tester.element(find.text('Steer'))).pop();
+      Navigator.of(tester.element(find.byTooltip('Steer'))).pop();
       await tester.pumpAndSettle();
     },
   );
@@ -496,12 +503,13 @@ void main() {
           .first,
     );
     expect(find.text('Could not refresh live output.'), findsOneWidget);
-    expect(find.text('Retry'), findsOneWidget);
+    expect(find.byTooltip('Retry'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
     expect(fixture.tailCalls, 3);
 
-    await tester.ensureVisible(find.text('Retry'));
-    await tester.tap(find.text('Retry'));
+    await tester.ensureVisible(find.byTooltip('Retry'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Retry'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.scrollUntilVisible(
@@ -540,6 +548,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.ensureVisible(find.text('Inspect the release').last);
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('Inspect the release'), findsOneWidget);
     expect(fixture.listCalls, 1);

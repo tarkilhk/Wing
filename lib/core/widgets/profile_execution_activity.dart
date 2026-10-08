@@ -1,8 +1,11 @@
+import '../models/chat_output.dart';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../presentation/tool_call_presentation.dart';
 import 'profile_tool_call.dart';
+import 'tool_activity_details.dart';
+import '../presentation/tool_activity_details.dart';
 
 import 'package:flutter/material.dart';
 
@@ -15,11 +18,15 @@ import 'profile_activity_tabs.dart';
 class ProfileLiveToolActivity extends StatelessWidget {
   final Iterable<GatewayToolActivity> activities;
   final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
 
   const ProfileLiveToolActivity({
     super.key,
     required this.activities,
     this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
   });
 
   @override
@@ -32,6 +39,8 @@ class ProfileLiveToolActivity extends StatelessWidget {
           key: ValueKey(('live-tool', activity.toolId)),
           call: ToolCallPresentation.live(activity),
           loadImage: loadImage,
+          onOpenResource: onOpenResource,
+          onShareResource: onShareResource,
         ),
     ],
   );
@@ -61,67 +70,38 @@ class ProfileTodoPanel extends StatelessWidget {
     final cancelled = todos
         .where((todo) => todo.status == GatewayTodoStatus.cancelled)
         .length;
-    final colors = WingTokens.of(context);
     final children = <Widget>[
-      Padding(
-        padding: EdgeInsets.fromLTRB(embedded ? 0 : 12, 0, 0, 8),
-        child: Text(
+      ActivityDetailFacts(
+        facts: [
           [
             '$completed of ${todos.length} completed',
             if (working > 0) '$working in progress',
             if (pending > 0) '$pending pending',
             if (cancelled > 0) '$cancelled cancelled',
           ].join(' · '),
-          style: TextStyle(fontSize: 12, height: 1.5, color: colors.muted),
-        ),
+        ],
       ),
-      for (final todo in todos)
-        ListTile(
-          dense: true,
-          minTileHeight: 48,
-          minVerticalPadding: 6,
-          minLeadingWidth: 16,
-          horizontalTitleGap: 8,
-          contentPadding: EdgeInsets.only(
-            left: todo.parent == null
-                ? (embedded ? 0 : 12)
-                : (embedded ? 12 : 24),
-            right: 0,
-          ),
-          leading: _TodoStatusIcon(status: todo.status),
-          title: SelectableText(
-            todo.content,
-            style: TextStyle(
-              fontSize: 14,
-              height: 1.4,
-              fontWeight: todo.status == GatewayTodoStatus.inProgress
-                  ? FontWeight.w500
-                  : FontWeight.w400,
-              color:
-                  todo.status == GatewayTodoStatus.completed ||
-                      todo.status == GatewayTodoStatus.cancelled
-                  ? colors.muted
-                  : colors.onSurface,
+      ActivityDetailsCard(
+        children: [
+          for (final todo in todos)
+            Padding(
+              padding: EdgeInsets.only(left: todo.parent == null ? 0 : 12),
+              child: ActivityDetailSection(
+                leading: _TodoStatusIcon(status: todo.status),
+                block: ToolDetailBlock(
+                  label:
+                      '${todo.parent == null ? '' : 'Subtask · '}${switch (todo.status) {
+                        GatewayTodoStatus.pending => 'Pending',
+                        GatewayTodoStatus.inProgress => 'In progress',
+                        GatewayTodoStatus.completed => 'Completed',
+                        GatewayTodoStatus.cancelled => 'Cancelled',
+                      }}',
+                  text: todo.content,
+                ),
+              ),
             ),
-          ),
-          subtitle: Text(
-            '${todo.parent == null ? '' : 'Subtask · '}${switch (todo.status) {
-              GatewayTodoStatus.pending => 'Pending',
-              GatewayTodoStatus.inProgress => 'In progress',
-              GatewayTodoStatus.completed => 'Completed',
-              GatewayTodoStatus.cancelled => 'Cancelled',
-            }}',
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.5,
-              color: todo.status == GatewayTodoStatus.completed
-                  ? colors.success
-                  : todo.status == GatewayTodoStatus.inProgress
-                  ? colors.accent
-                  : colors.muted,
-            ),
-          ),
-        ),
+        ],
+      ),
     ];
     if (embedded) {
       return Column(
@@ -228,12 +208,16 @@ class ProfileReasoningDisclosure extends StatelessWidget {
     children: [
       ProfileActivityGuide(
         inset: 0,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 8),
-          child: SelectableText(
-            text,
-            style: const TextStyle(fontSize: 13, height: 1.4),
-          ),
+        child: ActivityDetailsCard(
+          children: [
+            ActivityDetailSection(
+              block: ToolDetailBlock(
+                label: running ? 'Thinking' : 'Thought',
+                text: text,
+                markdown: true,
+              ),
+            ),
+          ],
         ),
       ),
     ],

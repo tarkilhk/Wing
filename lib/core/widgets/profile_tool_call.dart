@@ -1,3 +1,4 @@
+import '../models/chat_output.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,9 +6,8 @@ import '../presentation/tool_call_presentation.dart';
 import '../theme/wing_theme.dart';
 import 'activity_time.dart';
 import 'compact_activity_row.dart';
-import 'chat_inline_image.dart';
-import 'markdown_message_content.dart';
 import 'profile_transcript_disclosure.dart';
+import 'tool_activity_details.dart';
 
 /// One action, shared by live receipts and passive saved transcript outputs.
 class ProfileToolCall extends StatelessWidget {
@@ -16,11 +16,15 @@ class ProfileToolCall extends StatelessWidget {
     required this.call,
     this.initiallyExpanded = false,
     this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
   });
 
   final ToolCallPresentation call;
   final bool initiallyExpanded;
   final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
 
   /// Wing's glyph policy uses delivered tool identity, never translated titles.
   /// Both live and saved calls use this lookup. Provider namespaces can share
@@ -117,23 +121,12 @@ class ProfileToolCall extends StatelessWidget {
         }
       },
       details: [
-        SelectableText('Action: ${call.title}'),
-        const SizedBox(height: 8),
-        if (call.target case final target?) ...[
-          SelectableText(
-            target.startsWith('data:') ? 'Attached image' : target,
-            style: TextStyle(fontSize: 12, color: colors.muted),
-          ),
-          const SizedBox(height: 8),
-        ],
-        if (call.imageTarget case final image?) ...[
-          ChatInlineImage(
-            target: image,
-            title: 'Analyzed image',
-            loadImage: loadImage,
-          ),
-          const SizedBox(height: 12),
-        ],
+        ToolActivityDetailsView(
+          call: call,
+          loadImage: loadImage,
+          onOpenResource: onOpenResource,
+          onShareResource: onShareResource,
+        ),
         if (call.labels.length > 1)
           for (final label in call.labels.skip(1))
             Padding(
@@ -142,24 +135,6 @@ class ProfileToolCall extends StatelessWidget {
                 '${label.text}${label.preview.isEmpty ? '' : '\n${label.preview}'}',
               ),
             ),
-        for (final detail in call.details) ...[
-          Text(
-            detail.label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: colors.muted,
-            ),
-          ),
-          const SizedBox(height: 4),
-          detail.markdown
-              ? MarkdownMessageContent(data: detail.text, loadImage: loadImage)
-              : SelectableText(
-                  detail.text,
-                  style: const TextStyle(fontSize: 13, height: 1.4),
-                ),
-          const SizedBox(height: 12),
-        ],
         ProfileTranscriptDisclosure(
           label: 'Raw details',
           icon: Icons.data_object,

@@ -18,6 +18,7 @@ import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_workspace_controller_test.dart' show Host;
+import 'helpers/pump_markdown_widget.dart';
 
 void main() {
   late Host host;
@@ -613,7 +614,7 @@ void main() {
         expect(find.byType(SelectableText), findsNWidgets(4));
         final texts = tester
             .widgetList<SelectableText>(find.byType(SelectableText))
-            .map((w) => w.data)
+            .map((w) => w.data ?? w.textSpan?.toPlainText())
             .toList();
         expect(texts.first, 'Inspect the rental conditions');
         expect(texts.last, 'Check an alternative supplier');
@@ -666,10 +667,19 @@ void main() {
     await tester.tap(find.text('Tasks 1/1'));
     await tester.pumpAndSettle();
     expect(find.text('Inspect contract'), findsOneWidget);
-    expect(find.text('Checked the contract.'), findsNothing);
+    expect(
+      find.text('Checked the contract.', findRichText: true),
+      findsNothing,
+    );
+    await tester.ensureVisible(find.text('Thought'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Thought'));
     await tester.pumpAndSettle();
-    expect(find.text('Checked the contract.'), findsOneWidget);
+    await tester.settleMarkdown();
+    expect(
+      find.text('Checked the contract.', findRichText: true),
+      findsOneWidget,
+    );
   });
 
   testWidgets(

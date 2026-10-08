@@ -1,3 +1,4 @@
+import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,11 +74,14 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       await tester.tap(find.text('Read skill'));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(find.text('Saved tool detail'), findsOneWidget);
       await tester.tap(find.text('Tasks 1/4'));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(find.text('Task details'), findsOneWidget);
       expect(find.text('Saved tool detail'), findsNothing);
       expect(find.text('Thinking'), findsOneWidget);
@@ -89,22 +93,34 @@ void main() {
       );
       update(() => completed = 2);
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(find.text('Task details'), findsOneWidget);
       await tester.tap(find.text('Agents 1/2'));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(activations, 1);
       expect(find.text('Agent details'), findsOneWidget);
       await tester.tap(find.text('Thinking'));
       await tester.pumpAndSettle();
-      expect(find.text('Reasoning details'), findsOneWidget);
+      await tester.settleMarkdown();
+      expect(
+        find.text('Reasoning details', findRichText: true),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Tools 5'));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(find.text('Saved tool detail'), findsOneWidget);
-      expect(find.text('Reasoning details'), findsOneWidget);
+      expect(
+        find.text('Reasoning details', findRichText: true),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Tasks 2/4'));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       update(() => showTasks = false);
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(find.text('Saved tool detail'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -153,12 +169,15 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       final before = tester.getTopLeft(find.text('Tasks')).dy;
       await tester.tap(find.text('Tasks'));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(tester.getTopLeft(find.text('Tasks')).dy, closeTo(before, 1));
       await tester.tap(find.text('Tools'));
       await tester.pumpAndSettle();
+      await tester.settleMarkdown();
       expect(tester.getTopLeft(find.text('Tasks')).dy, closeTo(before, 1));
       expect(tester.takeException(), isNull);
     },

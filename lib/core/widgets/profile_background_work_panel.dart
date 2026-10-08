@@ -1,7 +1,10 @@
 import '../theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
-import 'anchored_expansion_tile.dart';
+import 'compact_activity_row.dart';
+import 'activity_time.dart';
+import 'tool_activity_details.dart';
+import '../presentation/tool_activity_details.dart';
 import 'profile_transcript_disclosure.dart';
 
 import '../models/gateway_process.dart';
@@ -105,7 +108,7 @@ class _ProfileBackgroundWorkPanelState
         label: 'Background work',
         summary: Text(chat.backgroundSummary),
         loading: refreshing,
-        childrenPadding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
+        childrenPadding: EdgeInsets.zero,
         children: [
           if (snapshot?.loop case final loop?)
             _LoopSection(
@@ -164,10 +167,10 @@ class _ProfileBackgroundWorkPanelState
             ),
           Align(
             alignment: Alignment.centerRight,
-            child: TextButton.icon(
+            child: ActivityDetailAction(
               onPressed: refreshing || chat.actionBusy ? null : _refresh,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Refresh'),
+              icon: Icons.refresh,
+              label: 'Refresh',
             ),
           ),
         ],
@@ -208,28 +211,28 @@ class _LoopSection extends StatelessWidget {
     ],
     actions: [
       if (actions.contains(SessionControlAction.loopPause))
-        TextButton.icon(
+        ActivityDetailAction(
           onPressed: disabled
               ? null
               : () => onAction(SessionControlAction.loopPause),
-          icon: const Icon(Icons.pause, size: 18),
-          label: const Text('Pause loop'),
+          icon: Icons.pause,
+          label: 'Pause loop',
         ),
       if (actions.contains(SessionControlAction.loopResume))
-        TextButton.icon(
+        ActivityDetailAction(
           onPressed: disabled
               ? null
               : () => onAction(SessionControlAction.loopResume),
-          icon: const Icon(Icons.play_arrow, size: 18),
-          label: const Text('Resume loop'),
+          icon: Icons.play_arrow,
+          label: 'Resume loop',
         ),
       if (actions.contains(SessionControlAction.loopStop))
-        TextButton.icon(
+        ActivityDetailAction(
           onPressed: disabled
               ? null
               : () => onAction(SessionControlAction.loopStop),
-          icon: const Icon(Icons.stop, size: 18),
-          label: const Text('Stop loop'),
+          icon: Icons.stop,
+          label: 'Stop loop',
         ),
     ],
   );
@@ -261,25 +264,25 @@ class _HeartbeatSection extends StatelessWidget {
     ],
     actions: [
       if (actions.contains(SessionControlAction.heartbeatPause))
-        TextButton.icon(
+        ActivityDetailAction(
           onPressed: disabled
               ? null
               : () => onAction(SessionControlAction.heartbeatPause),
-          icon: const Icon(Icons.pause, size: 18),
-          label: const Text('Pause heartbeat'),
+          icon: Icons.pause,
+          label: 'Pause heartbeat',
         ),
       if (actions.contains(SessionControlAction.heartbeatResume))
-        TextButton.icon(
+        ActivityDetailAction(
           onPressed: disabled
               ? null
               : () => onAction(SessionControlAction.heartbeatResume),
-          icon: const Icon(Icons.play_arrow, size: 18),
-          label: const Text('Resume heartbeat'),
+          icon: Icons.play_arrow,
+          label: 'Resume heartbeat',
         ),
-      TextButton.icon(
+      ActivityDetailAction(
         onPressed: disabled ? null : onClear,
-        icon: const Icon(Icons.clear, size: 18),
-        label: const Text('Clear heartbeat'),
+        icon: Icons.clear,
+        label: 'Clear heartbeat',
       ),
     ],
   );
@@ -301,44 +304,15 @@ class _WorkSection extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            SelectableText(
-              prompt.trim().isEmpty ? 'No prompt provided' : prompt,
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 10,
-              runSpacing: 4,
-              children: [for (final detail in details) Text(detail)],
-            ),
-            if (actions.isNotEmpty)
-              Wrap(spacing: 4, runSpacing: 2, children: actions),
-          ],
-        ),
+  Widget build(BuildContext context) => ActivityDetailsCard(
+    children: [
+      ActivityDetailSection(
+        leading: Icon(icon, size: 16),
+        block: ToolDetailBlock(label: 'Prompt', text: prompt),
       ),
-    ),
+      ActivityDetailFacts(facts: details),
+      ActivityDetailStatus(label: title, icon: icon, actions: actions),
+    ],
   );
 }
 
@@ -358,79 +332,83 @@ class _ProcessTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => AnchoredExpansionTile(
+  Widget build(BuildContext context) => CompactActivityRow(
     key: ValueKey(('process', process.id)),
-    minTileHeight: 44,
-    tilePadding: EdgeInsets.zero,
-    childrenPadding: const EdgeInsets.only(left: 12, right: 4, bottom: 8),
-    title: Text(
-      process.command,
-      style: WingTokens.of(context).typography.mono,
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-    ),
-    subtitle: Text(_processStatus(process)),
-    children: [
-      if (process.cwd case final cwd?)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: SelectableText(
-            'Folder: $cwd',
-            style: WingTokens.of(context).typography.mono,
-          ),
-        ),
-      if (process.pid case final pid?)
-        Align(alignment: Alignment.centerLeft, child: Text('PID $pid')),
-      if (process.detached || process.notifyOnComplete)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            [
+    icon: Icons.terminal_rounded,
+    lines: [
+      Text(process.command, style: WingTokens.of(context).typography.mono),
+      Text(
+        _processStatus(process),
+        style: WingTokens.of(context).typography.label,
+      ),
+    ],
+    time: const ActivityTime(subject: 'Process'),
+    details: [
+      ActivityDetailsCard(
+        children: [
+          if (process.commandSource case final command?)
+            ActivityDetailSection(
+              block: ToolDetailBlock(
+                label: 'Command',
+                text: command,
+                format: ToolDetailFormat.source,
+              ),
+            ),
+          if (process.outputTail case final output?)
+            ActivityDetailSection(
+              block: ToolDetailBlock(
+                label: 'Recent output',
+                text: output,
+                format: ToolDetailFormat.source,
+              ),
+            ),
+          ActivityDetailFacts(
+            facts: [
+              if (process.cwd case final cwd?) 'Folder: $cwd',
+              if (process.pid case final pid?) 'PID $pid',
               if (process.detached) 'Detached',
               if (process.notifyOnComplete) 'Completion notice enabled',
-            ].join(' · '),
+              if (process.outputTail != null)
+                'Latest received output; not a complete transcript',
+            ],
           ),
-        ),
-      if (process.outputTail case final output?) ...[
-        const SizedBox(height: 6),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Recent output',
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(8),
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: SelectableText(
-            output,
-            style: WingTokens.of(context).typography.mono,
-          ),
-        ),
-      ],
-      if (error case final message?)
-        Align(alignment: Alignment.centerLeft, child: StudioError(message)),
-      Align(
-        alignment: Alignment.centerRight,
-        child: process.isRunning
-            ? TextButton.icon(
-                onPressed: stopping ? null : onStop,
-                icon: stopping
-                    ? const SizedBox.square(
-                        dimension: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.stop, size: 18),
-                label: const Text('Stop process'),
-              )
-            : TextButton.icon(
-                onPressed: onDismiss,
-                icon: const Icon(Icons.close, size: 18),
-                label: const Text('Dismiss'),
+          if (error case final message?)
+            ActivityDetailStatus(
+              label: message,
+              error: true,
+              icon: Icons.error_outline,
+            ),
+          ActivityDetailStatus(
+            label: process.isRunning
+                ? 'Running'
+                : process.exitCode != null && process.exitCode != 0
+                ? 'Failed'
+                : 'Completed',
+            error:
+                !process.isRunning &&
+                process.exitCode != null &&
+                process.exitCode != 0,
+            icon: process.isRunning
+                ? Icons.timelapse_outlined
+                : process.exitCode != null && process.exitCode != 0
+                ? Icons.error_outline
+                : Icons.check_circle_outline,
+            contextFacts: [
+              if (!process.isRunning)
+                process.exitCode == null
+                    ? 'Process exited; exit code not supplied'
+                    : 'Exit ${process.exitCode}',
+            ],
+            actions: [
+              ActivityDetailAction(
+                label: process.isRunning ? 'Stop process' : 'Dismiss',
+                icon: process.isRunning ? Icons.stop : Icons.close,
+                busy: stopping,
+                onPressed: process.isRunning ? onStop : onDismiss,
               ),
+            ],
+          ),
+        ],
       ),
     ],
   );
@@ -447,7 +425,11 @@ class _ErrorRow extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Expanded(child: StudioError(message)),
-      TextButton(onPressed: onRetry, child: const Text('Retry')),
+      ActivityDetailAction(
+        label: 'Retry',
+        icon: Icons.refresh,
+        onPressed: onRetry,
+      ),
     ],
   );
 }

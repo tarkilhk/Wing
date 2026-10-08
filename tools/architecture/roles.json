@@ -491,6 +491,11 @@
       "feature": "chat-activity",
       "library": "lib/core/presentation/saved_activity.dart"
     },
+    "lib/core/presentation/tool_activity_details.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_activity_details.dart"
+    },
     "lib/core/presentation/tool_call_presentation.dart": {
       "role": "presentation",
       "feature": "chat-activity",
@@ -1825,6 +1830,11 @@
       "role": "view",
       "feature": "app-preferences-backup",
       "library": "lib/core/widgets/text_size_settings_card.dart"
+    },
+    "lib/core/widgets/tool_activity_details.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/tool_activity_details.dart"
     },
     "lib/core/widgets/user_message_attachment.dart": {
       "role": "view",

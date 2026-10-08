@@ -1,10 +1,11 @@
 import 'studio_error.dart';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../presentation/tool_call_presentation.dart';
 import '../theme/wing_theme.dart';
 import 'activity_time.dart';
+import 'tool_activity_details.dart';
+import '../presentation/tool_activity_details.dart';
 import 'profile_transcript_disclosure.dart';
 
 import '../models/gateway_insight.dart';
@@ -90,7 +91,11 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
           Row(
             children: [
               Expanded(child: StudioError(error)),
-              TextButton(onPressed: _refresh, child: const Text('Retry')),
+              ActivityDetailAction(
+                label: 'Retry',
+                icon: Icons.refresh,
+                onPressed: _refresh,
+              ),
             ],
           ),
         if (!chat.subagentsLoading &&
@@ -109,10 +114,10 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
           ),
         Align(
           alignment: Alignment.centerRight,
-          child: TextButton.icon(
+          child: ActivityDetailAction(
             onPressed: chat.subagentsLoading ? null : _refresh,
-            icon: const Icon(Icons.refresh, size: 18),
-            label: const Text('Refresh'),
+            icon: Icons.refresh,
+            label: 'Refresh',
           ),
         ),
       ];
@@ -133,7 +138,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
         label: 'Subagents',
         summary: Text(chat.subagentSummary),
         loading: chat.subagentsLoading,
-        childrenPadding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
+        childrenPadding: EdgeInsets.zero,
         children: children,
       );
     },
@@ -151,7 +156,6 @@ class _SubagentDetailSheet extends StatefulWidget {
 class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
     with WidgetsBindingObserver {
   final _steer = TextEditingController();
-  bool _expandedGoal = false;
   @override
   void initState() {
     super.initState();
@@ -204,82 +208,100 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: ListView(
                 children: [
-                  Text(
-                    _goal(current),
-                    style: Theme.of(context).textTheme.titleMedium,
-                    maxLines: _expandedGoal ? null : 3,
-                    overflow: _expandedGoal ? null : TextOverflow.ellipsis,
-                  ),
-                  if (_goal(current).length > 120)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton(
-                        onPressed: () =>
-                            setState(() => _expandedGoal = !_expandedGoal),
-                        child: Text(
-                          _expandedGoal ? 'Show less' : 'Show full task',
+                  ActivityDetailsCard(
+                    children: [
+                      ActivityDetailSection(
+                        block: ToolDetailBlock(
+                          label: 'Task',
+                          text: _goal(current),
                         ),
                       ),
-                    ),
-                  const SizedBox(height: 4),
-                  _SubagentStatusLine(
-                    activity: current,
-                    unconfirmed: unconfirmed,
-                  ),
-                  if (_activityText(current) case final text?) ...[
-                    const SizedBox(height: 6),
-                    SelectableText(
-                      text,
-                      style: const TextStyle(fontSize: 13, height: 1.4),
-                    ),
-                  ],
-                  const SizedBox(height: 6),
-                  _SubagentMetadata(activity: current),
-                  if (current.acceptingSteer && canControl) ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _steer,
-                      minLines: 1,
-                      maxLines: 3,
-                      enabled: !widget.session.state.steering,
-                      decoration: const InputDecoration(
-                        labelText: 'Steer subagent',
-                        hintText: 'Add guidance for the current task',
-                      ),
-                    ),
-                  ],
-                  if (canControl) const SizedBox(height: 8),
-                  Wrap(
-                    alignment: WrapAlignment.end,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (canControl)
-                        OutlinedButton.icon(
-                          onPressed: widget.session.state.interrupting
-                              ? null
-                              : widget.session.interrupt,
-                          icon: const Icon(Icons.stop_circle_outlined),
-                          label: const Text('Interrupt'),
+                      if (_activityText(current) case final text?)
+                        ActivityDetailSection(
+                          block: ToolDetailBlock(
+                            label: 'Current activity',
+                            text: text,
+                          ),
                         ),
                       if (current.acceptingSteer && canControl)
-                        FilledButton(
-                          onPressed: widget.session.state.steering
-                              ? null
-                              : _submitSteer,
-                          child: const Text('Steer'),
+                        Padding(
+                          padding: const EdgeInsets.all(WingSpacing.sm),
+                          child: TextField(
+                            controller: _steer,
+                            minLines: 1,
+                            maxLines: 3,
+                            enabled: !widget.session.state.steering,
+                            decoration: const InputDecoration(
+                              labelText: 'Steer subagent',
+                              hintText: 'Add guidance for the current task',
+                            ),
+                          ),
                         ),
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 0,
+                        runSpacing: 0,
+                        children: [
+                          if (canControl)
+                            ActivityDetailAction(
+                              onPressed: widget.session.state.interrupting
+                                  ? null
+                                  : widget.session.interrupt,
+                              icon: Icons.stop_circle_outlined,
+                              label: 'Interrupt',
+                            ),
+                          if (current.acceptingSteer && canControl)
+                            ActivityDetailAction(
+                              label: 'Steer',
+                              icon: Icons.send_outlined,
+                              onPressed: widget.session.state.steering
+                                  ? null
+                                  : _submitSteer,
+                            ),
+                        ],
+                      ),
+                      if (widget.session.state.controlMessage
+                          case final message?)
+                        ActivityDetailStatus(
+                          label: message,
+                          error: widget.session.state.controlFailed,
+                          icon: widget.session.state.controlFailed
+                              ? Icons.error_outline
+                              : Icons.info_outline,
+                        ),
+                      _SubagentMetadata(activity: current),
+                      _tailBody(current),
+                      ActivityDetailStatus(
+                        label: _statusLabel(current, unconfirmed),
+                        icon: unconfirmed
+                            ? Icons.help_outline
+                            : _statusIcon(current.status),
+                        error:
+                            !unconfirmed &&
+                            current.status == GatewaySubagentStatus.failed,
+                        warning:
+                            !unconfirmed &&
+                            current.status == GatewaySubagentStatus.interrupted,
+                        actions: [
+                          Padding(
+                            padding: const EdgeInsets.all(WingSpacing.sm),
+                            child: ActivityTime(
+                              subject: 'Agent',
+                              durationSeconds: current.isTerminal
+                                  ? current.durationSeconds
+                                  : null,
+                              backendStartedAt:
+                                  !unconfirmed &&
+                                      current.status ==
+                                          GatewaySubagentStatus.running
+                                  ? current.startedAt
+                                  : null,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
-                  if (widget.session.state.controlMessage
-                      case final message?) ...[
-                    const SizedBox(height: 8),
-                    widget.session.state.controlFailed
-                        ? StudioError(message)
-                        : Text(message),
-                  ],
-                  const SizedBox(height: 12),
-                  _tailBody(current),
                 ],
               ),
             ),
@@ -294,70 +316,65 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
     final readableTail = tail != null && tail.available && tail.text.isNotEmpty
         ? tail
         : widget.session.state.lastAvailableTail;
+    final messages = <String>[
+      if (widget.session.state.tailError == null) ...[
+        if (tail == null)
+          'Loading live output...'
+        else if (!tail.available)
+          activity.isTerminal
+              ? 'Live output is unavailable after completion.'
+              : 'Hermes has not provided a live transcript for this subagent.'
+        else if (tail.text.isEmpty)
+          'Waiting for transcript text...',
+      ],
+      if (readableTail != null &&
+          (widget.session.state.tailError != null ||
+              tail?.available != true ||
+              tail!.text.isEmpty))
+        'Showing the last received output.',
+      if (readableTail?.truncated == true)
+        'Showing the latest 16 KiB of live output.',
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            const Expanded(child: Text('Live output')),
-            if (widget.session.state.loadingTail)
-              const SizedBox.square(
-                dimension: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            IconButton(
-              tooltip: 'Refresh live output',
-              onPressed: widget.session.state.loadingTail
-                  ? null
-                  : widget.session.refreshTail,
-              icon: const Icon(Icons.refresh),
+        ActivityDetailSection(
+          block: ToolDetailBlock(
+            label: 'Live output',
+            text: readableTail?.text ?? messages.join('\n'),
+            format: ToolDetailFormat.source,
+          ),
+          actions: [
+            ActivityDetailAction(
+              label: 'Refresh live output',
+              icon: Icons.refresh,
+              busy: widget.session.state.loadingTail,
+              onPressed: widget.session.refreshTail,
             ),
+            if (widget.session.state.tailError != null &&
+                widget.session.state.tailFailures >= 3)
+              ActivityDetailAction(
+                label: 'Retry',
+                icon: Icons.refresh,
+                onPressed: widget.session.retryTail,
+              ),
           ],
         ),
-        if (widget.session.state.tailError case final error?) ...[
-          StudioError(error),
-          if (widget.session.state.tailFailures >= 3)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: widget.session.retryTail,
-                child: const Text('Retry'),
-              ),
-            ),
-        ] else if (tail == null) ...[
-          const Text('Loading live output...'),
-        ] else if (!tail.available) ...[
-          Text(
-            activity.isTerminal
-                ? 'Live output is unavailable after completion.'
-                : 'Hermes has not provided a live transcript for this subagent.',
+        if (readableTail != null && messages.isNotEmpty)
+          ActivityDetailFacts(facts: messages),
+        if (widget.session.state.tailError case final error?)
+          ActivityDetailStatus(
+            label: error,
+            error: true,
+            icon: Icons.error_outline,
           ),
-        ] else if (tail.text.isEmpty) ...[
-          const Text('Waiting for transcript text...'),
-        ],
-        if (readableTail != null) ...[
-          if (widget.session.state.tailError != null ||
-              tail?.available != true ||
-              tail!.text.isEmpty)
-            const Text('Showing the last received output.'),
-          if (readableTail.truncated)
-            const Text('Showing the latest 16 KiB of live output.'),
-          const SizedBox(height: 6),
-          SelectableText(readableTail.text),
-        ],
-        if (activity.recentActivity.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          const Text('Recent activity'),
-          const SizedBox(height: 6),
-          for (final line in activity.recentActivity)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: SelectableText(
-                _recentActivityText(line),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+        if (activity.recentActivity.isNotEmpty)
+          ActivityDetailSection(
+            block: ToolDetailBlock(
+              label: 'Recent activity',
+              text: activity.recentActivity.map(_recentActivityText).join('\n'),
             ),
-        ],
+          ),
       ],
     );
   }
@@ -417,7 +434,8 @@ class _SubagentRow extends StatelessWidget {
         '$count ${count == 1 ? 'tool call' : 'tool calls'}',
     ].join(' · ');
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+      contentPadding: const EdgeInsets.all(WingSpacing.sm),
+      minVerticalPadding: 0,
       minTileHeight: 48,
       minLeadingWidth: 16,
       horizontalTitleGap: 8,
@@ -428,8 +446,6 @@ class _SubagentRow extends StatelessWidget {
             ? colors.muted
             : activity.status == GatewaySubagentStatus.failed
             ? colors.danger
-            : activity.status == GatewaySubagentStatus.completed
-            ? colors.success
             : activity.status == GatewaySubagentStatus.running
             ? colors.accent
             : colors.muted,
@@ -450,7 +466,6 @@ class _SubagentRow extends StatelessWidget {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 3),
           _SubagentStatusLine(activity: activity, unconfirmed: unconfirmed),
           if (_activityText(activity) case final text?)
             Text(
@@ -490,22 +505,16 @@ class _SubagentStatusLine extends StatelessWidget {
         Expanded(
           child: Text(
             _statusLabel(activity, unconfirmed),
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.5,
-              color: unconfirmed
-                  ? colors.muted
-                  : activity.status == GatewaySubagentStatus.failed
+            style: colors.typography.label.copyWith(
+              color:
+                  !unconfirmed &&
+                      activity.status == GatewaySubagentStatus.failed
                   ? colors.danger
-                  : activity.status == GatewaySubagentStatus.completed
-                  ? colors.success
-                  : activity.status == GatewaySubagentStatus.running
-                  ? colors.accent
                   : colors.muted,
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: WingSpacing.sm),
         ActivityTime(
           subject: 'Agent',
           durationSeconds: activity.isTerminal
@@ -537,23 +546,9 @@ class _SubagentMetadata extends StatelessWidget {
       if (activity.durationSeconds case final value?)
         'Backend duration (seconds): $value',
     ].join('\n');
-    return ProfileTranscriptDisclosure(
-      label: 'Details',
-      icon: Icons.info_outline,
-      children: [
-        SelectableText(
-          values,
-          style: const TextStyle(fontSize: 12, height: 1.5),
-        ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            onPressed: () => Clipboard.setData(ClipboardData(text: values)),
-            icon: const Icon(Icons.copy_outlined, size: 16),
-            label: const Text('Copy details'),
-          ),
-        ),
-      ],
+    return ActivityDetailSection(
+      initiallyCollapsed: true,
+      block: ToolDetailBlock(label: 'Details', text: values, secondary: true),
     );
   }
 }
@@ -564,7 +559,7 @@ String _goal(GatewaySubagentActivity activity) =>
 IconData _statusIcon(GatewaySubagentStatus status) => switch (status) {
   GatewaySubagentStatus.queued => Icons.schedule_outlined,
   GatewaySubagentStatus.running => Icons.sync,
-  GatewaySubagentStatus.completed => Icons.flag_outlined,
+  GatewaySubagentStatus.completed => Icons.check_circle_outline,
   GatewaySubagentStatus.failed => Icons.error_outline,
   GatewaySubagentStatus.interrupted => Icons.stop_circle_outlined,
 };

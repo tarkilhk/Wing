@@ -53,7 +53,7 @@ class CompactActivityRow extends StatelessWidget {
           onExpansionChanged: onExpansionChanged,
           minTileHeight: 0,
           tilePadding: EdgeInsets.zero,
-          childrenPadding: const EdgeInsets.only(left: 24),
+          childrenPadding: EdgeInsets.zero,
           shape: const Border(),
           collapsedShape: const Border(),
           expandedCrossAxisAlignment: CrossAxisAlignment.stretch,

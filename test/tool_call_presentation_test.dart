@@ -19,6 +19,212 @@ ToolCallPresentation completed(
 );
 
 void main() {
+  test('activity requests and receipts preserve current stock tool facts', () {
+    const diff = '--- a/report.py\n+++ b/report.py\n@@ -1 +1 @@\n-old\n+new';
+    final patch = completed(
+      'patch',
+      {'success': true, 'diff': diff},
+      args: {
+        'path': '/workspace/report.py',
+        'old_string': 'old',
+        'new_string': '',
+      },
+    ).activityDetails;
+    expect(patch.resourceTarget, '/workspace/report.py');
+    expect(patch.request.map((b) => b.text), ['old', '']);
+    expect(patch.response.single.label, 'Reported diff');
+    expect(patch.response.single.text, diff);
+    final failed = completed(
+      'patch',
+      {'error': 'No match found'},
+      args: {
+        'path': '/workspace/report.py',
+        'old_string': 'old',
+        'new_string': 'new',
+      },
+    );
+    expect(failed.outcome, ToolCallOutcome.error);
+    expect(failed.activityDetails.response.map((b) => b.label), ['Error']);
+    final write = completed(
+      'write_file',
+      {'bytes_written': 4, 'verified': true},
+      args: {'path': '/workspace/report.py', 'content': 'new\n'},
+    );
+    expect(write.activityDetails.request.single.text, 'new\n');
+    expect(write.activityDetails.metadata, [
+      'Bytes written: 4',
+      'Write verified by server',
+    ]);
+    expect(write.activityDetails.response, isEmpty);
+    expect(write.outcome, ToolCallOutcome.success);
+  });
+
+  test(
+    'file receipts and console output keep exact text and reported limits',
+    () {
+      const content = '21|# Heading\n22|  **literal**\n';
+      final read = completed(
+        'read_file',
+        {
+          'content': content,
+          'total_lines': 80,
+          'file_size': 912,
+          'truncated': true,
+          'next_offset': 23,
+        },
+        args: {'path': '/workspace/report.py', 'offset': 21, 'limit': 2},
+      ).activityDetails;
+      expect(read.response.single.text, content);
+      expect(read.request, isEmpty);
+      expect(read.readOptions, ['Offset: 21', 'Limit: 2']);
+      expect(
+        read.resourceFor('/workspace/report.py')?.path,
+        '/workspace/report.py',
+      );
+      expect(read.resourceFor('javascript:alert(1)'), isNull);
+      expect(read.resourceFor('data:image/png;base64,AA=='), isNull);
+      expect(read.resourceFor('https://user:password@example.org/x'), isNull);
+      expect(read.response.single.numberedLines, isTrue);
+      expect(read.response.single.markdown, isFalse);
+      expect(read.metadata, [
+        'Total lines: 80',
+        'File bytes: 912',
+        'Next offset: 23',
+        'Partial file returned',
+      ]);
+      final code = completed(
+        'execute_code',
+        {'output': '**literal**\n  exact\n', 'status': 'success'},
+        args: {'code': 'print("exact")'},
+      ).activityDetails;
+      expect(code.response.single.markdown, isFalse);
+      expect(code.response.single.text, '**literal**\n  exact\n');
+      expect(code.exitCode, isNull);
+      expect(
+        completed('terminal', {
+          'exit_code': 2,
+          'stdout': '',
+        }).activityDetails.exitCode,
+        2,
+      );
+      expect(
+        completed('read_file', {
+          'content': '',
+          'total_lines': 0,
+        }).activityDetails.response.single.text,
+        '',
+      );
+    },
+  );
+
+  test('native vision is an image receipt rather than invented analysis', () {
+    final receipt = completed(
+      'vision_analyze',
+      {
+        '_multimodal': true,
+        'content': [
+          {'type': 'text', 'text': 'Image loaded into your context.'},
+        ],
+        'text_summary': 'Image loaded',
+        'meta': {'native_vision': true},
+      },
+      args: {
+        'image_url': '/workspace/dashboard.png',
+        'question': 'Check legibility',
+      },
+    ).activityDetails;
+    expect(receipt.nativeVision, isTrue);
+    expect(receipt.images.single.target, '/workspace/dashboard.png');
+    expect(receipt.request.single.text, 'Check legibility');
+    expect(receipt.response.first.label, 'Image receipt');
+    expect(receipt.response.first.text, 'Image loaded into your context.');
+    expect(receipt.response.any((b) => b.label == 'Analysis'), isFalse);
+    final generated = completed('image_generate', {
+      'image': '/workspace/generated.png',
+    }).activityDetails;
+    expect(generated.images.single.target, '/workspace/generated.png');
+  });
+
+  test('search counts retain the stock lower-bound qualification', () {
+    for (final lowerBound in [true, false, null]) {
+      final search = completed('search_files', {
+        'total_count': 250,
+        'truncated': true,
+        'total_count_is_lower_bound': ?lowerBound,
+      }).activityDetails;
+      expect(search.metadata, contains('Reported matches: 250'));
+      expect(search.metadata, contains('Partial results returned'));
+      expect(
+        search.metadata.contains('Count is a lower bound'),
+        lowerBound == true,
+      );
+    }
+  });
+
+  test('structured search and unknown tool data remain readable', () {
+    final search = completed(
+      'search_files',
+      {
+        'matches': [
+          {'path': 'report.py', 'line': 9, 'content': 'hello'},
+        ],
+        'total_count': 1,
+        'truncated': false,
+      },
+      args: {'pattern': 'hello'},
+    ).activityDetails;
+    expect(search.request.single.text, 'hello');
+    expect(search.metadata, ['Reported matches: 1']);
+    expect(
+      search.response.firstWhere((b) => b.label == 'Line: 9').text,
+      'hello',
+    );
+    final other = completed(
+      'connector_query',
+      {
+        'message': 'Returned data',
+        'records': [
+          {'name': 'Example', 'count': 3},
+        ],
+      },
+      args: {
+        'filter': {'region': 'north'},
+        'limit': 3,
+      },
+    ).activityDetails;
+    expect(other.request.single.text, contains('Region: north'));
+    expect(
+      other.response.firstWhere((b) => b.label == 'Records').text,
+      contains('Count: 3'),
+    );
+  });
+
+  test('file checks stay independent and diagnostics appear exactly once', () {
+    for (final name in ['write_file', 'patch']) {
+      final receipt = completed(name, {
+        'lint': {
+          'status': 'skipped',
+          'message': 'No syntax checker configured',
+        },
+        'lsp_diagnostics': 'report.py:9: unresolved name',
+      }).activityDetails;
+      expect(receipt.metadata, contains('Syntax check: Skipped'));
+      expect(
+        receipt.response.where(
+          (block) => block.text == 'report.py:9: unresolved name',
+        ),
+        hasLength(1),
+      );
+      expect(
+        receipt.response
+            .singleWhere((block) => block.label == 'Semantic diagnostics')
+            .text,
+        'report.py:9: unresolved name',
+      );
+      expect(receipt.metadata, isNot(contains('Write verified by server')));
+    }
+  });
+
   test('every tool has a useful one-line input detail', () {
     final cases = <(String, Map<String, dynamic>, String)>[
       (
@@ -131,15 +337,18 @@ void main() {
         }),
       ),
     ]) {
-      expect(call.details, hasLength(1));
-      expect(call.details.single.text.trim(), isNotEmpty);
-      expect(call.details.single.label, 'business-trip-policy-research');
-      expect(call.details.single.text, contains('patch'));
+      expect(call.activityDetails.response, hasLength(1));
+      expect(call.activityDetails.response.single.text.trim(), isNotEmpty);
       expect(
-        call.details.single.text,
+        call.activityDetails.response.single.label,
+        'business-trip-policy-research',
+      );
+      expect(call.activityDetails.response.single.text, contains('patch'));
+      expect(
+        call.activityDetails.response.single.text,
         contains('references/accommodation-search-quality.md'),
       );
-      expect(call.details.single.text, contains('true'));
+      expect(call.activityDetails.response.single.text, contains('true'));
       expect(call.result, raw);
     }
   });
@@ -174,19 +383,27 @@ void main() {
           },
         ],
       });
-      expect(call.details, hasLength(3));
+      expect(call.activityDetails.response, hasLength(3));
       expect(
-        call.details.every((detail) => detail.text.trim().isNotEmpty),
+        call.activityDetails.response.every(
+          (detail) => detail.text.trim().isNotEmpty,
+        ),
         isTrue,
       );
-      expect(call.details[0].text, contains('Action: patch'));
-      expect(call.details[0].text, isNot(contains('null')));
-      expect(call.details[1].text, contains('Success: false'));
-      expect(call.details[1].text, contains('Error: Permission denied'));
-      expect(call.details[2].label, 'Policy FAQ');
+      expect(call.activityDetails.response[0].text, contains('Action: patch'));
+      expect(call.activityDetails.response[0].text, isNot(contains('null')));
+      expect(call.activityDetails.response[1].text, contains('Success: false'));
       expect(
-        call.details[2].text,
-        '[Open source](https://example.org/faq)\n\n'
+        call.activityDetails.response[1].text,
+        contains('Error: Permission denied'),
+      );
+      expect(call.activityDetails.response[2].label, 'Policy FAQ');
+      expect(
+        call.activityDetails.response[2].link,
+        Uri.parse('https://example.org/faq'),
+      );
+      expect(
+        call.activityDetails.response[2].text,
         'Choose the hotel that matches the request.',
       );
       expect(
@@ -194,7 +411,7 @@ void main() {
           'content': [
             {'type': 'text', 'text': ' \n '},
           ],
-        }).details,
+        }).activityDetails.response,
         isEmpty,
       );
     },
@@ -243,7 +460,10 @@ void main() {
         ],
       });
       expect(bridge.outcome, ToolCallOutcome.error);
-      expect(bridge.details.single.text, 'The event could not be created.');
+      expect(
+        bridge.activityDetails.response.single.text,
+        'The event could not be created.',
+      );
       final search = completed('web_search', {
         'data': {
           'web': [
@@ -255,16 +475,21 @@ void main() {
           ],
         },
       });
-      expect(search.details.single.label, 'Mileage FAQ');
-      expect(search.details.single.text, contains('Unlimited mileage'));
+      expect(search.activityDetails.response.single.label, 'Mileage FAQ');
+      expect(
+        search.activityDetails.response.single.text,
+        contains('Unlimited mileage'),
+      );
     },
   );
 
   test('command output preserves indentation and literal Markdown markers', () {
-    const stdout = '- option\n  indented\n\n';
+    const stdout =
+        '[Open source](https://example.org/literal)\n\n- option\n  indented\n\n';
     final call = completed('terminal', {'stdout': stdout, 'exit_code': 0});
-    expect(call.details.single.text, stdout);
-    expect(call.details.single.markdown, isFalse);
+    expect(call.activityDetails.response.single.text, stdout);
+    expect(call.activityDetails.response.single.markdown, isFalse);
+    expect(call.activityDetails.response.single.link, isNull);
   });
 
   test('a source discussing 404 errors is not reported as a failed page', () {
@@ -313,9 +538,12 @@ void main() {
           '</untrusted_tool_result>';
       final call = completed('web_extract', raw);
       expect(call.result, raw);
-      expect(call.details.single.text, contains('Unlimited mileage'));
       expect(
-        call.details.single.text,
+        call.activityDetails.response.single.text,
+        contains('Unlimited mileage'),
+      );
+      expect(
+        call.activityDetails.response.single.text,
         isNot(contains('untrusted_tool_result')),
       );
     },
@@ -361,16 +589,15 @@ void main() {
         },
       ], presentationId: (_) => Object());
       final view = ToolCallPresentation.saved(timeline.entries[1].tool!);
-      expect(view.imageTarget, '/tmp/map.png');
-      expect(view.details.first, (
-        label: 'Question',
-        text: 'Which area?',
-        markdown: false,
-      ));
-      expect(view.details.last.text, 'Yellow area');
+      expect(view.activityDetails.images.single.target, '/tmp/map.png');
+      expect(view.activityDetails.request.single.label, 'Question');
+      expect(view.activityDetails.request.single.text, 'Which area?');
+      expect(view.activityDetails.response.last.text, 'Yellow area');
       expect(
-        ToolCallPresentation.saved(timeline.entries[2].tool!).imageTarget,
-        isNull,
+        ToolCallPresentation.saved(
+          timeline.entries[2].tool!,
+        ).activityDetails.images,
+        isEmpty,
       );
     },
   );

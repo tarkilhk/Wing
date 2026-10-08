@@ -448,3 +448,128 @@ guards snapshot clearing, exact child-index joins, background dispatch and
 malformed/unrelated payloads. `test/profile_subagents_test.dart` verifies roster
 discovery on opening a saved chat. Exception-only tool headers retain delivered
 timing in `test/profile_tool_call_test.dart`.
+
+
+## Inline requests and receipts
+
+Expanded Tools use a single detail card aligned with the leading activity icon.
+Code and command requests are paired with literal output; read-file requests
+show the exact path/range, supplied numbered content and reported file limits.
+Writes expose requested content and server verification when supplied. Patch
+requests expose Find/Replace or the requested patch separately from the returned
+unified diff; the client never synthesizes an applied diff from intent. Vision
+shows the exact requested image/question and backend analysis or native image
+receipt. Search matches and other structured tool records use readable fields.
+Both live and saved calls use the same pure `ToolActivityDetails` projection.
+
+Local previews are bounded to 12 lines/1,600 characters. Icon controls expand the
+already received text, open a full read-only view, wrap/scroll literal text, copy
+exact originals or open supplied HTTP sources. Markdown is limited to explanatory
+prose; source, logs and diffs remain literal. These display actions do not rerun a
+tool or request omitted file lines. Raw details retain exact input/output values.
+The existing profile-scoped image loader owns image access and original viewing.
+
+Latest unmodified upstream main inspected on 8 October 2026:
+[`dde8800ed91c6e128064a17d5db914d74622594b`](https://github.com/NousResearch/hermes-agent/commit/dde8800ed91c6e128064a17d5db914d74622594b).
+`tools/file_tools.py`, `tools/file_operations.py`, `tools/file_operations_common.py`,
+`tools/vision_tools.py`, `tools/image_generation_tool.py` and
+`tui_gateway/tool_progress.py` establish these request/receipt fields. The stock
+file editor is `patch`; no new legacy tool alias is introduced. Native vision's
+`_multimodal` receipt confirms pixels supplied to the agent, not a returned
+analysis. Exit codes and server verification are shown only when supplied.
+
+Behavioral guards in `test/tool_call_presentation_test.dart` protect request/result
+fidelity, empty replacements/files, failed patches, reported limits, structured
+matches, native vision and absent exit codes. `test/profile_tool_call_test.dart`
+protects icon-only exact copy, leading-icon alignment, Markdown expansion/full
+view and rendered 390 dp/320 dp doubled-text cards in both themes. Runtime payload
+semantics, clipboard values and rendered reachability cannot be established by
+source linting alone. Existing compact-header, disclosure and live/history tests
+remain applicable. Capture with `CAPTURE_TOOL_RESULTS=true` and
+`CAPTURE_FONT_DIR` containing Roboto, MaterialIcons and DejaVuSansMono font files.
+
+
+### Resource action refinement
+
+File/image headers retain Preview (eye), Share and Copy icons. Generated images
+receive the same actions on their returned target. Preview opens the existing
+scoped output viewer; Share downloads original bytes and opens the platform
+share sheet. The actions use exact supplied resource targets and never rerun the
+tool or replace the stored receipt with current file contents. The workspace
+captures the original chat/profile file owner and rechecks current chat/route
+admission after a held share download. Views only forward these resource intents.
+External links offer preview and copy; unsupported URI schemes do not gain file
+or share actions.
+
+Read offset/limit are passive facts in the compact Read options row, alongside
+its label, with no separate body or full-view/copy toolbar. Both are omitted
+when not supplied. Unknown read arguments remain separately inspectable, and
+Raw details keeps every exact argument. The charter's
+[accepted activity family](DESIGN_SYSTEM.md#accepted-activity-detail-family)
+owns the Read options spacing reference, compact control geometry, typography,
+surfaces and completion presentation for every tool. There is no read-only
+density branch. Large-text resource controls reflow below the readable path.
+Exit codes and native image receipts add quiet context without replacing the
+status or implying success.
+
+Latest stock main inspected for these actions on 8 October 2026:
+[`0240fa4a84123406a0e5e6e7262e5b772b43f0bd`](https://github.com/NousResearch/hermes-agent/commit/0240fa4a84123406a0e5e6e7262e5b772b43f0bd).
+`hermes_cli/web_routers/files.py` retains `/api/fs/read-text` and
+`/api/fs/download`, including profile-scoped reads and session-owned download
+resolution. Existing client file readers and native sharing implement the UI;
+no backend modifications are needed.
+
+At the same stock commit, `SearchResult.to_dict` in
+`tools/file_operations_common.py` supplies `total_count_is_lower_bound` when a
+search is truncated; the active file-search tool invokes that serializer in
+`tools/file_tools.py`. Display that qualification beside the reported match
+count. A partial result must not present a lower-bound count as a complete total.
+`test/tool_call_presentation_test.dart` guards true, false and absent qualifications.
+
+`test/profile_tool_call_test.dart` guards preview/share forwarding, exact
+punctuation-bearing paths, pending/retry behavior, icon-only controls and compact
+read-option alignment in both themes and text sizes. `test/remote_file_saver_test.dart`
+guards exact original bytes and held-download share admission after navigation or
+owner disposal. These rendered and asynchronous properties require behavioral
+checks; static source inspection cannot establish their outcomes.
+
+The rich-render cases also compare each section's actual label/body positions
+against the same card edge, top/bottom content framing and actual image left
+edge, and require shared Completed wording, icon and neutral color across
+code/read/edit/vision. They reproduce the previous green/neutral footer mismatch
+and 10 dp extra centered-image gutter, and require all four content insets to
+match the Read options reference, including actual compact toolbar height and
+icon targets. Rendered geometry cannot be established by source linting;
+the behavioral guard and visual family review are required together.
+
+
+### Complete activity family
+
+The accepted detail frame is shared by Tools, Tasks, live/saved Agents, reasoning
+and Work, including goals, loops, heartbeats and background processes. The public
+`ActivityDetailsCard`, `ActivityDetailContent`, `ActivityDetailSection`, `ActivityDetailStatus` and
+`ActivityDetailAction` in `lib/core/widgets/tool_activity_details.dart` own one
+surface, section padding, exact copy, local preview, full view and action geometry.
+Views continue forwarding control intents to the captured supervision owner;
+no second task, process or agent cache is introduced. Last-received/unavailable
+agent output and process tail scope remain explicit. `GatewayProcessActivity`
+keeps a bounded display command and its exact received source; output-tail data
+is retained for copying/expansion instead of being clipped in the model.
+
+Current stock main rechecked on 8 October 2026 remains
+[`0240fa4a84123406a0e5e6e7262e5b772b43f0bd`](https://github.com/NousResearch/hermes-agent/commit/0240fa4a84123406a0e5e6e7262e5b772b43f0bd).
+This refinement uses existing stock process, subagent, todo and session-control
+observations/commands. Stock `tools/file_operations_common.py` and
+`tools/file_tools.py` establish grouped search paths/lines/excerpts and independent
+write/patch verification, lint status/output/message and semantic diagnostics.
+Supplied web-source URLs retain exact link copy separately from excerpt copy.
+Nothing adds a backend endpoint or derives an omitted execution result.
+
+`test/activity_family_test.dart` reviews actual production Tasks, saved/live
+Agents, Work, goals, reasoning, search, writes and web results in both themes at
+390 dp/100% and 320 dp/200%. It checks shared surfaces, content framing and 32 dp
+icon-only controls. Capture with `CAPTURE_ACTIVITY_FAMILY=true` and
+`CAPTURE_FONT_DIR=/path/to/review/fonts` (Roboto, MaterialIcons, DejaVuSansMono);
+images are written to ignored `build/activity-family/`. Review alongside the
+code/read/edit/vision captures. Owner-level goal, process and subagent tests
+retain confirmations, admission, rejection feedback and last-received data.

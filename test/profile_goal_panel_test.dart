@@ -133,9 +133,11 @@ void main() {
     await showPanel(tester);
 
     expect(find.text('Ship the release'), findsOneWidget);
-    expect(find.text('Verification: Run checks'), findsOneWidget);
+    expect(find.text('Run checks'), findsOneWidget);
     expect(find.text('1. Implement'), findsOneWidget);
-    await tester.tap(find.text('Pause'));
+    await tester.ensureVisible(find.byTooltip('Pause'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Pause'));
     await tester.pump();
     expect(
       fixture.requests.any(
@@ -160,7 +162,9 @@ void main() {
     tester,
   ) async {
     await showPanel(tester);
-    await tester.tap(find.text('Add criterion'));
+    await tester.ensureVisible(find.byTooltip('Add criterion'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add criterion'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('goal-criterion-draft')),
@@ -184,7 +188,9 @@ void main() {
   ) async {
     fixture.failAction = true;
     await showPanel(tester);
-    await tester.tap(find.text('Add criterion'));
+    await tester.ensureVisible(find.byTooltip('Add criterion'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add criterion'));
     await tester.pumpAndSettle();
     final draft = find.byKey(const ValueKey('goal-criterion-draft'));
     await tester.enterText(draft, 'Keep this criterion');
@@ -214,6 +220,8 @@ void main() {
     tester,
   ) async {
     await showPanel(tester);
+    await tester.ensureVisible(find.byTooltip('Remove criterion 2'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Remove criterion 2'));
     await tester.pumpAndSettle();
     expect(find.text('Remove criterion 2?'), findsOneWidget);
@@ -221,6 +229,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('2. Verify'), findsOneWidget);
 
+    await tester.ensureVisible(find.byTooltip('Remove criterion 2'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Remove criterion 2'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
@@ -233,7 +243,9 @@ void main() {
     expect(remove.$2['args'], {'index': 2});
     expect(find.text('2. Verify'), findsNothing);
 
-    await tester.tap(find.text('Clear criteria'));
+    await tester.ensureVisible(find.byTooltip('Clear criteria'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Clear criteria'));
     await tester.pumpAndSettle();
     expect(find.text('Clear all criteria?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Clear criteria'));
@@ -253,6 +265,8 @@ void main() {
   ) async {
     await showPanel(tester);
 
+    await tester.ensureVisible(find.byTooltip('Remove criterion 1'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Remove criterion 1'));
     await tester.pumpAndSettle();
     fixture.subgoals[0] = 'Changed by server';
@@ -274,7 +288,9 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'OK'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Clear criteria'));
+    await tester.ensureVisible(find.byTooltip('Clear criteria'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Clear criteria'));
     await tester.pumpAndSettle();
     fixture.subgoals.add('Added by server');
     await controller.refreshSessionControl(chat);
@@ -305,9 +321,13 @@ void main() {
             updateHost = setState;
             return Scaffold(
               body: showGoalPanel
-                  ? ProfileGoalPanel(
-                      session: supervision,
-                      initiallyExpanded: true,
+                  ? ListView(
+                      children: [
+                        ProfileGoalPanel(
+                          session: supervision,
+                          initiallyExpanded: true,
+                        ),
+                      ],
                     )
                   : const SizedBox.shrink(),
             );
@@ -317,7 +337,9 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    await tester.tap(find.text('Add criterion'));
+    await tester.ensureVisible(find.byTooltip('Add criterion'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add criterion'));
     await tester.pumpAndSettle();
     final draft = find.byKey(const ValueKey('goal-criterion-draft'));
     await tester.enterText(draft, 'Keep this local draft');
@@ -350,12 +372,14 @@ void main() {
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('Chat actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Chat actions'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Goal').last);
     await tester.pumpAndSettle();
     expect(find.text('Ship the release'), findsOneWidget);
-    expect(find.text('Pause'), findsOneWidget);
+    expect(find.byTooltip('Pause'), findsOneWidget);
   });
 
   testWidgets('keeps goal actions usable on a narrow large-text phone', (
@@ -385,19 +409,24 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Refresh'));
+    await tester.ensureVisible(find.byTooltip('Refresh'));
     await tester.pumpAndSettle();
     final reads = fixture.requests
         .where((r) => r.$1 == 'session.control.read')
         .length;
-    await tester.tap(find.text('Refresh'));
+    await tester.ensureVisible(find.byTooltip('Refresh'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Refresh'));
     await tester.pumpAndSettle();
     expect(
       fixture.requests.where((r) => r.$1 == 'session.control.read').length,
       reads + 1,
     );
-    await tester.ensureVisible(find.text('Add criterion'));
-    await tester.tap(find.text('Add criterion'));
+    await tester.ensureVisible(find.byTooltip('Add criterion'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('Add criterion'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add criterion'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('goal-criterion-draft')), findsOneWidget);
     expect(tester.takeException(), isNull);

@@ -17,6 +17,7 @@ class ProfileMessage extends StatelessWidget {
   final TranscriptMessage message;
   final bool streaming;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
+  final Future<void> Function(ChatOutput output)? onShareRemoteFile;
   final Future<bool> Function(ChatOutput output)? onDownloadRemoteFile;
   final UserAttachmentImageLoader? loadAttachmentImage;
   final VoidCallback? onReadAloud;
@@ -27,6 +28,7 @@ class ProfileMessage extends StatelessWidget {
     required this.message,
     this.streaming = false,
     this.onOpenRemoteFile,
+    this.onShareRemoteFile,
     this.onDownloadRemoteFile,
     this.loadAttachmentImage,
     this.onReadAloud,
@@ -186,6 +188,8 @@ class ProfileMessage extends StatelessWidget {
       return ProfileToolActivity(
         results: [message.tool!],
         loadImage: loadAttachmentImage,
+        onOpenResource: onOpenRemoteFile,
+        onShareResource: onShareRemoteFile,
       );
     }
     final user = role == 'user';

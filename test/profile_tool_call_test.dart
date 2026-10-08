@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'package:wing/core/models/chat_output.dart';
+import 'package:wing/core/widgets/studio_error.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -9,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
 import 'chat_inline_image_test.dart' show settleImages;
+import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/presentation/tool_call_presentation.dart';
@@ -16,6 +20,8 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_inline_image.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/activity_time.dart';
+import 'package:wing/core/widgets/tool_activity_details.dart';
+import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/compact_activity_row.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
@@ -28,6 +34,7 @@ void main() {
     for (final (family, file) in [
       ('Roboto', 'Roboto-Regular.ttf'),
       ('MaterialIcons', 'MaterialIcons-Regular.otf'),
+      ('monospace', 'DejaVuSansMono.ttf'),
     ]) {
       await (FontLoader(family)..addFont(
             File(
@@ -36,6 +43,462 @@ void main() {
           ))
           .load();
     }
+  });
+  testWidgets('file and image resource actions retain exact owner targets', (
+    tester,
+  ) async {
+    for (final name in [
+      'read_file',
+      'patch',
+      'vision_analyze',
+      'image_generate',
+    ]) {
+      const path = '/workspace/folder/a #%.png';
+      ChatOutput? opened;
+      ChatOutput? shared;
+      final shareDone = Completer<void>();
+      final call = ToolCallPresentation.live(
+        GatewayToolActivity.fromGatewayEvent('tool.complete', {
+          'tool_id': name,
+          'name': name,
+          'args': name == 'image_generate'
+              ? {'prompt': 'A chart'}
+              : name == 'vision_analyze'
+              ? {'image_url': path, 'question': 'Review it'}
+              : {'path': path},
+          'result': name == 'image_generate'
+              ? {'image': path}
+              : {'content': 'Exact receipt'},
+        })!,
+      );
+      final pixels = img.Image(width: 4, height: 4);
+      final png = Uint8List.fromList(img.encodePng(pixels));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.light),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ProfileToolCall(
+                call: call,
+                initiallyExpanded: true,
+                loadImage: (_) async => png,
+                onOpenResource: (output) async {
+                  opened = output;
+                },
+                onShareResource: (output) async {
+                  shared = output;
+                  await shareDone.future;
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await settleImages(tester);
+      final image = name == 'vision_analyze' || name == 'image_generate';
+      final previewLabel = image ? 'Preview image' : 'Preview file';
+      final shareLabel = image ? 'Share image' : 'Share file';
+      expect(find.text(previewLabel), findsNothing);
+      expect(find.text(shareLabel), findsNothing);
+      expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+      await tester.tap(find.byTooltip(previewLabel));
+      await tester.pumpAndSettle();
+      expect(opened?.path, path);
+      expect(opened?.kind, image ? ChatOutputKind.image : ChatOutputKind.file);
+      await tester.tap(find.byTooltip(shareLabel));
+      await tester.pump();
+      expect(shared?.path, path);
+      expect(
+        tester
+            .widget<IconButton>(
+              find
+                  .ancestor(
+                    of: find.byTooltip(shareLabel),
+                    matching: find.byType(IconButton),
+                  )
+                  .first,
+            )
+            .onPressed,
+        isNull,
+      );
+      shareDone.complete();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('resource failures stay readable and actions can be retried', (
+    tester,
+  ) async {
+    final call = ToolCallPresentation.live(
+      GatewayToolActivity.fromGatewayEvent('tool.complete', {
+        'tool_id': 'failed-share',
+        'name': 'read_file',
+        'args': {'path': '/workspace/report.py'},
+        'result': {'content': '1|print(1)'},
+      })!,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProfileToolCall(
+            call: call,
+            initiallyExpanded: true,
+            onShareResource: (_) async => throw StateError('Unavailable'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('Share file'));
+    await tester.pumpAndSettle();
+    expect(find.byType(StudioError), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(
+            find
+                .ancestor(
+                  of: find.byTooltip('Share file'),
+                  matching: find.byType(IconButton),
+                )
+                .first,
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final name in [
+        'execute_code',
+        'read_file',
+        'patch',
+        'vision_analyze',
+      ]) {
+        testWidgets('rich $name receipt in $brightness at $scale', (
+          tester,
+        ) async {
+          tester.view.physicalSize = Size(scale == 2 ? 320 : 390, 900);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final (args, result) = switch (name) {
+            'execute_code' => (
+              {
+                'code':
+                    'from pathlib import Path\n\nreport = Path("delivery-test.txt")\nlines = report.read_text().splitlines()\nprint(f"Checked {len(lines)} records")',
+              },
+              {
+                'output': 'Checked 7 records\nDelivery test passed',
+                'status': 'success',
+              },
+            ),
+            'read_file' => (
+              {'path': '/workspace/report.py', 'offset': 1, 'limit': 5},
+              {
+                'content':
+                    '1|from pathlib import Path\n2|\n3|report = Path("delivery-test.txt")\n4|lines = report.read_text().splitlines()\n5|print(len(lines))',
+                'total_lines': 80,
+                'file_size': 1941,
+                'truncated': true,
+                'next_offset': 6,
+              },
+            ),
+            'patch' => (
+              {
+                'path': '/workspace/report.py',
+                'old_string': 'print(len(lines))',
+                'new_string': 'print(f"Checked {len(lines)} records")',
+              },
+              {
+                'success': true,
+                'diff':
+                    '--- a/report.py\n+++ b/report.py\n@@ -5 +5 @@\n-print(len(lines))\n+print(f"Checked {len(lines)} records")',
+              },
+            ),
+            _ => (
+              {
+                'image_url': '/workspace/dashboard.png',
+                'question':
+                    'Review the dashboard for legibility and clipped text.',
+              },
+              {
+                'success': true,
+                'analysis':
+                    '## Legibility\nThe headings are readable.\n\n- **Baseline dates:** clearly labelled.\n- The last record is clipped at the right edge.',
+              },
+            ),
+          };
+          final call = ToolCallPresentation.live(
+            GatewayToolActivity.fromGatewayEvent('tool.complete', {
+              'tool_id': name,
+              'name': name,
+              'args': args,
+              'result': result,
+              'duration_s': .14,
+            })!,
+          );
+          final image = img.Image(width: 320, height: 140);
+          img.fill(image, color: img.ColorRgb8(232, 244, 241));
+          img.fillRect(
+            image,
+            x1: 16,
+            y1: 18,
+            x2: 304,
+            y2: 42,
+            color: img.ColorRgb8(90, 128, 131),
+          );
+          for (var i = 0; i < 5; i++) {
+            img.fillRect(
+              image,
+              x1: 24 + i * 54,
+              y1: 68 - i * 4,
+              x2: 55 + i * 54,
+              y2: 122,
+              color: img.ColorRgb8(34, 137, 126),
+            );
+          }
+          final png = Uint8List.fromList(img.encodePng(image));
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: RepaintBoundary(
+                    key: const ValueKey('rich-receipt-capture'),
+                    child: ColoredBox(
+                      color: wingTheme(brightness).scaffoldBackgroundColor,
+                      child: ProfileToolCall(
+                        call: call,
+                        initiallyExpanded: true,
+                        loadImage: (_) async => png,
+                        onOpenResource: (_) async {},
+                        onShareResource: (_) async {},
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await settleImages(tester);
+          await tester.settleMarkdown();
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          // Review the family against one rendered alignment contract, rather
+          // than accepting a different spacing/status convention for each tool.
+          final cardLeft = tester
+              .getTopLeft(find.byType(ToolActivityDetailsView))
+              .dx;
+          if (name == 'vision_analyze') {
+            expect(tester.getTopLeft(find.byType(Image)).dx, cardLeft + 9);
+          }
+          expect(find.text('Completed'), findsOneWidget);
+          expect(find.text('Succeeded'), findsNothing);
+          final completed = tester.widget<Text>(find.text('Completed'));
+          final muted = WingTokens.of(
+            tester.element(find.text('Completed')),
+          ).muted;
+          expect(completed.style?.color, muted);
+          expect(
+            tester.widget<Icon>(find.byIcon(Icons.check_circle_outline)).color,
+            muted,
+          );
+          for (final block in [
+            ...call.activityDetails.request,
+            ...call.activityDetails.response,
+          ]) {
+            expect(find.byTooltip('Copy ${block.label}'), findsOneWidget);
+            expect(find.text('Copy ${block.label}'), findsNothing);
+            expect(tester.getTopLeft(find.text(block.label)).dx, cardLeft + 33);
+            final headerRow = find
+                .ancestor(
+                  of: find.text(block.label),
+                  matching: find.byType(Row),
+                )
+                .first;
+            final headerFrame = find
+                .ancestor(of: headerRow, matching: find.byType(Container))
+                .first;
+            final rowRect = tester.getRect(headerRow);
+            final frameRect = tester.getRect(headerFrame);
+            expect(rowRect.left - frameRect.left, 8);
+            // The section separator occupies one dp above its inset.
+            expect(rowRect.top - frameRect.top, 9);
+            expect(frameRect.bottom - rowRect.bottom, 8);
+            final copyButton = find
+                .ancestor(
+                  of: find.byTooltip('Copy ${block.label}'),
+                  matching: find.byType(IconButton),
+                )
+                .first;
+            expect(tester.getSize(copyButton), const Size(32, 32));
+            final copyIcon = find.descendant(
+              of: copyButton,
+              matching: find.byIcon(Icons.copy_outlined),
+            );
+            expect(frameRect.right - tester.getTopRight(copyIcon).dx, 8);
+            if (capture && scale == 1) {
+              expect(frameRect.height, 33);
+            }
+            final body = block.markdown
+                ? find.byWidgetPredicate(
+                    (widget) =>
+                        widget is MarkdownMessageContent &&
+                        widget.data == block.text,
+                  )
+                : find.byWidgetPredicate(
+                    (widget) =>
+                        widget is SelectableText &&
+                        widget.textSpan?.toPlainText() == block.text,
+                  );
+            expect(tester.getTopLeft(body).dx, cardLeft + 9);
+            final contentSurface = find
+                .ancestor(of: body, matching: find.byType(ColoredBox))
+                .first;
+            expect(
+              tester.getTopLeft(body).dy,
+              tester.getTopLeft(contentSurface).dy + 8,
+            );
+            expect(
+              tester.getBottomLeft(body).dy,
+              tester.getBottomLeft(contentSurface).dy - 8,
+            );
+            expect(
+              tester.getTopRight(body).dx,
+              tester.getTopRight(contentSurface).dx - 8,
+            );
+          }
+          if (name == 'read_file') {
+            expect(find.byTooltip('Copy Read options'), findsNothing);
+            expect(find.byTooltip('Open Read options'), findsNothing);
+            expect(find.text('Offset: 1 · Limit: 5'), findsOneWidget);
+            if (scale == 1 && capture) {
+              // Ahem substitutes square glyphs in uncaptured widget tests;
+              // the ordinary inline fit is checked with actual Roboto renders.
+              expect(
+                tester.getTopLeft(find.text('Read options')).dy,
+                tester.getTopLeft(find.text('Offset: 1 · Limit: 5')).dy,
+              );
+              expect(
+                tester.getSize(find.byType(ToolActivityDetailsView)).height,
+                lessThan(400),
+              );
+            }
+          }
+          if (name == 'execute_code') {
+            expect(find.text('Exit 0'), findsNothing);
+            final card = find.byType(ToolActivityDetailsView);
+            final leading = find.byIcon(Icons.code_rounded).first;
+            expect(tester.getTopLeft(card).dx, tester.getTopLeft(leading).dx);
+            String? copied;
+            tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+              SystemChannels.platform,
+              (call) async {
+                if (call.method == 'Clipboard.setData') {
+                  copied = (call.arguments as Map)['text'] as String;
+                }
+                return null;
+              },
+            );
+            addTearDown(
+              () => tester.binding.defaultBinaryMessenger
+                  .setMockMethodCallHandler(SystemChannels.platform, null),
+            );
+            await tester.tap(find.byTooltip('Copy Code'));
+            await tester.pump();
+            expect(copied, args['code']);
+            expect(find.byTooltip('Copy Code: copied'), findsOneWidget);
+            await tester.pump(const Duration(seconds: 2));
+          }
+          if (capture) {
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.byKey(const ValueKey('rich-receipt-capture')),
+            );
+            await tester.runAsync(() async {
+              final rendered = await boundary.toImage();
+              final bytes = await rendered.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final file = File(
+                'build/tool-results/activity-$name-${brightness.name}-${scale.toInt()}.png',
+              );
+              await file.parent.create(recursive: true);
+              await file.writeAsBytes(bytes!.buffer.asUint8List());
+              rendered.dispose();
+            });
+          }
+        });
+      }
+    }
+  }
+
+  testWidgets('long prose expands as Markdown and copies the original', (
+    tester,
+  ) async {
+    final text =
+        '# Findings\n\n${List.generate(20, (i) => '- Record $i').join('\n')}';
+    final call = ToolCallPresentation.live(
+      GatewayToolActivity.fromGatewayEvent('tool.complete', {
+        'tool_id': 'long',
+        'name': 'connector_query',
+        'args': {'query': 'Recent records'},
+        'result': {'text': text},
+      })!,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.light),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ProfileToolCall(call: call, initiallyExpanded: true),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Preview'), findsOneWidget);
+    expect(find.byType(MarkdownMessageContent), findsNothing);
+    await tester.ensureVisible(find.byTooltip('Expand Text'));
+    await tester.tap(find.byTooltip('Expand Text'));
+    await tester.pumpAndSettle();
+    await tester.settleMarkdown();
+    expect(find.byType(MarkdownMessageContent), findsOneWidget);
+    expect(find.text('Full text'), findsOneWidget);
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await tester.ensureVisible(find.byTooltip('Copy Text'));
+    await tester.tap(find.byTooltip('Copy Text'));
+    await tester.pump();
+    expect(copied, text);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.ensureVisible(find.byTooltip('Open Text'));
+    await tester.tap(find.byTooltip('Open Text'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byType(MarkdownMessageContent).evaluate().length,
+      greaterThanOrEqualTo(1),
+    );
+    expect(tester.takeException(), isNull);
   });
   testWidgets(
     'tool icons describe the activity instead of defaulting to commands',
@@ -310,8 +773,8 @@ void main() {
             await tester.tap(find.text('Skill manage'));
             await tester.pumpAndSettle();
             expect(find.text('Result'), findsNothing);
-            expect(call.details, hasLength(4));
-            for (final detail in call.details) {
+            expect(call.activityDetails.response, hasLength(4));
+            for (final detail in call.activityDetails.response) {
               expect(find.text(detail.text), findsOneWidget);
               expect(detail.text, contains('Action: patch'));
               expect(detail.text, contains('Success: true'));

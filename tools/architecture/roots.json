@@ -6057,6 +6057,15 @@
       "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml: Python unittest discovery",
       "status": "supported",
       "selector": "unittest"
+    },
+    {
+      "id": "host-test-activity-family",
+      "kind": "host-test",
+      "path": "test/activity_family_test.dart",
+      "purpose": "Shared activity framing, icon-only actions and real-font captures across Tasks, Agents, Work, reasoning and tool results",
+      "source": "docs/TOOL_ACTIVITY.md; test/activity_family_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -13814,6 +13823,26 @@
       "path": "scripts/tests/test_check_commit_linters.py",
       "area": "scripts",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "docs/design/2026-10-08-activity-information-design.md",
+      "area": "docs",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activity_details.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/tool_activity_details.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/activity_family_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {
@@ -14078,6 +14107,7 @@
         "lib/core/widgets/workspace_picker.dart",
         "lib/core/widgets/workspace_profile_navigation.dart",
         "lib/main.dart",
+        "test/activity_family_test.dart",
         "test/activity_shimmer_test.dart",
         "test/admin_provider_status_test.dart",
         "test/admin_tool_models_test.dart",
@@ -14434,6 +14464,7 @@
         "lib/core/services/scheduled_tasks_controller.dart",
         "lib/core/services/workspace_snapshot_store.dart",
         "lib/main.dart",
+        "test/activity_family_test.dart",
         "test/administration_comparison_test.dart",
         "test/administration_design_test.dart",
         "test/administration_health_entry_test.dart",
@@ -14914,6 +14945,7 @@
         "integration_test/support/journey_capture.dart",
         "integration_test/voice_native_test.dart",
         "integration_test/voice_permission_native_test.dart",
+        "test/activity_family_test.dart",
         "test/activity_shimmer_test.dart",
         "test/admin_provider_status_test.dart",
         "test/admin_tool_models_test.dart",

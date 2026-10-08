@@ -189,7 +189,9 @@ void main() {
     await showPanel(tester);
     await tester.tap(find.text('dart run worker.dart'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Stop process'));
+    await tester.ensureVisible(find.byTooltip('Stop process'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Stop process'));
     await tester.pumpAndSettle();
 
     final stop = fixture.requests.singleWhere(
@@ -209,9 +211,11 @@ void main() {
 
     await tester.tap(find.text('dart run worker.dart'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Stop process'));
+    await tester.ensureVisible(find.byTooltip('Stop process'));
     await tester.pumpAndSettle();
-    expect(find.text('dart run worker.dart'), findsOneWidget);
+    await tester.tap(find.byTooltip('Stop process'));
+    await tester.pumpAndSettle();
+    expect(find.text('dart run worker.dart'), findsWidgets);
     expect(
       find.text('The server did not confirm that the process stopped.'),
       findsOneWidget,
@@ -219,9 +223,11 @@ void main() {
 
     await tester.tap(find.text('dart test'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Dismiss'));
+    await tester.ensureVisible(find.byTooltip('Dismiss'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Dismiss'));
+    await tester.ensureVisible(find.byTooltip('Dismiss'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Dismiss'));
     await tester.pumpAndSettle();
     expect(find.text('dart test'), findsNothing);
     expect(
@@ -241,9 +247,11 @@ void main() {
     expect(find.text('Waiting for the current response'), findsOneWidget);
     expect(find.text('Deferred while the goal is active'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Pause loop'));
+    await tester.ensureVisible(find.byTooltip('Pause loop'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pause loop'));
+    await tester.ensureVisible(find.byTooltip('Pause loop'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Pause loop'));
     await tester.pumpAndSettle();
     expect(
       fixture.requests.any(
@@ -254,9 +262,11 @@ void main() {
       isTrue,
     );
 
-    await tester.ensureVisible(find.text('Clear heartbeat'));
+    await tester.ensureVisible(find.byTooltip('Clear heartbeat'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Clear heartbeat'));
+    await tester.ensureVisible(find.byTooltip('Clear heartbeat'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Clear heartbeat'));
     await tester.pumpAndSettle();
     expect(find.text('Clear heartbeat?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
@@ -279,6 +289,8 @@ void main() {
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('Chat actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Chat actions'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Background work').last);
@@ -286,6 +298,6 @@ void main() {
 
     expect(find.text('Check the release queue'), findsOneWidget);
     expect(find.text('Report deployment health'), findsOneWidget);
-    expect(find.text('dart run worker.dart'), findsOneWidget);
+    expect(find.text('dart run worker.dart'), findsWidgets);
   });
 }

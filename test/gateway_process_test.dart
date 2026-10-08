@@ -22,6 +22,7 @@ void main() {
     expect(process, isNotNull);
     expect(process!.id, 'proc_abc123');
     expect(process.command, 'python -m http.server 8000');
+    expect(process.commandSource, 'python  -m\nhttp.server 8000');
     expect(process.cwd, '/srv/project');
     expect(process.status, GatewayProcessStatus.running);
     expect(process.isRunning, isTrue);
@@ -84,8 +85,8 @@ void main() {
     expect(process.command.length, 200);
     expect(process.command, endsWith('…'));
     expect(process.cwd?.length, 1000);
-    expect(process.outputTail?.length, 4000);
-    expect(process.outputTail, isNot(startsWith('old')));
+    expect(process.commandSource, 'x' * 500);
+    expect(process.outputTail, 'old${'z' * 5000}');
     expect(process.uptimeSeconds, isNull);
     expect(process.pid, isNull);
   });

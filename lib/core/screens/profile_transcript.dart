@@ -1,3 +1,4 @@
+import '../models/chat_output.dart';
 import '../services/server_connection_status.dart';
 import '../models/notification_focus.dart';
 import '../models/transcript_timeline.dart' as timeline_facts;
@@ -28,6 +29,8 @@ class ProfileTranscript extends StatefulWidget {
   final Widget? activityThinking;
   final int liveToolCount;
   final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
   final timeline_facts.TranscriptTimeline timeline;
   final int? focusedMessageId;
   final VoidCallback? onBackToLatest;
@@ -45,6 +48,8 @@ class ProfileTranscript extends StatefulWidget {
     this.activityThinking,
     this.liveToolCount = 0,
     this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
     this.focusedMessageId,
     this.onBackToLatest,
     this.notificationAnchors = const {},
@@ -600,6 +605,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                         ? ProfileToolActivitySection(
                             section: section,
                             loadImage: widget.loadImage,
+                            onOpenResource: widget.onOpenResource,
+                            onShareResource: widget.onShareResource,
                             showLatestReview:
                                 rowIndex == 0 && chat.reading.streaming.isEmpty,
                             tabs: rowIndex == 0 && joinCurrentActivity
@@ -840,6 +847,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     ProfileToolActivitySection(
                       section: section,
                       loadImage: widget.loadImage,
+                      onOpenResource: widget.onOpenResource,
+                      onShareResource: widget.onShareResource,
                       expandedMessageId: targetId,
                       focusedMessageKey: _focusedRow,
                     )

@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../models/gateway_activity.dart';
 import '../models/transcript_message.dart';
 import 'desktop_tool_labels.dart';
+import 'tool_activity_details.dart';
 
 enum ToolCallOutcome { running, completed, success, warning, error }
 
@@ -15,14 +16,13 @@ final class ToolCallPresentation {
     required this.subtitle,
     required this.status,
     required this.outcome,
-    required this.details,
+    required this.activityDetails,
     required this.arguments,
     required this.result,
     required this.labels,
     this.callId,
     this.context,
     this.summary,
-    this.imageTarget,
     this.durationSeconds,
     this.startedAt,
   });
@@ -35,11 +35,10 @@ final class ToolCallPresentation {
   final String? target;
   final String status;
   final ToolCallOutcome outcome;
-  final List<({String label, String text, bool markdown})> details;
+  final ToolActivityDetails activityDetails;
   final String? arguments;
   final String? result;
   final List<ToolCallLabel> labels;
-  final String? imageTarget;
   final double? durationSeconds;
   final Duration? startedAt;
 
@@ -107,6 +106,7 @@ final class ToolCallPresentation {
     final target =
         _firstText(args, const [
           'image_url',
+          'video_url',
           'url',
           'file_path',
           'path',
@@ -131,6 +131,7 @@ final class ToolCallPresentation {
           data['isError'] == true ||
           error != null ||
           data['error'] == true ||
+          const ['error', 'timeout', 'interrupted'].contains(data['status']) ||
           (exit is num && exit != 0)) {
         outcome = ToolCallOutcome.error;
         status = error == null ? 'Failed' : _oneLine(error);
@@ -142,15 +143,20 @@ final class ToolCallPresentation {
           case final warning?) {
         outcome = ToolCallOutcome.warning;
         status = _oneLine(warning);
+      } else if (data['no_change'] == true) {
+        status = 'No change';
       } else if (data['status'] == 'unchanged') {
         outcome = ToolCallOutcome.completed;
         status = 'Already loaded';
-      } else if (data['success'] == true || data['ok'] == true) {
+      } else if (data['success'] == true ||
+          data['ok'] == true ||
+          data['status'] == 'success' ||
+          data['verified'] == true) {
         outcome = ToolCallOutcome.success;
-        status = summary == null ? 'Succeeded' : _oneLine(summary);
+        status = summary == null ? 'Completed' : _oneLine(summary);
       }
     }
-    final details = <({String label, String text, bool markdown})>[];
+    final details = <({String label, String text, bool markdown, Uri? link})>[];
     if (args['question'] is String) {
       details.add(_detail('Question', args['question'] as String));
     }
@@ -218,7 +224,7 @@ final class ToolCallPresentation {
               ? _sourceText(url, content)
               : _scalarFacts(source, heading: sourceTitle);
           if (text.trim().isNotEmpty) {
-            details.add(_detail(sourceTitle, text));
+            details.add(_detail(sourceTitle, text, link: _sourceUri(url)));
           }
         }
       }
@@ -260,14 +266,16 @@ final class ToolCallPresentation {
       subtitle: _inputDetail(name, args, data, labels, context),
       status: status,
       outcome: outcome,
-      details: List.unmodifiable(details),
+      activityDetails: ToolActivityDetails.project(
+        name: name,
+        input: input,
+        output: output,
+        details: details,
+        context: context,
+      ),
       arguments: arguments,
       result: result,
       labels: labels,
-      // Only show an image explicitly delivered as this vision call's input.
-      imageTarget: name == 'vision_analyze'
-          ? _firstText(args, const ['image_url'])
-          : null,
       durationSeconds: durationSeconds,
       startedAt: completed ? null : startedAt,
     );
@@ -427,16 +435,17 @@ String _scalarFacts(Map data, {required String heading}) {
       .join('\n');
 }
 
-String _sourceText(String? url, String? content) {
+Uri? _sourceUri(String? url) {
   final uri = url == null ? null : Uri.tryParse(url);
-  final source =
-      uri != null &&
+  return uri != null &&
           (uri.scheme == 'https' || uri.scheme == 'http') &&
           uri.host.isNotEmpty
-      ? '[Open source](${uri.toString().replaceAll('(', '%28').replaceAll(')', '%29')})'
-      : url;
-  return [?source, ?content].join('\n\n');
+      ? uri
+      : null;
 }
+
+String _sourceText(String? url, String? content) =>
+    _sourceUri(url) != null ? content ?? url! : [?url, ?content].join('\n\n');
 
 String _humanize(String text) {
   final words = text.replaceAll(RegExp(r'[_-]+'), ' ').trim();
@@ -472,13 +481,15 @@ String formatToolDuration(double seconds) {
   return '${whole ~/ 60}m ${whole % 60}s';
 }
 
-({String label, String text, bool markdown}) _detail(
+({String label, String text, bool markdown, Uri? link}) _detail(
   String label,
   String text, {
   bool allowMarkdown = true,
+  Uri? link,
 }) => (
   label: label,
   text: text,
+  link: link,
   markdown:
       allowMarkdown &&
       RegExp(r'(^|\n)(#{1,6} |[-*] |```)|\[[^\]]+\]\(|\*\*').hasMatch(text),

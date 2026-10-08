@@ -57,6 +57,16 @@ final class OwnedRemoteFiles {
     return saveRemoteFile(file);
   }
 
+  Future<void> downloadAndShare(
+    String path, {
+    required bool Function() admitPresentation,
+    Future<void> Function(RemoteFileDownload) deliver = shareRemoteFile,
+  }) async {
+    final file = await download(path);
+    if (!_active || !admitPresentation()) return;
+    await deliver(file);
+  }
+
   void dispose() {
     if (!_active) return;
     _active = false;

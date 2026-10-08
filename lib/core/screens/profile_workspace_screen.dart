@@ -990,6 +990,22 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
+  Future<void> _shareToolResource(ProfileChat chat, ChatOutput output) async {
+    final owner = chat.key;
+    final files = _retainOutputFiles(chat);
+    try {
+      await files.downloadAndShare(
+        output.path!,
+        admitPresentation: () =>
+            mounted &&
+            controller.current?.chat?.key == owner &&
+            ModalRoute.of(context)?.isCurrent == true,
+      );
+    } finally {
+      _releaseOutputFiles(files);
+    }
+  }
+
   Future<Uint8List> _loadAttachmentImage(ProfileChat chat, String path) async {
     final files = _retainOutputFiles(chat);
     try {
@@ -1053,6 +1069,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             message: entry.message,
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
+            onShareRemoteFile: (output) => _shareToolResource(chat, output),
             onDownloadRemoteFile: (output) =>
                 _downloadAnswerOutput(chat, output),
           ),
@@ -1090,6 +1107,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   loadAttachmentImage: (path) =>
                       _loadAttachmentImage(chat, path),
                   onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
+                  onShareRemoteFile: (output) =>
+                      _shareToolResource(chat, output),
                   onDownloadRemoteFile: (output) =>
                       _downloadAnswerOutput(chat, output),
                 ),
@@ -1139,6 +1158,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 _voiceOutput.owner == controller.voiceReplyKey(chat, message),
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
+            onShareRemoteFile: (output) => _shareToolResource(chat, output),
             onDownloadRemoteFile: (output) =>
                 _downloadAnswerOutput(chat, output),
           ),
@@ -1333,6 +1353,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   : () => controller.backToLatest(chat),
               liveToolCount: visibleTools.length,
               loadImage: (path) => _loadAttachmentImage(chat, path),
+              onOpenResource: (output) => _openAnswerOutput(chat, output),
+              onShareResource: (output) => _shareToolResource(chat, output),
               currentActivity: [
                 if (chat.runtime.tool != null &&
                     !chat.runtime.toolActivities.any(
@@ -1347,6 +1369,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   ProfileLiveToolActivity(
                     activities: visibleTools,
                     loadImage: (path) => _loadAttachmentImage(chat, path),
+                    onOpenResource: (output) => _openAnswerOutput(chat, output),
+                    onShareResource: (output) =>
+                        _shareToolResource(chat, output),
                   ),
               ],
               activityTabs: [

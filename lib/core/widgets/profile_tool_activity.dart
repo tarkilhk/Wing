@@ -1,3 +1,4 @@
+import '../models/chat_output.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -70,6 +71,8 @@ class ProfileToolActivitySection extends StatelessWidget {
     this.thinking,
     this.liveToolCount = 0,
     this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
   });
   final TranscriptTimelineSection section;
   final int? expandedMessageId;
@@ -80,6 +83,8 @@ class ProfileToolActivitySection extends StatelessWidget {
   final Widget? thinking;
   final int liveToolCount;
   final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +97,8 @@ class ProfileToolActivitySection extends StatelessWidget {
             ProfileToolActivitySection(
               section: preceding,
               loadImage: loadImage,
+              onOpenResource: onOpenResource,
+              onShareResource: onShareResource,
             ),
           ProfileReviewNoticeRow(text: latestReview),
         ],
@@ -145,6 +152,8 @@ class ProfileToolActivitySection extends StatelessWidget {
             ProfileToolActivity(
               results: group.toolResults,
               loadImage: loadImage,
+              onOpenResource: onOpenResource,
+              onShareResource: onShareResource,
               initiallyExpanded:
                   expandedMessageId != null &&
                   group.containsMessage(expandedMessageId!),
@@ -167,12 +176,16 @@ class ProfileToolActivity extends StatelessWidget {
     this.focusedMessageId,
     this.focusedMessageKey,
     this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
   }) : results = List.unmodifiable(results);
   final List<TranscriptToolResult> results;
   final bool initiallyExpanded;
   final int? focusedMessageId;
   final GlobalKey? focusedMessageKey;
   final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
 
   @override
   Widget build(BuildContext context) {
@@ -201,6 +214,8 @@ class ProfileToolActivity extends StatelessWidget {
                   initiallyExpanded &&
                   (focusedMessageId == null || result.id == focusedMessageId),
               loadImage: loadImage,
+              onOpenResource: onOpenResource,
+              onShareResource: onShareResource,
             ),
           ),
       ],

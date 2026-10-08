@@ -13,8 +13,11 @@
 - **Keep browsing after changes.** Chat and project actions apply when Hermes confirms them. The list then refreshes in the background, keeping search, token counts and reading position available. Progress and Retry stay above the scrolling list; retrying a refresh does not repeat the action.
 - **Read the whole story.** Follow streamed replies, code, tables, tool activity and available reasoning. Find a message in a chat, open a result, or return to the latest reply.
 - **Understand each action.** Open Activity → Tools for readable call titles,
-  targets, exception notices and available timings. Expand a call for its result or the
-  exact analyzed image; Raw details retains selectable, copyable inputs and output.
+  targets, exception notices and available timings. Expand a call for its request
+  and reported result: code/output, file content, Find/Replace and returned diffs,
+  images/questions, search matches or readable tool data. Icon actions copy exact
+  text, preview or share files/images, expand long previews, open a full view and wrap code; explanation text
+  supports Markdown. Raw details retains selectable, copyable inputs and output.
   Skill-update batches show each operation's action, affected file when supplied
   and reported success.
   Live elapsed counters start only from a backend tool start; saved timing appears

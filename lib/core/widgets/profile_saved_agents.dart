@@ -4,7 +4,8 @@ import '../presentation/saved_activity.dart';
 import '../theme/wing_theme.dart';
 import 'activity_time.dart';
 import 'compact_activity_row.dart';
-import 'markdown_message_content.dart';
+import 'tool_activity_details.dart';
+import '../presentation/tool_activity_details.dart';
 
 /// Saved output is inspectable without pretending a past child is controllable.
 class ProfileSavedAgents extends StatelessWidget {
@@ -21,11 +22,38 @@ class ProfileSavedAgents extends StatelessWidget {
 
   Widget _buildAgent(BuildContext context, SavedAgentResult agent) {
     final colors = WingTokens.of(context);
-    final details = [
-      if (agent.summary case final summary? when summary.trim().isNotEmpty)
-        MarkdownMessageContent(data: summary),
-      if (agent.error case final error? when error.trim().isNotEmpty)
-        SelectableText(error),
+    final hasResult =
+        (agent.summary?.trim().isNotEmpty ?? false) ||
+        (agent.error?.trim().isNotEmpty ?? false);
+    final details = <Widget>[
+      if (hasResult)
+        ActivityDetailsCard(
+          children: [
+            ActivityDetailSection(
+              block: ToolDetailBlock(label: 'Task', text: agent.goal),
+            ),
+            if (agent.summary case final summary?
+                when summary.trim().isNotEmpty)
+              ActivityDetailSection(
+                block: ToolDetailBlock(
+                  label: 'Output',
+                  text: summary,
+                  markdown: true,
+                ),
+              ),
+            if (agent.error case final error? when error.trim().isNotEmpty)
+              ActivityDetailSection(
+                block: ToolDetailBlock(label: 'Error', text: error),
+              ),
+            ActivityDetailStatus(
+              label: agent.status == 'completed'
+                  ? 'Completed'
+                  : agent.notice ?? agent.status,
+              error: agent.status == 'failed' || agent.status == 'timeout',
+              warning: agent.status == 'interrupted',
+            ),
+          ],
+        ),
     ];
     return CompactActivityRow(
       icon: Icons.account_tree_outlined,
