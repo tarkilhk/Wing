@@ -26,7 +26,7 @@ flutter build apk --debug
 `python3 scripts/test.py` runs product tests and all current-source linters.
 Use `python3 scripts/test.py --full` for the complete checker fixture, CLI,
 native compilation and SDK proofs as well. CI runs the complete suite nightly,
-when checking tools or their inputs change, and before release. The test
+when checking tools or their inputs change, and before a published release. The test
 inventory and coverage boundary are documented in [Testing](docs/TESTING.md).
 
 The ordinary debug APK uses `com.tarkilhk.wing.dev`, keeping its app storage separate from Wing. No release key is needed for development. Release signing is covered in [the release guide](docs/ANDROID_RELEASE_PLAN.md).
@@ -116,7 +116,11 @@ PR checks compare it with the preceding baseline and reject new exceptions or
 stale entries. Both quality and release workflows require the architecture and
 offline QA gates as hard failures.
 
-Run analysis and relevant tests, then the full suite before a release. Tests under `integration_test/` and opt-in live tests may create chats, change profile settings or use providers. Read each test's environment flags and cleanup behavior before running it against an explicitly authorized server. Ordinary `flutter test` does not replace device or live-server acceptance.
+Choose local checks and retries using
+[verification scope and stopping](docs/TESTING.md#verification-scope-and-stopping).
+Published releases retain the full-suite gate in the release checklist; local
+builds and phone installs use the applicable existing evidence.
+Tests under `integration_test/` and opt-in live tests may create chats, change profile settings or use providers. Read each test's environment flags and cleanup behavior before running it against an explicitly authorized server. Ordinary `flutter test` does not replace device or live-server acceptance.
 
 A useful change description explains the user-visible result, its boundaries, tests run and remaining limits. Update the relevant guide when behavior changes. Put revision-specific test results in the PR or issue, and keep generated logs/captures out of current instructions. Check new Markdown links from their file's directory.
 

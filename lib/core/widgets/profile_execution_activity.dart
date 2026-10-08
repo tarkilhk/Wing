@@ -10,10 +10,51 @@ import '../presentation/tool_activity_details.dart';
 import 'package:flutter/material.dart';
 
 import '../models/gateway_activity.dart';
+import '../models/chat_runtime.dart';
 import '../models/gateway_todo.dart';
 import '../theme/wing_theme.dart';
 import 'profile_transcript_disclosure.dart';
-import 'profile_activity_tabs.dart';
+import 'compact_activity_row.dart';
+import 'activity_time.dart';
+
+/// Native event order is supplied by the owners; rendering never sorts it.
+class ProfileExecutionActivity extends StatelessWidget {
+  const ProfileExecutionActivity({
+    super.key,
+    required this.entries,
+    this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
+  });
+  final List<ChatActivityEntry> entries;
+  final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final entry in entries)
+        switch (entry) {
+          ChatToolEntry(:final activity) => ProfileLiveToolActivity(
+            key: ValueKey(('activity-tool', entry.identity)),
+            activities: [activity],
+            loadImage: loadImage,
+            onOpenResource: onOpenResource,
+            onShareResource: onShareResource,
+          ),
+          ChatReasoningEntry() => ProfileReasoningDisclosure(
+            key: ValueKey(('activity-reasoning', entry.identity)),
+            text: entry.text,
+            running: entry.running,
+            source: entry.source,
+            availableText: entry.availableText,
+          ),
+        },
+    ],
+  );
+}
 
 class ProfileLiveToolActivity extends StatelessWidget {
   final Iterable<GatewayToolActivity> activities;
@@ -195,34 +236,85 @@ class _PendingTaskPainter extends CustomPainter {
 class ProfileReasoningDisclosure extends StatelessWidget {
   final String text;
   final bool running;
+  final bool initiallyExpanded;
+  final String? source;
+  final String? availableText;
 
   const ProfileReasoningDisclosure({
     super.key,
     required this.text,
     this.running = false,
+    this.initiallyExpanded = false,
+    this.source,
+    this.availableText,
   });
 
   @override
-  Widget build(BuildContext context) => ProfileTranscriptDisclosure(
+  Widget build(BuildContext context) => CompactActivityRow(
     key: const ValueKey('reasoning-disclosure'),
-    label: running ? 'Thinking' : 'Thought',
     icon: running ? Icons.pending_outlined : Icons.psychology_outlined,
-    children: [
-      ProfileActivityGuide(
-        inset: 0,
-        child: ActivityDetailsCard(
+    initiallyExpanded: initiallyExpanded,
+    time: const ActivityTime(),
+    lines: [
+      Text(
+        running ? 'Thinking' : 'Reasoning',
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          height: 1.3,
+        ),
+      ),
+      Text(
+        text.trimLeft().split('\n').first,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 12,
+          height: 1.5,
+          color: WingTokens.of(context).muted,
+        ),
+      ),
+    ],
+    details: [
+      ActivityDetailsCard(
+        children: [
+          ActivityDetailSection(
+            block: ToolDetailBlock(
+              label: 'Reasoning',
+              text: text,
+              markdown: true,
+              copyable: true,
+            ),
+          ),
+        ],
+      ),
+      if (source != null || availableText != null)
+        ProfileTranscriptDisclosure(
+          label: 'Raw details',
+          icon: Icons.data_object,
+          maintainState: false,
           children: [
-            ActivityDetailSection(
-              block: ToolDetailBlock(
-                label: running ? 'Thinking' : 'Thought',
-                text: text,
-                markdown: true,
-                copyable: true,
-              ),
+            ActivityDetailsCard(
+              children: [
+                if (source != null)
+                  ActivityDetailSection(
+                    copyable: false,
+                    viewable: false,
+                    block: ToolDetailBlock(label: 'Source', text: source!),
+                  ),
+                if (availableText != null)
+                  ActivityDetailSection(
+                    block: ToolDetailBlock(
+                      label: 'Available reasoning',
+                      text: availableText!,
+                      markdown: true,
+                      copyable: true,
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
-      ),
     ],
   );
 }

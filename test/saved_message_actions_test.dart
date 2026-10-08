@@ -4,8 +4,12 @@ import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/answer_versions.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
@@ -13,15 +17,53 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/models/queued_prompt_draft.dart';
 import 'package:wing/core/services/ws_client.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'answer_versions_test.dart' show AnswerHost;
+
+const _capture = bool.fromEnvironment('STUDIO_REVIEW');
+const _reviewFrame = ValueKey('saved-edit-review-frame');
 
 void main() {
   late AnswerHost host;
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
   late ProfileChat original;
+
+  setUpAll(() async {
+    if (!_capture) return;
+    for (final entry in {
+      'Roboto': 'build/studio-roboto.ttf',
+      'Ahem': 'build/studio-roboto.ttf',
+      'MaterialIcons': 'build/studio-icons.otf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            Future.value(
+              ByteData.sublistView(File(entry.value).readAsBytesSync()),
+            ),
+          ))
+          .load();
+    }
+  });
+
+  Future<void> capture(WidgetTester tester, String name) async {
+    if (!_capture) return;
+    await tester.pump();
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(_reviewFrame),
+    );
+    await tester.runAsync(() async {
+      final image = await boundary.toImage();
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      final directory = Directory('/tmp/wing-message-edit-review')
+        ..createSync(recursive: true);
+      await File(
+        '${directory.path}/$name.png',
+      ).writeAsBytes(bytes!.buffer.asUint8List());
+      image.dispose();
+    });
+  }
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -54,6 +96,127 @@ void main() {
   tearDown(() {
     controller.dispose();
     appPreferences.dispose();
+  });
+
+  testWidgets('edit stays on sent messages and out of Fork and Find', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('edit-message-4')), findsOneWidget);
+    expect(find.byTooltip('Edit prompt'), findsNothing);
+    final reading = controller.openReadingSession(original);
+    addTearDown(reading.dispose);
+    await reading.start();
+    reading.search('Follow-up');
+    expect(reading.select(reading.observation.matches.single), isTrue);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Edit message'), findsNothing);
+    expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+  });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('${brightness.name} edit dialog at $scale above keyboard', (
+        tester,
+      ) async {
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        addTearDown(tester.view.resetViewInsets);
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: _reviewFrame,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final edit = find.byKey(const ValueKey('edit-message-4'));
+        if (edit.evaluate().isEmpty) {
+          await tester.scrollUntilVisible(
+            edit,
+            160,
+            scrollable: find.byType(Scrollable).first,
+          );
+        }
+        await tester.ensureVisible(edit);
+        await tester.tap(edit);
+        await tester.pumpAndSettle();
+        tester.view.viewInsets = FakeViewPadding(
+          bottom: 240 * tester.view.devicePixelRatio,
+        );
+        await tester.pumpAndSettle();
+        final submit = find.widgetWithText(FilledButton, 'Replace and resend');
+        final close = find.byTooltip('Cancel editing');
+        expect(tester.getRect(submit).bottom, lessThanOrEqualTo(400));
+        expect(tester.getRect(close).top, greaterThanOrEqualTo(0));
+        expect(tester.getSize(close), const Size(48, 48));
+        expect(tester.takeException(), isNull);
+        await capture(tester, 'editor-${brightness.name}-$scale');
+        final field = find.byKey(const ValueKey('saved-message-edit-input'));
+        await tester.ensureVisible(field);
+        await tester.enterText(field, 'Corrected follow-up');
+        await tester.pumpAndSettle();
+        expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+        host.submitError = JsonRpcError(
+          'prompt.submit',
+          'Session busy',
+          code: 4009,
+        );
+        await tester.tap(submit);
+        for (var i = 0; i < 100 && original.runtime.changingAnswer; i++) {
+          await tester.pump(const Duration(milliseconds: 1));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 1)),
+          );
+        }
+        await tester.pumpAndSettle();
+        final error = find.byKey(const ValueKey('edit-message-error'));
+        await tester.ensureVisible(error);
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextFormField>(field).enabled, isTrue);
+        expect(tester.getRect(submit).bottom, lessThanOrEqualTo(400));
+        expect(tester.getRect(close).top, greaterThanOrEqualTo(0));
+        expect(
+          tester.getRect(find.text('Edit message')).top,
+          greaterThanOrEqualTo(0),
+        );
+        expect(tester.takeException(), isNull);
+        await capture(tester, 'editor-error-${brightness.name}-$scale');
+        await tester.tap(close);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('saved-message-edit-dialog')),
+          findsNothing,
+        );
+      });
+    }
+  }
+
+  test('unchanged and empty edits do not rewind or pause the queue', () async {
+    await restoreComposerFixture(
+      chat: original,
+      preferences: controller.preferences,
+      appendQueued: [QueuedPromptDraft(text: 'Queued followup')],
+    );
+    final prompt = original.reading.messages.first;
+    for (final text in ['', '  ', ' Original prompt ']) {
+      expect(await controller.editSavedPrompt(original, prompt, text), isFalse);
+    }
+    expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+    expect(original.composer.observation.paused, isFalse);
+    expect(original.reading.messages.first, prompt);
   });
 
   test('edit rewinds the addressed row and pauses queued followups', () async {
@@ -274,16 +437,20 @@ void main() {
     await tester.tapAt(Offset(target.right - 2, target.center.dy));
     await tester.pumpAndSettle();
 
-    expect(find.text('Edit and resend?'), findsOneWidget);
+    expect(find.text('Edit message'), findsOneWidget);
     expect(
       find.text(
-        "This replaces this message's turn and all later history in this chat.",
+        "Resending replaces this message and all later history in this chat.",
       ),
       findsOneWidget,
     );
     expect(find.text('Follow-up'), findsWidgets);
     expect(find.text('Replace and resend'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
+    expect(
+      tester.widget<FilledButton>(find.byType(FilledButton).last).onPressed,
+      isNull,
+    );
+    await tester.tap(find.byTooltip('Cancel editing'));
     await tester.pumpAndSettle();
     expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
   });
@@ -315,7 +482,7 @@ void main() {
     });
     await tester.pump();
 
-    expect(find.text('Edit and resend?'), findsOneWidget);
+    expect(find.text('Edit message'), findsOneWidget);
     expect(find.text('Corrected followup'), findsOneWidget);
     expect(find.byKey(const ValueKey('edit-message-error')), findsOneWidget);
     expect(
@@ -349,6 +516,7 @@ void main() {
         await tester.pumpAndSettle();
         final field = find.byKey(const ValueKey('saved-message-edit-input'));
         await tester.enterText(field, 'Retained correction');
+        await tester.pump();
         await tester.tap(find.text('Replace and resend'));
         await tester.pump();
         for (
@@ -370,7 +538,7 @@ void main() {
         await tester.tapAt(const Offset(8, 8));
         await tester.binding.handlePopRoute();
         await tester.pump();
-        expect(find.text('Edit and resend?'), findsOneWidget);
+        expect(find.text('Edit message'), findsOneWidget);
         expect(
           find.descendant(
             of: field,
@@ -410,7 +578,7 @@ void main() {
           );
           expect(tester.widget<TextFormField>(field).enabled, isTrue);
         } else {
-          expect(find.text('Edit and resend?'), findsNothing);
+          expect(find.text('Edit message'), findsNothing);
         }
       },
     );

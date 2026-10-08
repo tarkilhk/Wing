@@ -327,11 +327,14 @@ final class _ToolProjection {
       if (!response.any((b) => b.text.contains(error))) {
         addResponse('Error', error, role: ToolDetailRole.warning);
       }
-      state = ToolReceiptState.error;
-      status ??= 'Failed';
-    } else if (data['success'] == false ||
+    }
+    if (error != null ||
+        data['success'] == false ||
         data['ok'] == false ||
         data['isError'] == true) {
+      // A generic warning label cannot describe a failed receipt. Keep the
+      // tool-specific context, such as why a read was not attempted.
+      if (status == 'Completed with a warning') status = 'Failed';
       state = ToolReceiptState.error;
       status ??= 'Failed';
     }

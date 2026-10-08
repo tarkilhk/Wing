@@ -2237,12 +2237,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
       runtimeId: runtimeId,
       canPublish: currentRead,
       onChanged: () {
-        if (!_closed) _changed(browserChat: key);
+        if (!currentRead()) return;
+        _changed(browserChat: key);
+        if (!chat.reading.historyLoading) {
+          // Optional replay can settle after refresh's final snapshot flush.
+          // Persist its measured facts even inside the general update throttle.
+          unawaited(_saveReadingSnapshot());
+        }
       },
       propagateFailure: propagateFailure,
     );
     if (refreshed && currentRead()) {
-      chat._runtime.reconcileHistoricalTools();
+      chat._runtime.reconcileHistoricalActivity();
       unawaited(refreshContext(chat));
       unawaited(_saveReadingSnapshot());
     }
@@ -4787,6 +4793,21 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return !rejected;
   }
 
+  /// Admission for the durable prompt edit command, shared by its UI entry points.
+  bool canEditSavedPrompt(ProfileChat chat, Map<String, dynamic> selected) =>
+      !_closed &&
+      !chat.runtime.opening &&
+      !chat.runtime.offline &&
+      !recovering &&
+      !chat.runtime.blocksTurnAdmission &&
+      !chat.runtime.changingAnswer &&
+      !chat._changingIntelligence &&
+      !chat.runtime.commandRunning &&
+      !chat.composer.observation.draining &&
+      !switching &&
+      isHumanAnswerPrompt(selected) &&
+      (answerMessageId(selected) ?? 0) > 0;
+
   /// Replaces one saved user turn and everything after it in this session.
   Future<bool> editSavedPrompt(
     ProfileChat chat,
@@ -4796,18 +4817,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final resource = _commandOwner(chat);
     final text = rawText.trim();
     final selectedId = answerMessageId(selected);
-    if (text.isEmpty) return false;
-    if (chat.runtime.blocksTurnAdmission ||
-        chat.runtime.changingAnswer ||
-        chat._changingIntelligence ||
-        chat.runtime.commandRunning ||
-        chat.composer.observation.draining ||
-        switching) {
+    if (text.isEmpty || text == answerMessageDisplayText(selected).trim()) {
       return false;
     }
     if (!isHumanAnswerPrompt(selected) || selectedId == null) {
       throw StateError('Wait for this message to be saved');
     }
+    if (!canEditSavedPrompt(chat, selected)) return false;
     final originalReading = chat.reading.captureBranch();
     final runtimeChange = chat._runtime.beginAnswerChange(submitting: true);
     _changed();
@@ -6512,7 +6528,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat.reading.appendAssistant(
             text,
             turnGeneration: chat._runtime.turnRevision,
-            reasoning: chat.runtime.reasoning,
+            reasoning: '',
             responseReused: false,
             interim: true,
           );
@@ -6721,7 +6737,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.reading.appendAssistant(
         finalText,
         turnGeneration: chat._runtime.turnRevision,
-        reasoning: chat.runtime.reasoning,
+        reasoning: completion['reasoning'] is String
+            ? completion['reasoning'] as String
+            : '',
         persistedTurn: completion['persisted_turn'],
         responsePreviewed: completion['response_previewed'] == true,
         responseReused:

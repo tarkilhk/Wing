@@ -38,11 +38,13 @@ roots keep their separate namespaces. Neither mode shares previous findings.
 
 Source enforcement stays on every local commit (with the hook installed),
 branch push/PR and release. Exhaustive checker self-tests run nightly, when
-checker/runner/fixture/dependency inputs change, and before release. Routine
+checker/runner/fixture/dependency inputs change, and before a published release. Routine
 `python3 scripts/test.py` includes all current-source linters and product tests;
 `python3 scripts/test.py --full` includes every original checker proof too.
 The selected/scheduled inventory is explicit in `tools/testing/test_batches.dart`;
-unknown new suites remain routine. See [verification cadence](../../docs/TESTING.md#continuous-checks).
+unknown new suites remain routine. Choose local checks and retries using
+[verification scope and stopping](../../docs/TESTING.md#verification-scope-and-stopping);
+see [verification cadence](../../docs/TESTING.md#continuous-checks) for CI.
 
 The one-process linter driver also enters `model.withSharedSourceParses`.
 Only valid parsed trees are reused for the same canonical root, absolute file

@@ -39,6 +39,7 @@ void main() {
     Brightness brightness = Brightness.light,
     double scale = 1,
     String content = 'A short message.',
+    Widget? actions,
   }) async {
     await tester.binding.setSurfaceSize(const Size(320, 640));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -59,6 +60,7 @@ void main() {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: ProfileMessage(
+                  actions: actions,
                   message: TranscriptMessage.fromRow({
                     'role': role,
                     'content': content,
@@ -73,6 +75,61 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('${brightness.name} sent message actions at $scale', (
+        tester,
+      ) async {
+        var edits = 0;
+        await pump(
+          tester,
+          role: 'user',
+          timestamp: _date.toUtc().millisecondsSinceEpoch / 1000,
+          brightness: brightness,
+          scale: scale,
+          content: 'Compare the two proposals and explain the tradeoffs.',
+          actions: IconButton(
+            tooltip: 'Edit message',
+            constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+            onPressed: () => edits++,
+            icon: const Icon(Icons.edit_outlined, size: 18),
+          ),
+        );
+        final copy = tester.getRect(find.byTooltip('Copy message'));
+        final edit = tester.getRect(find.byTooltip('Edit message'));
+        expect(edit.right, lessThanOrEqualTo(copy.left));
+        final time = tester.getRect(find.text('14:07'));
+        final bubble = tester.getRect(find.byType(SelectableText).first);
+        expect(time.bottom, lessThanOrEqualTo(edit.top));
+        expect(bubble.right, lessThanOrEqualTo(edit.left));
+        expect(edit.top, lessThan(bubble.bottom));
+        expect(copy.top, edit.top);
+        expect(edit.size, const Size(48, 48));
+        expect(find.text('Edit message'), findsNothing);
+        expect(find.text('Copy message'), findsNothing);
+        await tester.tap(find.byTooltip('Edit message'));
+        expect(edits, 1);
+        if (_capture) {
+          final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find.byKey(_frame),
+          );
+          await tester.runAsync(() async {
+            final image = await boundary.toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final directory = Directory('/tmp/wing-message-edit-review')
+              ..createSync(recursive: true);
+            await File(
+              '${directory.path}/${brightness.name}-$scale.png',
+            ).writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+      });
+    }
   }
 
   for (final brightness in Brightness.values) {

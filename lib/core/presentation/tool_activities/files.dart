@@ -96,7 +96,12 @@ void _writeFile(_ToolProjection p) {
   p.layout = ToolActivityLayout.file;
   p.intent = _text(p.args['path']);
   final target = _fileDestination(p);
-  if (!_fileReceiptFailed(p) && _fileTarget(target)) p.resourceTarget = target;
+  // A requested destination alone is not a written resource. Stock WriteResult
+  // supplies bytes_written even for an empty file; errors still prohibit actions.
+  if (p.data['bytes_written'] case final int bytes
+      when bytes >= 0 && !_fileReceiptFailed(p) && _fileTarget(target)) {
+    p.resourceTarget = target;
+  }
   final content = p.args['content'];
   p.addRequest(
     'Content to write',
@@ -167,7 +172,8 @@ void _patchFile(_ToolProjection p) {
       ? (p.data['files_deleted'] as List).whereType<String>().toSet()
       : <String>{};
   final target = _fileDestination(p);
-  if (!_fileReceiptFailed(p) &&
+  if (p.data['success'] == true &&
+      !_fileReceiptFailed(p) &&
       !noChange &&
       !deleted.contains(target) &&
       _fileTarget(target)) {
@@ -187,7 +193,10 @@ void _patchFile(_ToolProjection p) {
               label: entry.value,
               text: '',
               facts: [path],
-              resourceTarget: entry.key == 'files_created' && _fileTarget(path)
+              resourceTarget:
+                  entry.key == 'files_created' &&
+                      !deleted.contains(path) &&
+                      _fileTarget(path)
                   ? path
                   : null,
             ),
@@ -198,9 +207,7 @@ void _patchFile(_ToolProjection p) {
   }
   p.addResponse('Recovery', p.data['_hint'], secondary: true);
   _fileDiagnostics(p);
-  if (p.resourceTarget == null &&
-      p.intent != null &&
-      p.layout == ToolActivityLayout.file) {
+  if (p.resourceTarget == null && p.intent != null) {
     p.fact('File', p.intent);
   }
   _fileWarnings(p);

@@ -11,6 +11,46 @@ Keep logs and generated captures under ignored `build/`. Record source revision,
 For CPU attribution, input latency, thermal load and battery investigations, use
 the [performance procedure](PERFORMANCE.md) and its repeatable phone recorder.
 
+## Verification scope and stopping
+
+Choose checks to resolve an identified risk. Before running them, identify the
+changed behavior, affected callers/dependencies, required gates and the condition
+that ends verification. Documentation-only edits need review of wording, links
+and formatting; they do not need runtime test campaigns.
+
+1. During implementation, run focused tests at the changed contract and the
+   applicable source guards. Include affected dependencies when the property
+   crosses files or owners.
+2. At final integration, run a justified broad suite once for the stable tested
+   inputs. Full verification is warranted by changes to checking tools, runners,
+   fixtures or dependencies, substantial changes across application boundaries,
+   or an explicit release/CI requirement. A local production APK build or phone
+   install is not publication and does not itself trigger a full suite.
+3. Record the tested revision or source fingerprint, command/scope, configuration
+   and result. Reuse that evidence while its relevant inputs remain unchanged.
+   A commit, push, equivalent isolated checkout or documentation edit does not
+   invalidate unchanged behavior checks. Verify relevant input differences rather
+   than treating every new commit hash as a reason to repeat everything.
+4. After a failure, diagnose it and rerun the affected test and relevant
+   dependencies. For an isolated timeout, check infrastructure/load separately
+   from product behavior and rerun that test alone or with lower concurrency.
+   A passing isolated rerun closes that uncertainty; it does not invalidate other
+   passing checks or justify another full campaign. Preserve the original failed
+   aggregate result and report the successful focused rerun separately.
+5. Repeat a full suite only when substantial changes invalidate broad evidence,
+   failures indicate a wider problem, or an explicit gate requires a fresh run.
+   Before repeating it, state the concrete trigger and which evidence is no
+   longer usable. A desire for a green aggregate command is not a trigger.
+6. Stop when the planned affected checks pass and required gates are satisfied;
+   report remaining limits without expanding scope automatically. If the user
+   stops testing, terminate the active owned run and start no replacement campaign.
+   Continue other authorized work where its prerequisites are satisfied.
+
+Required published-release and CI gates remain mandatory. A failed or interrupted
+full command is not a passing full run; a focused recovery does not waive a gate
+that explicitly requires one. Ordinary local delivery can use the completed
+checks and their stated limits without manufacturing another release campaign.
+
 ## Continuous checks
 
 After activating the Flutter toolchain, run `python3 scripts/test.py` for routine
@@ -30,7 +70,7 @@ New unclassified suites run routinely; they are never silently scheduled away.
 | --- | --- |
 | Source linters | Every local commit with the hook installed, every branch push/PR, and release |
 | Product host tests | Every routine run and branch push/PR |
-| Complete checker fixtures and source/native/SDK proofs | Nightly, whenever checking tools/runner/fixture/dependency inputs change, and before release |
+| Complete checker fixtures and source/native/SDK proofs | Nightly, whenever checking tools/runner/fixture/dependency inputs change, and before a published release |
 
 CI uses `--changed-since` with the preceding commit or PR base to select full
 verification when tool inputs change. Unknown or missing history selects the

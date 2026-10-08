@@ -149,6 +149,25 @@ reported truncation and failed result validation. A process launch or exited
 process without a supplied exit code does not acquire a successful exit. Existing
 steer, interrupt, refresh, retry and scheduling ownership stays intact.
 
+### Native reasoning fields and actions
+
+Verified native reasoning contract: upstream `aa74e184ea779994af642ab4f888e10a95415d90`.
+
+| Field or action | User signal and placement | Scope and eligibility |
+| --- | --- | --- |
+| Delta or available text | Compact one-line received-text preview, with exact authored Markdown in expanded main content | Empty/absent reasoning produces no row; whitespace deltas preserve word boundaries; long text scrolls in the shared viewport |
+| Available text after a streamed run | Retained separate receipt in Raw details; streamed main text remains intact | No inferred truncation or completeness; exact receipt can be copied/opened under the same payload rules |
+| Native event source | Raw details identifies the received event type | Passive; no copy/view control for routing metadata |
+| Verbose hint, session ID and event sequence | Transport/presentation context; no additional main-card field | No operational user action; sequence is not an insight count |
+| Saved string reasoning and typed readable summary/text parts | Reasoning at the saved assistant message position | Ignore opaque/encrypted parts and signatures; absent readable text stays absent |
+| Expand | Shared compact Reasoning/Thinking row with the full received body | No extra panel or footer; empty rows omitted |
+| Copy | Icon-only exact received reasoning text | One scoped payload copy; no derived summary copy |
+| Eye | Icon-only existing fuller text viewer | Actual layout overflow only; short prose has no eye |
+| Timing, counts, wrap and share | No native reasoning duration/insight count/resource | Omitted; prose reflows and has no literal wrapping toggle |
+
+Live rows and saved message attachments have independent native sources. Neither
+requires a persistent client timeline or reconstruction of missing live events.
+
 ## Verification
 
 Family projector regressions exercise exact public observations and selection.

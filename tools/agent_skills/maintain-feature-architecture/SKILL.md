@@ -64,9 +64,10 @@ File-set changes require `python3 tools/architecture/rules/authored_census.py`;
 Dart role changes require `dart run tools/architecture/rules/role_inventory.dart`;
 executable Dart root changes require
 `dart run tools/architecture/rules/dart_main_roots.dart`.
-Run focused behavior checks for changed contracts and the required integration
-gates for the delivery milestone. Broaden verification when the change or an
-unresolved failure warrants it; reuse accepted evidence for unchanged source.
+Choose behavior checks, integration scope and failure recovery using
+[verification scope and stopping](../../../docs/TESTING.md#verification-scope-and-stopping).
+Done when the planned affected checks and required gates are accounted for with
+their evidence or stated limits.
 
 Review the actual diff against the affected map row, interfaces and registrations.
 For a new or moved boundary, a reviewer should be able to locate its owner,

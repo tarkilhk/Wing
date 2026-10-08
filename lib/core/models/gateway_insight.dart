@@ -1,12 +1,7 @@
-enum GatewayReasoningEventMode { append, replace }
-
 class GatewayReasoningUpdate {
-  static const _maxTextLength = 20000;
-
   final String text;
-  final GatewayReasoningEventMode mode;
 
-  const GatewayReasoningUpdate({required this.text, required this.mode});
+  const GatewayReasoningUpdate({required this.text});
 
   static GatewayReasoningUpdate? fromGatewayEvent(
     String eventType,
@@ -15,31 +10,14 @@ class GatewayReasoningUpdate {
     if (eventType != 'reasoning.delta' && eventType != 'reasoning.available') {
       return null;
     }
-    final text = _safeText(data['text']?.toString(), _maxTextLength);
-    if (text == null) return null;
-    return GatewayReasoningUpdate(
-      text: text,
-      mode: eventType == 'reasoning.available'
-          ? GatewayReasoningEventMode.replace
-          : GatewayReasoningEventMode.append,
-    );
-  }
-
-  String applyTo(String current) {
-    final combined = mode == GatewayReasoningEventMode.replace
-        ? text
-        : '$current$text';
-    if (combined.length <= _maxTextLength) return combined;
-    return '${combined.substring(0, _maxTextLength - 1)}…';
-  }
-
-  static String? _safeText(String? value, int maxLength) {
-    if (value == null) return null;
-    final safe = value.replaceAll('\u0000', '');
-    if (safe.trim().isEmpty) return null;
-    return safe.length <= maxLength
-        ? safe
-        : '${safe.substring(0, maxLength - 1)}…';
+    final text = data['text'];
+    if (text is! String ||
+        text.isEmpty ||
+        text.replaceAll('\u0000', '').isEmpty) {
+      return null;
+    }
+    if (eventType == 'reasoning.available' && text.trim().isEmpty) return null;
+    return GatewayReasoningUpdate(text: text);
   }
 }
 

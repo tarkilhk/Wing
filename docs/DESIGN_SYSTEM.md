@@ -280,6 +280,18 @@ The selection audit covers App settings and composer preferences; Activity filte
 
 ## Conversation preservation
 
+The owner's 9 October message-control refinement keeps controls beside the sent
+user bubble: a quiet local `HH:mm` above one icon-only Edit → Copy row, with
+48 dp targets and full-date accessibility. At enlarged text, release the bubble's
+extra leading inset to keep words readable while the side controls stay in place.
+Keep Fork and Regenerate on answers;
+do not add another Edit there or enable editing in Find's reading window.
+The saved-message editor uses a compact Studio header with icon-only close,
+one scrollable message/warning area and a fixed Replace and resend footer.
+Use the shared surfaces, borders, typography, spacing and control corners;
+keep the footer above keyboard insets at 320 dp/200% text. Pending work disables
+editing and dismissal; rejected work retains the correction and shows its error.
+
 Network continuity uses a shared LED on the left of each server identity, quiet
 bounded recovery, retained conversation state, and immediate notification
 navigation with cached reading where available. Use these rules for
@@ -521,6 +533,19 @@ Preserve loading, refresh, retry, uncertainty and control eligibility. Use Studi
 semantic tokens and at least 48 dp rows; enlarged text wraps statuses/metadata
 without hiding reachable controls. See [the activity contract](TOOL_ACTIVITY.md).
 
+
+## Native reasoning timeline, 9 October 2026
+
+Activity's Timeline tab contains native reasoning between tool calls, using the
+same compact two-line row geometry and shared detail frame. Reasoning has one
+line of supplied text beneath its title. Active streamed text uses Thinking;
+sealed or saved text uses Reasoning. Expand to read the received Markdown, with
+exact-copy and actual-overflow viewer icons. Native event source and any
+separately supplied reasoning preview remain in Raw details. Omit invented
+insight counts and reasoning timing. There is no separate Thinking footer.
+Tasks, Agents and Work retain their selection and controls; live Activity keeps
+its existing location above the composer. Saved reasoning-only messages remain
+at their backend position. Live and saved segmentation need not match.
 
 ## Activity information and typography, 8 October 2026
 

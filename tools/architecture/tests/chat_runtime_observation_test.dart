@@ -143,6 +143,24 @@ Future<void> _proofMain(List<String> args) async {
     );
     reset(
       model: goodModel.replaceFirst(
+        'final Object? activityEntries',
+        'Object? activityEntries',
+      ),
+    );
+    await verdict(
+      1,
+      'mutable activity observation',
+      subject: 'ChatRuntimeObservation.activityEntries',
+    );
+    reset(
+      model: goodModel.replaceFirst(
+        'final Object? activityEntries = null;',
+        '',
+      ),
+    );
+    await verdict(2, 'missing native activity observation');
+    reset(
+      model: goodModel.replaceFirst(
         'class ChatApproval {',
         'class ChatApproval { set other(Object? value) {}',
       ),

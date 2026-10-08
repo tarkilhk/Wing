@@ -32,7 +32,7 @@ const stored = {
     'mainActivity',
     'mainToolActivity',
     'toolActivities',
-    'reasoning',
+    'activityEntries',
     'approvals',
     'approvalPosition',
     'approvalTotal',

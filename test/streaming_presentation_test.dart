@@ -90,7 +90,10 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 150));
 
     expect(chat.reading.streaming, 'First second');
-    expect(chat.runtime.reasoning, 'Thinking more');
+    expect(
+      chat.runtime.activityEntries.whereType<ChatReasoningEntry>().last.text,
+      'Thinking more',
+    );
     expect(storage.snapshotWrites, 0);
     expect(chat.reading.messages.single, same(saved));
 
@@ -162,7 +165,10 @@ void main() {
     expect(chat.runtime.mainActivity, ChatMainActivity.thinking);
     expect(updates, 3);
     host.event('a', 'reasoning.delta', {'text': ' more'});
-    expect(chat.runtime.reasoning, 'Thinking more');
+    expect(
+      chat.runtime.activityEntries.whereType<ChatReasoningEntry>().last.text,
+      'Thinking more',
+    );
     expect(updates, 3);
     host.event('a', 'message.delta', {'text': ' third'});
     expect(chat.runtime.mainActivity, ChatMainActivity.writing);

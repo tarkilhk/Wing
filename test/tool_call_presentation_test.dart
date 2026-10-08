@@ -641,6 +641,111 @@ void main() {
     },
   );
 
+  test('failed receipts take precedence over separately received warnings', () {
+    for (final (name, result, warning) in [
+      (
+        'browser_click',
+        {
+          'success': false,
+          'error': 'Chrome fallback failed',
+          'fallback_warning': 'Chrome was used',
+        },
+        'Chrome was used',
+      ),
+      (
+        'write_file',
+        {'error': 'Permission denied', '_warning': 'Additional caution'},
+        'Additional caution',
+      ),
+    ]) {
+      final call = completed(name, result);
+      expect(call.outcome, ToolCallOutcome.error);
+      expect(call.status, 'Failed');
+      expect(call.activityDetails.receiptStatus, 'Failed');
+      expect(call.activityDetails.response.map((block) => block.text), [
+        warning,
+        result['error'],
+      ]);
+    }
+    for (final failure in [
+      {'success': false},
+      {'ok': false},
+      {'isError': true},
+    ]) {
+      final call = completed('browser_click', {
+        ...failure,
+        'fallback_warning': 'Chrome was used',
+      });
+      expect(call.outcome, ToolCallOutcome.error);
+      expect(call.status, 'Failed');
+      expect(call.activityDetails.response.single.text, 'Chrome was used');
+    }
+  });
+
+  test('warning-only successful receipts retain their qualification', () {
+    for (final (name, warningField) in [
+      ('browser_click', 'fallback_warning'),
+      ('write_file', '_warning'),
+    ]) {
+      final call = completed(name, {
+        'success': true,
+        warningField: 'Additional caution',
+      });
+      expect(call.outcome, ToolCallOutcome.warning);
+      expect(call.status, 'Completed with a warning');
+      expect(call.activityDetails.response.single.text, 'Additional caution');
+    }
+  });
+
+  test('failure-specific receipt statuses survive error finalization', () {
+    for (final (name, result, expectedStatus) in [
+      (
+        'read_file',
+        {
+          'success': false,
+          'note': 'Symlink traversal refused',
+          'error': 'Unsafe path',
+          '_warning': 'The file was not read',
+        },
+        'Read not attempted',
+      ),
+      (
+        'terminal',
+        {'exit_code': 7, 'error': 'Process failed', 'pty_note': 'PTY was used'},
+        'Exited with code 7',
+      ),
+      (
+        'execute_code',
+        {
+          'status': 'timeout',
+          'error': 'Execution timed out',
+          'warning': 'Partial output was returned',
+        },
+        'Timed out',
+      ),
+      (
+        'web_extract',
+        {
+          'results': [
+            {'url': 'https://example.org', 'error': 'Source unavailable'},
+          ],
+          'error': 'All sources failed',
+          'warning': 'Try again later',
+        },
+        'Could not extract sources',
+      ),
+    ]) {
+      final call = completed(name, result);
+      expect(call.outcome, ToolCallOutcome.error);
+      expect(call.status, expectedStatus);
+      expect(call.activityDetails.receiptStatus, expectedStatus);
+      expect(
+        call.activityDetails.response.map((block) => block.text),
+        contains(result['error']),
+      );
+    }
+  });
+
   test(
     'structured text content and web sources remain readable across tools',
     () {

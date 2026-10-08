@@ -36,40 +36,42 @@ class ProfileMessage extends StatelessWidget {
     this.actions,
   });
 
-  Widget _copy(BuildContext context, String content, {Widget? timestamp}) =>
-      IconButton(
-        tooltip: 'Copy message',
-        style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-        padding: timestamp == null ? null : EdgeInsets.zero,
-        icon: timestamp == null
-            ? const Icon(Icons.copy_outlined, size: 17)
-            : SizedBox(
-                width: 48,
-                height: 48,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.copy_outlined, size: 17),
-                    const SizedBox(height: 2),
-                    // Keep metadata inside the existing copy target, including
-                    // at enlarged text sizes; the full date remains accessible.
-                    SizedBox(
-                      width: 44,
-                      height: 20,
-                      child: FittedBox(fit: BoxFit.scaleDown, child: timestamp),
-                    ),
-                  ],
-                ),
-              ),
-        onPressed: () async {
-          await Clipboard.setData(ClipboardData(text: content));
-          if (context.mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Message copied')));
-          }
-        },
-      );
+  Widget _copy(BuildContext context, String content) => IconButton(
+    tooltip: 'Copy message',
+    style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+    icon: const Icon(Icons.copy_outlined, size: 17),
+    onPressed: () async {
+      await Clipboard.setData(ClipboardData(text: content));
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Message copied')));
+      }
+    },
+  );
+
+  Widget _userControls(BuildContext context, Widget? timestamp) => SizedBox(
+    width: actions == null ? 48 : 96,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // The time has its own accessible/full-date target above the actions.
+        Padding(
+          padding: const EdgeInsets.only(top: WingSpacing.sm),
+          child: SizedBox(
+            height: MediaQuery.textScalerOf(context).scale(12),
+            child: timestamp == null
+                ? null
+                : FittedBox(fit: BoxFit.scaleDown, child: timestamp),
+          ),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [?actions, _copy(context, message.copyText)],
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -194,6 +196,9 @@ class ProfileMessage extends StatelessWidget {
     }
     final user = role == 'user';
     final timestamp = _timestamp(context);
+    final bodySize = theme.textTheme.bodyLarge?.fontSize ?? 16;
+    final enlargedText =
+        MediaQuery.textScalerOf(context).scale(bodySize) >= bodySize * 1.5;
     return Padding(
       padding: EdgeInsets.only(bottom: user ? WingSpacing.md : 0),
       child: Column(
@@ -277,7 +282,9 @@ class ProfileMessage extends StatelessWidget {
               children: [
                 Flexible(
                   child: Container(
-                    margin: EdgeInsets.only(left: user ? 28 : 0),
+                    margin: EdgeInsets.only(
+                      left: user && !enlargedText ? 28 : 0,
+                    ),
                     padding: user
                         ? const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -308,15 +315,18 @@ class ProfileMessage extends StatelessWidget {
                           ),
                   ),
                 ),
-                if (user && !streaming)
-                  _copy(context, message.copyText, timestamp: timestamp),
+                if (user && !streaming) _userControls(context, timestamp),
               ],
             ),
           for (final attachment in message.attachments)
             Padding(
               padding: EdgeInsets.only(
                 left: 28,
-                right: streaming ? 0 : 48,
+                right: streaming
+                    ? 0
+                    : user && actions != null
+                    ? 96
+                    : 48,
                 top: 8,
               ),
               child: UserMessageAttachmentTile(
@@ -325,8 +335,9 @@ class ProfileMessage extends StatelessWidget {
                 loadImage: loadAttachmentImage,
               ),
             ),
-          if (user && content.isEmpty && timestamp != null) timestamp,
-          if (actions != null)
+          if (user && !streaming && content.isEmpty)
+            _userControls(context, timestamp),
+          if (actions != null && !user)
             Align(alignment: Alignment.centerRight, child: actions),
         ],
       ),

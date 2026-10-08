@@ -42,7 +42,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
   final jump = find.byKey(const ValueKey('jump-to-latest'));
   final thoughtHeader = find.descendant(
     of: find.byType(ListTile),
-    matching: find.text('Thought'),
+    matching: find.text('Reasoning'),
   );
 
   Map<String, dynamic> row(int id) => {
@@ -813,7 +813,9 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             final agents = find.byKey(
               const ValueKey(('activity-tab', 'agents')),
             );
-            final tools = find.byKey(const ValueKey(('activity-tab', 'tools')));
+            final tools = find.byKey(
+              const ValueKey(('activity-tab', 'timeline')),
+            );
             await Scrollable.ensureVisible(
               tester.element(agents),
               alignment: 0.2,
@@ -1093,7 +1095,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     final thought = thoughtHeader;
     await toggleInPlace(tester, thought);
     await tester.settleMarkdown();
-    expect(find.text('A short thought'), findsOneWidget);
+    expect(find.text('A short thought'), findsNWidgets(2));
     await toggleInPlace(tester, thought);
     expect(chat.reading.historyScrollOffset, closeTo(0, 1));
   });

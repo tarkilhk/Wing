@@ -107,7 +107,8 @@ class ChatRuntime {
   bool _compacting = false;
   GatewayToolActivity? _mainTool;
   final _tools = <GatewayToolActivity>[];
-  String _reasoning = '';
+  final _activity = <ChatActivityEntry>[];
+  int _reasoningOrdinal = 0;
   final _approvals = GatewayApprovalQueue();
   final _approvalCorrelations = <String, Object>{};
   bool _approvalResponding = false;
@@ -148,7 +149,7 @@ class ChatRuntime {
     compacting: _compacting,
     mainToolActivity: _mainTool,
     toolActivities: _tools,
-    reasoning: _reasoning,
+    activityEntries: _activity,
     approvals: _approvals.requests.map(_approval),
     approvalPosition: _approvals.position,
     approvalTotal: _approvals.total,
@@ -385,7 +386,7 @@ class ChatRuntime {
       _compacting = false;
       _mainTool = null;
       _tools.clear();
-      _reasoning = '';
+      _activity.clear();
       _error = null;
     }
     return original;
@@ -471,6 +472,7 @@ class ChatRuntime {
 
   void failTurn(String error) {
     if (!_closed) {
+      _sealReasoning();
       _compacting = false;
       _execution = ChatExecution.failed;
       _error = error;
@@ -483,6 +485,7 @@ class ChatRuntime {
     required String? error,
   }) {
     if (_closed) return;
+    _sealReasoning();
     _compacting = false;
     _execution = failed
         ? ChatExecution.failed
@@ -523,24 +526,34 @@ class ChatRuntime {
   }
 
   void observeText(String text) {
-    if (!_closed && text.isNotEmpty) _main = ChatMainActivity.writing;
+    if (!_closed && text.isNotEmpty) {
+      _sealReasoning();
+      _main = ChatMainActivity.writing;
+    }
   }
 
   void finishSegment() {
     if (!_closed) {
-      _reasoning = '';
+      _sealReasoning();
       _main = ChatMainActivity.working;
     }
   }
 
-  void reconcileHistoricalTools() {
-    if (!_closed) _tools.removeWhere((activity) => activity.isTerminal);
+  void reconcileHistoricalActivity() {
+    if (_closed) return;
+    _tools.removeWhere((activity) => activity.isTerminal);
+    _activity.removeWhere(
+      (entry) => switch (entry) {
+        ChatToolEntry(:final activity) => activity.isTerminal,
+        ChatReasoningEntry(:final running) => !running,
+      },
+    );
   }
 
   void finishActivity() {
     if (!_closed) {
       _tools.clear();
-      _reasoning = '';
+      _activity.clear();
     }
   }
 
@@ -548,8 +561,31 @@ class ChatRuntime {
     if (_closed) return;
     final update = GatewayReasoningUpdate.fromGatewayEvent(type, data);
     if (update == null) return;
-    _reasoning = update.applyTo(_reasoning);
+    final last = _activity.lastOrNull;
+    final current = last is ChatReasoningEntry && last.running ? last : null;
+    final available = type == 'reasoning.available';
+    final entry = ChatReasoningEntry(
+      identity: current?.identity ?? (_runtimeId, _turn, ++_reasoningOrdinal),
+      text: available && current != null
+          ? current.text
+          : '${current?.text ?? ''}${update.text}',
+      source: current?.source ?? type,
+      availableText: available && current != null ? update.text : null,
+      running: !available,
+    );
+    if (current == null) {
+      _activity.add(entry);
+    } else {
+      _activity[_activity.length - 1] = entry;
+    }
     if (type == 'reasoning.delta') _main = ChatMainActivity.thinking;
+  }
+
+  void _sealReasoning() {
+    if (_activity.lastOrNull case final ChatReasoningEntry entry
+        when entry.running) {
+      _activity[_activity.length - 1] = entry.sealed();
+    }
   }
 
   GatewayToolActivity? observeTool(
@@ -565,6 +601,7 @@ class ChatRuntime {
       receivedAt: live ? receivedAt ?? toolActivityNow() : null,
     );
     if (update == null) return null;
+    _sealReasoning();
     // Argument generation announces a name, not a call identity or a start.
     if (type == 'tool.generating') {
       _mainTool = update;
@@ -579,8 +616,14 @@ class ChatRuntime {
     final merged = index < 0 ? update : _tools[index].merge(update);
     if (index < 0) {
       _tools.add(merged);
+      _activity.add(ChatToolEntry(merged));
     } else {
       _tools[index] = merged;
+      final position = _activity.indexWhere(
+        (entry) =>
+            entry is ChatToolEntry && entry.activity.toolId == merged.toolId,
+      );
+      if (position >= 0) _activity[position] = ChatToolEntry(merged);
     }
     if (type != 'tool.complete') {
       _mainTool = merged;
@@ -601,6 +644,7 @@ class ChatRuntime {
     if (data['running'] == true) {
       _execution = ChatExecution.running;
     } else {
+      _sealReasoning();
       _compacting = false;
       if (observation.executionActive) _execution = ChatExecution.completed;
     }

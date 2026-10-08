@@ -26,7 +26,6 @@ class ProfileTranscript extends StatefulWidget {
   final Future<void> Function() onLoadOlder;
   final List<Widget> currentActivity;
   final List<ProfileActivityTab> activityTabs;
-  final Widget? activityThinking;
   final int liveToolCount;
   final Future<Uint8List> Function(String)? loadImage;
   final Future<void> Function(ChatOutput)? onOpenResource;
@@ -45,7 +44,6 @@ class ProfileTranscript extends StatefulWidget {
     required this.tail,
     this.currentActivity = const [],
     this.activityTabs = const [],
-    this.activityThinking,
     this.liveToolCount = 0,
     this.loadImage,
     this.onOpenResource,
@@ -438,18 +436,20 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     // Join adjacent saved calls and live work without crossing visible prose
     // or hiding the latest review's standalone detail button.
     final joinCurrentActivity = timeline.joinsCurrentActivity;
+    final hasCurrentActivity =
+        widget.currentActivity.isNotEmpty || widget.activityTabs.isNotEmpty;
+    Widget currentActivity() => ProfileActivitySection(
+      key: ValueKey(('activity', chat.key)),
+      tabs: widget.activityTabs,
+      subtitle: widget.liveToolCount > 0
+          ? Text(
+              '${widget.liveToolCount} tool ${widget.liveToolCount == 1 ? 'call' : 'calls'}',
+            )
+          : null,
+      children: widget.currentActivity,
+    );
     final tailContent = [
-      if ((widget.currentActivity.isNotEmpty ||
-              widget.activityTabs.isNotEmpty ||
-              widget.activityThinking != null) &&
-          !joinCurrentActivity)
-        ProfileActivitySection(
-          key: ValueKey(('activity', chat.key)),
-          tabs: widget.activityTabs,
-          thinking: widget.activityThinking,
-          toolCount: widget.liveToolCount,
-          children: widget.currentActivity,
-        ),
+      if (hasCurrentActivity && !joinCurrentActivity) currentActivity(),
       ...widget.tail,
     ];
     final tail = [
@@ -481,8 +481,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final keysStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
         : 0;
-    final activeIds = timeline.entries
-        .map((entry) => entry.presentationId)
+    final activeIds = timeline.sections
+        .expand((section) => section.presentationIds)
         .toSet();
     _rows.removeWhere((id, _) => !activeIds.contains(id));
     // A sliver needs an index lookup to retain mounted message/expansion state
@@ -493,8 +493,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     var newDurableKeys = 0;
     for (final section in rows) {
       final group = section.messages.toList();
-      final existing = group.reversed
-          .map((row) => _rows[row.presentationId])
+      final presentations = section.presentationIds.toList();
+      final existing = presentations.reversed
+          .map((id) => _rows[id])
           .whereType<GlobalKey>()
           .where((key) => !usedKeys.contains(key))
           .firstOrNull;
@@ -507,8 +508,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           newDurableKeys++;
         }
       }
-      for (final row in group) {
-        _rows[row.presentationId] = key;
+      for (final id in presentations) {
+        _rows[id] = key;
       }
       keys.add(key);
       usedKeys.add(key);
@@ -612,9 +613,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                             tabs: rowIndex == 0 && joinCurrentActivity
                                 ? widget.activityTabs
                                 : const [],
-                            thinking: rowIndex == 0 && joinCurrentActivity
-                                ? widget.activityThinking
-                                : null,
                             liveToolCount: rowIndex == 0 && joinCurrentActivity
                                 ? widget.liveToolCount
                                 : 0,

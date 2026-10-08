@@ -10,7 +10,7 @@ import 'package:wing/core/utils/expansion_scroll_controller.dart';
 
 void main() {
   for (final scale in [1.0, 2.0, 3.0]) {
-    testWidgets('tabs retain details and Thinking at phone scale $scale', (
+    testWidgets('tabs retain timeline expansion at phone scale $scale', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(360, 900);
@@ -34,7 +34,6 @@ void main() {
                     padding: const EdgeInsets.all(16),
                     child: ProfileActivitySection(
                       initiallyExpanded: true,
-                      toolCount: 5,
                       tabs: [
                         if (showTasks)
                           ProfileActivityTab(
@@ -49,10 +48,6 @@ void main() {
                           onSelected: () => activations++,
                         ),
                       ],
-                      thinking: const ProfileReasoningDisclosure(
-                        text: 'Reasoning details',
-                        running: true,
-                      ),
                       children: [
                         ProfileToolActivity(
                           results: [
@@ -63,6 +58,10 @@ void main() {
                               'content': 'Saved tool detail',
                             }),
                           ],
+                        ),
+                        const ProfileReasoningDisclosure(
+                          text: 'Reasoning details',
+                          running: true,
                         ),
                       ],
                     ),
@@ -84,13 +83,7 @@ void main() {
       await tester.settleMarkdown();
       expect(find.text('Task details'), findsOneWidget);
       expect(find.text('Saved tool detail'), findsNothing);
-      expect(find.text('Thinking'), findsOneWidget);
-      expect(
-        tester
-            .getTopLeft(find.byKey(const ValueKey('activity-thinking-divider')))
-            .dy,
-        lessThan(tester.getTopLeft(find.text('Thinking')).dy),
-      );
+      expect(find.text('Thinking'), findsNothing);
       update(() => completed = 2);
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
@@ -100,20 +93,26 @@ void main() {
       await tester.settleMarkdown();
       expect(activations, 1);
       expect(find.text('Agent details'), findsOneWidget);
+      await tester.tap(find.text('Timeline'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Thinking'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Thinking'));
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
       expect(
         find.text('Reasoning details', findRichText: true),
-        findsOneWidget,
+        findsNWidgets(2),
       );
-      await tester.tap(find.text('Tools 5'));
+      await tester.ensureVisible(find.text('Timeline'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Timeline'));
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
       expect(find.text('Saved tool detail'), findsOneWidget);
       expect(
         find.text('Reasoning details', findRichText: true),
-        findsOneWidget,
+        findsNWidgets(2),
       );
       await tester.tap(find.text('Tasks 2/4'));
       await tester.pumpAndSettle();

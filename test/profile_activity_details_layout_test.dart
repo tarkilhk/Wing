@@ -142,7 +142,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           for (var index = 0; index < rows.length; index++)
             find.byKey(ValueKey<(String, Object?)>(('saved-tool', index + 1))),
         ];
-        _expectDenseRows(tester, toolRows, 'tools');
+        _expectDenseRows(tester, toolRows, 'timeline');
         final wrappedLabel = find.text(wrappedLabelText);
         expect(wrappedLabel, findsOneWidget);
         expect(
@@ -312,7 +312,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       if (scale == 1) {
         expect(
           tester
-              .getSize(find.byKey(const ValueKey(('activity-tab', 'tools'))))
+              .getSize(find.byKey(const ValueKey(('activity-tab', 'timeline'))))
               .height,
           lessThanOrEqualTo(32),
         );

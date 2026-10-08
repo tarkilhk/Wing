@@ -38,9 +38,8 @@ class ProfileActivityGuide extends StatelessWidget {
 }
 
 class ProfileActivityTabs extends StatefulWidget {
-  const ProfileActivityTabs({super.key, required this.tabs, this.thinking});
+  const ProfileActivityTabs({super.key, required this.tabs});
   final List<ProfileActivityTab> tabs;
-  final Widget? thinking;
   @override
   State<ProfileActivityTabs> createState() => _ProfileActivityTabsState();
 }
@@ -201,18 +200,6 @@ class _ProfileActivityTabsState extends State<ProfileActivityTabs> {
                       ),
                 ],
               ),
-            ),
-          ],
-          if (widget.thinking != null) ...[
-            Divider(
-              key: const ValueKey('activity-thinking-divider'),
-              height: 12,
-              thickness: .5,
-              color: colors.outlineVariant,
-            ),
-            Padding(
-              padding: const EdgeInsets.only(left: 24),
-              child: widget.thinking!,
             ),
           ],
         ],

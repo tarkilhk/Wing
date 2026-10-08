@@ -1,5 +1,11 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/presentation/tool_activity_details.dart';
+import 'package:wing/core/presentation/tool_call_presentation.dart';
+import 'package:wing/core/widgets/tool_activity_details.dart';
 
 ToolActivityDetails project(
   String name,
@@ -8,6 +14,110 @@ ToolActivityDetails project(
 ) => ToolActivityDetails.project(name: name, input: args, output: data);
 
 void main() {
+  for (final name in ['write_file', 'patch']) {
+    testWidgets('$name waits for its receipt before file preview and share', (
+      tester,
+    ) async {
+      const path = '/work/report.txt';
+      final args = name == 'write_file'
+          ? {'path': path, 'content': 'new bytes'}
+          : {'path': path, 'old_string': 'old', 'new_string': 'new'};
+      var opened = false;
+      var shared = false;
+      final call = ToolCallPresentation.live(
+        GatewayToolActivity(
+          name: name,
+          phase: GatewayToolActivityPhase.running,
+          arguments: jsonEncode(args),
+        ),
+      );
+      expect(call.outcome, ToolCallOutcome.running);
+      expect(call.activityDetails.resourceTarget, isNull);
+      expect(call.activityDetails.headerFacts, contains('File: $path'));
+      expect(call.activityDetails.request.first.copyable, isTrue);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ToolActivityDetailsView(
+                call: call,
+                onOpenResource: (_) async {
+                  opened = true;
+                },
+                onShareResource: (_) async {
+                  shared = true;
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.byTooltip('Preview file'), findsNothing);
+      expect(find.byTooltip('Share file'), findsNothing);
+      expect(
+        find.byTooltip(
+          name == 'write_file' ? 'Copy Content to write' : 'Copy Find',
+        ),
+        findsOneWidget,
+      );
+      expect(opened, isFalse);
+      expect(shared, isFalse);
+
+      final completed = ToolCallPresentation.live(
+        GatewayToolActivity(
+          name: name,
+          phase: GatewayToolActivityPhase.completed,
+          arguments: jsonEncode(args),
+          result: jsonEncode({
+            'resolved_path': '/work/actual.txt',
+            if (name == 'write_file') 'bytes_written': 9 else 'success': true,
+          }),
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ToolActivityDetailsView(
+                call: completed,
+                onOpenResource: (_) async {
+                  opened = true;
+                },
+                onShareResource: (resource) async {
+                  expect(resource.path, '/work/actual.txt');
+                  shared = true;
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.byTooltip('Preview file'), findsOneWidget);
+      expect(find.byTooltip('Share file'), findsOneWidget);
+      await tester.tap(find.byTooltip('Share file'));
+      await tester.pump();
+      expect(shared, isTrue);
+    });
+
+    test(
+      '$name empty or bookkeeping-only receipts cannot admit file actions',
+      () {
+        for (final output in [
+          null,
+          <String, Object?>{},
+          {'resolved_path': '/work/report.txt', '_warning': 'Caution'},
+        ]) {
+          final detail = ToolActivityDetails.project(
+            name: name,
+            input: {'path': '/work/report.txt'},
+            output: output,
+          );
+          expect(detail.resourceTarget, isNull);
+        }
+      },
+    );
+  }
+
   test('stock context parsing cannot turn code dates into file resources', () {
     const actualPath = 'tests/test_current_plan.py';
     const corruptedPath =
@@ -188,15 +298,64 @@ void main() {
       {'bytes_written': 0},
     );
     expect(unknownVerification.metadata, ['Wrote an empty file']);
+    expect(unknownVerification.resourceTarget, '/work/file.txt');
     expect(unknownVerification.request.single.copyable, isFalse);
     final refusal = project(
       'write_file',
       {'path': '/work/file.txt', 'content': 'requested'},
-      {'stale_write_blocked': true, 'error': 'The file was NOT modified.'},
+      {
+        'bytes_written': 0,
+        'stale_write_blocked': true,
+        'error': 'The file was NOT modified.',
+      },
     );
     expect(refusal.request.single.text, 'requested');
     expect(refusal.resourceTarget, isNull);
     expect(refusal.receiptState, ToolReceiptState.error);
+  });
+
+  test('patch successful receipt admits the actual surviving destination', () {
+    final changed = project(
+      'patch',
+      {'path': 'requested.py', 'old_string': 'old', 'new_string': 'new'},
+      {
+        'success': true,
+        'diff': '-old\n+new',
+        'resolved_path': '/work/actual.py',
+      },
+    );
+    expect(changed.resourceTarget, '/work/actual.py');
+    final deleted = project(
+      'patch',
+      {'path': '/work/actual.py'},
+      {
+        'success': true,
+        'files_deleted': ['/work/actual.py'],
+      },
+    );
+    expect(deleted.resourceTarget, isNull);
+    expect(deleted.response.single.resourceTarget, isNull);
+    final failed = project(
+      'patch',
+      {'path': '/work/actual.py'},
+      {'success': false, 'error': 'No change was applied.'},
+    );
+    expect(failed.resourceTarget, isNull);
+    final createdThenDeleted = project(
+      'patch',
+      {'mode': 'patch', 'patch': 'Requested patch'},
+      {
+        'success': true,
+        'files_created': ['/work/transient.py'],
+        'files_deleted': ['/work/transient.py'],
+      },
+    );
+    expect(
+      createdThenDeleted.response.every(
+        (block) => block.resourceTarget == null,
+      ),
+      isTrue,
+    );
   });
 
   test('patch no-change outranks files_modified bookkeeping', () {
@@ -266,6 +425,13 @@ void main() {
         isNot(contains('Missing tool')),
       );
       expect(partial.receiptState, ToolReceiptState.error);
+      expect(partial.resourceTarget, isNull);
+      expect(
+        partial.response
+            .singleWhere((b) => b.label == 'Created')
+            .resourceTarget,
+        '/work/new.py',
+      );
       expect(partial.metadata.any((s) => s.contains('verified')), isFalse);
     },
   );

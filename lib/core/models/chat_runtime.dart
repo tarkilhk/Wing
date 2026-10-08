@@ -10,6 +10,44 @@ enum ChatRecovery { ready, opening, offline, reconnecting }
 
 enum ChatMainActivity { working, thinking, writing, tool }
 
+/// Ordered native observations. Identities address presentation only.
+sealed class ChatActivityEntry {
+  const ChatActivityEntry();
+  Object get identity;
+}
+
+final class ChatToolEntry extends ChatActivityEntry {
+  const ChatToolEntry(this.activity);
+  final GatewayToolActivity activity;
+  @override
+  Object get identity => activity.toolId!;
+}
+
+final class ChatReasoningEntry extends ChatActivityEntry {
+  const ChatReasoningEntry({
+    required this.identity,
+    required this.text,
+    required this.source,
+    this.availableText,
+    this.running = false,
+  });
+  @override
+  final Object identity;
+  final String text;
+  final String source;
+
+  /// A separately delivered preview never replaces already streamed text.
+  final String? availableText;
+  final bool running;
+
+  ChatReasoningEntry sealed() => ChatReasoningEntry(
+    identity: identity,
+    text: text,
+    source: source,
+    availableText: availableText,
+  );
+}
+
 /// The correlation is issued by the runtime owner, not inferred from display text.
 class ChatApproval {
   ChatApproval({
@@ -77,7 +115,7 @@ class ChatRuntimeObservation {
     required this.compacting,
     required this.mainToolActivity,
     required Iterable<GatewayToolActivity> toolActivities,
-    required this.reasoning,
+    required Iterable<ChatActivityEntry> activityEntries,
     required Iterable<ChatApproval> approvals,
     required this.approvalPosition,
     required this.approvalTotal,
@@ -90,7 +128,8 @@ class ChatRuntimeObservation {
     required this.error,
     required this.decisionError,
     required this.decisionErrorRequestId,
-  }) : toolActivities = List.unmodifiable(toolActivities),
+  }) : activityEntries = List.unmodifiable(activityEntries),
+       toolActivities = List.unmodifiable(toolActivities),
        approvals = List.unmodifiable(approvals);
   final String runtimeId;
   final ChatExecution execution;
@@ -105,7 +144,7 @@ class ChatRuntimeObservation {
   final bool compacting;
   final GatewayToolActivity? mainToolActivity;
   final Iterable<GatewayToolActivity> toolActivities;
-  final String reasoning;
+  final List<ChatActivityEntry> activityEntries;
   final List<ChatApproval> approvals;
   final int approvalPosition;
   final int approvalTotal;

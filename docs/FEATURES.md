@@ -12,8 +12,8 @@
 - **Find the right chat.** Search, pin and group conversations; filter by profile, project or status. The Project filter lists projects and unassigned-chat groups belonging to the selected profiles; clear the Profile filter to see all profiles' projects. Recents shows chats with messages from the last 24 hours alongside ongoing work, with All, Running and Needs input filters.
 - **Keep browsing after changes.** Chat and project actions apply when Hermes confirms them. The list then refreshes in the background, keeping search, token counts and reading position available. Progress and Retry stay above the scrolling list; retrying a refresh does not repeat the action.
 - **Read the whole story.** Follow streamed replies, code, tables, tool activity and available reasoning. Find a message in a chat, open a result, or return to the latest reply.
-- **Understand each action.** Open Activity → Tools for readable call titles,
-  targets, exception notices and available timings. Expand a call for its request
+- **Understand each action.** Open Activity → Timeline for readable call titles,
+  targets, exception notices and available timings, with native reasoning between calls. Expand a call for its request
   and reported result: code/output, file content, Find/Replace and returned diffs,
   images/questions, search matches or readable tool data. Icon actions copy exact
   text, preview or share files/images, expand long previews, open a full view and wrap code; explanation text

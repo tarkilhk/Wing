@@ -10,8 +10,8 @@ agents work independently. Keep this purpose in view throughout each task.
 - Protect each incorrect pattern encountered with a small, deterministic linter
   where feasible. Use behavioral regressions for properties static checks cannot
   establish, such as lifetime, uncertainty and asynchronous ordering.
-- Prioritize completed production migrations and dead-code removal. Run focused
-  checks for each change and broad verification at integration milestones.
+- Prioritize completed production migrations and dead-code removal. Choose checks
+  using the verification policy below.
 - For parallel work, assign explicit module/file ownership and integrate bounded
   handoffs before starting dependent changes.
 
@@ -24,6 +24,14 @@ use the maintained [architecture map](docs/ARCHITECTURE.md) for new work.
 Before committing in a fresh checkout, enable the tracked lint hook using
 `python3 scripts/install_git_hooks.py`. See [local commit checks](CONTRIBUTING.md#local-commit-checks)
 for toolchain setup and staged-snapshot behavior.
+
+# Verification
+
+Before choosing tests, retrying a failure or preparing delivery, read and follow
+[verification scope and stopping](docs/TESTING.md#verification-scope-and-stopping).
+It owns focused checks, reuse of existing evidence, full-run triggers, timeout
+recovery and the stopping condition. A commit, push or local phone install alone
+does not require another full run.
 
 # Hermes deployment constraint
 

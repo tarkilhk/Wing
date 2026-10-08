@@ -111,7 +111,7 @@ final class TranscriptTimeline {
   }
 
   bool get joinsCurrentActivity =>
-      !hasLiveMessage && sections.isNotEmpty && sections.last.isTool;
+      !hasLiveMessage && sections.isNotEmpty && sections.last.isActivity;
 
   /// Post-frame visibility targets consult the current owner's rows, not a
   /// preceding frame's timeline. This returns identity only, never raw content.
@@ -186,12 +186,20 @@ final class TranscriptTimelineEntry {
 }
 
 final class TranscriptTimelineGroup {
-  TranscriptTimelineGroup._(Iterable<TranscriptTimelineEntry> messages)
-    : messages = List.unmodifiable(messages);
+  TranscriptTimelineGroup._(
+    Iterable<TranscriptTimelineEntry> messages, {
+    this.isReasoning = false,
+  }) : messages = List.unmodifiable(messages);
   final List<TranscriptTimelineEntry> messages;
-  bool get isTool => messages.last.message.role == 'tool';
+  final bool isReasoning;
+  Iterable<Object> get presentationIds => messages.map(
+    (entry) => isReasoning
+        ? ('reasoning', entry.presentationId)
+        : entry.presentationId,
+  );
+  bool get isTool => !isReasoning && messages.last.message.role == 'tool';
   String? get reviewText => messages.last.reviewText;
-  bool get isActivity => isTool || reviewText != null;
+  bool get isActivity => isReasoning || isTool || reviewText != null;
   List<TranscriptToolResult> get toolResults =>
       List.unmodifiable([for (final message in messages) ?message.tool]);
   bool containsMessage(int id) =>
@@ -204,10 +212,13 @@ final class TranscriptTimelineSection {
   final List<TranscriptTimelineGroup> groups;
   Iterable<TranscriptTimelineEntry> get messages =>
       groups.expand((group) => group.messages);
+  Iterable<Object> get presentationIds =>
+      groups.expand((group) => group.presentationIds);
   bool get isTool => groups.last.isTool;
   bool get isActivity => groups.last.isActivity;
-  int get toolCount =>
-      messages.where((entry) => entry.message.role == 'tool').length;
+  int get toolCount => groups
+      .where((group) => group.isTool)
+      .fold(0, (count, group) => count + group.toolResults.length);
   int get reviewCount =>
       messages.where((entry) => entry.reviewText != null).length;
   String? get latestReview => groups.last.reviewText;
@@ -221,18 +232,30 @@ final class TranscriptTimelineSection {
 List<TranscriptTimelineGroup> _groupRows(
   Iterable<TranscriptTimelineEntry> entries,
 ) {
-  final groups = <List<TranscriptTimelineEntry>>[];
+  final groups = <TranscriptTimelineGroup>[];
+  final tools = <TranscriptTimelineEntry>[];
+  void flushTools() {
+    if (tools.isEmpty) return;
+    groups.add(TranscriptTimelineGroup._(tools));
+    tools.clear();
+  }
+
   for (final entry in entries) {
     if (entry.suppressed) continue;
-    if (entry.message.role == 'tool' &&
-        groups.isNotEmpty &&
-        groups.last.last.message.role == 'tool') {
-      groups.last.add(entry);
+    if (entry.reasoning.isNotEmpty && entry.interAgentSender == null) {
+      flushTools();
+      groups.add(TranscriptTimelineGroup._([entry], isReasoning: true));
+    }
+    if (entry.emptyAssistant) continue;
+    if (entry.message.role == 'tool') {
+      tools.add(entry);
     } else {
-      groups.add([entry]);
+      flushTools();
+      groups.add(TranscriptTimelineGroup._([entry]));
     }
   }
-  return List.unmodifiable(groups.map(TranscriptTimelineGroup._));
+  flushTools();
+  return List.unmodifiable(groups);
 }
 
 List<TranscriptTimelineSection> _groupSections(
@@ -240,7 +263,6 @@ List<TranscriptTimelineSection> _groupSections(
 ) {
   final sections = <List<TranscriptTimelineGroup>>[];
   for (final group in groups) {
-    if (group.messages.last.emptyAssistant) continue;
     if (group.isActivity &&
         sections.isNotEmpty &&
         sections.last.last.isActivity) {
@@ -267,6 +289,32 @@ String _reasoning(Map<String, dynamic> row) {
   ]) {
     final value = row[key];
     if (value is String && value.trim().isNotEmpty) return value;
+  }
+  final details = row['reasoning_details'];
+  if (details is List) {
+    final text = [
+      for (final detail in details)
+        if (detail is Map)
+          if (detail['type'] == 'reasoning.text' && detail['text'] is String)
+            detail['text'] as String
+          else if (detail['type'] == 'reasoning.summary' &&
+              detail['summary'] is String)
+            detail['summary'] as String,
+    ].where((text) => text.trim().isNotEmpty).join('\n\n');
+    if (text.isNotEmpty) return text;
+  }
+  final items = row['codex_reasoning_items'];
+  if (items is List) {
+    return [
+      for (final item in items)
+        if (item is Map && item['type'] == 'reasoning')
+          if (item['summary'] is List)
+            for (final part in item['summary'] as List)
+              if (part is Map &&
+                  part['type'] == 'summary_text' &&
+                  part['text'] is String)
+                part['text'] as String,
+    ].where((text) => text.trim().isNotEmpty).join('\n\n');
   }
   return '';
 }

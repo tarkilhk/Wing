@@ -26,7 +26,7 @@ check cannot establish delivered event order or rendered wrapping. The original
 automatic/manual regression was proven red before implementation. Run
 `flutter test --no-pub test/profile_activity_status_test.dart`.
 
-Open Activity in a conversation, then Tools. Every backend call has an individual
+Open Activity in a conversation, then Timeline. Every backend call has an individual
 action row: a single-line action title, one single-line input detail and timing.
 URLs omit the HTTP(S) prefix in the subtitle; complete inputs remain in details.
 Warnings and failures replace the input subtitle with a one-line exception.
@@ -43,8 +43,78 @@ no minimum row height or inter-row spacing. Both lines ellipsize at the availabl
 width and grow with text scaling. Full titles and inputs are available expanded;
 16 dp icons and
 rotating arrows fit the compact text rows.
-Tasks, Agents, Work and Thinking retain their selection;
+Timeline, Tasks, Agents and Work retain their selection;
 approvals and questions remain outside tool disclosures.
+
+## Native reasoning timeline, 9 October 2026
+
+Verified latest stock upstream main
+[`aa74e184ea779994af642ab4f888e10a95415d90`](https://github.com/NousResearch/hermes-agent/commit/aa74e184ea779994af642ab4f888e10a95415d90):
+`tui_gateway/contracts/events.py`, `agent_callbacks.py`, `tool_progress.py`,
+`event_replay.py`, `session_history.py`, `agent/turn_response_intake.py`,
+`agent/reasoning_summaries.py` and `agent/codex_responses_adapter.py`.
+
+Activity's Timeline tab interleaves reasoning with individual tool calls.
+`ChatRuntime` owns the transient ordered `ChatActivityEntry` observations.
+Consecutive `reasoning.delta` text, including whitespace chunks, extends one
+immutable reasoning entry. A native tool event, assistant output, interim
+segment or terminal observation closes that run. Subsequent reasoning starts
+another row. Tool updates replace their original entry by exact backend call
+identity; completion order cannot reorder calls. The gateway delivers native
+per-session events in sequenced order; the renderer never sorts by timestamps.
+
+`reasoning.available` supplies received text, potentially only the producer's
+500-character preview. A standalone receipt makes its own completed row. When
+it follows an open streamed run, the original streamed text remains intact and
+the separately received text stays in Raw details. The client does not infer
+completeness from text length. There are no client text caps, invented insight
+counts or reasoning timers. Generic `thinking.delta` progress is not reasoning.
+Native event source stays quiet in Raw details; the verbose display hint does
+not earn another field or control.
+
+`TranscriptTimeline` independently projects saved assistant reasoning at its
+native message position. Reasoning-only assistant rows stay visible between
+calls. A reasoning attachment on a prose answer has its own Activity projection
+before that answer, with separate presentation identity for scroll/expansion
+stability. String reasoning fields and readable `reasoning.text`,
+`reasoning.summary` and Codex `summary_text` parts are eligible. Opaque encrypted
+content and signatures cannot become displayed reasoning. Inter-agent reply
+reasoning stays inside its existing reply disclosure.
+
+Live activity remains above the composer. Interim output seals its current
+reasoning run without dropping the ordered live list. Successful authoritative
+history refresh replaces completed live activity with saved observations;
+active reasoning and running calls remain live. A new turn or replacement
+runtime clears the transient list. No live segmentation is persisted or
+reconstructed during reopen. Live and saved rows need not be identical.
+`message.complete.reasoning` is the only reasoning attached to a provisional
+final answer; accumulated live text is not copied into assistant history rows.
+
+Reasoning uses `CompactActivityRow`, a one-line supplied text preview and the
+shared Activity detail frame. Expand to read all received text. Copy uses the
+exact received text; the eye appears only for actual overflow and opens the
+existing fuller viewer. Actions are icon-only. Timeline replaces the separate
+Thinking footer; Tasks, Agents and Work keep their selection and workflows.
+
+`NATIVE_REASONING_TIMELINE` is guarded by
+`test/profile_execution_activity_test.dart`, `test/profile_activity_tabs_test.dart`
+and `test/profile_transcript_test.dart`. The isolated original saved projection
+fails the reasoning-only-row assertion. Behavioral checks cover interleaving,
+late tool completion, immutable observations, exact whitespace/long text,
+preview preservation, runtime/turn lifetime, native structured field selection,
+native turn-error closure, category state and scroll anchoring. Static checks cannot establish delivered
+event order or provider persistence. Phone render checks cover light/dark at
+390 dp/100% and 320 dp/200%, compact mixed rows, errors and overflowing reasoning.
+Run `flutter test --no-pub test/profile_execution_activity_test.dart test/profile_activity_tabs_test.dart test/profile_transcript_test.dart`.
+Opt-in captures use `CAPTURE_REASONING_TIMELINE=true` and `CAPTURE_FONT_DIR`
+pointing to Roboto/Material Icons; images remain in ignored build output.
+The inspected captures use the shared frame and readable fonts in both themes;
+exact copy and fuller-view recovery are exercised in the same render matrix.
+Local served preview bytes match the generated captures. These checks use native
+contract fixtures; they do not establish a live provider's reasoning persistence.
+`ARCH_CHAT_RUNTIME_OBSERVATION` requires the final `activityEntries` observation
+in place of the retired single reasoning field; its finite fixtures reject
+mutable or missing activity observations.
 
 ## Stock backend contract
 
@@ -68,6 +138,8 @@ backend patches, plugins or custom endpoints. Sources are upstream
   a duration stops the estimate and leaves timing absent. Completion alone means
   completed, not succeeded. Explicit result success, errors, terminal exit codes,
   unchanged skill status and returned 404 pages determine readable outcomes.
+  A reported failure takes precedence over a generic warning status. Warning
+  payloads remain inspectable, and specific failure explanations stay intact.
 - A saved tool row is joined to an assistant `tool_calls[].function` by exact
   `tool_call_id`, even when the assistant has no prose. Inputs outside the loaded
   history window stay unavailable; no adjacency/name guesses are made.
@@ -100,8 +172,12 @@ The stock REST history still omits ordinary tool durations.
 `ProfileGateway.completedToolActivities` reads the current runtime's retained
 completions from `last_seen: 0`, selects exact matching runtime identities and
 valid measured durations, and deduplicates in last-completion order.
-`TranscriptReading.refresh` reads those receipts alongside the authoritative
-saved page and enriches actual rows by exact tool-call ID. Live measured receipts
+`TranscriptReading.refresh` starts those reads alongside the authoritative
+saved page, publishes the saved page without waiting for optional replay, and
+enriches actual rows by exact tool-call ID when replay arrives. Loading state
+and ordinary message failures belong to the authoritative history read. A late
+valid enrichment also schedules persistence without requiring another user
+action. Live measured receipts
 win over a delayed recovery response. The existing 256-receipt bound retains the
 newest recovered completions. The controller rejects reads after runtime
 replacement; the reading generation rejects superseded or retired reads.
@@ -109,6 +185,10 @@ Replayed starts, turn events and pending inputs never enter execution owners.
 Partial replay can still supply a retained measurement for an exact call; it
 cannot establish a complete turn. A failed timing read leaves saved messages
 readable. Recovered durations enter the existing passive reading cache.
+
+`test/profile_execution_activity_test.dart` holds replay open while checking
+that saved history is already visible and no longer loading. It also checks
+late persistence, failed replay, superseded reads and runtime retirement.
 
 `TOOL_TIMING_RECOVERY` is guarded by
 `test/profile_execution_activity_test.dart`: the actual controller/history path
@@ -329,7 +409,7 @@ checks cannot establish actual rendered height or the available payload at
 runtime. The same cases run on Android through
 `integration_test/profile_expansion_scroll_test.dart`.
 The transcript scroll controller retains both ends of the corrected scroll range
-across lazy-list layout estimates. Switching a long Tools section to a short
+across lazy-list layout estimates. Switching a long Timeline section to a short
 Agents section holds the tapped tab and its content in view, including when the
 new height would otherwise cross the natural bottom boundary. Collapsing a
 disclosure instead clamps its corrected position to the natural bottom boundary
@@ -441,7 +521,7 @@ Existing current-runtime tabs take precedence when sharing the latest section.
 Saved child results are passive values with no invented subagent ID or control
 capability. Expand a saved row to inspect output; steering and interruption
 remain exclusive to verified current-runtime agents. The original tool result
-remains available under Tools, including any fields not summarized in Agents.
+remains available under Timeline, including any fields not summarized in Agents.
 Async completion notices retain their existing expandable result display;
 stock notice metadata does not supply a structured per-child roster.
 
@@ -464,7 +544,7 @@ timing in `test/profile_tool_call_test.dart`.
 
 ## Inline requests and receipts
 
-Expanded Tools show one card aligned with the leading activity icon. The
+Expanded tool rows show one card aligned with the leading activity icon. The
 [Studio charter](DESIGN_SYSTEM.md#user-value-first-activity) owns appearance and
 useful-only action policy. The [field decisions](design/activity-field-policy.md)
 account for all 32 catalog identities, the 28 current dedicated contracts and

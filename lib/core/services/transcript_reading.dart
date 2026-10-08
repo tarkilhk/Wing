@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../models/notification_focus.dart';
 import '../models/gateway_activity.dart';
 import '../models/answer_versions.dart';
@@ -15,6 +17,8 @@ import 'workspace_connection_failure.dart';
 /// It borrows transport; the coordinator supplies captured publication authority.
 final class TranscriptReading {
   TranscriptReading({required this._gateway});
+
+  static const _observedToolLimit = 256;
 
   final ProfileGateway _gateway;
   WorkspaceScope get scope => _gateway.scope;
@@ -85,7 +89,7 @@ final class TranscriptReading {
     if (_closed || id == null) return;
     if (identical(_observedTools[id], activity)) return;
     _observedTools[id] = activity;
-    if (_observedTools.length > 256) {
+    if (_observedTools.length > _observedToolLimit) {
       _observedTools.remove(_observedTools.keys.first);
     }
     if (!_messages.any(
@@ -590,14 +594,6 @@ final class TranscriptReading {
       }
       final page = await historyRead;
       if (!valid()) return false;
-      final tools = await toolRead;
-      if (!valid()) return false;
-      for (final activity in tools) {
-        // A live completion arriving during the read remains authoritative.
-        if (_observedTools[activity.toolId]?.durationSeconds == null) {
-          observeTool(activity);
-        }
-      }
       final historyApplyStarted = CompletionDiagnostics.enabled
           ? CompletionDiagnostics.start()
           : 0;
@@ -647,6 +643,9 @@ final class TranscriptReading {
         _messages = List.unmodifiable([...older.map(_freezeRow), ..._messages]);
         _nextHistoryOffset = olderPage.nextOffset;
       }
+      // Authoritative history owns loading and refresh completion. Optional
+      // replay may span many runtime rings; publish the page without waiting.
+      unawaited(_enrichCompletedTools(toolRead, valid, onChanged));
       return true;
     } catch (failure) {
       if (valid()) {
@@ -661,6 +660,25 @@ final class TranscriptReading {
         if (canPublish()) onChanged();
       }
     }
+  }
+
+  Future<void> _enrichCompletedTools(
+    Future<List<GatewayToolActivity>> read,
+    bool Function() canPublish,
+    void Function() onChanged,
+  ) async {
+    final tools = await read;
+    if (!canPublish()) return;
+    final previous = _messages;
+    for (final activity in tools.skip(
+      tools.length > _observedToolLimit ? tools.length - _observedToolLimit : 0,
+    )) {
+      // A live completion arriving during replay remains authoritative.
+      if (_observedTools[activity.toolId]?.durationSeconds == null) {
+        observeTool(activity);
+      }
+    }
+    if (!identical(previous, _messages)) onChanged();
   }
 
   Future<List<GatewayToolActivity>> _readCompletedTools(

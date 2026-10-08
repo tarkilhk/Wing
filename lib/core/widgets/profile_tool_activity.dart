@@ -21,16 +21,12 @@ class ProfileActivitySection extends StatelessWidget {
     this.subtitle,
     this.initiallyExpanded = false,
     this.tabs = const [],
-    this.thinking,
-    this.toolCount = 0,
   });
 
   final List<Widget> children;
   final Widget? subtitle;
   final bool initiallyExpanded;
   final List<ProfileActivityTab> tabs;
-  final Widget? thinking;
-  final int toolCount;
 
   @override
   Widget build(BuildContext context) => ProfileTranscriptDisclosure(
@@ -43,8 +39,8 @@ class ProfileActivitySection extends StatelessWidget {
         tabs: [
           if (children.isNotEmpty)
             ProfileActivityTab(
-              id: 'tools',
-              label: toolCount > 0 ? 'Tools $toolCount' : 'Tools',
+              id: 'timeline',
+              label: 'Timeline',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: children,
@@ -52,7 +48,6 @@ class ProfileActivitySection extends StatelessWidget {
             ),
           ...tabs,
         ],
-        thinking: thinking,
       ),
     ],
   );
@@ -68,7 +63,6 @@ class ProfileToolActivitySection extends StatelessWidget {
     this.showLatestReview = false,
     this.currentActivity = const [],
     this.tabs = const [],
-    this.thinking,
     this.liveToolCount = 0,
     this.loadImage,
     this.onOpenResource,
@@ -80,7 +74,6 @@ class ProfileToolActivitySection extends StatelessWidget {
   final bool showLatestReview;
   final List<Widget> currentActivity;
   final List<ProfileActivityTab> tabs;
-  final Widget? thinking;
   final int liveToolCount;
   final Future<Uint8List> Function(String)? loadImage;
   final Future<void> Function(ChatOutput)? onOpenResource;
@@ -130,8 +123,6 @@ class ProfileToolActivitySection extends StatelessWidget {
             child: ProfileSavedAgents(agents: saved.agents),
           ),
       ],
-      thinking: thinking,
-      toolCount: total,
       initiallyExpanded: expanded,
       subtitle: Text(
         [
@@ -141,7 +132,24 @@ class ProfileToolActivitySection extends StatelessWidget {
       ),
       children: [
         for (final group in section.groups)
-          if (group.reviewText case final review?)
+          if (group.isReasoning)
+            ProfileReasoningDisclosure(
+              key:
+                  group.messages.first.emptyAssistant &&
+                      expandedMessageId != null &&
+                      group.containsMessage(expandedMessageId!)
+                  ? focusedMessageKey
+                  : ValueKey((
+                      'saved-reasoning',
+                      group.messages.first.presentationId,
+                    )),
+              text: group.messages.first.reasoning,
+              initiallyExpanded:
+                  group.messages.first.emptyAssistant &&
+                  expandedMessageId != null &&
+                  group.containsMessage(expandedMessageId!),
+            )
+          else if (group.reviewText case final review?)
             ProfileReviewNoticeRow(
               key: group.messages.last.message.id == expandedMessageId
                   ? focusedMessageKey
@@ -167,7 +175,7 @@ class ProfileToolActivitySection extends StatelessWidget {
 }
 
 /// Contiguous outputs retain their transcript grouping and focus identities;
-/// every call has its own readable disclosure inside the Tools tab.
+/// every call has its own readable disclosure inside the Timeline tab.
 class ProfileToolActivity extends StatelessWidget {
   ProfileToolActivity({
     super.key,

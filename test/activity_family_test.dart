@@ -533,7 +533,7 @@ void main() {
             await tester.tap(find.text('python report.py'));
             await tester.pumpAndSettle();
           } else if (entry.key == 'reasoning') {
-            await tester.tap(find.text('Thought'));
+            await tester.tap(find.text('Reasoning'));
             await tester.pumpAndSettle();
           }
           await tester.settleMarkdown();

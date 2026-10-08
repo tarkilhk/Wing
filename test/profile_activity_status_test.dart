@@ -335,7 +335,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(label(), 'Hermes is working…');
     // Accumulated text and reasoning remain in the transcript, not the status.
     expect(chat.reading.streaming, isNotEmpty);
-    expect(chat.runtime.reasoning, isNotEmpty);
+    expect(
+      chat.runtime.activityEntries.whereType<ChatReasoningEntry>().last.text,
+      isNotEmpty,
+    );
     host.event('a', 'message.delta', {'text': 'Here are the results.'});
     host.event('a', 'reasoning.available', {'text': 'Earlier reasoning'});
     expect(label(), 'Writing response…');

@@ -138,6 +138,7 @@ class Host {
   Completer<void>? heldHistoryStarted;
   Completer<void>? heldHistoryDelay;
   Object? heldHistoryFailure;
+  Completer<void>? heldTimingLog;
   Completer<void>? projectDelay;
   final projectPaths = <String, String?>{};
   bool wrongProjectOwner = false;
@@ -193,7 +194,10 @@ class Host {
       disconnect: () => disconnectCalls++,
       get: (path, query) async {
         reads.add((path, query));
-        if (path == 'logs') return {'file': 'gui', 'lines': <String>[]};
+        if (path == 'logs') {
+          if (heldTimingLog case final held?) await held.future;
+          return {'file': 'gui', 'lines': <String>[]};
+        }
         await delays[name]?.future;
         if (failures.contains(name)) throw Exception('offline');
         if (path == 'sessions') {
@@ -2380,13 +2384,19 @@ void main() {
       host.event('a', 'message.delta', {'text': 'Second reply'});
       expect(chat.runtime.execution, ChatExecution.running);
       expect(chat.reading.streaming, 'Second reply');
-      expect(chat.runtime.reasoning, 'Second reasoning');
+      expect(
+        chat.runtime.activityEntries.whereType<ChatReasoningEntry>().last.text,
+        'Second reasoning',
+      );
 
       host.delays['a']!.complete();
       await Future<void>.delayed(Duration.zero);
       expect(chat.runtime.execution, ChatExecution.running);
       expect(chat.reading.streaming, 'Second reply');
-      expect(chat.runtime.reasoning, 'Second reasoning');
+      expect(
+        chat.runtime.activityEntries.whereType<ChatReasoningEntry>().last.text,
+        'Second reasoning',
+      );
 
       host.historyMessages = [
         {'id': 1, 'role': 'assistant', 'content': 'First reply'},
@@ -2726,6 +2736,14 @@ void main() {
 
   for (final missingFact in ['access', 'live observation']) {
     test('automatic queue drain requires confirmed $missingFact', () async {
+      // History can finish while optional timing reads remain in flight. Hold
+      // their HTTP success so it cannot supply fresh access evidence after we
+      // deliberately remove one of the queue's required connection facts.
+      final timingLog = Completer<void>();
+      host.heldTimingLog = timingLog;
+      addTearDown(() {
+        if (!timingLog.isCompleted) timingLog.complete();
+      });
       final chat = await controller.createChat(canDispatch: () => true);
       final profile = chat.key.workspace.profileName;
       expect(
@@ -2756,6 +2774,7 @@ void main() {
         'Keep until connected',
       );
 
+      timingLog.complete();
       controller.connectionStatus.accessAvailable();
       controller.connectionStatus.liveChanged(profile, true);
       await controller.beginQueuedPromptEdit(

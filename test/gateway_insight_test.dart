@@ -3,7 +3,7 @@ import 'package:wing/core/models/gateway_insight.dart';
 
 void main() {
   group('GatewayReasoningUpdate', () {
-    test('appends deltas and replaces them with reasoning.available', () {
+    test('retains exact native delta and available payloads', () {
       final first = GatewayReasoningUpdate.fromGatewayEvent('reasoning.delta', {
         'text': 'Check the ',
       })!;
@@ -16,12 +16,9 @@ void main() {
         {'text': 'Verified the complete gateway contract.', 'verbose': true},
       )!;
 
-      final streamed = second.applyTo(first.applyTo(''));
-      expect(streamed, 'Check the gateway contract.');
-      expect(
-        available.applyTo(streamed),
-        'Verified the complete gateway contract.',
-      );
+      expect(first.text, 'Check the ');
+      expect(second.text, 'gateway contract.');
+      expect(available.text, 'Verified the complete gateway contract.');
     });
 
     test('ignores unrelated, empty, and NUL-only events', () {

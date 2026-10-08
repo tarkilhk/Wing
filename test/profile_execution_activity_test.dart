@@ -1,9 +1,14 @@
+import 'package:wing/core/models/chat_runtime.dart';
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/models/gateway_todo.dart';
@@ -14,6 +19,10 @@ import 'package:wing/core/services/transcript_reading.dart';
 import 'package:wing/core/services/workspace_snapshot_store.dart';
 import 'package:wing/core/models/transcript_reading.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/chat_runtime.dart' as execution;
+import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,6 +30,21 @@ import 'profile_workspace_controller_test.dart' show Host;
 import 'helpers/pump_markdown_widget.dart';
 
 void main() {
+  setUpAll(() async {
+    if (!const bool.fromEnvironment('CAPTURE_REASONING_TIMELINE')) return;
+    const root = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final font in {
+      'Roboto': 'Roboto-Regular.ttf',
+      'MaterialIcons': 'MaterialIcons-Regular.otf',
+    }.entries) {
+      await (FontLoader(font.key)..addFont(
+            File(
+              '$root/${font.value}',
+            ).readAsBytes().then((bytes) => bytes.buffer.asByteData()),
+          ))
+          .load();
+    }
+  });
   late Host host;
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
@@ -96,6 +120,7 @@ void main() {
         'open_requests': [],
       };
       await controller.refreshHistory(chat);
+      await Future<void>.delayed(Duration.zero);
       final timeline = TranscriptTimeline.project(
         chat.reading.messages,
         presentationId: chat.reading.messagePresentationId,
@@ -157,6 +182,7 @@ void main() {
       };
       final execution = chat.runtime.execution;
       await controller.refreshHistory(chat);
+      await Future<void>.delayed(Duration.zero);
       expect(chat.reading.messages, hasLength(5));
       expect(chat.reading.messages.map((row) => row['duration_s']).toList(), [
         0.195,
@@ -201,6 +227,7 @@ void main() {
         ],
       };
       await controller.refreshHistory(chat);
+      await Future<void>.delayed(Duration.zero);
       expect(chat.reading.messages.first['duration_s'], isNull);
       expect(chat.reading.messages.last['duration_s'], .511);
     },
@@ -245,9 +272,286 @@ void main() {
   });
 
   test(
-    'late timing recovery cannot overwrite live completion or a retired read',
+    'saved history publishes before held timing replay and late receipts persist',
     () async {
-      for (final retired in [false, true]) {
+      host.historyMessages = [
+        {
+          'id': 21,
+          'role': 'tool',
+          'tool_call_id': 'measured',
+          'content': 'File contents',
+        },
+      ];
+      final held = Completer<Map<String, dynamic>>();
+      final started = Completer<void>();
+      final enriched = Completer<void>();
+      final base = host.gateway(chat.key.workspace);
+      final reading = TranscriptReading(
+        gateway: ProfileGateway(
+          scope: chat.key.workspace,
+          discover: base.discover,
+          get: base.read,
+          rpc: (method, params) async {
+            if (method == 'session.events.since') {
+              started.complete();
+              return held.future;
+            }
+            return base.call(method, params);
+          },
+        ),
+      );
+      addTearDown(() {
+        reading.dispose();
+        if (!held.isCompleted) held.complete({'events': []});
+      });
+      final refresh = reading.refresh(
+        sessionId: chat.key.sessionId,
+        runtimeId: chat.runtime.runtimeId,
+        canPublish: () => true,
+        onChanged: () {
+          if (reading.messages.firstOrNull?['duration_s'] == .195) {
+            enriched.complete();
+          }
+        },
+      );
+      await started.future;
+      await Future<void>.delayed(Duration.zero);
+      expect(reading.messages.single['content'], 'File contents');
+      expect(reading.messages.single['duration_s'], isNull);
+      expect(reading.historyLoading, isFalse);
+      expect(await refresh, isTrue);
+      final presentation = reading.messagePresentationId(
+        reading.messages.single,
+      );
+      held.complete({
+        'events': [
+          {
+            'type': 'tool.complete',
+            'session_id': chat.runtime.runtimeId,
+            'payload': {
+              'tool_id': 'measured',
+              'name': 'read_file',
+              'duration_s': .195,
+            },
+          },
+        ],
+      });
+      await enriched.future;
+      expect(reading.messages.single['duration_s'], .195);
+      expect(reading.historyLoading, isFalse);
+      expect(reading.historyError, isNull);
+      expect(
+        reading.messagePresentationId(reading.messages.single),
+        same(presentation),
+      );
+      expect(reading.captureToolDurations().single, {
+        'id': 21,
+        'tool_call_id': 'measured',
+        'duration_s': .195,
+      });
+      expect(reading.captureSnapshot().messages.single['duration_s'], .195);
+      expect(reading.toolDurationRevision, 1);
+    },
+  );
+
+  test('controller persists late replay without another user action', () async {
+    final preferences = await SharedPreferences.getInstance();
+    final connection = controller.connection;
+    controller.dispose();
+    final held = Completer<Map<String, dynamic>>();
+    var holdReplay = false;
+    controller = ProfileWorkspaceController(
+      connectionIdentity: 'late-replay-persistence',
+      access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+      preferences: preferences,
+      appPreferences: appPreferences,
+      gatewayFactory: (scope) {
+        final base = host.gateway(scope);
+        late final ProfileGateway gateway;
+        gateway = ProfileGateway(
+          scope: scope,
+          discover: base.discover,
+          get: base.read,
+          rpc: (method, params) {
+            if (holdReplay && method == 'session.events.since') {
+              return held.future;
+            }
+            return base.call(method, params);
+          },
+          connect: () {
+            base.onEvent = gateway.onEvent;
+            base.onConnectionChanged = gateway.onConnectionChanged;
+            return base.connect();
+          },
+          close: base.close,
+          disconnect: base.disconnect,
+        );
+        return gateway;
+      },
+    );
+    addTearDown(() {
+      if (!held.isCompleted) held.complete({'events': []});
+    });
+    await controller.initialize();
+    chat = await controller.createChat(canDispatch: () => true);
+    host.historyMessages = [
+      {'id': 20, 'role': 'user', 'content': 'Read the file'},
+      {
+        'id': 21,
+        'role': 'tool',
+        'tool_call_id': 'late-measured',
+        'content': 'File contents',
+      },
+    ];
+    holdReplay = true;
+    await controller.refreshHistory(chat);
+    final store = WorkspaceSnapshotStore(
+      preferences,
+      'late-replay-persistence',
+    );
+    expect(chat.reading.historyLoading, isFalse);
+    expect(chat.reading.messages.last['duration_s'], isNull);
+    held.complete({
+      'events': [
+        {
+          'type': 'tool.complete',
+          'session_id': chat.runtime.runtimeId,
+          'payload': {
+            'tool_id': 'late-measured',
+            'name': 'read_file',
+            'duration_s': .195,
+          },
+        },
+      ],
+    });
+    // Drain async storage work; no edit, navigation or disposal can flush it.
+    for (
+      var i = 0;
+      i < 30 && store.readToolDurations('a', chat.key.sessionId).isEmpty;
+      i++
+    ) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(store.readToolDurations('a', chat.key.sessionId), [
+      {'id': 21, 'tool_call_id': 'late-measured', 'duration_s': .195},
+    ]);
+    expect(chat.reading.messages.last['duration_s'], .195);
+  });
+
+  test('failed held timing replay leaves published history intact', () async {
+    host.historyMessages = [
+      {'id': 21, 'role': 'assistant', 'content': 'Saved answer'},
+    ];
+    final held = Completer<Map<String, dynamic>>();
+    final base = host.gateway(chat.key.workspace);
+    final reading = TranscriptReading(
+      gateway: ProfileGateway(
+        scope: chat.key.workspace,
+        discover: base.discover,
+        get: base.read,
+        rpc: (method, params) async {
+          if (method == 'session.events.since') return held.future;
+          return base.call(method, params);
+        },
+      ),
+    );
+    addTearDown(() {
+      reading.dispose();
+      if (!held.isCompleted) held.complete({'events': []});
+    });
+    var publications = 0;
+    expect(
+      await reading.refresh(
+        sessionId: chat.key.sessionId,
+        runtimeId: chat.runtime.runtimeId,
+        canPublish: () => true,
+        onChanged: () => publications++,
+      ),
+      isTrue,
+    );
+    expect(reading.messages.single['content'], 'Saved answer');
+    expect(reading.historyLoading, isFalse);
+    final published = publications;
+    held.completeError(StateError('Replay lost connection'));
+    await Future<void>.delayed(Duration.zero);
+    expect(reading.messages.single['content'], 'Saved answer');
+    expect(reading.historyError, isNull);
+    expect(publications, published);
+  });
+
+  test('late replay cannot overwrite a live measured completion', () async {
+    for (final seconds in [0.0, .42]) {
+      host.historyMessages = [
+        {
+          'id': 21,
+          'role': 'tool',
+          'tool_call_id': 'measured',
+          'content': 'File contents',
+        },
+      ];
+      final held = Completer<Map<String, dynamic>>();
+      final base = host.gateway(chat.key.workspace);
+      final reading = TranscriptReading(
+        gateway: ProfileGateway(
+          scope: chat.key.workspace,
+          discover: base.discover,
+          get: base.read,
+          rpc: (method, params) async {
+            if (method == 'session.events.since') return held.future;
+            return base.call(method, params);
+          },
+        ),
+      );
+      addTearDown(() {
+        reading.dispose();
+        if (!held.isCompleted) held.complete({'events': []});
+      });
+      var publications = 0;
+      expect(
+        await reading.refresh(
+          sessionId: chat.key.sessionId,
+          runtimeId: chat.runtime.runtimeId,
+          canPublish: () => true,
+          onChanged: () => publications++,
+        ),
+        isTrue,
+      );
+      reading.observeTool(
+        GatewayToolActivity.fromGatewayEvent('tool.complete', {
+          'tool_id': 'measured',
+          'name': 'read_file',
+          'duration_s': seconds,
+        })!,
+      );
+      final published = publications;
+      held.complete({
+        'events': [
+          {
+            'type': 'tool.complete',
+            'session_id': chat.runtime.runtimeId,
+            'payload': {
+              'tool_id': 'measured',
+              'name': 'read_file',
+              'duration_s': .195,
+            },
+          },
+        ],
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(reading.messages.single['duration_s'], seconds);
+      expect(publications, published);
+    }
+  });
+
+  test(
+    'late replay rejects superseded, replaced, cancelled and disposed reads',
+    () async {
+      for (final retirement in [
+        'superseded',
+        'replaced',
+        'cancelled',
+        'disposed',
+      ]) {
         host.historyMessages = [
           {
             'id': 21,
@@ -257,8 +561,8 @@ void main() {
           },
         ];
         final held = Completer<Map<String, dynamic>>();
-        final started = Completer<void>();
         final base = host.gateway(chat.key.workspace);
+        var replayReads = 0;
         final reading = TranscriptReading(
           gateway: ProfileGateway(
             scope: chat.key.workspace,
@@ -266,30 +570,39 @@ void main() {
             get: base.read,
             rpc: (method, params) async {
               if (method == 'session.events.since') {
-                started.complete();
-                return held.future;
+                if (replayReads++ == 0) return held.future;
+                return {'events': []};
               }
               return base.call(method, params);
             },
           ),
         );
-        addTearDown(reading.dispose);
+        addTearDown(() {
+          reading.dispose();
+          if (!held.isCompleted) held.complete({'events': []});
+        });
         var current = true;
-        final refresh = reading.refresh(
+        var publications = 0;
+        Future<bool> refresh() => reading.refresh(
           sessionId: chat.key.sessionId,
           runtimeId: chat.runtime.runtimeId,
           canPublish: () => current,
-          onChanged: () {},
+          onChanged: () => publications++,
         );
-        await started.future;
-        reading.observeTool(
-          GatewayToolActivity.fromGatewayEvent('tool.complete', {
-            'tool_id': 'measured',
-            'name': 'read_file',
-            'duration_s': .42,
-          })!,
-        );
-        if (retired) current = false;
+        expect(await refresh(), isTrue);
+        expect(reading.messages.single['duration_s'], isNull);
+        switch (retirement) {
+          case 'superseded':
+            expect(await refresh(), isTrue);
+          case 'replaced':
+            current = false;
+            reading.resetHistorySegment();
+          case 'cancelled':
+            reading.cancelReads();
+          case 'disposed':
+            reading.dispose();
+        }
+        final published = publications;
         held.complete({
           'events': [
             {
@@ -303,12 +616,10 @@ void main() {
             },
           ],
         });
-        expect(await refresh, !retired);
-        if (retired) {
-          expect(reading.messages, isEmpty);
-        } else {
-          expect(reading.messages.single['duration_s'], .42);
-        }
+        await Future<void>.delayed(Duration.zero);
+        expect(reading.messages.single['duration_s'], isNull);
+        expect(reading.captureToolDurations(), isEmpty);
+        expect(publications, published);
       }
     },
   );
@@ -534,22 +845,36 @@ void main() {
   );
 
   test(
-    'reasoning appends, replaces, and stays with the runtime owner',
+    'reasoning preserves streamed text and native preview with its runtime',
     () async {
       host.event('a', 'reasoning.delta', {'text': 'Check the '});
       host.event('a', 'reasoning.delta', {'text': 'contract.'});
-      expect(chat.runtime.reasoning, 'Check the contract.');
+      expect(
+        chat.runtime.activityEntries.whereType<ChatReasoningEntry>().last.text,
+        'Check the contract.',
+      );
       host.event('a', 'reasoning.available', {
         'text': 'Verified reasoning.',
         'verbose': true,
       });
-      expect(chat.runtime.reasoning, 'Verified reasoning.');
+      final reasoning = chat.runtime.activityEntries
+          .whereType<ChatReasoningEntry>()
+          .single;
+      expect(reasoning.text, 'Check the contract.');
+      expect(reasoning.availableText, 'Verified reasoning.');
+      expect(reasoning.running, isFalse);
 
       await controller.switchProfile('b');
       final other = await controller.createChat(canDispatch: () => true);
       host.event('a', 'reasoning.delta', {'text': ' Owner A'});
-      expect(chat.runtime.reasoning, 'Verified reasoning. Owner A');
-      expect(other.runtime.reasoning, isEmpty);
+      expect(
+        chat.runtime.activityEntries.whereType<ChatReasoningEntry>().last.text,
+        ' Owner A',
+      );
+      expect(
+        other.runtime.activityEntries.whereType<ChatReasoningEntry>(),
+        isEmpty,
+      );
     },
   );
 
@@ -670,16 +995,16 @@ void main() {
     expect(find.text('Inspect contract'), findsOneWidget);
     expect(
       find.text('Checked the contract.', findRichText: true),
-      findsNothing,
+      findsOneWidget,
     );
-    await tester.ensureVisible(find.text('Thought'));
+    await tester.ensureVisible(find.text('Reasoning'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Thought'));
+    await tester.tap(find.text('Reasoning'));
     await tester.pumpAndSettle();
     await tester.settleMarkdown();
     expect(
       find.text('Checked the contract.', findRichText: true),
-      findsOneWidget,
+      findsNWidgets(2),
     );
   });
 
@@ -746,4 +1071,385 @@ void main() {
       '',
     );
   });
+
+  test('saved reasoning-only messages remain between native tool rows', () {
+    final timeline = TranscriptTimeline.project([
+      {'id': 1, 'role': 'tool', 'tool_call_id': 'first', 'content': 'Read'},
+      {
+        'id': 2,
+        'role': 'assistant',
+        'content': '',
+        'reasoning_content': 'Review the first result.',
+      },
+      {'id': 3, 'role': 'tool', 'tool_call_id': 'second', 'content': 'Checked'},
+      {'id': 4, 'role': 'assistant', 'content': 'Answer'},
+    ], presentationId: (row) => row['id']!);
+    expect(timeline.sections, hasLength(2));
+    expect(timeline.sections.first.messages.map((entry) => entry.message.id), [
+      1,
+      2,
+      3,
+    ]);
+    expect(timeline.sections.first.toolCount, 2);
+  });
+
+  test('live native reasoning stays between calls as completions arrive', () {
+    host.event('a', 'message.start');
+    host.event('a', 'reasoning.delta', {'text': 'First'});
+    host.event('a', 'reasoning.delta', {'text': ' '});
+    host.event('a', 'reasoning.delta', {'text': 'plan.'});
+    final captured = chat.runtime.activityEntries;
+    host.event('a', 'tool.start', {'tool_id': 'first', 'name': 'read_file'});
+    host.event('a', 'reasoning.available', {'text': 'Review its output.'});
+    host.event('a', 'tool.start', {
+      'tool_id': 'second',
+      'name': 'execute_code',
+    });
+    host.event('a', 'reasoning.delta', {'text': 'Check the result.'});
+    final before = chat.runtime.activityEntries;
+    host.event('a', 'tool.complete', {
+      'tool_id': 'first',
+      'name': 'read_file',
+      'result': 'Native output',
+      'duration_s': .4,
+    });
+    final after = chat.runtime.activityEntries;
+    expect(
+      after.map((entry) => entry.identity),
+      before.map((entry) => entry.identity),
+    );
+    expect(
+      after.map(
+        (entry) => entry is ChatReasoningEntry
+            ? entry.text
+            : (entry as ChatToolEntry).activity.toolId,
+      ),
+      [
+        'First plan.',
+        'first',
+        'Review its output.',
+        'second',
+        'Check the result.',
+      ],
+    );
+    expect((after[1] as ChatToolEntry).activity.durationSeconds, .4);
+    expect((before[1] as ChatToolEntry).activity.isTerminal, isFalse);
+    expect((captured.single as ChatReasoningEntry).running, isTrue);
+    expect((after.first as ChatReasoningEntry).running, isFalse);
+    expect(() => after.clear(), throwsUnsupportedError);
+    host.event('a', 'message.interim', {'text': 'An interim response'});
+    expect(chat.runtime.activityEntries, hasLength(5));
+    host.event('a', 'reasoning.delta', {'text': 'Continue after commentary.'});
+    expect(chat.runtime.activityEntries, hasLength(6));
+    expect(chat.reading.messages.last['_gateway_reasoning'], isNull);
+  });
+
+  test('live reasoning is exact and resets with turn and runtime lifetime', () {
+    final owner = execution.ChatRuntime(runtimeId: 'native');
+    owner.beginTurn(submitting: false);
+    final text = 'Native reasoning\n' * 2000;
+    owner.observeReasoning('reasoning.delta', {'text': text});
+    owner.observeReasoning('reasoning.available', {
+      'text': text.substring(0, 500),
+    });
+    final entry =
+        owner.observation.activityEntries.single as ChatReasoningEntry;
+    expect(entry.text, text);
+    expect(entry.availableText, text.substring(0, 500));
+    owner.beginTurn(submitting: false);
+    expect(owner.observation.activityEntries, isEmpty);
+    owner.observeReasoning('thinking.delta', {'text': 'Progress notification'});
+    expect(owner.observation.activityEntries, isEmpty);
+    owner.observeReasoning('reasoning.available', {
+      'text': 'Standalone preview',
+    });
+    expect(
+      (owner.observation.activityEntries.single as ChatReasoningEntry).running,
+      isFalse,
+    );
+    owner.observeReasoning('reasoning.delta', {'text': 'Check the failure.'});
+    owner.failTurn('Native turn error');
+    expect(
+      (owner.observation.activityEntries.last as ChatReasoningEntry).running,
+      isFalse,
+    );
+    owner.replaceRuntime('replacement');
+    expect(owner.observation.activityEntries, isEmpty);
+  });
+
+  test('saved structured reasoning selects readable native fields only', () {
+    String project(Map<String, dynamic> fields) => TranscriptTimeline.project([
+      {'id': 1, 'role': 'assistant', 'content': '', ...fields},
+    ], presentationId: (row) => row['id']!).entries.single.reasoning;
+    expect(
+      project({
+        'reasoning_details': [
+          {
+            'type': 'reasoning.text',
+            'text': 'Native text',
+            'signature': 'opaque',
+          },
+          {'type': 'reasoning.encrypted', 'data': 'opaque'},
+          {'type': 'reasoning.summary', 'summary': 'Native summary'},
+        ],
+      }),
+      'Native text\n\nNative summary',
+    );
+    expect(
+      project({
+        'codex_reasoning_items': [
+          {
+            'type': 'reasoning',
+            'encrypted_content': 'opaque',
+            'summary': [
+              {'type': 'summary_text', 'text': 'Provider summary'},
+              {'type': 'unknown', 'text': 'opaque'},
+            ],
+          },
+        ],
+      }),
+      'Provider summary',
+    );
+    expect(
+      project({
+        'reasoning_details': [
+          {'type': 'reasoning.encrypted', 'data': 'opaque'},
+        ],
+      }),
+      isEmpty,
+    );
+    expect(
+      project({
+        'reasoning': 'Preferred native text',
+        'reasoning_content': 'Duplicate native text',
+      }),
+      'Preferred native text',
+    );
+  });
+
+  testWidgets('saved reasoning-only Find result opens its native payload', (
+    tester,
+  ) async {
+    final timeline = TranscriptTimeline.project([
+      {
+        'id': 2,
+        'role': 'assistant',
+        'content': '',
+        'reasoning': 'Received reasoning',
+      },
+    ], presentationId: (row) => row['id']!);
+    final focused = GlobalKey();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: [
+              ProfileToolActivitySection(
+                section: timeline.sections.single,
+                expandedMessageId: 2,
+                focusedMessageKey: focused,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.settleMarkdown();
+    expect(focused.currentContext, isNotNull);
+    expect(
+      find.text('Received reasoning', findRichText: true),
+      findsNWidgets(2),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('native live timeline renders reasoning between tool calls', (
+    tester,
+  ) async {
+    host.event('a', 'message.start');
+    host.event('a', 'reasoning.delta', {'text': 'Inspect the contract.'});
+    host.event('a', 'tool.start', {'tool_id': 'first', 'name': 'read_file'});
+    host.event('a', 'reasoning.delta', {'text': 'Compare the results.'});
+    host.event('a', 'tool.start', {
+      'tool_id': 'second',
+      'name': 'execute_code',
+    });
+    host.event('a', 'message.delta', {'text': 'The native response.'});
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.settleMarkdown();
+    await tester.tap(find.text('Activity'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.settleMarkdown();
+    final first = find.byWidgetPredicate(
+      (widget) => widget is ProfileToolCall && widget.call.callId == 'first',
+    );
+    final second = find.byWidgetPredicate(
+      (widget) => widget is ProfileToolCall && widget.call.callId == 'second',
+    );
+    expect(
+      tester.getTopLeft(find.text('Inspect the contract.')).dy,
+      lessThan(tester.getTopLeft(first).dy),
+    );
+    expect(
+      tester.getTopLeft(first).dy,
+      lessThan(tester.getTopLeft(find.text('Compare the results.')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Compare the results.')).dy,
+      lessThan(tester.getTopLeft(second).dy),
+    );
+    expect(find.text('Timeline'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('native timeline renders ${brightness.name} at $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final boundary = GlobalKey();
+        final owner = execution.ChatRuntime(runtimeId: 'render');
+        owner.observeReasoning('reasoning.delta', {
+          'text': 'Inspect the native API.',
+        });
+        owner.observeTool('tool.complete', {
+          'tool_id': 'read',
+          'name': 'read_file',
+          'args': {'path': '/workspace/reports/contract.md'},
+          'result': 'Source received',
+          'duration_s': .195,
+        });
+        owner.observeReasoning('reasoning.available', {
+          'text': 'Compare the reported result before proceeding.\n\n' * 30,
+        });
+        owner.observeTool('tool.complete', {
+          'tool_id': 'code',
+          'name': 'execute_code',
+          'args': {'code': 'print(result)'},
+          'result': {'error': 'The check failed'},
+          'duration_s': .4,
+        });
+        owner.observeReasoning('reasoning.delta', {
+          'text': 'Review the failure and choose the next step.',
+        });
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: RepaintBoundary(
+              key: boundary,
+              child: Scaffold(
+                body: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    ProfileActivitySection(
+                      initiallyExpanded: true,
+                      children: [
+                        ProfileExecutionActivity(
+                          entries: owner.observation.activityEntries,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(ProfileReasoningDisclosure), findsNWidgets(3));
+        expect(find.byType(ProfileToolCall), findsNWidgets(2));
+        expect(find.text('—'), findsNothing);
+        expect(tester.takeException(), isNull);
+        Future<void> capture(String state) async {
+          if (!const bool.fromEnvironment('CAPTURE_REASONING_TIMELINE')) return;
+          await tester.runAsync(() async {
+            final render =
+                boundary.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary;
+            final picture = await render.toImage();
+            final bytes = await picture.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final file = File(
+              'build/reasoning-timeline/${brightness.name}-${scale.toInt()}-$state.png',
+            );
+            await file.parent.create(recursive: true);
+            await file.writeAsBytes(bytes!.buffer.asUint8List());
+            picture.dispose();
+          });
+        }
+
+        await capture('collapsed');
+        final reason = find.byType(ProfileReasoningDisclosure).at(1);
+        await tester.ensureVisible(reason);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(of: reason, matching: find.text('Reasoning')).first,
+        );
+        await tester.pumpAndSettle();
+        await tester.settleMarkdown();
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Copy Reasoning'), findsOneWidget);
+        expect(find.byTooltip('Open Reasoning'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await capture('expanded');
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        final copy = find.byTooltip('Copy Reasoning');
+        await tester.ensureVisible(copy);
+        await tester.pumpAndSettle();
+        await tester.tap(copy);
+        await tester.pump();
+        expect(
+          copied,
+          (owner.observation.activityEntries[2] as ChatReasoningEntry).text,
+        );
+        final open = find.byTooltip('Open Reasoning');
+        await tester.ensureVisible(open);
+        await tester.pumpAndSettle();
+        await tester.tap(open);
+        await tester.pumpAndSettle();
+        await tester.settleMarkdown();
+        expect(find.byTooltip('Show raw content'), findsOneWidget);
+        expect(find.byTooltip('Copy Reasoning'), findsOneWidget);
+        expect(find.byTooltip('Open Reasoning'), findsNothing);
+        await tester.tap(find.byTooltip('Show raw content'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            (owner.observation.activityEntries[2] as ChatReasoningEntry).text,
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
 }
