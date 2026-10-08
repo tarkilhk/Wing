@@ -601,6 +601,12 @@ The expanded Task contains the complete original backend instructions, with its
 existing scrolling, viewer and exact-copy actions. Shortening the heading never
 shortens the task payload or creates an authored summary.
 
+Saved-agent lifecycle status appears once, under the task heading, in both
+collapsed and expanded rows. Do not repeat it as a detail-card footer. Keep
+distinct errors and result qualifications (partial output, iteration limits,
+schema failures) with the expanded result, including when no output was supplied.
+A separate full-screen or modal viewer must retain its own necessary context.
+
 ### Activity actions and viewers
 
 Use one icon vocabulary: **eye** opens a fuller viewer or useful resource,

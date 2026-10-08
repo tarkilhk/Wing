@@ -97,6 +97,7 @@ void main() {
         await tester.tap(find.text(heading));
         await tester.pumpAndSettle();
         expect(find.text(task), findsOneWidget);
+        expect(find.text('Dispatched in background'), findsOneWidget);
         await tester.tap(find.byTooltip('Copy Task'));
         await tester.pump();
         expect(copied, task);
@@ -321,12 +322,14 @@ void main() {
       await tester.tap(find.text('Inspect the report'));
       await tester.pumpAndSettle();
       expect(find.text('Task'), findsOneWidget);
+      expect(find.text('Completed'), findsOneWidget);
       expect(find.text('No result supplied'), findsOneWidget);
       expect(find.byTooltip('Copy Task'), findsOneWidget);
       expect(find.byTooltip('Copy Output'), findsNothing);
       await tester.tap(find.text('Continue in background'));
       await tester.pumpAndSettle();
       expect(find.text('Task'), findsNWidgets(2));
+      expect(find.text('Dispatched in background'), findsOneWidget);
       expect(find.text('No result supplied'), findsOneWidget);
       expect(find.byTooltip('Steer'), findsNothing);
       expect(find.byTooltip('Interrupt'), findsNothing);
@@ -359,7 +362,7 @@ void main() {
       await tester.tap(find.text('Delegated task'));
       await tester.pumpAndSettle();
       expect(find.text('Provider rejected the request'), findsOneWidget);
-      expect(find.text('Failed'), findsNWidgets(2));
+      expect(find.text('Failed'), findsOneWidget);
       expect(find.text('Output'), findsNothing);
       expect(find.byTooltip('Copy Task'), findsNothing);
       expect(find.byTooltip('Copy Error'), findsNothing);
@@ -436,6 +439,62 @@ void main() {
     expect(find.byTooltip('Copy Schema finding'), findsNothing);
     expect(find.byTooltip('Copy Output qualification'), findsNothing);
   });
+
+  for (final state in ['completed', 'failed', 'timeout', 'interrupted']) {
+    testWidgets('saved $state retains qualifications without a status footer', (
+      tester,
+    ) async {
+      final hasError = state == 'failed' || state == 'timeout';
+      final agent = SavedActivity([
+        call(
+          'delegate_task',
+          {
+            'results': [
+              {
+                'task_index': 0,
+                'status': state,
+                'summary_truncated': true,
+                if (hasError) 'summary': 'Provider stopped the task',
+                if (hasError) 'error': 'Provider stopped the task',
+              },
+            ],
+          },
+          args: {
+            'tasks': [
+              {'goal': 'Inspect the report'},
+            ],
+          },
+        ),
+      ]).agents.single;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: ListView(
+              children: [
+                ProfileSavedAgents(agents: [agent]),
+              ],
+            ),
+          ),
+        ),
+      );
+      expect(find.text(agent.statusLabel), findsOneWidget);
+      await tester.tap(find.text('Inspect the report'));
+      await tester.pumpAndSettle();
+      expect(find.text(agent.statusLabel), findsOneWidget);
+      expect(find.text('Summary shortened by the server'), findsOneWidget);
+      expect(
+        find.text('Provider stopped the task'),
+        hasError ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text('No result supplied'),
+        hasError ? findsNothing : findsOneWidget,
+      );
+      expect(find.text('Output'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   test(
     'ordinary results and malformed payloads create no activity categories',

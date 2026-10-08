@@ -380,6 +380,24 @@ void main() {
             ],
           ),
           'saved-agents': ProfileSavedAgents(agents: saved),
+          'dispatched-agents': ProfileSavedAgents(
+            agents: SavedActivity(
+              TranscriptTimeline.project(
+                [
+                  {
+                    'id': 2,
+                    'role': 'tool',
+                    'tool_name': 'delegate_task',
+                    'content': jsonEncode({
+                      'status': 'dispatched',
+                      'goals': [_agentTask],
+                    }),
+                  },
+                ],
+                presentationId: (row) => row['id']!,
+              ).sections.expand((s) => s.groups).expand((g) => g.toolResults),
+            ).agents,
+          ),
           'agents': ProfileSubagentPanel(
             session: session,
             initiallyExpanded: true,
@@ -475,9 +493,17 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          if (entry.key == 'saved-agents') {
+          if (entry.key == 'saved-agents' || entry.key == 'dispatched-agents') {
             await tester.tap(find.text(_agentHeading));
             await tester.pumpAndSettle();
+            expect(
+              find.text(
+                entry.key == 'saved-agents'
+                    ? 'Completed'
+                    : 'Dispatched in background',
+              ),
+              findsOneWidget,
+            );
           } else if (entry.key == 'agents') {
             await tester.tap(find.text(_agentHeading));
             await tester.pumpAndSettle();

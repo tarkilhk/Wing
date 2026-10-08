@@ -25,15 +25,6 @@ class ProfileSavedAgents extends StatelessWidget {
     final hasError = agent.error?.trim().isNotEmpty == true;
     final repeatedError =
         hasError && agent.summary?.trim() == agent.error?.trim();
-    final statusIcon = agent.failed
-        ? Icons.error_outline
-        : agent.warning
-        ? Icons.warning_amber_outlined
-        : agent.status == 'completed'
-        ? Icons.check_circle_outline
-        : agent.status == 'dispatched'
-        ? Icons.schedule_outlined
-        : Icons.help_outline;
     return CompactActivityRow(
       icon: Icons.account_tree_outlined,
       lines: [
@@ -123,15 +114,9 @@ class ProfileSavedAgents extends StatelessWidget {
                     copyable: false,
                   ),
                 ),
-            ActivityDetailStatus(
-              label: agent.statusLabel,
-              icon: statusIcon,
-              error: agent.failed,
-              warning: agent.warning,
-              contextFacts: hasSummary && !repeatedError
-                  ? const []
-                  : agent.qualifications,
-            ),
+            if (!(hasSummary && !repeatedError) &&
+                agent.qualifications.isNotEmpty)
+              ActivityDetailFacts(facts: agent.qualifications),
             ActivityDetailSection(
               initiallyCollapsed: true,
               viewable: false,

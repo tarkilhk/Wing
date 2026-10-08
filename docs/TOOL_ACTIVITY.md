@@ -419,10 +419,9 @@ private capture artifacts remain under ignored `build/` or outside the repositor
 
 ## Restoring Activity from saved chats
 
-Saved agents expand only when a nonblank summary or error was delivered.
-Recorded background dispatches without output show the full goal and dispatch
-notice as passive text, without a chevron or expansion action. Saved-agent rows
-share the zero-vertical-padding density of tool headers.
+Saved agents expand to reveal their full received task and any output or error.
+Recorded background dispatches remain passive observations with no runtime
+controls. Saved-agent rows share the zero-vertical-padding density of tool headers.
 
 Opening a chat reads its active `subagent.list` roster without requiring the
 Agents tab to be visible first. Its existing scoped read admission prevents
@@ -509,6 +508,8 @@ received pixels when available and retain source/received distinction. Generated
 resources come only from returned locators, not requested image counts.
 
 Saved Agents retain requested task and reported status even without output.
+Their row header owns lifecycle status; the expanded card contains intent,
+received output and distinct result qualifications without repeating that status.
 Truncation, iteration limits and schema validation failures qualify actual
 results. Unknown state remains neutral. Process launch is distinct from finished
 execution, absent exit code stays absent, and connector dispatch counts do not
@@ -565,3 +566,15 @@ the original target and backend-resolved path. `test/resource_filename_test.dart
 protect exact targets, popup identity, action scopes and the viewer document
 surface in both themes and at enlarged text. Runtime identity and layout need
 these behavioral checks rather than a static string/path pattern ban.
+
+`SAVED_AGENT_STATUS_ONCE` requires one visible lifecycle status before and after
+expanding a saved agent. Removing duplicate status must preserve supplied errors
+and result qualifications even without a distinct summary. The regressions in
+`test/saved_activity_test.dart` cover dispatch, terminal states and qualified
+missing/repeated-error output; `test/activity_family_test.dart` captures completed
+and dispatched cards in both themes and at enlarged text. Static source checks
+cannot establish how often the received status is visible in composed widgets.
+The dispatch receipt's supplied `status` and `goals` were rechecked against stock
+`tools/delegate_tool_dispatch.py` at upstream main
+[`aa74e184ea779994af642ab4f888e10a95415d90`](https://github.com/NousResearch/hermes-agent/commit/aa74e184ea779994af642ab4f888e10a95415d90)
+on 9 October 2026; this correction changes client presentation only.
