@@ -13933,6 +13933,11 @@
       "path": "test/resource_filename_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/agent_task_presentation.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

@@ -1925,6 +1925,11 @@
       "role": "view",
       "feature": "outputs-and-viewers",
       "library": "lib/core/widgets/resource_filename.dart"
+    },
+    "lib/core/presentation/agent_task_presentation.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/agent_task_presentation.dart"
     }
   }
 }

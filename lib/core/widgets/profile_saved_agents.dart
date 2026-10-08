@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../presentation/agent_task_presentation.dart';
 import '../presentation/saved_activity.dart';
 import '../presentation/tool_activity_details.dart';
 import '../theme/wing_theme.dart';
@@ -36,7 +37,12 @@ class ProfileSavedAgents extends StatelessWidget {
     return CompactActivityRow(
       icon: Icons.account_tree_outlined,
       lines: [
-        Text(agent.goal, style: const TextStyle(fontSize: 14, height: 1.4)),
+        Text(
+          agentTaskHeading(agent.goal),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 14, height: 1.4),
+        ),
         Text(
           agent.statusLabel,
           style: colors.typography.label.copyWith(

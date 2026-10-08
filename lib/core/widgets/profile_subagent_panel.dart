@@ -1,6 +1,7 @@
 import 'studio_error.dart';
 
 import 'package:flutter/material.dart';
+import '../presentation/agent_task_presentation.dart';
 import '../presentation/tool_call_presentation.dart';
 import '../theme/wing_theme.dart';
 import 'activity_time.dart';
@@ -482,10 +483,8 @@ class _SubagentRow extends StatelessWidget {
             : colors.muted,
       ),
       title: Text(
-        _goal(activity),
-        // ListTile's inherited title style defaults to one line. Explicitly
-        // allow the bounded backend goal to wrap at accessibility text sizes.
-        maxLines: MediaQuery.textScalerOf(context).scale(14) > 21 ? 99 : 2,
+        agentTaskHeading(_goal(activity)),
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 14,

@@ -208,6 +208,8 @@ void main() {
         'agent states and metadata remain readable ${brightness.name} $scale',
         (tester) async {
           const longGoal =
+              'Inspect the release candidate and verify the Android transport settings. Keep every original instruction in the task body.';
+          const heading =
               'Inspect the release candidate and verify the Android transport settings';
           fixture.rows = [
             {
@@ -235,12 +237,14 @@ void main() {
             });
           }
           await showPanel(tester, brightness: brightness, scale: scale);
-          if (scale == 2) {
-            expect(
-              tester.getSize(find.text(longGoal)).height,
-              greaterThan(2 * 14 * scale * 1.3),
-            );
-          }
+          final title = tester.widget<Text>(find.text(heading));
+          expect(title.maxLines, 2);
+          expect(title.overflow, TextOverflow.ellipsis);
+          expect(find.text(longGoal), findsNothing);
+          expect(
+            tester.getSize(find.text(heading)).height,
+            lessThanOrEqualTo(2 * 14 * scale * 1.3 + 1),
+          );
           for (final label in [
             'Running',
             'Queued',
@@ -258,6 +262,15 @@ void main() {
           );
           expect(queuedTime.backendStartedAt, isNull);
           expect(queuedTime.durationSeconds, isNull);
+          await tester.ensureVisible(find.text(heading));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(heading));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 100));
+          expect(find.text(longGoal), findsOneWidget);
+          expect(find.byTooltip('Copy Task'), findsOneWidget);
+          Navigator.of(tester.element(find.text(longGoal))).pop();
+          await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
         },
       );

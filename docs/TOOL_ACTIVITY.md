@@ -360,6 +360,14 @@ completion/failure/removal regressions in `test/background_markdown_content_test
 protect both properties. This is a behavioral guard: static analysis cannot establish
 sliver height estimates or painted tab position.
 
+`AGENT_TASK_HEADING` keeps live/saved agent rows scannable without duplicating
+the full Task. `agentTaskHeading` derives the first sentence without its ending
+period; each renderer caps it at two lines with ellipsis, including enlarged
+text. Full instructions and exact-copy scope remain unchanged in Task. Sentence
+content, painted line limits and clipboard payloads require behavioral checks;
+`test/saved_activity_test.dart` and `test/profile_subagent_panel_test.dart` protect
+them, with rendered family coverage in `test/activity_family_test.dart`.
+
 Inspect production widgets at 360 dp with ordinary and enlarged text in both
 themes, including expanded vision and raw details. Store captures under ignored
 `build/` or outside the repository, as required by `docs/PERFORMANCE.md`.

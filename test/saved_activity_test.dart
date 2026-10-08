@@ -10,6 +10,7 @@ import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/models/gateway_todo.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/presentation/saved_activity.dart';
+import 'package:wing/core/presentation/agent_task_presentation.dart';
 
 TranscriptToolResult call(String name, Object output, {Object? args}) =>
     TranscriptToolResult.fromRow({
@@ -20,6 +21,90 @@ TranscriptToolResult call(String name, Object output, {Object? args}) =>
     });
 
 void main() {
+  test(
+    'agent headings retain the first sentence without its ending period',
+    () {
+      expect(
+        agentTaskHeading('Review the report. Check every record.'),
+        'Review the report',
+      );
+      expect(agentTaskHeading('Review the report.'), 'Review the report');
+      expect(agentTaskHeading('Review\n the report'), 'Review the report');
+      expect(
+        agentTaskHeading(
+          'Review report.md at https://example.org for 3.5 hours. Then report.',
+        ),
+        'Review report.md at https://example.org for 3.5 hours',
+      );
+    },
+  );
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('saved agent heading and exact Task ${brightness.name} $scale', (
+        tester,
+      ) async {
+        const heading =
+            'Review the release candidate and compare every supplied record against the original source';
+        const task =
+            '$heading.\nKeep all instructions intact. Check every record and report uncertainty.';
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        tester.view.physicalSize = const Size(320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final agents = SavedActivity([
+          call('delegate_task', {
+            'status': 'dispatched',
+            'goals': [task],
+          }),
+        ]).agents;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: ListView(children: [ProfileSavedAgents(agents: agents)]),
+            ),
+          ),
+        );
+        final label = tester.widget<Text>(find.text(heading));
+        expect(label.maxLines, 2);
+        expect(label.overflow, TextOverflow.ellipsis);
+        expect(
+          tester.getSize(find.text(heading)).height,
+          lessThanOrEqualTo(2 * 14 * scale * 1.4 + 1),
+        );
+        expect(find.text(task), findsNothing);
+        await tester.tap(find.text(heading));
+        await tester.pumpAndSettle();
+        expect(find.text(task), findsOneWidget);
+        await tester.tap(find.byTooltip('Copy Task'));
+        await tester.pump();
+        expect(copied, task);
+        expect(agents.single.goal, task);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
   test(
     'latest full task snapshot preserves order/status and empty clears it',
     () {

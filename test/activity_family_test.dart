@@ -34,6 +34,10 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
 
 const _capture = bool.fromEnvironment('CAPTURE_ACTIVITY_FAMILY');
+const _agentHeading =
+    'Review the report and compare every supplied record against the original source';
+const _agentTask =
+    '$_agentHeading. Check source dates and preserve every instruction in the task. Report uncertainty separately from confirmed results.';
 
 class _FamilyFixture extends ProfileActionsFixture {
   @override
@@ -48,7 +52,7 @@ class _FamilyFixture extends ProfileActionsFixture {
           'subagents': [
             {
               'subagent_id': 'agent',
-              'goal': 'Review the report for accuracy',
+              'goal': _agentTask,
               'status': 'running',
               'model': 'review-model',
               'accepting_steer': true,
@@ -341,7 +345,7 @@ void main() {
                 'tool_name': 'delegate_task',
                 'args': {
                   'tasks': [
-                    {'goal': 'Review the report'},
+                    {'goal': _agentTask},
                   ],
                 },
                 'content': jsonEncode({
@@ -472,10 +476,10 @@ void main() {
           );
           await tester.pumpAndSettle();
           if (entry.key == 'saved-agents') {
-            await tester.tap(find.text('Review the report'));
+            await tester.tap(find.text(_agentHeading));
             await tester.pumpAndSettle();
           } else if (entry.key == 'agents') {
-            await tester.tap(find.text('Review the report for accuracy'));
+            await tester.tap(find.text(_agentHeading));
             await tester.pumpAndSettle();
           } else if (entry.key == 'work') {
             await tester.ensureVisible(find.text('python report.py'));

@@ -205,11 +205,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           ),
           findsNWidgets(3),
         );
-        expect(find.text(goal), findsOneWidget);
+        final goalHeading = goal.substring(0, goal.length - 1);
+        expect(find.text(goalHeading), findsOneWidget);
         final semantics = tester.ensureSemantics();
         expect(
           tester
-              .getSemantics(find.text(goal))
+              .getSemantics(find.text(goalHeading))
               .getSemanticsData()
               .hasAction(SemanticsAction.tap),
           isTrue,

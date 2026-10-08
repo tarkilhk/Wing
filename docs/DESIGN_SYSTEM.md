@@ -593,6 +593,14 @@ control eligibility. An exited process without an exit code does not establish
 command success. Keep cancellation, steering, retry and other actual lifecycle
 controls within their existing authorization and recovery flows.
 
+Live and saved subagent headings identify the task with its first sentence,
+omitting the ending period. Cap headings at two lines with end ellipsis at every
+text size; a task without a sentence-ending period uses the same two-line cap.
+Periods within filenames, URLs and decimal values remain part of the sentence.
+The expanded Task contains the complete original backend instructions, with its
+existing scrolling, viewer and exact-copy actions. Shortening the heading never
+shortens the task payload or creates an authored summary.
+
 ### Activity actions and viewers
 
 Use one icon vocabulary: **eye** opens a fuller viewer or useful resource,
