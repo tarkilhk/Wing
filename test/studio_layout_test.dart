@@ -249,7 +249,7 @@ void main() {
             ),
           ),
         );
-        await tester.pumpAndSettle();
+        await tester.pumpAndSettle(const Duration(milliseconds: 250));
         expect(find.byType(PlayfulPortrait), findsOneWidget);
         expect(find.text('Your agent, with you'), findsOneWidget);
         await _capture(
@@ -266,7 +266,7 @@ void main() {
               )
               .first,
         );
-        await tester.pumpAndSettle();
+        await tester.pumpAndSettle(const Duration(milliseconds: 250));
         expect(
           find.text('Restore configuration').hitTestable(),
           findsOneWidget,
@@ -367,7 +367,7 @@ void main() {
                 ),
               ),
             );
-            await tester.pumpAndSettle();
+            await tester.pumpAndSettle(const Duration(milliseconds: 250));
             expect(
               MediaQuery.sizeOf(
                 tester.element(find.byType(ProfileWorkspaceScreen)),
@@ -398,7 +398,7 @@ void main() {
             await tester.tapAt(
               Offset(clearRect.right - 2, clearRect.center.dy),
             );
-            await tester.pumpAndSettle();
+            await tester.pumpAndSettle(const Duration(milliseconds: 250));
             expect(tester.widget<IconButton>(clearFilters).onPressed, isNull);
             await filterChatsToProfile(tester, 'personal');
             await revealChatProject(tester, 'personal', 'p2');
@@ -416,7 +416,7 @@ void main() {
               findsNothing,
             );
             await tester.tap(projectActions);
-            await tester.pumpAndSettle();
+            await tester.pumpAndSettle(const Duration(milliseconds: 250));
             final menu = find
                 .ancestor(
                   of: find.byKey(const ValueKey('project-action-new')),
@@ -436,7 +436,7 @@ void main() {
               await _capture(tester, '${brightness.name}-project-menu-$scale');
             }
             await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-            await tester.pumpAndSettle();
+            await tester.pumpAndSettle(const Duration(milliseconds: 250));
             expect(
               find.byKey(const ValueKey('project-action-new')),
               findsNothing,
@@ -444,20 +444,20 @@ void main() {
             await tester.longPress(
               find.byKey(const ValueKey('project-personal-p2')),
             );
-            await tester.pumpAndSettle();
+            await tester.pumpAndSettle(const Duration(milliseconds: 250));
             expect(
               find.byKey(const ValueKey('project-action-rename')),
               findsOneWidget,
             );
             await tester.tapAt(const Offset(8, 8));
-            await tester.pumpAndSettle();
+            await tester.pumpAndSettle(const Duration(milliseconds: 250));
             expect(
               find.byKey(const ValueKey('project-action-new')),
               findsNothing,
             );
 
             await controller.createChat(canDispatch: () => true);
-            await tester.pumpAndSettle();
+            await tester.pumpAndSettle(const Duration(milliseconds: 250));
             if (export) {
               await _capture(tester, '${brightness.name}-empty-chat-$scale');
             }
@@ -478,7 +478,7 @@ void main() {
                 },
               ),
             );
-            await tester.pumpAndSettle();
+            await tester.pumpAndSettle(const Duration(milliseconds: 250));
             await tester.settleMarkdown();
             expect(chat.context?.used, 42000);
             expect(chat.markReadFailed, isFalse);
@@ -533,7 +533,7 @@ void main() {
             tester.view.viewInsets = FakeViewPadding(
               bottom: 280 * tester.view.devicePixelRatio,
             );
-            await tester.pumpAndSettle();
+            await tester.pumpAndSettle(const Duration(milliseconds: 250));
             expect(tester.takeException(), isNull);
             expect(controller.current!.chat, same(chat));
             expect(chat.composer.observation.text, contains('An unsent draft'));
@@ -556,19 +556,19 @@ void main() {
               await tester.pump(const Duration(milliseconds: 220));
               await _capture(tester, '${brightness.name}-held-action-$scale');
               await heldAction.cancel();
-              await tester.pumpAndSettle();
+              await tester.pumpAndSettle(const Duration(milliseconds: 250));
               expect(
                 chat.composer.observation.text,
                 contains('An unsent draft'),
               );
             }
             tester.view.resetViewInsets();
-            await tester.pumpAndSettle();
+            await tester.pumpAndSettle(const Duration(milliseconds: 250));
 
             if (export) {
               final adminSuffix = scale == 1 ? '' : '-large-text';
               await tester.tap(find.byTooltip('Open navigation menu'));
-              await tester.pumpAndSettle();
+              await tester.pumpAndSettle(const Duration(milliseconds: 250));
               await _capture(tester, '${brightness.name}-drawer$adminSuffix');
               await tester.scrollUntilVisible(
                 find.byKey(const ValueKey('nav-administration')),
@@ -584,18 +584,18 @@ void main() {
                 ),
                 alignment: .5,
               );
-              await tester.pumpAndSettle();
+              await tester.pumpAndSettle(const Duration(milliseconds: 250));
               await tester.tap(
                 find.byKey(const ValueKey('nav-administration')),
               );
-              await tester.pumpAndSettle();
+              await tester.pumpAndSettle(const Duration(milliseconds: 250));
               await _capture(
                 tester,
                 '${brightness.name}-administration-profile$adminSuffix',
               );
               expect(find.byType(TabBar), findsNothing);
               await tester.tap(find.byTooltip('Open navigation menu'));
-              await tester.pumpAndSettle();
+              await tester.pumpAndSettle(const Duration(milliseconds: 250));
               final health = find.byKey(const ValueKey('nav-health'));
               await tester.scrollUntilVisible(
                 health,
@@ -609,17 +609,17 @@ void main() {
                 tester.element(health),
                 alignment: .5,
               );
-              await tester.pumpAndSettle();
+              await tester.pumpAndSettle(const Duration(milliseconds: 250));
               expect(health.hitTestable(), findsOneWidget);
               await tester.tap(health);
-              await tester.pumpAndSettle();
+              await tester.pumpAndSettle(const Duration(milliseconds: 250));
               expect(find.byType(HermesHealthContent), findsOneWidget);
               await _capture(
                 tester,
                 '${brightness.name}-administration-health$adminSuffix',
               );
               await tester.binding.handlePopRoute();
-              await tester.pumpAndSettle();
+              await tester.pumpAndSettle(const Duration(milliseconds: 250));
               expect(controller.current!.chat, same(chat));
               await tester.scrollUntilVisible(
                 find.byKey(const ValueKey('nav-settings')),
@@ -630,14 +630,14 @@ void main() {
                 ),
               );
               await tester.tap(find.byKey(const ValueKey('nav-settings')));
-              await tester.pumpAndSettle();
+              await tester.pumpAndSettle(const Duration(milliseconds: 250));
               await _capture(tester, '${brightness.name}-settings$adminSuffix');
               await tester.scrollUntilVisible(
                 find.text('While your agent is working'),
                 200,
                 scrollable: find.byType(Scrollable).last,
               );
-              await tester.pumpAndSettle();
+              await tester.pumpAndSettle(const Duration(milliseconds: 250));
               await _capture(
                 tester,
                 '${brightness.name}-settings-actions$adminSuffix',
@@ -768,7 +768,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(const Duration(milliseconds: 250));
       await _capture(tester, '${brightness.name}-controls');
       const choice = ModelChoice(provider: 'openai', model: 'gpt-6-astra');
       await tester.pumpWidget(
@@ -798,7 +798,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(const Duration(milliseconds: 250));
       await _capture(tester, '${brightness.name}-intelligence');
     });
   }

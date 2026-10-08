@@ -123,7 +123,7 @@ void main() {
     await tester.runAsync(
       () => rootBundle.loadString('assets/pricing/openai.json'),
     );
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(const Duration(milliseconds: 250));
   }
 
   Future<void> snapshot(WidgetTester tester, String name) async {
@@ -154,7 +154,7 @@ void main() {
         .last;
     if (target.evaluate().isEmpty) {
       tester.state<ScrollableState>(scrollable).position.jumpTo(0);
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(const Duration(milliseconds: 250));
       if (target.evaluate().isEmpty) {
         await tester.scrollUntilVisible(
           target,
@@ -165,13 +165,13 @@ void main() {
       }
     }
     await tester.ensureVisible(target);
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(const Duration(milliseconds: 250));
   }
 
   Future<void> tap(WidgetTester tester, Finder target) async {
     await reveal(tester, target);
     await tester.tap(target);
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(const Duration(milliseconds: 250));
   }
 
   testWidgets('period totals, title switches and day selection stay local', (
@@ -235,7 +235,7 @@ void main() {
       find.byKey(const ValueKey('usage-year-band')),
       const Offset(200, 0),
     );
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('usage-year-band')), findsOneWidget);
     expect(fixture.requests.length, 4);
     expect(tester.takeException(), isNull);
@@ -349,7 +349,7 @@ void main() {
     await tester.pump();
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     pending.completeError(StateError('Offline'));
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(const Duration(milliseconds: 250));
     expect(find.textContaining('Could not load'), findsWidgets);
     expect(find.text('No recorded model usage in this period.'), findsNothing);
     fixture.override = (_, path, _, _) async =>
@@ -375,11 +375,11 @@ void main() {
     await tester.pump();
     expect(find.text('Loading usage…'), findsOneWidget);
     await tester.tap(find.text('7D'));
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(const Duration(milliseconds: 250));
     pending.complete({
       'models': [_paid()..['estimated_cost'] = 30],
     });
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(const Duration(milliseconds: 250));
     expect(find.text('USD 7.00'), findsOneWidget);
     expect(find.text('USD 30.00'), findsNothing);
     await tap(tester, find.text('30D'));
@@ -524,10 +524,10 @@ void main() {
         final band = find.byKey(const ValueKey('usage-year-band'));
         await reveal(tester, find.byKey(const ValueKey('usage-activity-grid')));
         await tester.drag(band, const Offset(140, 0));
-        await tester.pumpAndSettle();
+        await tester.pumpAndSettle(const Duration(milliseconds: 250));
         await snapshot(tester, '${brightness.name}-$scale-scrolled');
         await tester.drag(band, const Offset(-300, 0));
-        await tester.pumpAndSettle();
+        await tester.pumpAndSettle(const Duration(milliseconds: 250));
         await tap(tester, find.text('365D'));
         await reveal(tester, find.byKey(const ValueKey('usage-activity-grid')));
         await snapshot(tester, '${brightness.name}-$scale-year');

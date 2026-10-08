@@ -401,11 +401,12 @@ void main() {
       });
       await show(tester);
       expect(find.text('Writing response…'), findsOneWidget);
-      expect(find.byTooltip('Steer'), findsOneWidget);
+      expect(find.byTooltip('Stop'), findsOneWidget);
       expect(find.byTooltip('Send'), findsNothing);
       expect(find.text('Draft your next message'), findsOneWidget);
       await tester.enterText(find.byType(TextField), 'For later');
       await tester.pump();
+      expect(find.byTooltip('Steer'), findsOneWidget);
       final gesture = await tester.startGesture(
         tester.getCenter(find.byTooltip('Steer')),
       );

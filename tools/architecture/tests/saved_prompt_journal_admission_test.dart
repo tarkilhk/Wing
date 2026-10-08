@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../model.dart';
 import '../rules/saved_prompt_journal_admission.dart' as rule;
+import '../proof_process.dart';
 
 class _Case {
   const _Case(
@@ -61,7 +62,9 @@ class ProfileWorkspaceController $owner {
 }
 ''';
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final good = _source();
   final cases = [
     _Case(
@@ -312,7 +315,7 @@ Future<void> main() async {
       }
       if (!fixture.cli) continue;
       if (!cliExits.add(fixture.exit)) throw StateError('Duplicate CLI proof');
-      final result = await Process.run(Platform.resolvedExecutable, [
+      final result = await runProofProcess(proofDartExecutable, [
         'run',
         'tools/architecture/rules/saved_prompt_journal_admission.dart',
         '--root',

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../model.dart';
 import '../rules/current_tool_events.dart' as rule;
+import '../proof_process.dart';
 
 const modelPath = 'lib/core/models/gateway_activity.dart';
 const runtimePath = 'lib/core/services/chat_runtime.dart';
@@ -139,7 +140,9 @@ const _cases = [
   _Case('malformed source', 2, invalid: 'syntax'),
 ];
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final cliExits = <int>{};
   for (final fixture in _cases) {
     final root = Directory.systemTemp.createTempSync(
@@ -223,7 +226,7 @@ Future<void> main() async {
       if (!cliExits.add(fixture.exit)) {
         throw StateError('Duplicate CLI representative');
       }
-      final result = await Process.run(Platform.resolvedExecutable, [
+      final result = await runProofProcess(proofDartExecutable, [
         'run',
         'tools/architecture/rules/current_tool_events.dart',
         '--root',

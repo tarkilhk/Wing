@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../model.dart';
 import '../rules/retired_answer_versions_namespace.dart' as rule;
+import '../proof_process.dart';
 
 class _Case {
   const _Case(
@@ -151,7 +152,9 @@ const cases = [
   _Case('canonical root cannot be a part', "part of 'other.dart';", 2),
 ];
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final cliExits = <int>{};
   for (final fixture in cases) {
     final root = Directory.systemTemp.createTempSync(
@@ -219,7 +222,7 @@ Future<void> main() async {
       if (!cliExits.add(fixture.exit)) {
         throw StateError('Duplicate CLI proof');
       }
-      final result = await Process.run(Platform.resolvedExecutable, [
+      final result = await runProofProcess(proofDartExecutable, [
         'run',
         'tools/architecture/rules/retired_answer_versions_namespace.dart',
         '--root',

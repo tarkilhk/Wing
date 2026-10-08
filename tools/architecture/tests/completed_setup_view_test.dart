@@ -1,12 +1,16 @@
 import 'dart:io';
 
 import '../rules/completed_setup_view.dart' as rule;
+import '../proof_process.dart';
 
 void expect(bool value, String message) {
   if (!value) throw StateError(message);
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   if (args.isNotEmpty && (args.length != 2 || args.first != '--compiled')) {
     throw const FormatException('Use [--compiled PATH]');
   }
@@ -178,7 +182,7 @@ class SavedConnection { SavedConnection(); SavedConnection.named(); void copyWit
     }
     final binary = args.isEmpty ? '${root.path}/guard' : args.last;
     if (args.isEmpty) {
-      final compile = await Process.run(Platform.resolvedExecutable, [
+      final compile = await runProofProcess(proofDartExecutable, [
         'compile',
         'exe',
         File(
@@ -200,7 +204,7 @@ class SavedConnection { SavedConnection(); SavedConnection.named(); void copyWit
       await view.writeAsString(example.$1);
       for (final command in [
         (
-          Platform.resolvedExecutable,
+          proofDartExecutable,
           [
             'run',
             'tools/architecture/rules/completed_setup_view.dart',
@@ -211,7 +215,7 @@ class SavedConnection { SavedConnection(); SavedConnection.named(); void copyWit
         ),
         (binary, ['--root', root.path], 'aot'),
       ]) {
-        final result = await Process.run(command.$1, command.$2);
+        final result = await runProofProcess(command.$1, command.$2);
         expect(
           result.exitCode == example.$2,
           'CLI ${example.$2}: ${result.stdout} ${result.stderr}',
@@ -260,7 +264,7 @@ class SavedConnection { SavedConnection(); SavedConnection.named(); void copyWit
     const noncandidate = "int f() => 'not an int';";
     await view.writeAsString(noncandidate);
     expect((await rule.check(root)).isEmpty, 'noncandidate boundary property');
-    final analysis = await Process.run(Platform.resolvedExecutable, [
+    final analysis = await runProofProcess(proofDartExecutable, [
       'analyze',
       view.path,
     ]);
@@ -272,7 +276,7 @@ class SavedConnection { SavedConnection(); SavedConnection.named(); void copyWit
     );
     for (final command in [
       (
-        Platform.resolvedExecutable,
+        proofDartExecutable,
         [
           'run',
           'tools/architecture/rules/completed_setup_view.dart',
@@ -282,9 +286,9 @@ class SavedConnection { SavedConnection(); SavedConnection.named(); void copyWit
       ),
       (binary, ['--root', root.path]),
     ]) {
-      final result = await Process.run(command.$1, command.$2);
+      final result = await runProofProcess(command.$1, command.$2);
       expect(result.exitCode == 0, 'noncandidate CLI split ${result.stderr}');
-      final invalidSdk = await Process.run(command.$1, [
+      final invalidSdk = await runProofProcess(command.$1, [
         ...command.$2,
         '--sdk',
         '${root.path}/missing-sdk',

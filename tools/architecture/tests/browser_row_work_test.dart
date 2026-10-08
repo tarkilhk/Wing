@@ -2,17 +2,21 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../rules/browser_row_work.dart' as rule;
+import '../proof_process.dart';
 
 void require(bool condition, String message) {
   if (!condition) throw StateError(message);
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   if (args.isNotEmpty && (args.length != 2 || args.first != '--compiled')) {
     throw const FormatException('Use [--compiled PATH]');
   }
   final root = await Directory.systemTemp.createTemp('wing-browser-row-');
-  final sdk = File(Platform.resolvedExecutable).parent.parent.path;
+  final sdk = File(proofDartExecutable).parent.parent.path;
   final viewFile = File('${root.path}/${rule.browserLibrary}');
   Future<void> put(String path, String value) async {
     final file = File('${root.path}/$path');
@@ -362,7 +366,7 @@ Object? Function(String) get topBlock { return Local().browserResource; }
 
     final binary = args.isEmpty ? '${root.path}/browser-row-guard' : args[1];
     if (args.isEmpty) {
-      final result = await Process.run(Platform.resolvedExecutable, [
+      final result = await runProofProcess(proofDartExecutable, [
         'compile',
         'exe',
         'tools/architecture/rules/browser_row_work.dart',
@@ -389,7 +393,7 @@ Object? Function(String) get topBlock { return Local().browserResource; }
       await viewFile.writeAsString(example.$1);
       for (final command in [
         (
-          Platform.resolvedExecutable,
+          proofDartExecutable,
           [
             'run',
             'tools/architecture/rules/browser_row_work.dart',
@@ -399,7 +403,7 @@ Object? Function(String) get topBlock { return Local().browserResource; }
         ),
         (binary, ['--root', root.path]),
       ]) {
-        final result = await Process.run(command.$1, command.$2);
+        final result = await runProofProcess(command.$1, command.$2);
         require(
           result.exitCode == example.$2,
           'CLI expected ${example.$2}: ${result.stdout} ${result.stderr}',
@@ -418,7 +422,7 @@ Object? Function(String) get topBlock { return Local().browserResource; }
     await viewFile.writeAsString(valid.first);
     for (final command in [
       (
-        Platform.resolvedExecutable,
+        proofDartExecutable,
         [
           'run',
           'tools/architecture/rules/browser_row_work.dart',
@@ -431,7 +435,7 @@ Object? Function(String) get topBlock { return Local().browserResource; }
       (binary, ['--root', root.path, '--sdk', '${root.path}/missing']),
     ]) {
       require(
-        (await Process.run(command.$1, command.$2)).exitCode == 2,
+        (await runProofProcess(command.$1, command.$2)).exitCode == 2,
         'invalid SDK must fail before clean filter',
       );
     }
@@ -442,7 +446,7 @@ Object? Function(String) get topBlock { return Local().browserResource; }
       (await rule.check(root, sdkPath: sdk)).isEmpty,
       'explicit SDK/no config',
     );
-    final explicit = await Process.run(binary, [
+    final explicit = await runProofProcess(binary, [
       '--root',
       root.path,
       '--sdk',

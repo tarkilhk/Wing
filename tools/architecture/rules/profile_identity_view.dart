@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:yaml/yaml.dart' as yaml;
@@ -9,12 +8,11 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
-import 'package:analyzer/file_system/overlay_file_system.dart';
-import 'package:analyzer/file_system/physical_file_system.dart';
 
 import '../dart_sdk.dart';
 import '../lexical_bindings.dart';
 import '../model.dart';
+import '../semantic_context.dart';
 
 const id = 'ARCH_PROFILE_IDENTITY_VIEW';
 const view = 'lib/core/screens/administration/admin_identity_page.dart';
@@ -1081,7 +1079,7 @@ Future<List<Finding>> check(
     throw const FormatException('Completed identity page missing or ambiguous');
   }
   final optionsPath = '$root/analysis_options.yaml';
-  var options = File(optionsPath).existsSync()
+  final options = File(optionsPath).existsSync()
       ? File(optionsPath).readAsStringSync()
       : '';
   final configuration = yaml.loadYaml(options);
@@ -1103,16 +1101,11 @@ Future<List<Finding>> check(
     return visitor.found;
   }).toList();
   if (candidates.isEmpty) return [];
-  final overlay = OverlayResourceProvider(PhysicalResourceProvider.INSTANCE);
-  const flags = '  enable-experiment:\n    - private-named-parameters\n';
-  options = options.contains('\nanalyzer:\n')
-      ? options.replaceFirst('\nanalyzer:\n', '\nanalyzer:\n$flags')
-      : '$options\nanalyzer:\n$flags';
-  overlay.setOverlay(optionsPath, content: options, modificationStamp: 0);
-  final contexts = AnalysisContextCollection(
+  final contexts = semanticContextCollection(
+    root: root,
+    sdk: sdk,
     includedPaths: ['$root/$view'],
-    sdkPath: sdk,
-    resourceProvider: overlay,
+    cacheNamespace: 'profile-identity-view',
   );
   final findings = <Finding>[];
   try {

@@ -2,10 +2,15 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import '../tools/architecture/dart_sdk.dart';
 import '../tools/architecture/rules/required_quality_gates.dart';
 
 const qaCommand = "python3 -m unittest discover -s tools/qa -p 'test_*.py' -v";
 const architectureCommand = 'dart run tools/architecture/check_all.dart';
+const changedTestsCommand =
+    r'python3 scripts/test.py --changed-since "$TEST_BASE_REF"';
+const testBaseRef =
+    r'${{ github.event.pull_request.base.sha || github.event.before }}';
 const nativeBoundaryCommand =
     'python3 tools/architecture/native_share/provider_boundary.py';
 const nativeFixtureCommand =
@@ -101,13 +106,16 @@ const independentGuards = [
   'browser_row_work',
   'notification_journal_ack',
 ];
-final independentCommands = [
+const fixtureCommands = [
   'dart run tools/architecture/tests/workspace_search_owner_test.dart',
   'dart run tools/architecture/tests/profile_discovery_writer_test.dart',
   'dart run tools/architecture/tests/saved_prompt_journal_admission_test.dart',
   'dart run tools/architecture/tests/current_tool_events_test.dart',
   'dart run tools/architecture/tests/activity_density_test.dart',
   'dart run tools/architecture/tests/retired_answer_versions_namespace_test.dart',
+];
+final independentCommands = [
+  ...fixtureCommands,
   'python3 tools/architecture/rules/authored_census.py',
   'python3 tools/architecture/rules/native_retired_resources.py',
   for (final guard in independentGuards)
@@ -116,6 +124,34 @@ final independentCommands = [
 
 void main() {
   late Directory root;
+  late Directory cliDirectory;
+  late String cliKernel;
+  final sdk = dartSdkPath(Directory.current.path);
+
+  setUpAll(() async {
+    cliDirectory = await Directory.systemTemp.createTemp('wing-quality-cli-');
+    cliKernel = '${cliDirectory.path}/required_quality_gates.dill';
+    final compilation = await Process.run('$sdk/bin/dart', [
+      'compile',
+      'kernel',
+      'tools/architecture/rules/required_quality_gates.dart',
+      '-o',
+      cliKernel,
+    ]);
+    expect(
+      compilation.exitCode,
+      0,
+      reason: '${compilation.stdout}${compilation.stderr}',
+    );
+  });
+
+  tearDownAll(() async => cliDirectory.delete(recursive: true));
+
+  // Compile the current command once, then run its real main in a fresh process
+  // for every workflow mutation. The source-launch provider proof below stays
+  // independent; only repeated compilation is removed from the remaining cases.
+  Future<ProcessResult> runCli() =>
+      Process.run('$sdk/bin/dart', [cliKernel, root.path]);
 
   setUp(() async {
     root = await Directory.systemTemp.createTemp('wing-quality-gates-');
@@ -186,7 +222,10 @@ void main() {
         'echo fixture-only',
       ]) {
         _writeWorkflows(root);
-        final file = File('${root.path}/.github/workflows/pr-quality.yml');
+        final workflow = fixtureCommands.contains(command)
+            ? 'release.yml'
+            : 'pr-quality.yml';
+        final file = File('${root.path}/.github/workflows/$workflow');
         file.writeAsStringSync(
           file.readAsStringSync().replaceFirst(
             'run: $command',
@@ -219,7 +258,7 @@ void main() {
         'run: dart run tools/architecture/tests/provider_view_protocol_test.dart',
       ),
     );
-    final invalid = await Process.run('dart', [
+    final invalid = await Process.run('$sdk/bin/dart', [
       'run',
       'tools/architecture/rules/required_quality_gates.dart',
       root.path,
@@ -227,7 +266,7 @@ void main() {
     expect(invalid.exitCode, 1);
     expect(invalid.stderr, contains('independent-provider_view_protocol'));
     _writeWorkflows(root);
-    final valid = await Process.run('dart', [
+    final valid = await Process.run('$sdk/bin/dart', [
       'run',
       'tools/architecture/rules/required_quality_gates.dart',
       root.path,
@@ -249,11 +288,7 @@ void main() {
   ]) {
     test('actual CLI rejects omitted $name enforcement', () async {
       final command = 'dart run tools/architecture/rules/$name.dart';
-      final initiallyValid = await Process.run('dart', [
-        'run',
-        'tools/architecture/rules/required_quality_gates.dart',
-        root.path,
-      ]);
+      final initiallyValid = await runCli();
       expect(initiallyValid.exitCode, 0);
       for (final workflow in ['pr-quality.yml', 'release.yml']) {
         final file = File('${root.path}/.github/workflows/$workflow');
@@ -265,20 +300,12 @@ void main() {
             'run: echo omitted production guard',
           ),
         );
-        final invalid = await Process.run('dart', [
-          'run',
-          'tools/architecture/rules/required_quality_gates.dart',
-          root.path,
-        ]);
+        final invalid = await runCli();
         expect(invalid.exitCode, 1);
         expect(invalid.stderr, contains('independent-$name'));
         expect(invalid.stderr, contains(workflow));
         _writeWorkflows(root);
-        final valid = await Process.run('dart', [
-          'run',
-          'tools/architecture/rules/required_quality_gates.dart',
-          root.path,
-        ]);
+        final valid = await runCli();
         expect(valid.exitCode, 0, reason: '${valid.stdout}\n${valid.stderr}');
       }
     });
@@ -340,6 +367,132 @@ void main() {
         '        run: ./android/gradlew -p android :app:testDebugUnitTest --no-daemon\n';
     file.writeAsStringSync(contents.replaceFirst(setup, '') + setup);
     expect(checkRequiredQualityGates(root), hasLength(nativeCommands.length));
+  });
+
+  test('PR test selection is hard-failing and bound to the event base', () {
+    final file = File('${root.path}/.github/workflows/pr-quality.yml');
+    for (final mutation in [
+      (changedTestsCommand, 'python3 scripts/test.py'),
+      (changedTestsCommand, '$changedTestsCommand || true'),
+      (
+        'run: $changedTestsCommand',
+        'continue-on-error: true\n        run: $changedTestsCommand',
+      ),
+      (
+        'run: $changedTestsCommand',
+        'if: false\n        run: $changedTestsCommand',
+      ),
+      ('TEST_BASE_REF: $testBaseRef', 'TEST_BASE_REF: HEAD'),
+      ('TEST_BASE_REF:', 'IGNORED_BASE_REF:'),
+    ]) {
+      _writeWorkflows(root);
+      final source = file.readAsStringSync();
+      expect(source, contains(mutation.$1));
+      file.writeAsStringSync(source.replaceFirst(mutation.$1, mutation.$2));
+      expect(
+        checkRequiredQualityGates(root),
+        contains(contains('pr-quality.yml:quality:host-tests')),
+      );
+    }
+  });
+
+  test('release always retains complete hard-failing test coverage', () {
+    final file = File('${root.path}/.github/workflows/release.yml');
+    for (final replacement in [
+      'run: python3 scripts/test.py',
+      'run: echo "python3 scripts/test.py --full"',
+      'run: python3 scripts/test.py --full || true',
+      'continue-on-error: true\n        run: python3 scripts/test.py --full',
+      'if: false\n        run: python3 scripts/test.py --full',
+    ]) {
+      _writeWorkflows(root);
+      file.writeAsStringSync(
+        file.readAsStringSync().replaceFirst(
+          'run: python3 scripts/test.py --full',
+          replacement,
+        ),
+      );
+      expect(
+        checkRequiredQualityGates(root),
+        contains(contains('release.yml:build:host-tests')),
+      );
+    }
+  });
+
+  test('nightly and manual exhaustive execution cannot be removed', () {
+    final file = File('${root.path}/.github/workflows/nightly-tests.yml');
+    for (final mutation in [
+      ("cron: '0 19 * * *'", "cron: '0 19 * * 0'"),
+      ('schedule:', 'ignored_schedule:'),
+      ('workflow_dispatch:', 'ignored_dispatch:'),
+      ('  exhaustive:', '  exhaustive:\n    if: false'),
+      ('  exhaustive:', '  exhaustive:\n    continue-on-error: true'),
+      ('run: python3 scripts/test.py --full', 'run: python3 scripts/test.py'),
+      (
+        'run: python3 scripts/test.py --full',
+        'run: python3 scripts/test.py --full || true',
+      ),
+      (
+        'run: python3 scripts/test.py --full',
+        'continue-on-error: true\n        run: python3 scripts/test.py --full',
+      ),
+      (
+        'run: python3 scripts/test.py --full',
+        'if: false\n        run: python3 scripts/test.py --full',
+      ),
+      ('run: flutter pub get', 'run: echo dependencies'),
+      ('run: flutter pub get', 'if: false\n        run: flutter pub get'),
+      (
+        'run: flutter pub get',
+        'continue-on-error: true\n        run: flutter pub get',
+      ),
+    ]) {
+      _writeWorkflows(root);
+      final source = file.readAsStringSync();
+      expect(source, contains(mutation.$1));
+      file.writeAsStringSync(source.replaceFirst(mutation.$1, mutation.$2));
+      expect(
+        checkRequiredQualityGates(root),
+        contains(contains('nightly-tests.yml')),
+      );
+    }
+  });
+
+  test('standalone checker fixtures remain enforced nightly', () {
+    final file = File('${root.path}/.github/workflows/nightly-tests.yml');
+    for (final command in fixtureCommands) {
+      _writeWorkflows(root);
+      file.writeAsStringSync(
+        file.readAsStringSync().replaceFirst(
+          'run: $command',
+          'run: echo missing',
+        ),
+      );
+      expect(checkRequiredQualityGates(root), hasLength(1));
+    }
+  });
+
+  test('nightly dependencies must precede the complete suite', () {
+    final file = File('${root.path}/.github/workflows/nightly-tests.yml');
+    const setup = '      - name: Dependencies\n        run: flutter pub get\n';
+    final contents = file.readAsStringSync();
+    expect(contents, contains(setup));
+    file.writeAsStringSync(contents.replaceFirst(setup, '') + setup);
+    expect(checkRequiredQualityGates(root), hasLength(7));
+  });
+
+  test('missing and malformed nightly workflows fail closed', () {
+    final file = File('${root.path}/.github/workflows/nightly-tests.yml');
+    file.deleteSync();
+    expect(
+      checkRequiredQualityGates(root),
+      contains(contains('nightly-tests.yml QUALITY_WORKFLOW_INPUT:')),
+    );
+    file.writeAsStringSync('[[');
+    expect(
+      checkRequiredQualityGates(root),
+      contains(contains('nightly-tests.yml QUALITY_WORKFLOW_INPUT:')),
+    );
   });
 
   test('a command in a comment or echo cannot stand in for a gate', () {
@@ -421,19 +574,11 @@ void main() {
     'individual CLI rejects missing gate and accepts repaired workflow',
     () async {
       _writeWorkflows(root, qa: 'echo missing');
-      final invalid = await Process.run('dart', [
-        'run',
-        'tools/architecture/rules/required_quality_gates.dart',
-        root.path,
-      ]);
+      final invalid = await runCli();
       expect(invalid.exitCode, 1);
       expect(invalid.stderr, contains('REQUIRED_QUALITY_GATE:'));
       _writeWorkflows(root);
-      final valid = await Process.run('dart', [
-        'run',
-        'tools/architecture/rules/required_quality_gates.dart',
-        root.path,
-      ]);
+      final valid = await runCli();
       expect(valid.exitCode, 0);
       expect(valid.stderr, isNot(contains('REQUIRED_QUALITY_GATE:')));
       expect(valid.stderr, isNot(contains('QUALITY_WORKFLOW_INPUT:')));
@@ -446,11 +591,7 @@ void main() {
             'run: echo missing',
           ),
         );
-        final omittedNative = await Process.run('dart', [
-          'run',
-          'tools/architecture/rules/required_quality_gates.dart',
-          root.path,
-        ]);
+        final omittedNative = await runCli();
         expect(omittedNative.exitCode, 1);
         expect(omittedNative.stderr, contains('native-share-'));
       }
@@ -484,9 +625,26 @@ jobs:
           $qa
       - name: Architecture
         run: $architectureCommand
-${independentCommands.map((command) => '      - name: Independent production guard\n        run: $command').join('\n')}
+${independentCommands.where((command) => item.$1 == 'release.yml' || !fixtureCommands.contains(command) || command.contains('workspace_search_owner_test.dart')).map((command) => '      - name: Independent production guard\n        run: $command').join('\n')}
+      - name: Host tests
+        ${item.$1 == 'pr-quality.yml' ? 'env:\n          TEST_BASE_REF: $testBaseRef' : '# exhaustive release'}
+        run: ${item.$1 == 'pr-quality.yml' ? changedTestsCommand : 'python3 scripts/test.py --full'}
       ${nativeSetup ? '- name: Native dependency setup\n        run: ./android/gradlew -p android :app:testDebugUnitTest --no-daemon' : '# no dependency setup'}
 ${nativeCommands.map((command) => '      - name: Native guard\n        run: $command').join('\n')}
 ''');
   }
+  File('${root.path}/.github/workflows/nightly-tests.yml').writeAsStringSync('''
+on:
+  schedule:
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+jobs:
+  exhaustive:
+    steps:
+      - name: Dependencies
+        run: flutter pub get
+      - name: Exhaustive tests
+        run: python3 scripts/test.py --full
+${fixtureCommands.map((command) => '      - name: Proof fixtures\n        run: $command').join('\n')}
+''');
 }

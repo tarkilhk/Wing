@@ -2,20 +2,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/features.dart';
-import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/dart/element/element.dart';
-import 'package:analyzer/file_system/overlay_file_system.dart';
-import 'package:analyzer/file_system/physical_file_system.dart';
 import 'package:analyzer/source/source.dart' as analyzer_source;
-import 'package:analyzer/src/dart/analysis/driver_based_analysis_context.dart';
 import 'package:analyzer/src/generated/source.dart' show SourceFactory;
 
 import '../dart_sdk.dart';
 import '../model.dart';
+import '../semantic_context.dart';
 
 const id = 'ARCH_BROWSER_ROW_WORK';
 const browserLibrary = 'lib/core/services/chat_browser_data.dart';
@@ -30,7 +27,6 @@ Future<List<Finding>> check(Directory directory, {String? sdkPath}) async {
   final path = '$root/$browserLibrary';
   // The locked analyzer predates the pinned SDK's private named parameters.
   // Enable that actual SDK feature in memory; no application bytes are changed.
-  final overlay = OverlayResourceProvider(PhysicalResourceProvider.INSTANCE);
   final optionsPath = '$root/analysis_options.yaml';
   var options = File(optionsPath).existsSync()
       ? File(optionsPath).readAsStringSync()
@@ -38,20 +34,15 @@ Future<List<Finding>> check(Directory directory, {String? sdkPath}) async {
   if (options.contains('enable-experiment:')) {
     throw const FormatException('Experimental options require explicit review');
   }
-  const feature = '  enable-experiment:\n    - private-named-parameters\n';
-  options = options.contains('\nanalyzer:\n')
-      ? options.replaceFirst('\nanalyzer:\n', '\nanalyzer:\n$feature')
-      : '$options\nanalyzer:\n$feature';
-  overlay.setOverlay(optionsPath, content: options, modificationStamp: 0);
-  final contexts = AnalysisContextCollection(
+  final contexts = semanticContextCollection(
+    root: root,
+    sdk: sdk,
     includedPaths: [path],
-    sdkPath: sdk,
-    resourceProvider: overlay,
+    cacheNamespace: 'browser-row-work',
   );
   final findings = <Finding>[];
   try {
-    final driver =
-        (contexts.contextFor(path) as DriverBasedAnalysisContext).driver;
+    final driver = contexts.contextFor(path).driver;
     final graph = _Parsed(root, driver.sourceFactory);
     graph.library('$root/$browserLibrary');
     graph.library('$root/$controllerLibrary');

@@ -4,6 +4,7 @@ import 'dart:io';
 import '../dart_sdk.dart';
 import '../model.dart';
 import '../rules/profile_colours_view.dart' as rule;
+import '../proof_process.dart';
 
 const view = 'lib/core/widgets/profile_selector.dart';
 const prefs = "import 'package:shared_preferences/shared_preferences.dart';";
@@ -28,8 +29,9 @@ class Case {
 }
 
 class Workspace {
-  Workspace(Case c) {
-    root = Directory.systemTemp.createTempSync('wing-colour-guard-');
+  void load(Case c) {
+    final sourcesRoot = Directory('${root.path}/lib');
+    if (sourcesRoot.existsSync()) sourcesRoot.deleteSync(recursive: true);
     final sources = {
       'lib/core/widgets/chat_profile_bar.dart': 'class ChatProfileBar {}',
       'lib/core/services/app_preferences.dart':
@@ -61,7 +63,6 @@ class Workspace {
         'library': entry.key,
       };
     }
-    rolePath = '${root.path}/roles.json';
     File(rolePath).writeAsStringSync(jsonEncode({'schema': 1, 'files': roles}));
     final original = File('.dart_tool/package_config.json');
     final data = jsonDecode(original.readAsStringSync()) as Map;
@@ -83,12 +84,13 @@ class Workspace {
       }),
     );
   }
-  late final Directory root;
-  late final String rolePath;
+
+  final root = Directory.systemTemp.createTempSync('wing-colour-guard-');
+  String get rolePath => '${root.path}/roles.json';
   Snapshot get snapshot => Snapshot.load(root.path, rolePath);
   void close() {
-    // Standard FileByteStore writes can outlive context disposal. The fixture
-    // supervisor releases its whole scratch scope after this VM exits.
+    // The supervisor owns this child's scratch directory. Reused summaries
+    // stay live until the proof and its CLI/SDK children have finished.
     if (Platform.environment['WING_COLOUR_GUARD_FIXTURE_CHILD'] != '1') {
       root.deleteSync(recursive: true);
     }
@@ -99,7 +101,10 @@ void require(bool value, String why) {
   if (!value) throw StateError(why);
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   if (Platform.environment['WING_COLOUR_GUARD_FIXTURE_CHILD'] == '1') {
     await _run(args);
     return;
@@ -107,7 +112,7 @@ Future<void> main(List<String> args) async {
   final scratch = Directory.systemTemp.createTempSync('wing-colour-suite-');
   try {
     final sdk = dartSdkPath(Directory.current.path);
-    final child = await Process.start(
+    final child = await startProofProcess(
       '$sdk/bin/dart',
       [
         'run',
@@ -121,11 +126,16 @@ Future<void> main(List<String> args) async {
         'WING_COLOUR_GUARD_FIXTURE_CHILD': '1',
       },
     );
-    await Future.wait([
-      stdout.addStream(child.stdout),
-      stderr.addStream(child.stderr),
-    ]);
-    exitCode = await child.exitCode;
+    try {
+      await Future.wait([
+        stdout.addStream(child.stdout),
+        stderr.addStream(child.stderr),
+      ]);
+      exitCode = await child.exitCode;
+    } finally {
+      child.kill();
+      await child.exitCode;
+    }
   } finally {
     scratch.deleteSync(recursive: true);
   }
@@ -825,8 +835,9 @@ Future<void> _run(List<String> args) async {
       status: 2,
     ),
   ];
+  final workspace = Workspace();
   for (final fixture in cases) {
-    final workspace = Workspace(fixture);
+    workspace.load(fixture);
     try {
       List<Finding>? findings;
       var status = 0;
@@ -856,7 +867,7 @@ Future<void> _run(List<String> args) async {
         );
       }
       if (fixture.name == 'unrelated ordinary error') {
-        final analysis = await Process.run(Platform.resolvedExecutable, [
+        final analysis = await runProofProcess(proofDartExecutable, [
           'analyze',
           '${workspace.root.path}/$view',
         ]);
@@ -869,12 +880,12 @@ Future<void> _run(List<String> args) async {
       if (fixture.cli) {
         for (final (executable, prefix) in [
           (
-            Platform.resolvedExecutable,
+            proofDartExecutable,
             ['run', 'tools/architecture/rules/profile_colours_view.dart'],
           ),
           if (compiled != null) (compiled, <String>[]),
         ]) {
-          final result = await Process.run(executable, [
+          final result = await runProofProcess(executable, [
             ...prefix,
             '--root',
             workspace.root.path,
@@ -907,7 +918,7 @@ Future<void> _run(List<String> args) async {
             );
           }
           if (fixture.status == 0) {
-            final invalid = await Process.run(executable, [
+            final invalid = await runProofProcess(executable, [
               ...prefix,
               '--root',
               workspace.root.path,
@@ -936,13 +947,17 @@ Future<void> _run(List<String> args) async {
 }
 
 Future<void> _cacheTransitions(String sdk, String? compiled) async {
-  final workspace = Workspace(
-    Case(
-      'cache base',
-      page('Object? read() => cached;', imports: "import '../../bridge.dart';"),
-      extra: {'lib/bridge.dart': "String get cached => 'safe';"},
-    ),
-  );
+  final workspace = Workspace()
+    ..load(
+      Case(
+        'cache base',
+        page(
+          'Object? read() => cached;',
+          imports: "import '../../bridge.dart';",
+        ),
+        extra: {'lib/bridge.dart': "String get cached => 'safe';"},
+      ),
+    );
   final root = workspace.root.path;
   final originalView = File('$root/$view').readAsStringSync();
   final originalBridge = File('$root/lib/bridge.dart').readAsStringSync();
@@ -1091,7 +1106,7 @@ Future<void> _cacheTransitions(String sdk, String? compiled) async {
         ],
         if (compiled != null) [compiled],
       ]) {
-        final result = await Process.run(command.first, [
+        final result = await runProofProcess(command.first, [
           ...command.skip(1),
           ...arguments,
         ]);
@@ -1169,18 +1184,19 @@ Future<void> _cacheTransitions(String sdk, String? compiled) async {
     );
     stdout.writeln('PASS cache concurrent-store transition');
 
-    final corrupt = Workspace(
-      Case(
-        'corrupt cache base',
-        page(
-          'Object? read() => cached;',
-          imports: "import '../../bridge.dart';",
+    final corrupt = Workspace()
+      ..load(
+        Case(
+          'corrupt cache base',
+          page(
+            'Object? read() => cached;',
+            imports: "import '../../bridge.dart';",
+          ),
+          extra: {'lib/bridge.dart': originalBridge},
         ),
-        extra: {'lib/bridge.dart': originalBridge},
-      ),
-    );
+      );
     Future<void> corruptCli() async {
-      final result = await Process.run('$sdk/bin/dart', [
+      final result = await runProofProcess('$sdk/bin/dart', [
         'run',
         'tools/architecture/rules/profile_colours_view.dart',
         '--root',

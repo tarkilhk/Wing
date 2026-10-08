@@ -160,24 +160,14 @@ jobs:
         run: dart run tools/architecture/rules/transcript_history_dispatch.dart
       - name: Canonical profile discovery writer
         run: dart run tools/architecture/rules/profile_discovery_writer.dart
-      - name: Canonical profile discovery writer fixtures
-        run: dart run tools/architecture/tests/profile_discovery_writer_test.dart
       - name: Saved-prompt journal admission
         run: dart run tools/architecture/rules/saved_prompt_journal_admission.dart
-      - name: Saved-prompt journal admission fixtures
-        run: dart run tools/architecture/tests/saved_prompt_journal_admission_test.dart
       - name: Retired answer versions namespace
         run: dart run tools/architecture/rules/retired_answer_versions_namespace.dart
-      - name: Retired answer versions namespace fixtures
-        run: dart run tools/architecture/tests/retired_answer_versions_namespace_test.dart
       - name: Compact activity density
         run: dart run tools/architecture/rules/activity_density.dart
-      - name: Compact activity density fixtures
-        run: dart run tools/architecture/tests/activity_density_test.dart
       - name: Current stock tool events
         run: dart run tools/architecture/rules/current_tool_events.dart
-      - name: Current stock tool event fixtures
-        run: dart run tools/architecture/tests/current_tool_events_test.dart
       - name: Check notification resume identity
         run: dart run tools/architecture/rules/resume_durable_identity.dart
       - name: Check intelligence read admission
@@ -255,12 +245,11 @@ jobs:
           exit ${PIPESTATUS[0]}
 
       # ── Step 2: Run tests ────────────────────────────────
-      - name: Run tests
+      - name: Run product tests and required checker proofs
         id: test
-        continue-on-error: true
-        run: |
-          flutter test --no-pub --reporter=expanded 2>&1 | tee test_output.txt
-          exit ${PIPESTATUS[0]}
+        env:
+          TEST_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 scripts/test.py --changed-since "$TEST_BASE_REF"
 
       - name: Test opt-in performance measurements
         run: flutter test --no-pub --dart-define=WING_PERF_INSTRUMENTATION=true test/performance_instrumentation_test.dart test/markdown_inline_parser_test.dart test/markdown_parse_worker_test.dart test/background_markdown_content_test.dart test/background_markdown_message_test.dart
@@ -312,7 +301,7 @@ jobs:
 
       # ── Step 3: Summary & failure report ─────────────────
       - name: Failure summary
-        if: steps.analyze.outcome != 'success' || steps.test.outcome != 'success' || steps.android_build.outcome != 'success' || steps.native_test.outcome != 'success'
+        if: always() && (steps.analyze.outcome != 'success' || steps.test.outcome != 'success' || steps.android_build.outcome != 'success' || steps.native_test.outcome != 'success')
         run: |
           echo "## Quality checks failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -320,7 +309,11 @@ jobs:
           if [ "${{ steps.analyze.outcome }}" != "success" ]; then
             echo "### Static analysis failed" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            cat analyze_output.txt >> $GITHUB_STEP_SUMMARY
+            if [ -f analyze_output.txt ]; then
+              cat analyze_output.txt >> $GITHUB_STEP_SUMMARY
+            else
+              echo "Static analysis did not run; see the earlier failed step." >> $GITHUB_STEP_SUMMARY
+            fi
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           else
@@ -331,7 +324,7 @@ jobs:
           if [ "${{ steps.test.outcome }}" != "success" ]; then
             echo "### Tests failed" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            cat test_output.txt >> $GITHUB_STEP_SUMMARY
+            echo "See the product test step log for the complete failure report." >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           else
             echo "### All tests passed" >> $GITHUB_STEP_SUMMARY
@@ -340,13 +333,17 @@ jobs:
           for check in android_build native_test; do
             echo "### $check" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            cat "${check}_output.txt" >> $GITHUB_STEP_SUMMARY
+            if [ -f "${check}_output.txt" ]; then
+              cat "${check}_output.txt" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "No output captured; see the step status." >> $GITHUB_STEP_SUMMARY
+            fi
             echo '```' >> $GITHUB_STEP_SUMMARY
           done
 
       # ── Step 4: Pass/fail enforcement ────────────────────
       - name: Enforce checks
-        if: steps.analyze.outcome != 'success' || steps.test.outcome != 'success' || steps.android_build.outcome != 'success' || steps.native_test.outcome != 'success'
+        if: always() && (steps.analyze.outcome != 'success' || steps.test.outcome != 'success' || steps.android_build.outcome != 'success' || steps.native_test.outcome != 'success')
         run: |
           echo "──────────────────────────────────────────────"
           echo "Quality gate blocked - see summary above."

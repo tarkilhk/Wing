@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../dart_sdk.dart';
+import '../proof_process.dart';
 import '../rules/notification_journal_ack.dart' as rule;
 
 const prefsImport =
@@ -31,7 +32,13 @@ class Case {
 }
 
 class Workspace {
-  Workspace(Case c) {
+  final root = Directory.systemTemp.createTempSync('wing-journal-ack-');
+
+  void load(Case c) {
+    // Reuse dependency summaries, never a previous fixture's authored sources.
+    // Each rule invocation still creates and disposes its own analysis context.
+    final sourcesRoot = Directory('${root.path}/lib');
+    if (sourcesRoot.existsSync()) sourcesRoot.deleteSync(recursive: true);
     final sources = {rule.owner: c.source, ...c.extra};
     final roles = <String, Object>{};
     for (final e in sources.entries) {
@@ -66,7 +73,7 @@ class Workspace {
       }),
     );
   }
-  final root = Directory.systemTemp.createTempSync('wing-journal-ack-');
+
   String get rolePath => '${root.path}/roles.json';
 }
 
@@ -74,14 +81,17 @@ void require(bool value, String why) {
   if (!value) throw StateError(why);
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   final sdk = dartSdkPath(Directory.current.path);
   if (Platform.environment['WING_ACK_FIXTURE_CHILD'] != '1') {
     final scratch = Directory.systemTemp.createTempSync(
       'wing-journal-ack-suite-',
     );
     try {
-      final child = await Process.start(
+      final child = await startProofProcess(
         '$sdk/bin/dart',
         [
           'run',
@@ -92,11 +102,16 @@ Future<void> main(List<String> args) async {
         ],
         environment: {'TMPDIR': scratch.path, 'WING_ACK_FIXTURE_CHILD': '1'},
       );
-      await Future.wait([
-        stdout.addStream(child.stdout),
-        stderr.addStream(child.stderr),
-      ]);
-      exitCode = await child.exitCode;
+      try {
+        await Future.wait([
+          stdout.addStream(child.stdout),
+          stderr.addStream(child.stderr),
+        ]);
+        exitCode = await child.exitCode;
+      } finally {
+        child.kill();
+        await child.exitCode;
+      }
     } finally {
       scratch.deleteSync(recursive: true);
     }
@@ -594,8 +609,9 @@ Future<void> main(List<String> args) async {
       status: 1,
     ),
   ];
+  final w = Workspace();
   for (final c in cases) {
-    final w = Workspace(c);
+    w.load(c);
     var actual = 0;
     try {
       final findings = await rule.check(
@@ -629,7 +645,7 @@ Future<void> main(List<String> args) async {
         ],
         if (compiled != null) [compiled],
       ]) {
-        final result = await Process.run(command.first, [
+        final result = await runProofProcess(command.first, [
           ...command.skip(1),
           '--root',
           w.root.path,
@@ -656,7 +672,7 @@ Future<void> main(List<String> args) async {
         c.name == 'invalid reciprocal package part' ||
         c.name == 'valid reciprocal package part' ||
         c.name == 'invalid literal context remains SDK owned') {
-      final result = await Process.run('$sdk/bin/dart', [
+      final result = await runProofProcess('$sdk/bin/dart', [
         'analyze',
         '--no-fatal-warnings',
         '--format',
@@ -687,7 +703,7 @@ Future<void> main(List<String> args) async {
         ],
         if (compiled != null) [compiled],
       ]) {
-        final result = await Process.run(command.first, [
+        final result = await runProofProcess(command.first, [
           ...command.skip(1),
           '--root',
           w.root.path,

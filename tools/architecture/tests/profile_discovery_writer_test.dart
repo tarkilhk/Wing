@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../model.dart';
 import '../rules/profile_discovery_writer.dart' as rule;
+import '../proof_process.dart';
 
 class _Case {
   const _Case(
@@ -246,7 +247,9 @@ void _findings(String name, List problems, List<int> lines, String file) {
   }
 }
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final cliExits = <int>{};
   for (final fixture in _cases) {
     final root = Directory.systemTemp.createTempSync('wing-discovery-writer-');
@@ -296,11 +299,11 @@ Future<void> main() async {
       if (!cliExits.add(fixture.exit)) {
         throw StateError('Duplicate CLI representative');
       }
-      final result = await Process.run(Platform.resolvedExecutable, [
+      final result = await runProofProcess(proofDartExecutable, [
         '--packages=${File('.dart_tool/package_config.json').absolute.uri}',
-        Platform.script
-            .resolve('../rules/profile_discovery_writer.dart')
-            .toFilePath(),
+        File(
+          'tools/architecture/rules/profile_discovery_writer.dart',
+        ).absolute.path,
         '--root',
         root.path,
         '--roles',

@@ -5,7 +5,7 @@ Complete this for a fixed release candidate. Record passed, failed or not applic
 ## Automated checks
 
 - [ ] `flutter analyze --fatal-infos` passes.
-- [ ] `flutter test` passes; opt-in skips and their coverage limits are recorded.
+- [ ] `python3 scripts/test.py --full` passes; opt-in skips and their coverage limits are recorded.
 - [ ] `flutter pub outdated` has been reviewed and update decisions recorded.
 - [ ] The intended signed release artifact builds and passes package, version, certificate and non-debuggable checks.
 

@@ -6032,6 +6032,22 @@
       "purpose": "Compact activity density regression fixtures and CLI exit proof",
       "source": "tools/architecture/rules/activity_density.md; tools/architecture/README.md",
       "status": "supported"
+    },
+    {
+      "id": "host-test-batch-generator",
+      "kind": "manual-or-ci-cli",
+      "path": "tools/testing/test_batches.dart",
+      "purpose": "Partition all host tests between routine product verification and complete nightly proofs, preserving unique discovery and special suite lifetimes",
+      "source": "scripts/test.py",
+      "status": "supported"
+    },
+    {
+      "id": "ci-.github/workflows/nightly-tests.yml",
+      "kind": "ci-configuration",
+      "path": ".github/workflows/nightly-tests.yml",
+      "purpose": "Nightly and manual complete product/checker proof verification",
+      "source": "GitHub daily schedule; docs/TESTING.md",
+      "status": "supported"
     }
   ],
   "files": [
@@ -13743,6 +13759,46 @@
     {
       "path": "tools/architecture/tests/activity_density_test.dart",
       "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/architecture_proof_process_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/proof_process.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/testing/test_batches.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "scripts/test.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/test_batches_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": ".github/workflows/nightly-tests.yml",
+      "area": ".github",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "scripts/tests/test_test_runner.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/architecture_source_parsing_test.dart",
+      "area": "test",
       "provenance": "intentional-untracked"
     }
   ],

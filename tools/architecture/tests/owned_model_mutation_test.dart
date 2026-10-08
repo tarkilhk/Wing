@@ -1,12 +1,16 @@
 import 'dart:io';
 
 import '../rules/owned_model_mutation.dart' as rule;
+import '../proof_process.dart';
 
 void expect(bool condition, String message) {
   if (!condition) throw StateError(message);
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   if (args.isNotEmpty && (args.length != 2 || args.first != '--compiled')) {
     throw const FormatException('Use [--compiled PATH]');
   }
@@ -102,7 +106,7 @@ class AdministrationRepository {
     ).absolute.path;
     final compiled = args.isEmpty ? '${root.path}/guard' : args.last;
     if (args.isEmpty) {
-      final compilation = await Process.run(Platform.resolvedExecutable, [
+      final compilation = await runProofProcess(proofDartExecutable, [
         'compile',
         'exe',
         executable,
@@ -114,7 +118,7 @@ class AdministrationRepository {
         'compilation failed: ${compilation.stderr}',
       );
     }
-    Future<ProcessResult> cli() => Process.run(Platform.resolvedExecutable, [
+    Future<ProcessResult> cli() => runProofProcess(proofDartExecutable, [
       'run',
       executable,
       '--root',
@@ -131,7 +135,8 @@ class AdministrationRepository {
     await write(selected, valid.first);
     final green = await cli();
     expect(green.exitCode == 0, 'actual valid CLI failed: ${green.stderr}');
-    Future<ProcessResult> aot() => Process.run(compiled, ['--root', root.path]);
+    Future<ProcessResult> aot() =>
+        runProofProcess(compiled, ['--root', root.path]);
     await write(selected, invalid.first);
     final compiledRed = await aot();
     expect(

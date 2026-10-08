@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../model.dart';
 import '../rules/transcript_history_dispatch.dart' as rule;
+import '../proof_process.dart';
 
 class _Case {
   const _Case(this.name, this.source, this.exit, {this.cli = false});
@@ -85,7 +86,9 @@ const _cases = [
   _Case('malformed source', 'class _ProfileTranscriptState {', 2),
 ];
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final cliExits = <int>{};
   for (final fixture in _cases) {
     final root = Directory.systemTemp.createTempSync(
@@ -127,7 +130,7 @@ Future<void> main() async {
       }
       if (!fixture.cli) continue;
       if (!cliExits.add(fixture.exit)) throw StateError('Duplicate CLI proof');
-      final result = await Process.run(Platform.resolvedExecutable, [
+      final result = await runProofProcess(proofDartExecutable, [
         'run',
         'tools/architecture/rules/transcript_history_dispatch.dart',
         '--root',

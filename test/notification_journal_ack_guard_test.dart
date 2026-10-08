@@ -1,13 +1,14 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import '../tools/architecture/dart_sdk.dart';
+import '../tools/architecture/proof_process.dart';
 
 void main() {
   test(
     'notification journal ACK guard actual fixtures',
     () async {
       final sdk = dartSdkPath(Directory.current.path);
-      final result = await Process.run('$sdk/bin/dart', [
+      final result = await runProofProcess('$sdk/bin/dart', [
         'run',
         'tools/architecture/tests/notification_journal_ack_test.dart',
       ]);
@@ -19,7 +20,7 @@ void main() {
     'actual production notification journal ACK is preserved',
     () async {
       final sdk = dartSdkPath(Directory.current.path);
-      final result = await Process.run('$sdk/bin/dart', [
+      final result = await runProofProcess('$sdk/bin/dart', [
         'run',
         'tools/architecture/rules/notification_journal_ack.dart',
         '--json',

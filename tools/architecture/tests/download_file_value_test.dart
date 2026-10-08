@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../model.dart';
 import '../rules/download_file_value.dart' as rule;
+import '../proof_process.dart';
 
 const _view = rule.library;
 
@@ -39,7 +40,9 @@ const _cases = [
   _Case('missing-part', {_view: 'class Other {}'}, 2),
 ];
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final cliExits = <int>{};
   for (final fixture in _cases) {
     final directory = Directory.systemTemp.createTempSync(
@@ -88,7 +91,7 @@ Future<void> main() async {
         if (!cliExits.add(fixture.exit)) {
           throw StateError('Duplicate CLI representative');
         }
-        final result = await Process.run(Platform.resolvedExecutable, [
+        final result = await runProofProcess(proofDartExecutable, [
           'run',
           'tools/architecture/rules/download_file_value.dart',
           '--root',

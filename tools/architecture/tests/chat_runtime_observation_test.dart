@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '../dart_sdk.dart';
 import '../rules/chat_runtime_observation.dart' as rule;
+import '../proof_process.dart';
 
 void require(bool value, String reason) {
   if (!value) throw StateError(reason);
@@ -16,7 +17,10 @@ const chat = '''class ProfileChat {
 }
 ''';
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   require(
     args.isEmpty || args.length == 2 && args.first == '--original',
     'Use [--original ORIGINAL_SOURCE_ROOT]',
@@ -296,7 +300,7 @@ Future<void> main(List<String> args) async {
               _ => chat,
             }),
       );
-      final result = await Process.run('$sdk/bin/dart', [
+      final result = await runProofProcess('$sdk/bin/dart', [
         'run',
         executable,
         '--root',

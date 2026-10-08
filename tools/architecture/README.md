@@ -21,8 +21,9 @@ flutter test --no-pub test/architecture_contract_test.dart
 ```
 
 Resolved guards share the source/SDK/configuration-bound summary helper in
-`semantic_context.dart`, including completed model/setup views and backup
-ownership. Cache entries retain the pinned analyzer's summary keys, reader and
+`semantic_context.dart`, including completed model/setup views, identity
+presentation and backup ownership. Cache entries retain the pinned analyzer's
+summary keys, reader and
 checksum/version validation; rule verdicts are recomputed. Atomic writes finish
 before `putGet` returns, so disposal and immediate fixture deletion cannot race
 queued cache writes. `test/workspace_entry_key_owner_guard_test.dart` checks that
@@ -30,6 +31,76 @@ completion boundary and runs the real ownership fixture/CLI cleanup path. The
 existing semantic fixture suites still exercise source/dependency mutations,
 corrupt bytes, imports, aliases and source/AOT exits. This is a behavioral
 lifetime property, not a pattern that a source linter can establish.
+
+In complete host runs, production guards inspecting the same checkout share
+one summary namespace with the same root/SDK/options/package binding. Fixture
+roots keep their separate namespaces. Neither mode shares previous findings.
+
+Source enforcement stays on every local commit (with the hook installed),
+branch push/PR and release. Exhaustive checker self-tests run nightly, when
+checker/runner/fixture/dependency inputs change, and before release. Routine
+`python3 scripts/test.py` includes all current-source linters and product tests;
+`python3 scripts/test.py --full` includes every original checker proof too.
+The selected/scheduled inventory is explicit in `tools/testing/test_batches.dart`;
+unknown new suites remain routine. See [verification cadence](../../docs/TESTING.md#continuous-checks).
+
+The one-process linter driver also enters `model.withSharedSourceParses`.
+Only valid parsed trees are reused for the same canonical root, absolute file
+path and exact current source text. Every rule rereads the files and role
+manifest and rebuilds source wrappers, dependencies, part ownership, libraries,
+graphs and findings. The cache retains only the current root's present files
+and ends with its batch. Consumers treat parsed ASTs as read-only.
+`test/architecture_source_parsing_test.dart` protects same-size/same-mtime
+mutations, syntax repair, manifest-only edits, file/part changes and scope/root
+isolation.
+
+The journal ACK and identity presentation proofs replace authored fixture
+sources within one suite-owned directory. They retain dependency summaries
+between cases, recreate the analyzer context for every check, and rewrite roles
+and package configuration for the current fixture. Previous fixture sources are
+removed before the next case, including identity file-URI helpers outside `lib`.
+The suites still execute their actual source CLI and SDK controls; their
+positive, negative and malformed-input cases also check that reused summaries
+cannot preserve a previous verdict. The journal supervisor removes its entire
+scratch directory after the child exits, and identity cleanup runs in `finally`.
+
+The complete host runner compiles architecture commands together from the
+current checkout once per run into a native AOT snapshot, then launches each
+selected original `main` in a fresh `dartaotruntime` process. The runtime comes
+from the selected SDK, preserving implicit running-SDK discovery. Fixture
+compiler and analyzer commands use that SDK's actual `dart` executable. `proof_process.dart` forwards inner CLI commands to that same
+run-owned artifact; fresh arguments, roles, fixture files and diagnostics are
+still checked on every invocation. Native compilation/execution and SDK analyzer
+commands stay independent. The command manifest includes all discovered guard,
+fixture and dead-code mains; compilation and unknown-command errors fail the run.
+Journal and colours supervisors route their streamed children through the same
+artifact, retaining inherited environment, suite-owned `TMPDIR`, child flags
+and exit codes. They drain streams and await child exit before deleting scratch
+roots. Reviewed host wrappers share dedicated batches, preserving each original
+main and test callback while amortizing Flutter and analyzer startup. The
+runner's temporary artifacts are deleted only after its children finish.
+
+Standalone proofs use `proof_process.dart` to scope CLI compilation and child
+lifetimes. The first three source launches run unchanged. Repeated invocations
+then compile that current guard once to a temporary kernel and execute it in a
+fresh Dart process for each fixture. Any newly observed exit status also runs
+the source command, checks source/kernel exit agreement, and returns the source
+result to the original diagnostic assertions. Argument and workflow data are
+read on every invocation; no fixture verdict or cross-run artifact is cached.
+Native AOT compilation/execution and actual SDK analyzer controls stay direct
+subprocesses. The scope waits for its children before deleting its artifacts.
+`test/architecture_proof_process_test.dart` checks input forwarding, source exit
+controls, compile/exit failures and artifact cleanup.
+
+The profile-colours proof likewise replaces its ordinary fixture sources within
+one directory. Its ten cache transitions and separate corrupt-summary controls
+keep their independent workspaces and all source/dependency/options/SDK checks.
+
+`test/required_quality_gates_test.dart` compiles the current gate command to a
+suite-owned kernel once, then executes its real `main` in a fresh Dart process
+for every workflow mutation. It retains the independent source-launch rejection
+and repair controls. Every invocation still validates the current YAML, exit
+status and diagnostics; no workflow verdict or cross-run executable is cached.
 
 Multi-CLI fixture timeouts are subprocess watchdogs, separate from the rules'
 recorded quiet-host performance budgets. The saved-prompt admission wrapper uses

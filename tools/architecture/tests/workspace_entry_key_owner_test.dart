@@ -5,6 +5,7 @@ import '../dart_sdk.dart';
 import '../model.dart';
 import '../rules/workspace_entry_key_owner.dart' as rule;
 import 'app_preferences_view_test.dart' as support;
+import '../proof_process.dart';
 
 const mainView = 'lib/main.dart';
 const ownerPart = 'lib/core/services/app_preferences_workspace_entry.dart';
@@ -71,28 +72,31 @@ const _cases = [
   ),
 ];
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final sdk = dartSdkPath(Directory.current.path);
   final cliExits = <int>{};
   for (final fixture in _cases) {
-    final workspace = support.Workspace(
-      support.Case(
-        fixture.name,
-        'class AppSettingsContent {}',
-        extra: {
-          rule.codec: codecSource,
-          rule.owner: fixture.exit == 2
-              ? 'class OtherOwner {}'
-              : "import '../models/workspace_entry.dart';\n$prefsImport"
-                    "part 'app_preferences_workspace_entry.dart';\nclass AppPreferences {}",
-          if (fixture.exit != 2)
-            ownerPart:
-                "part of 'app_preferences.dart';\nObject? ownedRead(SharedPreferences p) => p.getString(WorkspaceEntryCodec.storageKey);",
-          mainView: fixture.source,
-          ...fixture.extra,
-        },
-      ),
-    );
+    final workspace = support.Workspace()
+      ..load(
+        support.Case(
+          fixture.name,
+          'class AppSettingsContent {}',
+          extra: {
+            rule.codec: codecSource,
+            rule.owner: fixture.exit == 2
+                ? 'class OtherOwner {}'
+                : "import '../models/workspace_entry.dart';\n$prefsImport"
+                      "part 'app_preferences_workspace_entry.dart';\nclass AppPreferences {}",
+            if (fixture.exit != 2)
+              ownerPart:
+                  "part of 'app_preferences.dart';\nObject? ownedRead(SharedPreferences p) => p.getString(WorkspaceEntryCodec.storageKey);",
+            mainView: fixture.source,
+            ...fixture.extra,
+          },
+        ),
+      );
     try {
       var actual = 0;
       var findings = <Finding>[];
@@ -126,7 +130,7 @@ Future<void> main() async {
         if (!cliExits.add(actual)) {
           throw StateError('Duplicate CLI representative');
         }
-        final result = await Process.run(Platform.resolvedExecutable, [
+        final result = await runProofProcess(proofDartExecutable, [
           'run',
           'tools/architecture/rules/workspace_entry_key_owner.dart',
           '--root',

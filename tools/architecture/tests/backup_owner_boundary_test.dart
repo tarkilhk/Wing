@@ -1,12 +1,16 @@
 import 'dart:io';
 
 import '../rules/backup_owner_boundary.dart' as rule;
+import '../proof_process.dart';
 
 void require(bool value, String message) {
   if (!value) throw StateError(message);
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   if (args.isNotEmpty && (args.length != 2 || args.first != '--compiled')) {
     throw const FormatException('Use [--compiled PATH]');
   }
@@ -398,7 +402,7 @@ class HomeScreenState {
     }
     final binary = args.isEmpty ? '${root.path}/guard' : args.last;
     if (args.isEmpty) {
-      final compile = await Process.run(Platform.resolvedExecutable, [
+      final compile = await runProofProcess(proofDartExecutable, [
         'compile',
         'exe',
         'tools/architecture/rules/backup_owner_boundary.dart',
@@ -415,7 +419,7 @@ class HomeScreenState {
       await fixture(example.$1.$1, example.$1.$2);
       for (final command in [
         (
-          Platform.resolvedExecutable,
+          proofDartExecutable,
           [
             'run',
             'tools/architecture/rules/backup_owner_boundary.dart',
@@ -425,7 +429,7 @@ class HomeScreenState {
         ),
         (binary, ['--root', root.path]),
       ]) {
-        final result = await Process.run(command.$1, command.$2);
+        final result = await runProofProcess(command.$1, command.$2);
         require(
           result.exitCode == example.$2,
           'CLI ${example.$2}: ${result.stderr}',
@@ -447,12 +451,12 @@ class HomeScreenState {
     await fixture(rule.mainView, cleanMain);
     for (final command in [
       (
-        Platform.resolvedExecutable,
+        proofDartExecutable,
         ['run', 'tools/architecture/rules/backup_owner_boundary.dart'],
       ),
       (binary, <String>[]),
     ]) {
-      final result = await Process.run(command.$1, [
+      final result = await runProofProcess(command.$1, [
         ...command.$2,
         '--root',
         root.path,

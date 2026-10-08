@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../rules/dart_main_roots.dart' as rule;
+import '../proof_process.dart';
 
 class RootFixture {
   RootFixture(
@@ -291,7 +292,7 @@ Future<void> prove({String? binary}) async {
   );
   final malformed = RootFixture({'tools/run.dart': 'void main('});
   try {
-    final runningExecutable = Platform.resolvedExecutable;
+    final runningExecutable = proofDartExecutable;
     final dart =
         const {
           'dart',
@@ -300,13 +301,13 @@ Future<void> prove({String? binary}) async {
         ? runningExecutable
         : 'dart'; // The Flutter host's executable is flutter_tester, not Dart.
     Future<ProcessResult> invoke(RootFixture workspace) => binary == null
-        ? Process.run(dart, [
+        ? runProofProcess(dart, [
             'run',
             'tools/architecture/rules/dart_main_roots.dart',
             '--root',
             workspace.directory.path,
           ])
-        : Process.run(binary, ['--root', workspace.directory.path]);
+        : runProofProcess(binary, ['--root', workspace.directory.path]);
     final rejected = await invoke(bad);
     require(
       rejected.exitCode == 1 &&
@@ -335,7 +336,10 @@ Future<void> prove({String? binary}) async {
   }
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   if (args.isNotEmpty && (args.length != 2 || args.first != '--binary')) {
     throw ArgumentError('Usage: dart_main_roots_test.dart [--binary PATH]');
   }

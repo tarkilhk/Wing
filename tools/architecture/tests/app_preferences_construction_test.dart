@@ -4,6 +4,7 @@ import 'dart:io';
 import '../dart_sdk.dart';
 import '../model.dart';
 import '../rules/app_preferences_construction.dart' as rule;
+import '../proof_process.dart';
 
 const caller = 'lib/caller.dart';
 const ownerImport = "import 'package:wing/core/services/app_preferences.dart';";
@@ -28,7 +29,12 @@ class Case {
 }
 
 class Workspace {
-  Workspace(Case fixture) {
+  void load(Case fixture) {
+    // Recreate fixture inputs while retaining analyzer-owned SDK summaries.
+    for (final name in ['lib', 'tools']) {
+      final input = Directory('${directory.path}/$name');
+      if (input.existsSync()) input.deleteSync(recursive: true);
+    }
     final sources = {
       rule.definition: ownerModel,
       rule.bootstrap: 'void createApplicationDependencies() {}',
@@ -56,7 +62,7 @@ class Workspace {
     final original = File('.dart_tool/package_config.json');
     final configuration = jsonDecode(original.readAsStringSync()) as Map;
     final config = File('${directory.path}/.dart_tool/package_config.json');
-    config.parent.createSync();
+    config.parent.createSync(recursive: true);
     config.writeAsStringSync(
       jsonEncode({
         ...configuration,
@@ -74,6 +80,7 @@ class Workspace {
       }),
     );
   }
+
   final directory = Directory.systemTemp.createTempSync(
     'wing-preferences-construction-',
   );
@@ -86,7 +93,10 @@ void require(bool condition, String message) {
   if (!condition) throw StateError(message);
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   String? compiled;
   if (args.isNotEmpty) {
     if (args.length != 2 ||
@@ -479,9 +489,10 @@ Future<void> main(List<String> args) async {
   // All 52 resolved API fixtures retain their full identity/location assertions.
   // CLI source/AOT runs need one representative per exit, plus invalid SDK.
   var passed = 0;
-  for (final fixture in cases) {
-    final workspace = Workspace(fixture);
-    try {
+  final workspace = Workspace();
+  try {
+    for (final fixture in cases) {
+      workspace.load(fixture);
       List<Finding>? findings;
       var actual = 0;
       try {
@@ -521,7 +532,7 @@ Future<void> main(List<String> args) async {
       for (final (executable, prefix) in [
         if (fixture.cli)
           (
-            Platform.resolvedExecutable,
+            proofDartExecutable,
             [
               'run',
               'tools/architecture/rules/app_preferences_construction.dart',
@@ -529,7 +540,7 @@ Future<void> main(List<String> args) async {
           ),
         if (fixture.cli && compiled != null) (compiled, <String>[]),
       ]) {
-        final result = await Process.run(executable, [
+        final result = await runProofProcess(executable, [
           ...prefix,
           '--root',
           workspace.directory.path,
@@ -564,7 +575,7 @@ Future<void> main(List<String> args) async {
           );
         }
         if (expected == 0) {
-          final invalid = await Process.run(executable, [
+          final invalid = await runProofProcess(executable, [
             ...prefix,
             '--root',
             workspace.directory.path,
@@ -580,9 +591,9 @@ Future<void> main(List<String> args) async {
         }
       }
       passed++;
-    } finally {
-      workspace.dispose();
     }
+  } finally {
+    workspace.dispose();
   }
   stdout.writeln(
     '${rule.id}: $passed API fixtures; actual source${compiled == null ? '' : '+AOT'} CLI invalid1/valid0/input2 and invalid SDK2 passed.',

@@ -3,10 +3,14 @@ import 'dart:io';
 
 import '../model.dart';
 import '../rules/deleted_draft_cleanup_boundary.dart' as rule;
+import '../proof_process.dart';
+
+Future<void> main(List<String> arguments) =>
+    withProofProcesses(() => _proofMain(arguments));
 
 /// Pure Dart guard fixtures, materialized outside production analyzer discovery.
 /// Run: dart run tools/architecture/tests/deleted_draft_cleanup_boundary_test.dart
-Future<void> main(List<String> arguments) async {
+Future<void> _proofMain(List<String> arguments) async {
   String? compiled;
   String? sdk;
   for (var i = 0; i < arguments.length; i++) {
@@ -37,12 +41,14 @@ Future<void> main(List<String> arguments) async {
           as Map;
   final clock = Stopwatch()..start();
   var passed = 0;
-  for (final entry in fixture['cases'] as List) {
-    if (compiled != null && !cliCases.contains(entry['name'])) continue;
-    final workspace = Directory.systemTemp.createTempSync(
-      'wing-cleanup-boundary-',
-    );
-    try {
+  final workspace = Directory.systemTemp.createTempSync(
+    'wing-cleanup-boundary-',
+  );
+  try {
+    for (final entry in fixture['cases'] as List) {
+      if (compiled != null && !cliCases.contains(entry['name'])) continue;
+      final sources = Directory('${workspace.path}/lib');
+      if (sources.existsSync()) sources.deleteSync(recursive: true);
       final roles = <String, Object>{};
       for (final entry in (entry['files'] as Map).entries) {
         final path = entry.key as String;
@@ -57,7 +63,7 @@ Future<void> main(List<String> arguments) async {
         };
       }
       final config = File('${workspace.path}/.dart_tool/package_config.json');
-      config.parent.createSync();
+      config.parent.createSync(recursive: true);
       config.writeAsStringSync(
         jsonEncode({
           'configVersion': 2,
@@ -103,21 +109,18 @@ Future<void> main(List<String> arguments) async {
       // Prove a bad/valid/input fixture through the actual independent CLI;
       // a swallowed exit status must not pass the quality gate.
       if (cliCases.contains(entry['name'])) {
-        final result = await Process.run(
-          compiled ?? Platform.resolvedExecutable,
-          [
-            if (compiled == null) ...[
-              'run',
-              'tools/architecture/rules/deleted_draft_cleanup_boundary.dart',
-            ],
-            if (sdk != null) ...['--sdk', sdk],
-            '--root',
-            workspace.path,
-            '--roles',
-            rolesPath,
-            '--json',
+        final result = await runProofProcess(compiled ?? proofDartExecutable, [
+          if (compiled == null) ...[
+            'run',
+            'tools/architecture/rules/deleted_draft_cleanup_boundary.dart',
           ],
-        );
+          if (sdk != null) ...['--sdk', sdk],
+          '--root',
+          workspace.path,
+          '--roles',
+          rolesPath,
+          '--json',
+        ]);
         if (result.exitCode != expected) {
           throw StateError(
             '${entry['name']}: CLI returned ${result.exitCode}: ${result.stdout} ${result.stderr}',
@@ -131,7 +134,7 @@ Future<void> main(List<String> arguments) async {
         }
       }
       if (compiled != null && entry['name'] == 'strict-batch') {
-        final invalidSdk = await Process.run(compiled, [
+        final invalidSdk = await runProofProcess(compiled, [
           '--root',
           workspace.path,
           '--roles',
@@ -145,9 +148,9 @@ Future<void> main(List<String> arguments) async {
         }
       }
       passed++;
-    } finally {
-      workspace.deleteSync(recursive: true);
     }
+  } finally {
+    workspace.deleteSync(recursive: true);
   }
   stdout.writeln(
     '${rule.id}: $passed fixtures passed in ${clock.elapsedMilliseconds} ms',

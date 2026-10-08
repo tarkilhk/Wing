@@ -1,12 +1,12 @@
 import 'dart:io';
 
-import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 
 import '../model.dart';
+import '../semantic_context.dart';
 import '../dart_sdk.dart';
 
 const id = 'ARCH_OWNED_MODEL_MUTATION';
@@ -90,9 +90,12 @@ Future<List<Finding>> check(Directory directory, {String? sdkPath}) async {
       );
     }
   }
-  final contexts = AnalysisContextCollection(
+  final contexts = semanticContextCollection(
+    root: root,
     includedPaths: [root],
-    sdkPath: dartSdkPath(root, configured: sdkPath),
+    sdk: dartSdkPath(root, configured: sdkPath),
+    cacheNamespace: 'owned-model-mutation',
+    enableSdkExperiments: false,
   );
   final findings = <Finding>[];
   try {

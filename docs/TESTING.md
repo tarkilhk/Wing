@@ -13,6 +13,51 @@ the [performance procedure](PERFORMANCE.md) and its repeatable phone recorder.
 
 ## Continuous checks
 
+After activating the Flutter toolchain, run `python3 scripts/test.py` for routine
+verification. This includes product unit/widget tests, security, recovery,
+ownership, accessibility and work-budget regressions, plus every current-source
+Dart and Python/native linter through `scripts/check_commit_linters.py`.
+Routine linters and host tests run concurrently; both must finish successfully
+for the command to pass.
+The exhaustive tests of the architecture checking tools are retained in the
+explicit `architectureProofSuites` inventory in `tools/testing/test_batches.dart`.
+They run in `python3 scripts/test.py --full`, which executes every discovered
+`test/**/*_test.dart` main once. The two mixed scheduled-task contract suites
+retain all their actual repository/DTO and fixture checks in routine runs.
+New unclassified suites run routinely; they are never silently scheduled away.
+
+| Check | Cadence |
+| --- | --- |
+| Source linters | Every local commit with the hook installed, every branch push/PR, and release |
+| Product host tests | Every routine run and branch push/PR |
+| Complete checker fixtures and source/native/SDK proofs | Nightly, whenever checking tools/runner/fixture/dependency inputs change, and before release |
+
+CI uses `--changed-since` with the preceding commit or PR base to select full
+verification when tool inputs change. Unknown or missing history selects the
+full suite. The nightly workflow also supports manual dispatch. Scheduling
+preserves every test but can delay finding a checking-tool regression until the
+next full run; checking the current app source is never deferred.
+
+Ordinary suites share generated Flutter
+batches, with separate lanes for pure tests, widget bindings and reviewed
+architecture wrappers. Additional transport fixtures require a source and
+cleanup review before batching. Custom bindings, font loading, special
+performance/cache lifetimes, environment-gated suites and unscoped setup stay
+isolated. Architecture fixture and CLI children retain fresh processes. The runner
+checks the complete selected/scheduled partition and source fingerprints, propagates any test failure,
+and retains its plan, machine events and toolchain metadata in a private
+owner-only temporary directory outside the checkout. During full runs, architecture guard and
+fixture programs are compiled together to a native AOT snapshot from the current
+source once during the timed run. Each selected main executes in a fresh SDK
+native runtime process with its original arguments and diagnostic assertions.
+The runtime stays inside the selected SDK so implicit SDK discovery retains
+its source-run provenance. Native AOT compilation and SDK
+controls retain their original independent subprocesses. Compilation or an
+unknown command fails verification. Generated code is removed after execution.
+`--concurrency=N` controls the shared host worker limit;
+the default is at most eight. Focused checks still use `flutter test --no-pub`
+with their original file paths. Device and live acceptance remain explicit.
+
 PRs and pushes to `main` run Dart analysis, host Flutter tests, a debug Android
 APK build, and native JVM boundary tests. Android checks use Flutter 3.44.0,
 Temurin Java 17, SDK platform 36, build-tools 36.0.0 and the project's pinned

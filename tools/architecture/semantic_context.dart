@@ -21,12 +21,15 @@ Future<T> withSharedAnalysisSummaries<T>(Future<T> Function() action) =>
 
 /// Standard analyzer summary storage, never rule results. Source, dependency,
 /// language/options and summary-version validation remain analyzer-owned.
+/// SDK experiments are applied only for guards that explicitly require them;
+/// other callers retain the checkout's discovered analysis options unchanged.
 /// The installed analyzer's public collection API has no byteStore parameter.
 AnalysisContextCollectionImpl semanticContextCollection({
   required String root,
   required String sdk,
   required List<String> includedPaths,
   required String cacheNamespace,
+  bool enableSdkExperiments = true,
 }) {
   root = Directory(root).resolveSymbolicLinksSync();
   final config = File('$root/.dart_tool/package_config.json');
@@ -34,6 +37,7 @@ AnalysisContextCollectionImpl semanticContextCollection({
     utf8.encode(
       jsonEncode([
         root,
+        enableSdkExperiments,
         Directory(sdk).resolveSymbolicLinksSync(),
         File('$sdk/version').readAsStringSync(),
         File('$sdk/lib/libraries.json').readAsStringSync(),
@@ -43,9 +47,17 @@ AnalysisContextCollectionImpl semanticContextCollection({
       ]),
     ),
   );
-  final cache = Directory(
-    '$root/.dart_tool/architecture/${Zone.current[_batchNamespace] ?? cacheNamespace}/$binding',
-  );
+  // Independent production guards inspect the same checkout during complete
+  // host verification. Share only analyzer-validated summaries for that root;
+  // fixture roots retain their individual namespaces and mutation controls.
+  final commands = Platform.environment['WING_TEST_ARCHITECTURE_COMMANDS'];
+  final productionBatch =
+      commands != null &&
+      (jsonDecode(File(commands).readAsStringSync()) as Map)['root'] == root;
+  final namespace =
+      Zone.current[_batchNamespace] ??
+      (productionBatch ? 'commit-batch' : cacheNamespace);
+  final cache = Directory('$root/.dart_tool/architecture/$namespace/$binding');
   cache.createSync(recursive: true);
   // The pinned analyzer ignores collection enabledExperiments when discovering
   // options normally. Preserve that discovery and all physical options bytes.
@@ -54,16 +66,16 @@ AnalysisContextCollectionImpl semanticContextCollection({
   var options = File(optionsPath).existsSync()
       ? File(optionsPath).readAsStringSync()
       : '';
-  if (options.contains('enable-experiment:')) {
+  if (enableSdkExperiments && options.contains('enable-experiment:')) {
     throw const FormatException('Explicit experiment review required');
   }
   const header = 'analyzer:\n';
   const flags = '  enable-experiment:\n    - private-named-parameters\n';
-  if (options.startsWith(header)) {
+  if (enableSdkExperiments && options.startsWith(header)) {
     options = '$header$flags${options.substring(header.length)}';
-  } else if (options.contains('\n$header')) {
+  } else if (enableSdkExperiments && options.contains('\n$header')) {
     options = options.replaceFirst('\n$header', '\n$header$flags');
-  } else {
+  } else if (enableSdkExperiments) {
     options = '$options\n$header$flags';
   }
   provider.setOverlay(optionsPath, content: options, modificationStamp: 0);

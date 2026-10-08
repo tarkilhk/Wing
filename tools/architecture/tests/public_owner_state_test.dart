@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../rules/public_owner_state.dart' as rule;
+import '../proof_process.dart';
 
 void expect(bool value, String message) {
   if (!value) throw StateError(message);
@@ -20,7 +21,9 @@ String owner(
       '${members.map((member) => replace[member] ?? (value ? 'final Object? $member = null;' : 'Object? _$member; Object? get $member => _$member;')).join('\n')}\n}\n';
 }
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final root = await Directory.systemTemp.createTemp(
     'wing-public-owner-state-',
   );
@@ -245,7 +248,7 @@ Future<void> main() async {
           _ => const {},
         },
       );
-      final result = await Process.run(Platform.resolvedExecutable, [
+      final result = await runProofProcess(proofDartExecutable, [
         'run',
         executable,
         '--root',

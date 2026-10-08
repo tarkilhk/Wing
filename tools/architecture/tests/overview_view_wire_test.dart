@@ -4,10 +4,14 @@ import 'dart:io';
 import '../model.dart';
 import '../dart_sdk.dart';
 import '../rules/overview_view_wire.dart' as rule;
+import '../proof_process.dart';
+
+Future<void> main(List<String> arguments) =>
+    withProofProcesses(() => _proofMain(arguments));
 
 /// Pure Dart guard fixtures, materialized outside production analyzer discovery.
 /// Run: dart run tools/architecture/tests/overview_view_wire_test.dart
-Future<void> main(List<String> arguments) async {
+Future<void> _proofMain(List<String> arguments) async {
   String? compiled;
   if (arguments.isNotEmpty) {
     if (arguments.length != 2 ||
@@ -27,11 +31,11 @@ Future<void> main(List<String> arguments) async {
           as Map;
   final clock = Stopwatch()..start();
   var passed = 0;
-  for (final entry in fixture['cases'] as List) {
-    final workspace = Directory.systemTemp.createTempSync(
-      'wing-overview-wire-',
-    );
-    try {
+  final workspace = Directory.systemTemp.createTempSync('wing-overview-wire-');
+  try {
+    for (final entry in fixture['cases'] as List) {
+      final sources = Directory('${workspace.path}/lib');
+      if (sources.existsSync()) sources.deleteSync(recursive: true);
       final roles = <String, Object>{};
       for (final entry in (entry['files'] as Map).entries) {
         final path = entry.key as String;
@@ -46,7 +50,7 @@ Future<void> main(List<String> arguments) async {
         };
       }
       final config = File('${workspace.path}/.dart_tool/package_config.json');
-      config.parent.createSync();
+      config.parent.createSync(recursive: true);
       config.writeAsStringSync(
         jsonEncode({
           'configVersion': 2,
@@ -101,7 +105,7 @@ Future<void> main(List<String> arguments) async {
         'bare-inherited-capability',
         'bare-unrelated-callback',
       }.contains(entry['name'])) {
-        final result = await Process.run(Platform.resolvedExecutable, [
+        final result = await runProofProcess(proofDartExecutable, [
           'run',
           'tools/architecture/rules/overview_view_wire.dart',
           '--root',
@@ -137,7 +141,7 @@ Future<void> main(List<String> arguments) async {
 
         prove(result);
         if (compiled != null) {
-          final result = await Process.run(compiled, [
+          final result = await runProofProcess(compiled, [
             '--root',
             workspace.path,
             '--roles',
@@ -151,12 +155,12 @@ Future<void> main(List<String> arguments) async {
         if (entry['name'] == 'owner-command') {
           for (final (executable, prefix) in <(String, List<String>)>[
             (
-              Platform.resolvedExecutable,
+              proofDartExecutable,
               ['run', 'tools/architecture/rules/overview_view_wire.dart'],
             ),
             if (compiled != null) (compiled, <String>[]),
           ]) {
-            final invalid = await Process.run(executable, [
+            final invalid = await runProofProcess(executable, [
               ...prefix,
               '--root',
               workspace.path,
@@ -176,9 +180,9 @@ Future<void> main(List<String> arguments) async {
         }
       }
       passed++;
-    } finally {
-      workspace.deleteSync(recursive: true);
     }
+  } finally {
+    workspace.deleteSync(recursive: true);
   }
   stdout.writeln(
     '${rule.id}: $passed fixtures passed in ${clock.elapsedMilliseconds} ms',

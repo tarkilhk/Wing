@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../model.dart';
+import '../proof_process.dart';
 import 'retired_declarations.dart' as rule;
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) => withProofProcesses(() => _prove(args));
+
+Future<void> _prove(List<String> args) async {
   if (args.isNotEmpty &&
       (args.length != 2 ||
           args.first != '--compiled' ||
@@ -102,7 +105,7 @@ Future<void> main(List<String> args) async {
         ];
         final commands = [
           (
-            Platform.resolvedExecutable,
+            proofDartExecutable,
             [
               '--packages=.dart_tool/package_config.json',
               'tools/architecture/dead_code/retired_declarations.dart',
@@ -112,7 +115,7 @@ Future<void> main(List<String> args) async {
           if (compiled != null) (compiled, options),
         ];
         for (final command in commands) {
-          final result = await Process.run(command.$1, command.$2);
+          final result = await runProofProcess(command.$1, command.$2);
           if (result.exitCode != test['exit']) {
             throw StateError('${test['name']}: CLI exit ${result.exitCode}');
           }

@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/dart/element/element.dart';
 
 import '../model.dart';
+import '../semantic_context.dart';
 import '../dart_sdk.dart';
 
 const id = 'ARCH_SETTINGS_VIEW_PROTOCOL';
@@ -93,9 +93,12 @@ Future<List<Finding>> check(
     }
   }
 
-  final contexts = AnalysisContextCollection(
+  final contexts = semanticContextCollection(
+    root: root,
     includedPaths: [root],
-    sdkPath: dartSdkPath(root, configured: sdkPath),
+    sdk: dartSdkPath(root, configured: sdkPath),
+    cacheNamespace: 'settings-view-protocol',
+    enableSdkExperiments: false,
   );
   final findings = <Finding>[];
   try {

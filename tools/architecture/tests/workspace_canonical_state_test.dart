@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../model.dart';
 import '../rules/workspace_canonical_state.dart' as rule;
+import '../proof_process.dart';
 
 String owner(
   String name, {
@@ -23,7 +24,9 @@ String source({String? replace, String? addition, String? ancestry}) =>
     '${owner('ProfileChat', replace: replace, addition: addition, ancestry: ancestry)}\n'
     '${owner('ProfileWorkspaceData')}\n${owner('ProfileWorkspaceController')}';
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final cases = <({String name, String text, int exit})>[
     (name: 'readonly', text: source(), exit: 0),
     (
@@ -118,7 +121,7 @@ Future<void> main() async {
         );
       }
       if (proved.add(fixture.exit)) {
-        final result = await Process.run(Platform.resolvedExecutable, [
+        final result = await runProofProcess(proofDartExecutable, [
           'run',
           'tools/architecture/rules/workspace_canonical_state.dart',
           '--root',

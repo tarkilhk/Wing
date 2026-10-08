@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/analysis/results.dart';
 
 const roles = {
   'domain',
@@ -21,6 +22,41 @@ const renderingUris = {
   'package:flutter/cupertino.dart',
   'package:flutter/widgets.dart',
 };
+
+/// Own parsed inputs for one linter batch; findings are always recomputed.
+Future<T> withSharedSourceParses<T>(Future<T> Function() action) =>
+    runZoned(action, zoneValues: {_sourceParses: _SourceParses()});
+
+final _sourceParses = Object();
+
+class _SourceParses {
+  String? root;
+  final current = <String, (String, ParseStringResult)>{};
+
+  void select(String selectedRoot, Set<String> paths) {
+    if (root != selectedRoot) {
+      current.clear();
+      root = selectedRoot;
+    }
+    current.removeWhere((path, _) => !paths.contains(path));
+  }
+
+  ParseStringResult parse(String path, String content) {
+    final previous = current[path];
+    if (previous != null && previous.$1 == content) return previous.$2;
+    final parsed = parseString(
+      content: content,
+      path: path,
+      throwIfDiagnostics: false,
+    );
+    if (parsed.errors.isEmpty) {
+      current[path] = (content, parsed);
+    } else {
+      current.remove(path);
+    }
+    return parsed;
+  }
+}
 
 class Finding implements Comparable<Finding> {
   const Finding(this.id, this.file, this.line, this.subject, this.message);
@@ -161,12 +197,18 @@ class Snapshot {
           ..sort();
     final sources = <String, Source>{};
     final partOwners = <String, List<String>>{};
+    final shared = Zone.current[_sourceParses] as _SourceParses?;
+    shared?.select(root, {for (final path in paths) '$root/$path'});
     for (final path in paths) {
-      final parsed = parseString(
-        content: File('$root/$path').readAsStringSync(),
-        path: '$root/$path',
-        throwIfDiagnostics: false,
-      );
+      final absolute = '$root/$path';
+      final content = File(absolute).readAsStringSync();
+      final parsed =
+          shared?.parse(absolute, content) ??
+          parseString(
+            content: content,
+            path: absolute,
+            throwIfDiagnostics: false,
+          );
       if (parsed.errors.isNotEmpty) {
         throw FormatException('Cannot parse $path; run flutter analyze first');
       }

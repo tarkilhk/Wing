@@ -4,6 +4,7 @@ import 'dart:io';
 import '../dart_sdk.dart';
 import '../model.dart';
 import '../rules/visibility_key_owner.dart' as rule;
+import '../proof_process.dart';
 
 const caller = 'lib/caller.dart';
 const modelImport =
@@ -29,7 +30,9 @@ class Case {
 }
 
 class Workspace {
-  Workspace(Case fixture) {
+  void load(Case fixture) {
+    final sourcesRoot = Directory('${directory.path}/lib');
+    if (sourcesRoot.existsSync()) sourcesRoot.deleteSync(recursive: true);
     final sources = {
       rule.definition: model,
       rule.owner: 'class AppPreferences {}',
@@ -54,7 +57,7 @@ class Workspace {
     final configuration = jsonDecode(original.readAsStringSync()) as Map;
     final packages = (configuration['packages'] as List).cast<Map>();
     final config = File('${directory.path}/.dart_tool/package_config.json');
-    config.parent.createSync();
+    config.parent.createSync(recursive: true);
     config.writeAsStringSync(
       jsonEncode({
         ...configuration,
@@ -72,6 +75,7 @@ class Workspace {
       }),
     );
   }
+
   final directory = Directory.systemTemp.createTempSync('wing-visibility-key-');
   String get rolesPath => '${directory.path}/roles.json';
   Snapshot get snapshot => Snapshot.load(directory.path, rolesPath);
@@ -82,7 +86,10 @@ void require(bool condition, String message) {
   if (!condition) throw StateError(message);
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   String? compiled;
   if (args.isNotEmpty) {
     if (args.length != 2 ||
@@ -270,9 +277,10 @@ Future<void> main(List<String> args) async {
     const Case('malformed source', 'class Caller {', input: true),
   ];
   var passed = 0;
-  for (final fixture in cases) {
-    final workspace = Workspace(fixture);
-    try {
+  final workspace = Workspace();
+  try {
+    for (final fixture in cases) {
+      workspace.load(fixture);
       List<Finding>? findings;
       var actual = 0;
       try {
@@ -311,12 +319,12 @@ Future<void> main(List<String> args) async {
       for (final (executable, prefix) in [
         if (fixture.cli)
           (
-            Platform.resolvedExecutable,
+            proofDartExecutable,
             ['run', 'tools/architecture/rules/visibility_key_owner.dart'],
           ),
         if (compiled != null) (compiled, <String>[]),
       ]) {
-        final result = await Process.run(executable, [
+        final result = await runProofProcess(executable, [
           ...prefix,
           '--root',
           workspace.directory.path,
@@ -350,7 +358,7 @@ Future<void> main(List<String> args) async {
           );
         }
         if (expected == 0) {
-          final invalidSdk = await Process.run(executable, [
+          final invalidSdk = await runProofProcess(executable, [
             ...prefix,
             '--root',
             workspace.directory.path,
@@ -366,9 +374,9 @@ Future<void> main(List<String> args) async {
         }
       }
       passed++;
-    } finally {
-      workspace.dispose();
     }
+  } finally {
+    workspace.dispose();
   }
   stdout.writeln(
     '${rule.id}: $passed API fixtures; actual source${compiled == null ? '' : '+AOT'} CLI invalid1/valid0/input2 and invalid SDK2 passed.',

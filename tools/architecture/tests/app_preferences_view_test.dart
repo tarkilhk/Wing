@@ -4,6 +4,7 @@ import 'dart:io';
 import '../dart_sdk.dart';
 import '../model.dart';
 import '../rules/app_preferences_view.dart' as rule;
+import '../proof_process.dart';
 
 const app = 'lib/core/screens/app_settings_content.dart';
 const importPrefs =
@@ -29,8 +30,12 @@ class Case {
 }
 
 class Workspace {
-  Workspace(Case fixture) {
-    directory = Directory.systemTemp.createTempSync('wing-app-prefs-view-');
+  void load(Case fixture) {
+    // Recreate fixture inputs while retaining analyzer-owned SDK summaries.
+    for (final name in ['lib', 'tools']) {
+      final input = Directory('${directory.path}/$name');
+      if (input.existsSync()) input.deleteSync(recursive: true);
+    }
     final sources = {
       for (final entry in rule.completedViews.entries)
         entry.key: 'class ${entry.value} {}',
@@ -48,7 +53,6 @@ class Workspace {
         'library': entry.key,
       };
     }
-    rolesPath = '${directory.path}/roles.json';
     File(
       rolesPath,
     ).writeAsStringSync(jsonEncode({'schema': 1, 'files': roles}));
@@ -67,13 +71,14 @@ class Workspace {
         },
     ];
     final config = File('${directory.path}/.dart_tool/package_config.json');
-    config.parent.createSync();
+    config.parent.createSync(recursive: true);
     config.writeAsStringSync(
       jsonEncode({...configuration, 'packages': absolute}),
     );
   }
-  late final Directory directory;
-  late final String rolesPath;
+
+  final directory = Directory.systemTemp.createTempSync('wing-app-prefs-view-');
+  String get rolesPath => '${directory.path}/roles.json';
   Snapshot get snapshot => Snapshot.load(directory.path, rolesPath);
   void dispose() => directory.deleteSync(recursive: true);
 }
@@ -82,7 +87,10 @@ void require(bool condition, String message) {
   if (!condition) throw StateError(message);
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   String? compiled;
   if (args.isNotEmpty) {
     if (args.length != 2 ||
@@ -276,9 +284,10 @@ Future<void> main(List<String> args) async {
     ),
   ];
   var passed = 0;
-  for (final fixture in cases) {
-    final workspace = Workspace(fixture);
-    try {
+  final workspace = Workspace();
+  try {
+    for (final fixture in cases) {
+      workspace.load(fixture);
       List<Finding>? findings;
       var actual = 0;
       try {
@@ -318,7 +327,7 @@ Future<void> main(List<String> args) async {
         for (final (executable, prefix) in [
           if (fixture.cli)
             (
-              Platform.resolvedExecutable,
+              proofDartExecutable,
               ['run', 'tools/architecture/rules/app_preferences_view.dart'],
             ),
           if (compiled != null) (compiled, <String>[]),
@@ -333,7 +342,7 @@ Future<void> main(List<String> args) async {
             sdk,
             '--json',
           ];
-          final result = await Process.run(executable, arguments);
+          final result = await runProofProcess(executable, arguments);
           require(
             result.exitCode == expected,
             '${fixture.name}: actual CLI verdict ${result.exitCode}: ${result.stdout}${result.stderr}',
@@ -360,7 +369,7 @@ Future<void> main(List<String> args) async {
             );
           }
           if (expected == 0) {
-            final invalidSdk = await Process.run(executable, [
+            final invalidSdk = await runProofProcess(executable, [
               ...prefix,
               '--root',
               workspace.directory.path,
@@ -378,9 +387,9 @@ Future<void> main(List<String> args) async {
         }
       }
       passed++;
-    } finally {
-      workspace.dispose();
     }
+  } finally {
+    workspace.dispose();
   }
   stdout.writeln(
     '${rule.id}: $passed API fixtures; actual source${compiled == null ? '' : '+AOT'} CLI invalid1/valid0/input2 and invalid SDK2 passed.',

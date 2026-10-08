@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../model.dart';
 import '../rules/supervision_view_dependencies.dart' as rule;
+import '../proof_process.dart';
 
 const _view = 'lib/core/widgets/profile_subagent_panel.dart';
 const _goal = 'lib/core/widgets/profile_goal_panel.dart';
@@ -87,7 +88,9 @@ const _cases = [
   _Case('missing-part', {_view: "part 'supervision_part.dart'; $_page"}, 2),
 ];
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   const representatives = {
     'original-direct': 1,
     'typed-owner': 0,
@@ -148,7 +151,7 @@ Future<void> main() async {
           throw StateError('Duplicate or altered CLI representative');
         }
         exercised[fixture.name] = fixture.exit;
-        final result = await Process.run(Platform.resolvedExecutable, [
+        final result = await runProofProcess(proofDartExecutable, [
           'run',
           'tools/architecture/rules/supervision_view_dependencies.dart',
           '--root',

@@ -90,6 +90,7 @@ def dart_driver(root, destination):
         if path.resolve() not in covered)
     imports = ["import 'dart:io';",
                f"import '{(aggregate.parent / 'cli.dart').as_uri()}' as cli;",
+               f"import '{(aggregate.parent / 'model.dart').as_uri()}' as model;",
                f"import '{(aggregate.parent / 'semantic_context.dart').as_uri()}' as semantic;"]
     callbacks = []
     for index, (name, path) in enumerate(commands):
@@ -112,7 +113,7 @@ def dart_driver(root, destination):
         callbacks.append(f"('{name}', () async {{ {call} }})")
     destination.write_text('\n'.join(imports) + '''
 Future<void> main() async {
-  await semantic.withSharedAnalysisSummaries(() async {
+  await model.withSharedSourceParses(() => semantic.withSharedAnalysisSummaries(() async {
   for (final entry in <(String, Future<void> Function())>[
 ''' + ',\n'.join(callbacks) + '''
   ]) {
@@ -124,7 +125,7 @@ Future<void> main() async {
     }
   }
   exitCode = 0;
-  });
+  }));
 }
 ''')
     return len(commands)

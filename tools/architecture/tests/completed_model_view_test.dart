@@ -1,12 +1,16 @@
 import 'dart:io';
 
 import '../rules/completed_model_view.dart' as rule;
+import '../proof_process.dart';
 
 void expect(bool value, String message) {
   if (!value) throw StateError(message);
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   if (args.isNotEmpty && (args.length != 2 || args.first != '--compiled')) {
     throw const FormatException('Use [--compiled PATH]');
   }
@@ -209,7 +213,7 @@ class ModelProviderAccess { static void fromResponse(Map<String, dynamic> respon
     ).absolute.path;
     final compiled = args.isEmpty ? '${root.path}/guard' : args.last;
     if (args.isEmpty) {
-      final compilation = await Process.run(Platform.resolvedExecutable, [
+      final compilation = await runProofProcess(proofDartExecutable, [
         'compile',
         'exe',
         executable,
@@ -227,7 +231,7 @@ class ModelProviderAccess { static void fromResponse(Map<String, dynamic> respon
       (inputErrors.first, 2),
     ]) {
       await view.writeAsString(example.$1);
-      final result = await Process.run(Platform.resolvedExecutable, [
+      final result = await runProofProcess(proofDartExecutable, [
         'run',
         'tools/architecture/rules/completed_model_view.dart',
         '--root',
@@ -256,7 +260,7 @@ class ModelProviderAccess { static void fromResponse(Map<String, dynamic> respon
     // not establish that the binary can find a real SDK outside dart-sdk/bin.
     for (final example in [(invalid[14], 1), (valid[7], 0)]) {
       await view.writeAsString(example.$1);
-      final result = await Process.run(compiled, ['--root', root.path]);
+      final result = await runProofProcess(compiled, ['--root', root.path]);
       expect(
         result.exitCode == example.$2,
         'compiled CLI ${example.$2}: ${result.stdout}\n${result.stderr}',
@@ -290,10 +294,10 @@ class ModelProviderAccess { static void fromResponse(Map<String, dynamic> respon
     for (final example in healthCases) {
       await health.writeAsString(example.$1);
       for (final command in [
-        [Platform.resolvedExecutable, 'run', executable],
+        [proofDartExecutable, 'run', executable],
         [compiled],
       ]) {
-        final result = await Process.run(command.first, [
+        final result = await runProofProcess(command.first, [
           ...command.skip(1),
           '--root',
           root.path,
@@ -321,7 +325,7 @@ class ModelProviderAccess { static void fromResponse(Map<String, dynamic> respon
     await health.writeAsString('void render() {}');
     await view.writeAsString(invalid[14]);
     await config.delete();
-    final missingSdk = await Process.run(compiled, ['--root', root.path]);
+    final missingSdk = await runProofProcess(compiled, ['--root', root.path]);
     expect(
       missingSdk.exitCode == 2 &&
           '${missingSdk.stderr}'.contains('[${rule.id} INPUT]'),

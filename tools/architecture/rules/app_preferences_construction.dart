@@ -1,16 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/dart/element/element.dart';
-import 'package:analyzer/file_system/overlay_file_system.dart';
-import 'package:analyzer/file_system/physical_file_system.dart';
 
 import '../dart_sdk.dart';
 import '../model.dart';
+import '../semantic_context.dart';
 
 const id = 'ARCH_APP_PREFERENCES_CONSTRUCTION';
 const definition = 'lib/core/services/app_preferences.dart';
@@ -97,24 +95,11 @@ Future<List<Finding>> check(
     if (visitor.requiresResolution) candidates.add(source);
   }
   if (candidates.isEmpty) return [];
-  final overlay = OverlayResourceProvider(PhysicalResourceProvider.INSTANCE);
-  final optionsPath = '$root/analysis_options.yaml';
-  var options = File(optionsPath).existsSync()
-      ? File(optionsPath).readAsStringSync()
-      : '';
-  if (options.contains('enable-experiment:')) {
-    throw const FormatException('Explicit experiment review required');
-  }
-  // The locked analyzer predates the pinned SDK's private named parameters.
-  const flags = '  enable-experiment:\n    - private-named-parameters\n';
-  options = options.contains('\nanalyzer:\n')
-      ? options.replaceFirst('\nanalyzer:\n', '\nanalyzer:\n$flags')
-      : '$options\nanalyzer:\n$flags';
-  overlay.setOverlay(optionsPath, content: options, modificationStamp: 0);
-  final contexts = AnalysisContextCollection(
+  final contexts = semanticContextCollection(
+    root: root,
+    sdk: sdk,
     includedPaths: [root],
-    resourceProvider: overlay,
-    sdkPath: sdk,
+    cacheNamespace: 'app-preferences-construction',
   );
   final findings = <Finding>[];
   final libraries = <String, ResolvedLibraryResult>{};

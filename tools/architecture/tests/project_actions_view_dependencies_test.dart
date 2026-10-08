@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../model.dart';
 import '../rules/project_actions_view_dependencies.dart' as rule;
+import '../proof_process.dart';
 
 const _view = rule.view;
 const _adapter = 'lib/core/services/profile_workspace_controller.dart';
@@ -65,7 +66,9 @@ const _cases = [
   _Case('missing-part', {_view: "part 'project_actions_part.dart'; $_page"}, 2),
 ];
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final cliExits = <int>{};
   for (final fixture in _cases) {
     final directory = Directory.systemTemp.createTempSync(
@@ -114,7 +117,7 @@ Future<void> main() async {
         if (!cliExits.add(fixture.exit)) {
           throw StateError('Duplicate CLI representative');
         }
-        final result = await Process.run(Platform.resolvedExecutable, [
+        final result = await runProofProcess(proofDartExecutable, [
           'run',
           'tools/architecture/rules/project_actions_view_dependencies.dart',
           '--root',

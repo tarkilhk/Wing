@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../model.dart';
 import '../rules/reading_view_inputs.dart' as rule;
+import '../proof_process.dart';
 
 const message = 'lib/core/widgets/profile_message.dart';
 const tools = 'lib/core/widgets/profile_tool_activity.dart';
@@ -314,7 +315,9 @@ const cases = [
   ),
 ];
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final cliExits = <int>{};
   for (final fixture in cases) {
     final root = Directory.systemTemp.createTempSync('wing-reading-input-');
@@ -422,7 +425,7 @@ Future<void> main() async {
             fixture.name != 'copied-pending-input-union') {
           throw StateError('Duplicate CLI representative');
         }
-        final result = await Process.run(Platform.resolvedExecutable, [
+        final result = await runProofProcess(proofDartExecutable, [
           'run',
           'tools/architecture/rules/reading_view_inputs.dart',
           '--root',

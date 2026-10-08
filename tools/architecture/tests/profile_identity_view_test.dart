@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../dart_sdk.dart';
+import '../proof_process.dart';
 import '../model.dart';
 import '../rules/profile_identity_view.dart' as rule;
 
@@ -41,7 +42,11 @@ class Case {
 }
 
 class Workspace {
-  Workspace(Case fixture) {
+  void load(Case fixture) {
+    final sourcesRoot = Directory('${directory.path}/lib');
+    if (sourcesRoot.existsSync()) sourcesRoot.deleteSync(recursive: true);
+    final toolsRoot = Directory('${directory.path}/tools');
+    if (toolsRoot.existsSync()) toolsRoot.deleteSync(recursive: true);
     final sources = {
       admin: raw,
       rule.session: owner,
@@ -88,6 +93,7 @@ class Workspace {
       }),
     );
   }
+
   final directory = Directory.systemTemp.createTempSync('wing-identity-view-');
   String get rolesPath => '${directory.path}/roles.json';
   Snapshot get snapshot => Snapshot.load(directory.path, rolesPath);
@@ -98,7 +104,10 @@ void require(bool condition, String message) {
   if (!condition) throw StateError(message);
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   String? compiled;
   if (args.isNotEmpty) {
     if (args.length != 2 ||
@@ -715,138 +724,142 @@ Future<void> main(List<String> args) async {
       input: true,
     ),
   ];
+  final workspace = Workspace();
+  try {
+    await verifyCases(cases, workspace, sdk, compiled);
+  } finally {
+    workspace.dispose();
+  }
+}
+
+Future<void> verifyCases(
+  List<Case> cases,
+  Workspace workspace,
+  String sdk,
+  String? compiled,
+) async {
   var passed = 0;
   for (final fixture in cases) {
-    final workspace = Workspace(fixture);
+    workspace.load(fixture);
     try {
-      try {
-        final findings = await rule.check(
-          workspace.snapshot,
-          workspace.directory.path,
-          sdkPath: sdk,
-        );
-        require(!fixture.input, '${fixture.name}: expected input rejection');
-        require(
-          fixture.bad ? findings.isNotEmpty : findings.isEmpty,
-          '${fixture.name}: findings=$findings',
-        );
-        require(
-          findings.every(
-            (f) => f.id == rule.id && f.file == fixture.file && f.line >= 2,
-          ),
-          '${fixture.name}: diagnostic provenance',
-        );
-      } on FormatException {
-        require(fixture.input, '${fixture.name}: unexpected input rejection');
-      }
-      final expected = fixture.input
-          ? 2
-          : fixture.bad
-          ? 1
-          : 0;
-      // Representative ordinary CLI proofs; every fixture uses freshly compiled
-      // CLI when requested, including SDK/provenance branches.
-      if (compiled != null ||
-          passed == 0 ||
-          fixture.name == 'local callbacks with raw operation spelling' ||
-          fixture.name == 'malformed selected input' ||
-          fixture.name == 'canonical enum capture' ||
-          fixture.name == 'actual file URI part cannot disappear' ||
-          fixture.name == 'canonical JsonUtf8Encoder constructor' ||
-          fixture.name ==
-              'session spelling authority alias cannot bypass canonical type capture' ||
-          fixture.name ==
-              'passive only semantic error belongs to standard SDK') {
-        final arguments = [
-          '--root',
-          workspace.directory.path,
-          '--roles',
-          workspace.rolesPath,
-          '--sdk',
-          sdk,
-          '--json',
-        ];
-        final process = await Process.run(
-          compiled ?? Platform.resolvedExecutable,
-          compiled == null
-              ? [
-                  'run',
-                  'tools/architecture/rules/profile_identity_view.dart',
-                  ...arguments,
-                ]
-              : arguments,
-        );
-        require(
-          process.exitCode == expected,
-          '${fixture.name}: CLI ${process.exitCode} expected$expected ${process.stderr}',
-        );
-        if (expected != 2) {
-          final output = jsonDecode(process.stdout as String) as Map;
-          require(
-            output['id'] == rule.id &&
-                ((output['findings'] as List).isNotEmpty == fixture.bad),
-            '${fixture.name}: CLI findings',
-          );
-        }
-      }
-      if (fixture.name == 'unrelated semantic error belongs to standard SDK' ||
-          fixture.name ==
-              'passive only semantic error belongs to standard SDK') {
-        final standard = await Process.run(Platform.resolvedExecutable, [
-          'analyze',
-          '${workspace.directory.path}/${rule.view}',
-        ]);
-        require(
-          standard.exitCode != 0 &&
-              '${standard.stdout}${standard.stderr}'.contains(
-                'return_of_invalid_type',
-              ),
-          'Noncandidate semantic error must fail standard SDK analysis',
-        );
-      }
-      passed++;
-    } finally {
-      workspace.dispose();
-    }
-  }
-  final valid = Workspace(
-    const Case('SDK validation clean path', 'class AdminIdentityPage {}'),
-  );
-  try {
-    var rejected = false;
-    try {
-      await rule.check(
-        valid.snapshot,
-        valid.directory.path,
-        sdkPath: '/missing/identity-sdk',
+      final findings = await rule.check(
+        workspace.snapshot,
+        workspace.directory.path,
+        sdkPath: sdk,
+      );
+      require(!fixture.input, '${fixture.name}: expected input rejection');
+      require(
+        fixture.bad ? findings.isNotEmpty : findings.isEmpty,
+        '${fixture.name}: findings=$findings',
+      );
+      require(
+        findings.every(
+          (f) => f.id == rule.id && f.file == fixture.file && f.line >= 2,
+        ),
+        '${fixture.name}: diagnostic provenance',
       );
     } on FormatException {
-      rejected = true;
+      require(fixture.input, '${fixture.name}: unexpected input rejection');
     }
-    require(rejected, 'SDK validation cannot be skipped on clean path');
-    final arguments = [
-      '--root',
-      valid.directory.path,
-      '--roles',
-      valid.rolesPath,
-      '--sdk',
-      '/missing/identity-sdk',
-      '--json',
-    ];
-    final process = await Process.run(
-      compiled ?? Platform.resolvedExecutable,
-      compiled == null
-          ? [
-              'run',
-              'tools/architecture/rules/profile_identity_view.dart',
-              ...arguments,
-            ]
-          : arguments,
-    );
-    require(process.exitCode == 2, 'Invalid SDK CLI expected2');
-  } finally {
-    valid.dispose();
+    final expected = fixture.input
+        ? 2
+        : fixture.bad
+        ? 1
+        : 0;
+    // Representative ordinary CLI proofs; every fixture uses freshly compiled
+    // CLI when requested, including SDK/provenance branches.
+    if (compiled != null ||
+        passed == 0 ||
+        fixture.name == 'local callbacks with raw operation spelling' ||
+        fixture.name == 'malformed selected input' ||
+        fixture.name == 'canonical enum capture' ||
+        fixture.name == 'actual file URI part cannot disappear' ||
+        fixture.name == 'canonical JsonUtf8Encoder constructor' ||
+        fixture.name ==
+            'session spelling authority alias cannot bypass canonical type capture' ||
+        fixture.name == 'passive only semantic error belongs to standard SDK') {
+      final arguments = [
+        '--root',
+        workspace.directory.path,
+        '--roles',
+        workspace.rolesPath,
+        '--sdk',
+        sdk,
+        '--json',
+      ];
+      final process = await runProofProcess(
+        compiled ?? proofDartExecutable,
+        compiled == null
+            ? [
+                'run',
+                'tools/architecture/rules/profile_identity_view.dart',
+                ...arguments,
+              ]
+            : arguments,
+      );
+      require(
+        process.exitCode == expected,
+        '${fixture.name}: CLI ${process.exitCode} expected$expected ${process.stderr}',
+      );
+      if (expected != 2) {
+        final output = jsonDecode(process.stdout as String) as Map;
+        require(
+          output['id'] == rule.id &&
+              ((output['findings'] as List).isNotEmpty == fixture.bad),
+          '${fixture.name}: CLI findings',
+        );
+      }
+    }
+    if (fixture.name == 'unrelated semantic error belongs to standard SDK' ||
+        fixture.name == 'passive only semantic error belongs to standard SDK') {
+      final standard = await runProofProcess(proofDartExecutable, [
+        'analyze',
+        '${workspace.directory.path}/${rule.view}',
+      ]);
+      require(
+        standard.exitCode != 0 &&
+            '${standard.stdout}${standard.stderr}'.contains(
+              'return_of_invalid_type',
+            ),
+        'Noncandidate semantic error must fail standard SDK analysis',
+      );
+    }
+    passed++;
   }
+  workspace.load(
+    const Case('SDK validation clean path', 'class AdminIdentityPage {}'),
+  );
+  var rejected = false;
+  try {
+    await rule.check(
+      workspace.snapshot,
+      workspace.directory.path,
+      sdkPath: '/missing/identity-sdk',
+    );
+  } on FormatException {
+    rejected = true;
+  }
+  require(rejected, 'SDK validation cannot be skipped on clean path');
+  final arguments = [
+    '--root',
+    workspace.directory.path,
+    '--roles',
+    workspace.rolesPath,
+    '--sdk',
+    '/missing/identity-sdk',
+    '--json',
+  ];
+  final process = await runProofProcess(
+    compiled ?? proofDartExecutable,
+    compiled == null
+        ? [
+            'run',
+            'tools/architecture/rules/profile_identity_view.dart',
+            ...arguments,
+          ]
+        : arguments,
+  );
+  require(process.exitCode == 2, 'Invalid SDK CLI expected2');
   stdout.writeln(
     '$passed identity-view fixtures + invalid SDK proof passed${compiled == null ? " (source)" : " (fresh compiled)"}',
   );

@@ -1,12 +1,15 @@
 import 'dart:io';
 
 import '../rules/secure_reply_view_wire.dart' as rule;
+import '../proof_process.dart';
 
 void require(bool value, String reason) {
   if (!value) throw StateError(reason);
 }
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final root = Directory.systemTemp.createTempSync('wing-secure-reply-wire-');
   const panel = 'class GatewaySensitivePromptPanel {}';
   var passed = 0;
@@ -118,7 +121,7 @@ Future<void> main() async {
         2 => 'class OtherPanel {}',
         _ => panel,
       });
-      final result = await Process.run(Platform.resolvedExecutable, [
+      final result = await runProofProcess(proofDartExecutable, [
         'run',
         executable,
         '--root',

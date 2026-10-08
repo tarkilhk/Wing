@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../model.dart';
 import '../rules/workspace_search_owner.dart' as rule;
+import '../proof_process.dart';
 
 const part = 'lib/core/services/workspace_search_part.dart';
 const legitimate = '''
@@ -197,7 +198,9 @@ class ProfileWorkspaceController {
   ),
 ];
 
-Future<void> main() async {
+Future<void> main() => withProofProcesses(() => _proofMain());
+
+Future<void> _proofMain() async {
   final cliExits = <int>{};
   for (final fixture in _cases) {
     final directory = Directory.systemTemp.createTempSync('wing-search-owner-');
@@ -248,7 +251,7 @@ Future<void> main() async {
       }
       if (fixture.cli) {
         cliExits.add(actual);
-        final result = await Process.run(Platform.resolvedExecutable, [
+        final result = await runProofProcess(proofDartExecutable, [
           'run',
           'tools/architecture/rules/workspace_search_owner.dart',
           '--root',

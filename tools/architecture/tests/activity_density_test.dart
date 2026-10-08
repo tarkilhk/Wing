@@ -4,6 +4,7 @@ import 'dart:io';
 import '../dart_sdk.dart';
 import '../model.dart';
 import '../rules/activity_density.dart' as rule;
+import '../proof_process.dart';
 
 const _tool = 'lib/core/widgets/profile_tool_call.dart';
 const _agents = 'lib/core/widgets/profile_saved_agents.dart';
@@ -164,7 +165,10 @@ const _fixtures = <({String name, String imports, String body, String extra, int
   ),
 ];
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) =>
+    withProofProcesses(() => _proofMain(args));
+
+Future<void> _proofMain(List<String> args) async {
   if (args.isNotEmpty && (args.length != 2 || args.first != '--compiled')) {
     throw const FormatException('Expected --compiled PATH');
   }
@@ -267,8 +271,8 @@ ${active ? fixture.extra : ''}
           throw StateError('${fixture.name} / $target: $exit $findings');
         }
         if (!cliRepresentatives.add(fixture.exit)) continue;
-        final result = await Process.run(
-          args.isEmpty ? Platform.resolvedExecutable : args.last,
+        final result = await runProofProcess(
+          args.isEmpty ? proofDartExecutable : args.last,
           [
             if (args.isEmpty) ...[
               'run',

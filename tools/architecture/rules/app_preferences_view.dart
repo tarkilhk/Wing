@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
@@ -10,6 +9,7 @@ import 'package:analyzer/dart/element/element.dart';
 import '../dart_sdk.dart';
 import '../lexical_bindings.dart';
 import '../model.dart';
+import '../semantic_context.dart';
 
 const id = 'ARCH_APP_PREFERENCES_VIEW';
 const completedViews = {
@@ -165,9 +165,12 @@ Future<List<Finding>> check(
       throw const FormatException('Ambiguous completed view part ownership');
     }
   }
-  final contexts = AnalysisContextCollection(
+  final contexts = semanticContextCollection(
+    root: root,
     includedPaths: [root],
-    sdkPath: dartSdkPath(root, configured: sdkPath),
+    sdk: dartSdkPath(root, configured: sdkPath),
+    cacheNamespace: 'app-preferences-view',
+    enableSdkExperiments: false,
   );
   final findings = <Finding>[];
   final resolvedLibraries = <String, ResolvedLibraryResult>{};

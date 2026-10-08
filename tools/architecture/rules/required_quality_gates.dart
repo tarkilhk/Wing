@@ -4,6 +4,20 @@ import 'package:yaml/yaml.dart';
 
 const _qaCommand = "python3 -m unittest discover -s tools/qa -p 'test_*.py' -v";
 const _architectureCommand = 'dart run tools/architecture/check_all.dart';
+const _changedTestsCommand =
+    r'python3 scripts/test.py --changed-since "$TEST_BASE_REF"';
+const _fullTestsCommand = 'python3 scripts/test.py --full';
+const _testBaseRef =
+    r'${{ github.event.pull_request.base.sha || github.event.before }}';
+const _fixtureNames = [
+  'workspace_search_owner',
+  'profile_discovery_writer',
+  'saved_prompt_journal_admission',
+  'retired_answer_versions_namespace',
+  'current_tool_events',
+  'activity_density',
+];
+
 const _nativeBoundaryCommand =
     'python3 tools/architecture/native_share/provider_boundary.py';
 const _nativeFixtureCommand =
@@ -123,29 +137,15 @@ List<String> checkRequiredQualityGates(Directory root) {
           'native-retired-resources',
           'python3 tools/architecture/rules/native_retired_resources.py',
         ),
+        for (final name in _fixtureNames)
+          if (target.$2 == 'build' || name == 'workspace_search_owner')
+            (
+              'fixture-$name',
+              'dart run tools/architecture/tests/${name}_test.dart',
+            ),
         (
-          'workspace-search-fixtures',
-          'dart run tools/architecture/tests/workspace_search_owner_test.dart',
-        ),
-        (
-          'profile-discovery-writer-fixtures',
-          'dart run tools/architecture/tests/profile_discovery_writer_test.dart',
-        ),
-        (
-          'saved-prompt-journal-admission-fixtures',
-          'dart run tools/architecture/tests/saved_prompt_journal_admission_test.dart',
-        ),
-        (
-          'retired-answer-versions-namespace-fixtures',
-          'dart run tools/architecture/tests/retired_answer_versions_namespace_test.dart',
-        ),
-        (
-          'current-tool-event-fixtures',
-          'dart run tools/architecture/tests/current_tool_events_test.dart',
-        ),
-        (
-          'activity-density-fixtures',
-          'dart run tools/architecture/tests/activity_density_test.dart',
+          'host-tests',
+          target.$2 == 'quality' ? _changedTestsCommand : _fullTestsCommand,
         ),
         ('native-share-boundary', _nativeBoundaryCommand),
         ('native-share-fixtures', _nativeFixtureCommand),
@@ -175,6 +175,8 @@ List<String> checkRequiredQualityGates(Directory root) {
                   _hardFailure(entry.$2['continue-on-error']) &&
                   _mandatory(entry.$2['if']) &&
                   _runsFinalCommand(entry.$2['run'], gate.$2) &&
+                  (gate.$2 != _changedTestsCommand ||
+                      _boundTestBase(entry.$2['env'])) &&
                   (!native || steps.take(entry.$1).any(_nativeToolingReady)),
             );
         if (!protected) {
@@ -193,7 +195,76 @@ List<String> checkRequiredQualityGates(Directory root) {
       failures.add('${target.$1} QUALITY_WORKFLOW_INPUT: ${error.message}');
     }
   }
+  failures.addAll(_checkNightly(root));
   return failures..sort();
+}
+
+bool _boundTestBase(Object? environment) =>
+    environment is Map && environment['TEST_BASE_REF'] == _testBaseRef;
+
+List<String> _checkNightly(Directory root) {
+  const path = '.github/workflows/nightly-tests.yml';
+  final failures = <String>[];
+  try {
+    final document = loadYaml(File('${root.path}/$path').readAsStringSync());
+    if (document is! Map || document['jobs'] is! Map) {
+      throw const FormatException('Expected workflow jobs.');
+    }
+    final events = document['on'];
+    final schedules = events is Map ? events['schedule'] : null;
+    if (schedules is! List ||
+        !schedules.any(
+          (entry) => entry is Map && entry['cron'] == '0 19 * * *',
+        ) ||
+        events is! Map ||
+        !events.containsKey('workflow_dispatch')) {
+      failures.add(
+        '$path:on REQUIRED_QUALITY_GATE: '
+        'Run exhaustive proofs nightly and support manual verification.',
+      );
+    }
+    final job = (document['jobs'] as Map)['exhaustive'];
+    if (job is! Map || job['steps'] is! List) {
+      throw const FormatException('Expected exhaustive job with steps.');
+    }
+    final steps = (job['steps'] as List).whereType<Map>().toList();
+    for (final command in [
+      _fullTestsCommand,
+      for (final name in _fixtureNames)
+        'dart run tools/architecture/tests/${name}_test.dart',
+    ]) {
+      final protected =
+          _hardFailure(job['continue-on-error']) &&
+          _mandatory(job['if']) &&
+          steps.indexed.any(
+            (entry) =>
+                _hardFailure(entry.$2['continue-on-error']) &&
+                _mandatory(entry.$2['if']) &&
+                _runsFinalCommand(entry.$2['run'], command) &&
+                steps
+                    .take(entry.$1)
+                    .any(
+                      (setup) =>
+                          _hardFailure(setup['continue-on-error']) &&
+                          _mandatory(setup['if']) &&
+                          _runsFinalCommand(setup['run'], 'flutter pub get'),
+                    ),
+          );
+      if (!protected) {
+        failures.add(
+          '$path:exhaustive REQUIRED_QUALITY_GATE: '
+          'Run $command as a mandatory hard-failing step after dependencies.',
+        );
+      }
+    }
+  } on FileSystemException catch (error) {
+    failures.add('$path QUALITY_WORKFLOW_INPUT: ${error.message}');
+  } on YamlException catch (error) {
+    failures.add('$path QUALITY_WORKFLOW_INPUT: ${error.message}');
+  } on FormatException catch (error) {
+    failures.add('$path QUALITY_WORKFLOW_INPUT: ${error.message}');
+  }
+  return failures;
 }
 
 bool _hardFailure(Object? value) => value == null || value == false;

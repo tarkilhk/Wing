@@ -19,9 +19,15 @@ dart run tools/architecture/rules/app_preferences_view.dart
 python3 tools/architecture/rules/authored_census.py
 python3 -m unittest discover -s tools/qa -p 'test_*.py' -v
 flutter analyze --fatal-infos
-flutter test
+python3 scripts/test.py
 flutter build apk --debug
 ```
+
+`python3 scripts/test.py` runs product tests and all current-source linters.
+Use `python3 scripts/test.py --full` for the complete checker fixture, CLI,
+native compilation and SDK proofs as well. CI runs the complete suite nightly,
+when checking tools or their inputs change, and before release. The test
+inventory and coverage boundary are documented in [Testing](docs/TESTING.md).
 
 The ordinary debug APK uses `com.tarkilhk.wing.dev`, keeping its app storage separate from Wing. No release key is needed for development. Release signing is covered in [the release guide](docs/ANDROID_RELEASE_PLAN.md).
 
@@ -54,7 +60,9 @@ by requiring its reconciliation before replacement.
 Every commit on every branch then runs the existing Dart and Python/native source
 linters against an isolated checkout of the Git index. Unstaged edits cannot hide
 a staged violation or contaminate a clean staged commit. Dart rules share one VM
-startup; native checks reuse their source/JDK/compiler-bound caches. Missing
+startup; native checks reuse their source/JDK/compiler-bound caches.
+Unchanged source trees also share parsing within that batch; current files and
+roles are reread and every rule computes fresh findings. Missing
 tooling blocks the commit with a setup error. Initialize dependencies with
 `flutter pub get` and the ordinary Android build above before the first check.
 The hook runs source checks; behavior tests and builds remain in CI.
