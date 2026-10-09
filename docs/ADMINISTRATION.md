@@ -665,6 +665,20 @@ Run once at the ordinary Android viewport/font size, then at 320 dp with Android
 font scale 2 and `--dart-define=ALERT_EXPECT_LARGE=true`. Do not override the
 Flutter test viewport: this journey verifies the Android-provided constraints.
 
+For the threshold lifecycle case alone, run that integration target with
+`--dart-define=ALERT_RETENTION_NATIVE=true`. It uses real one-minute warning and
+two-minute recovery durations, 46.2%/25% memory observations and no ongoing chats.
+An emulator-only host controller reads the development package's
+`code_cache/wing-health-retention-stage.json`. For each new token, it captures the
+Android window or presses Home, waits the requested `seconds`, then reopens the
+same app process; acknowledge the completed action by writing that token to
+`code_cache/wing-health-retention-ack`. Checkpoints have bounded deadlines.
+The journey requires a fresh host reading on each return, no host polling while
+paused, an alert after two 30-second pauses and recovery after a two-minute pause.
+It tests the shipped lifecycle/alert owners with controlled transport responses,
+not the physical phone's process retention or live Hermes readings. Keep native
+captures, source hashes and checkpoint receipts under ignored `build/`.
+
 | Before | After | Why |
 | --- | --- | --- |
 | Chats and conversation vertically center title and scope in different-height toolbars | Shared 48 dp title row, optional scope row below | Bell and titles share one compact geometry |

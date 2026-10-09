@@ -7,6 +7,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/models/health_alert.dart';
+import 'package:wing/core/models/host_thresholds.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/screens/administration/admin_usage_dashboard.dart';
@@ -18,6 +19,7 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/core/widgets/health_alerts/health_alerts_scope.dart';
 import 'package:wing/main.dart';
 
 import '../test/support/administration_design_fixture.dart';
@@ -170,11 +172,213 @@ Future<void> _waitFor(WidgetTester tester, Finder target) async {
   expect(target, findsWidgets);
 }
 
+/// The emulator host acknowledges captures or performs actual Home/reopen
+/// actions. No synthetic lifecycle events or shortened evaluator clock are used.
+Future<void> _retentionCheckpoint(
+  String name,
+  _Observations observations, {
+  Duration background = Duration.zero,
+}) async {
+  final cache = Directory.systemTemp.path;
+  final token = '$name-${DateTime.now().microsecondsSinceEpoch}';
+  final receipt = File('$cache/wing-health-retention-ack');
+  await File('$cache/wing-health-retention-stage.json').writeAsString(
+    jsonEncode({
+      'token': token,
+      'name': name,
+      'action': background == Duration.zero ? 'capture' : 'background',
+      'seconds': background.inSeconds,
+      'reads': observations.hostReads,
+      'lastReadAt': observations.owner
+          .hostResources()
+          .state
+          .stats
+          .readAt
+          ?.toIso8601String(),
+    }),
+  );
+  final deadline = DateTime.now().add(background + const Duration(seconds: 30));
+  var paused = false;
+  int? pausedReads;
+  while (DateTime.now().isBefore(deadline)) {
+    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.paused) {
+      paused = true;
+      pausedReads ??= observations.hostReads;
+      expect(observations.hostReads, pausedReads);
+    }
+    if (await receipt.exists() && await receipt.readAsString() == token) {
+      if (background != Duration.zero) expect(paused, isTrue);
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+  throw StateError('Native driver did not complete $name');
+}
+
+Future<void> _retentionJourney(WidgetTester tester) async {
+  SharedPreferences.setMockInitialValues({
+    'notification_permission_requested': true,
+    'microphone_permission_requested': true,
+  });
+  final prefs = await SharedPreferences.getInstance();
+  final preferences = AppPreferences(prefs);
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox());
+    await _settleScreen(tester);
+    preferences.dispose();
+  });
+  await preferences.setTheme(AppThemePreference.dark);
+  await HealthAlertSettingsStore(prefs).write(
+    HealthAlertSettings(
+      server: false,
+      profile: false,
+      rules: {
+        ...HealthAlertSettings().rules,
+        HostMetric.memoryUsedPercent: HealthAlertRule(
+          enabled: true,
+          warnAbove: 35,
+          clearBelow: 30,
+          alertMinutes: 1,
+          clearMinutes: 2,
+        ),
+      },
+    ),
+  );
+  final manager = await ConnectionManager.create(
+    prefs,
+    credentialStore: _Credentials(),
+  );
+  final connection = await manager.saveConnection(
+    'Threshold lifecycle QA',
+    'localhost',
+    1,
+    '',
+  );
+  preferences.admitWorkspaceEntry(connection.id);
+  await preferences.settleWorkspaceEntry();
+  final observations = _Observations()..liveSessions.clear();
+  void memory(double percent) {
+    final value = observations.stats['memory'] as Map;
+    value['percent'] = percent;
+    value['used'] = ((value['total'] as int) * percent / 100).round();
+    value['available'] = value['total'] - value['used'];
+  }
+
+  memory(25);
+  final registry = ProfileWorkspaceRegistry(
+    identities: ProfileConnectionIdentity(),
+    create: (connection, identity) {
+      final owner = observations.owner = ProfileWorkspaceController(
+        access: manager.accessFor(connection),
+        connectionIdentity: identity,
+        preferences: prefs,
+        appPreferences: preferences,
+        gatewayFactory: observations.gateway,
+      );
+      owner.hostResources(
+        repository: observations.server(connection, identity),
+      );
+      return owner;
+    },
+  );
+  await tester.pumpWidget(
+    WingApp(
+      connManager: manager,
+      appPreferences: preferences,
+      profileControllers: registry,
+    ),
+  );
+  await _waitFor(tester, find.text('Chats'));
+  await tester.tap(find.byTooltip('Open navigation menu'));
+  await _settleScreen(tester);
+  await tester.ensureVisible(find.byKey(const ValueKey('nav-health')));
+  await tester.tap(find.byKey(const ValueKey('nav-health')));
+  await _settleScreen(tester);
+  final scope = HealthAlertsScope.maybeOf(
+    tester.element(find.byType(AppBar).last),
+  )!;
+  final bell = find.byKey(const ValueKey('health-alert-bell'));
+  expect(observations.owner.hasActiveChats, isFalse);
+  expect(scope.alerts.alerts, isEmpty);
+  memory(46.2);
+  await observations.owner.hostResources().refresh();
+  final first = observations.owner.hostResources().state.stats.readAt!;
+  expect(bell, findsNothing);
+  await _retentionCheckpoint('first-high-reading', observations);
+  for (var visit = 1; visit <= 2; visit++) {
+    final previous = observations.owner.hostResources().state.stats.readAt!;
+    await _retentionCheckpoint(
+      'background-$visit',
+      observations,
+      background: const Duration(seconds: 30),
+    );
+    await _settleScreen(tester);
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (DateTime.now().isBefore(deadline) &&
+        !observations.owner.hostResources().state.stats.readAt!.isAfter(
+          previous,
+        )) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(WidgetsBinding.instance.lifecycleState, AppLifecycleState.resumed);
+    expect(
+      observations.owner.hostResources().state.stats.readAt!.isAfter(previous),
+      isTrue,
+    );
+    if (visit == 1) {
+      expect(scope.alerts.alerts, isEmpty);
+      expect(bell, findsNothing);
+    } else {
+      expect(
+        DateTime.now().difference(first),
+        greaterThanOrEqualTo(const Duration(minutes: 1)),
+      );
+      expect(scope.alerts.alerts.single.title, 'High memory usage');
+      expect(bell, findsOneWidget);
+    }
+    await _retentionCheckpoint('return-$visit', observations);
+  }
+  if (find.byTooltip('Dismiss health notice').evaluate().isNotEmpty) {
+    await tester.tap(find.byTooltip('Dismiss health notice'));
+  }
+  await tester.tap(bell);
+  await _settleScreen(tester);
+  expect(find.text('High memory usage'), findsOneWidget);
+  await _retentionCheckpoint('warning-details', observations);
+  await tester.tap(find.byTooltip('Close alerts'));
+  await _settleScreen(tester);
+  memory(25);
+  await observations.owner.hostResources().refresh();
+  expect(scope.alerts.alerts, hasLength(1));
+  await _retentionCheckpoint(
+    'recovery-background',
+    observations,
+    background: const Duration(minutes: 2),
+  );
+  await _settleScreen(tester);
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  while (scope.alerts.alerts.isNotEmpty && DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  expect(scope.alerts.alerts, isEmpty);
+  expect(bell, findsNothing);
+  await _retentionCheckpoint('recovered', observations);
+  expect(tester.takeException(), isNull);
+}
+
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   // Keep the native frame clock running through capture and I/O waits. Working
   // rows animate continuously, so route checks use bounded pumps, not settling.
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  if (const bool.fromEnvironment('ALERT_RETENTION_NATIVE')) {
+    testWidgets(
+      'Android health threshold retention through real Home and reopen',
+      _retentionJourney,
+      timeout: const Timeout(Duration(minutes: 6)),
+    );
+    return;
+  }
   const large = bool.fromEnvironment('ALERT_EXPECT_LARGE');
   for (final theme in [AppThemePreference.dark, AppThemePreference.light]) {
     testWidgets('Android health alerts ${theme.name}, large=$large', (
