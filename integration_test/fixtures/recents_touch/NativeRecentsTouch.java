@@ -75,13 +75,7 @@ public final class NativeRecentsTouch {
             end[p][1] = Float.parseFloat(args[cursor++]);
         }
         int duration = Integer.parseInt(args[cursor++]);
-        if (mode.equals("scrub")) {
-            down = SystemClock.uptimeMillis();
-            send(MotionEvent.ACTION_DOWN, start);
-            SystemClock.sleep(35);
-            send(MotionEvent.ACTION_UP, start);
-            SystemClock.sleep(80);
-        }
+        long started = SystemClock.uptimeMillis();
         if (mode.equals("interrupt")) {
             float shortDx = Float.parseFloat(args[cursor]);
             float[][] shortEnd = {{start[0][0] + shortDx, start[0][1]},
@@ -90,5 +84,6 @@ public final class NativeRecentsTouch {
             SystemClock.sleep(70);
         }
         drag(start, end, duration);
+        System.out.println("nativeTouchElapsedMs=" + (SystemClock.uptimeMillis() - started));
     }
 }

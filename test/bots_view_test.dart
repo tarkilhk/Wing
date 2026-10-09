@@ -350,7 +350,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.current!.chat!.key.sessionId, 'pin-one');
       expect(controller.current!.chat!.key.workspace.profileName, 'personal');
-      await tester.tap(find.byTooltip('Back to Bots'));
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(BotsContent), findsOneWidget);
       expect(

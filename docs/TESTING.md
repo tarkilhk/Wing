@@ -70,7 +70,7 @@ checks and their stated limits without manufacturing another release campaign.
 ## Recents conversation switching
 
 Prerequisite: at least two chats in the selected Recents filter. Open one from
-Recents. Exercise the two-finger horizontal swipe, double tap/hold/scrub and
+Recents. Exercise the two-finger horizontal swipe and
 inward pinch on blank transcript space. Lift both fingers: the stack must remain.
 Browse past either end without selecting or resuming a chat, then tap a center or
 peek card. The selected normal chat expands, retaining that chat's draft,
@@ -87,8 +87,9 @@ cue admission/coalescing. `recent_conversation_switcher_test.dart` covers real
 multitouch, pinch persistence, circular laps, browse/commit, interrupted springs,
 pointer-time fling decisions, accessible
 controls alongside expert gestures when an accessibility service is enabled,
-retained side-card identity across paint-order changes, unchanged rich-preview
-presentation during motion and completed asynchronous preview publication,
+snapshot-only dragging without preview reads or construction, bounded pixel
+ownership/disposal, delayed-resume expansion, removed double-tap switching and
+completed asynchronous preview publication,
 theme paint and the production Recents route with draft/cursor/Back
 restoration at normal and enlarged text in both themes.
 `chat_notification_coordinator_test.dart` protects fresh journal projections,
@@ -102,7 +103,9 @@ assets under ignored `build/` and exports normal/stack captures to
 `build/recents-review/`. Host tests do not certify physical-device gesture feel,
 keyboard transitions or frame pacing; inspect those on Android before release.
 
-Recents raster capture waits for the completed paint frame in every build mode.
+Recents raster capture runs during idle and waits for the completed paint frame
+in every build mode. Physical performance acceptance measures first movement and
+frame pacing for swipe, pinch and card browsing on representative rich history.
 The controlled repaint case queues a chat rebuild before opening the stack and
 checks the captured pixels, so an old frame cannot count as success.
 `recent_capture_release_safe_guard_test.dart` also rejects runtime reads of the
@@ -119,7 +122,7 @@ python3 scripts/test_native_recents.py --device <emulator-id> --output build/emu
 
 It builds `integration_test/recent_conversation_native_test.dart` and compiles a
 shell-only Java touch helper. Android dispatches real one/two-finger MotionEvents,
-including pinch, double tap/hold/scrub and interrupted returns; Flutter does not
+including pinch, double-tap non-admission and interrupted returns; Flutter does not
 synthesize these gestures. The matrix uses native normal/200% font settings in
 both themes. It covers passive browsing and circular laps, center/peek selection,
 keyboard/Back (including hidden-keyboard preservation and menu focus restoration

@@ -865,13 +865,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             context: context,
 
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              tooltip: switch (_chatOrigin) {
-                AppDestination.activity => 'Back to Recents',
-                AppDestination.bots => 'Back to Bots',
-                _ => 'Back to sessions',
-              },
-              onPressed: _leaveChat,
+              icon: const Icon(Icons.menu),
+              tooltip: 'Open navigation menu',
+              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
             ),
             // Share the project action across title and scope so the title
             // doesn't need another empty 48 dp row above the scope controls.
@@ -969,13 +965,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               },
             ),
             actions: [
-              Builder(
-                builder: (context) => IconButton(
-                  tooltip: 'Open navigation menu',
-                  icon: const Icon(Icons.menu),
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                ),
-              ),
               PopupMenuButton<String>(
                 tooltip: 'Chat actions',
                 icon: const Icon(Icons.more_vert),

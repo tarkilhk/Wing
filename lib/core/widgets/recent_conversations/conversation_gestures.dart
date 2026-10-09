@@ -25,12 +25,11 @@ class ConversationGestureBoundary extends SingleChildRenderObjectWidget {
 class _ConversationGestureBoundary extends RenderProxyBox {
   _ConversationGestureBoundary(this.blocked);
   bool blocked;
+  @override
+  bool hitTestSelf(Offset position) => true;
 }
 
-bool admitsConversationGesture(
-  PointerDownEvent event, {
-  bool textAllowed = true,
-}) {
+bool admitsConversationGesture(PointerDownEvent event) {
   final result = HitTestResult();
   GestureBinding.instance.hitTestInView(result, event.position, event.viewId);
   var admitted = false;
@@ -44,11 +43,8 @@ bool admitsConversationGesture(
         (target.properties.button == true || target.properties.link == true)) {
       return false;
     }
-    if (target is RenderParagraph && !textAllowed) return false;
     if (target is RenderEditable &&
-        (!textAllowed ||
-            !target.readOnly ||
-            target.selection?.isCollapsed == false)) {
+        (!target.readOnly || target.selection?.isCollapsed == false)) {
       return false;
     }
     if (target is RenderImage) return false;
@@ -56,7 +52,7 @@ bool admitsConversationGesture(
   return admitted;
 }
 
-enum ConversationGestureKind { slide, scrub, pinch }
+enum ConversationGestureKind { slide, pinch }
 
 final class ConversationGestureSample {
   const ConversationGestureSample(
@@ -75,16 +71,12 @@ final class ConversationGestureSample {
 /// expert gesture is recognized; excluded controls never enter this arena.
 class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
   bool Function(PointerDownEvent) admits = (_) => false;
-  bool Function(PointerDownEvent) admitsScrub = (_) => false;
-  bool _scrubAllowed = false;
   void Function(ConversationGestureSample)? onStart;
   void Function(ConversationGestureSample)? onUpdate;
   void Function()? onEnd;
   void Function()? onCancel;
   final _contacts = <int, Offset>{};
   Offset _anchor = Offset.zero;
-  Offset? _lastTap;
-  Duration? _lastTapTime;
   double _span = 0;
   Duration _timeStamp = Duration.zero;
   ConversationGestureKind? _kind;
@@ -120,18 +112,7 @@ class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
     }
     if (_contacts.length == 1) {
       _anchor = event.position;
-      _scrubAllowed = admitsScrub(event);
       _kind = null;
-      final lastTime = _lastTapTime;
-      if (_scrubAllowed &&
-          lastTime != null &&
-          _lastTap != null &&
-          event.timeStamp - lastTime < const Duration(milliseconds: 320) &&
-          (event.position - _lastTap!).distance < 24) {
-        _lastTap = null;
-        _lastTapTime = null;
-        _claim(ConversationGestureKind.scrub);
-      }
     } else {
       if (_started) {
         _cancel();
@@ -139,8 +120,6 @@ class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
       }
       _anchor = _center;
       _span = _currentSpan;
-      _lastTap = null;
-      _lastTapTime = null;
       // Two contacts on admitted blank transcript reserve the expert gesture
       // before either finger's vertical movement can claim ordinary scrolling.
       _claimed = true;
@@ -194,11 +173,6 @@ class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
       }
       if (_started) {
         onEnd?.call();
-      } else if (_scrubAllowed &&
-          _contacts.length == 1 &&
-          (event.position - _anchor).distance < 12) {
-        _lastTap = event.position;
-        _lastTapTime = event.timeStamp;
       }
       resolve(
         _claimed ? GestureDisposition.accepted : GestureDisposition.rejected,
@@ -230,8 +204,6 @@ class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
         _claim(ConversationGestureKind.slide);
       }
     } else if (!_claimed && delta.distance > kTouchSlop) {
-      _lastTap = null;
-      _lastTapTime = null;
       resolve(GestureDisposition.rejected);
       _clear();
       return;
@@ -247,8 +219,6 @@ class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
 
   void _cancel() {
     if (_started) onCancel?.call();
-    _lastTap = null;
-    _lastTapTime = null;
     resolve(GestureDisposition.rejected);
     _clear();
   }
@@ -275,5 +245,5 @@ class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
   @override
   void didStopTrackingLastPointer(int pointer) {}
   @override
-  String get debugDescription => 'recent conversation swipe, scrub or pinch';
+  String get debugDescription => 'recent conversation swipe or pinch';
 }

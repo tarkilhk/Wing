@@ -178,7 +178,6 @@ Offset _blank(WidgetTester tester) {
       final point = Offset(x, y);
       if (admitsConversationGesture(
         PointerDownEvent(position: point, viewId: tester.view.viewId),
-        textAllowed: false,
       )) {
         return point;
       }
@@ -639,25 +638,12 @@ void main() {
             ],
           );
           final blank = _blank(tester);
-          final dx = w * (blank.dx > w / 2 ? -.5 : .5);
           await _native(
             tester,
-            '$prefix-scrub-commit',
+            '$prefix-double-tap-stays-in-chat',
             actions: [
-              _touch(tester, 'scrub', [(blank, blank + Offset(dx, 0))]),
-            ],
-          );
-          expect(controller.current!.chat!.key, isNot(first.key));
-          await swipe('return-from-scrub', right: dx < 0);
-          expect(controller.current!.chat!.key, first.key);
-          final cancel = _blank(tester);
-          await _native(
-            tester,
-            '$prefix-scrub-cancel',
-            actions: [
-              _touch(tester, 'scrub', [
-                (cancel, cancel + Offset(w * .3, -100)),
-              ]),
+              {'type': 'tap', 'x': blank.dx, 'y': blank.dy},
+              {'type': 'tap', 'x': blank.dx, 'y': blank.dy},
             ],
           );
           expect(controller.current!.chat!.key, first.key);

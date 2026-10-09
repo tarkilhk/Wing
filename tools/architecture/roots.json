@@ -9581,6 +9581,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/widgets/recent_conversations/conversation_card_snapshots.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/recent_conversations/conversation_gestures.dart",
       "area": "lib",
       "provenance": "intentional-untracked"

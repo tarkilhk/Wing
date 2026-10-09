@@ -183,7 +183,7 @@ void main() {
 
   for (final systemBack in [false, true]) {
     testWidgets(
-      'chat opened from activity returns there on ${systemBack ? 'system' : 'toolbar'} Back',
+      'chat opened from activity returns there on ${systemBack ? 'system Back' : 'drawer Recents'}',
       (tester) async {
         final chat = await controller.createChat(canDispatch: () => true);
         emitChatEvent(controller, chat, 'session.title', {
@@ -204,7 +204,10 @@ void main() {
         if (systemBack) {
           await tester.binding.handlePopRoute();
         } else {
-          await tester.tap(find.byIcon(Icons.arrow_back).first);
+          expect(find.byIcon(Icons.arrow_back), findsNothing);
+          await tester.tap(find.byTooltip('Open navigation menu'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('nav-activity')));
         }
         await tester.pumpAndSettle();
         expect(find.byType(WorkspaceActivityContent), findsOneWidget);

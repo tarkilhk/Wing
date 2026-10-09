@@ -11,7 +11,9 @@ import '../../models/recent_conversation.dart';
 import '../../services/recent_conversation_session.dart';
 import '../studio_error.dart';
 import 'conversation_card_motion.dart';
+import 'conversation_card_snapshots.dart';
 import 'conversation_gestures.dart';
+import 'conversation_preview.dart';
 
 /// A transient layer over the real chat. It owns only input, card geometry,
 /// bounded ephemeral raster captures and nudge paint. The session owns reads
@@ -47,12 +49,21 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     duration: const Duration(milliseconds: 650),
   );
   final _liveBoundary = GlobalKey();
-  final _captures = <ProfileSessionKey, ui.Image>{};
+  final _snapshots = ConversationCardSnapshots();
+  final _previewBoundary = GlobalKey();
+  final _placeholders = <ProfileSessionKey, Widget>{};
+  final _previewVersions = <ProfileSessionKey, RecentConversationCard>{};
+  RecentConversationCard? _stagingCard;
+  Timer? _idleTimer;
+  bool _preparing = false, _preparationRequested = false, _liveDirty = true;
+  Object? _renderEnvironment;
+  Completer<void>? _selectionCompletion;
+  bool get _moving => _gesture != null || _motion.animating || _selecting;
+
   final _previews =
       <ProfileSessionKey, ({RecentConversationCard card, Widget view})>{};
   int _captureGeneration = 0;
   bool _active = false, _stack = false, _selecting = false;
-  bool _preparedFrame = false;
   int _base = 0, _preparedIndex = -1;
   double _startPosition = 0, _pinchPosition = 0, _pinchLift = 0;
   ConversationGestureKind? _gesture;
@@ -78,6 +89,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     widget.session.addListener(_sessionChanged);
     widget.session.nudges.addListener(_nudgeChanged);
     _syncCueAdmission();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _queueIdleWork());
   }
 
   @override
@@ -89,6 +101,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       widget.session.addListener(_sessionChanged);
       widget.session.nudges.addListener(_nudgeChanged);
       _clearCaptures();
+      _completeSelection();
       _active = _stack = _selecting = false;
       _base = math.max(0, _indexOf(widget.chatKey));
       _motion.jump(position: 0, lift: 0, zoom: 0);
@@ -97,18 +110,44 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       _active = _stack = false;
       _motion.jump(position: 0, lift: 0, zoom: 0);
     }
+    if (oldWidget.child != widget.child) {
+      _liveDirty = true;
+      ++_captureGeneration;
+    }
+    _queueIdleWork();
     if (!widget.gesturesEnabled && _gesture != null) _cancel();
     _syncCueAdmission();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final media = MediaQuery.of(context);
+    final environment = (
+      Theme.of(context),
+      media.size,
+      media.padding,
+      media.textScaler,
+    );
+    if (_renderEnvironment != environment) {
+      _renderEnvironment = environment;
+      _clearCaptures();
+      _queueIdleWork();
+    }
   }
 
   void _sessionChanged() {
     if (!mounted) return;
     if (!widget.session.active) {
-      _active = _stack = false;
+      _active = _stack = _selecting = false;
+      _gesture = null;
       _motion.stop();
+      _clearCaptures();
+      _completeSelection();
       _notifyPresentation();
     }
     setState(() {});
+    _queueIdleWork();
   }
 
   void _syncCueAdmission() {
@@ -144,67 +183,130 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   }
 
   void _motionChanged() {
-    if (!mounted) return;
-    if (_active) _prepareVisible();
-    setState(() {});
+    if (_moving) _idleTimer?.cancel();
   }
 
-  void _prepareVisible() {
-    final index = _focusedIndex;
-    if (_preparedIndex == index || _preparedFrame) return;
-    _preparedFrame = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _preparedFrame = false;
-      if (!mounted || !_active || !widget.session.active) return;
-      _preparedIndex = _focusedIndex;
+  void _queueIdleWork() {
+    _idleTimer?.cancel();
+    if (!mounted || _moving || !widget.session.active) return;
+    if (_preparing) {
+      _preparationRequested = true;
+      return;
+    }
+    _idleTimer = Timer(const Duration(milliseconds: 80), () {
+      if (mounted && !_moving) unawaited(_prepareIdle());
+    });
+  }
+
+  Future<void> _prepareIdle() async {
+    if (_preparing || _moving || !widget.session.active || _size.isEmpty) {
+      return;
+    }
+    _preparing = true;
+    final generation = _captureGeneration;
+    bool current() =>
+        mounted &&
+        widget.session.active &&
+        !_moving &&
+        generation == _captureGeneration;
+    try {
+      _preparedIndex = _active
+          ? _focusedIndex
+          : math.max(0, widget.session.selectedIndex);
       widget.session.prepareAround(_preparedIndex);
       final wanted = <ProfileSessionKey>{
         widget.chatKey,
         for (final offset in [-1, 0, 1])
           widget.session.entryAt(_preparedIndex + offset).key,
       };
-      for (final key in _captures.keys.toList()) {
-        if (!wanted.contains(key)) _captures.remove(key)!.dispose();
-      }
+      _snapshots.retain(wanted);
       _previews.removeWhere((key, _) => !wanted.contains(key));
-    });
+      _placeholders.removeWhere((key, _) => !wanted.contains(key));
+      _previewVersions.removeWhere((key, _) => !wanted.contains(key));
+      if (_liveDirty && !_active) await _capture();
+      for (final offset in [0, -1, 1]) {
+        if (!current()) return;
+        final card = widget.session.cardAt(_preparedIndex + offset);
+        final key = card.entry.key;
+        if (_snapshots.isLive(key) ||
+            card.loading ||
+            identical(_previewVersions[key], card)) {
+          continue;
+        }
+        setState(() => _stagingCard = card);
+        await SchedulerBinding.instance.endOfFrame;
+        if (!current()) return;
+        final boundary = _previewBoundary.currentContext?.findRenderObject();
+        if (boundary is! RenderRepaintBoundary || !boundary.attached) continue;
+        ui.Image image;
+        try {
+          image = await boundary.toImage(
+            pixelRatio: math.min(1, 768 / _size.longestSide),
+          );
+        } catch (_) {
+          continue;
+        }
+        if (!current()) {
+          image.dispose();
+          return;
+        }
+        _snapshots.record(key, image, live: false);
+        _previewVersions[key] = card;
+      }
+    } finally {
+      _preparing = false;
+      if (mounted) {
+        setState(() => _stagingCard = null);
+        if (_preparationRequested) {
+          _preparationRequested = false;
+          _queueIdleWork();
+        }
+      }
+    }
   }
 
   Future<void> _capture() async {
-    final key = widget.chatKey, generation = ++_captureGeneration;
+    final key = widget.chatKey, generation = _captureGeneration;
+    if (_active || _moving) return;
     final boundary = _liveBoundary.currentContext?.findRenderObject();
     if (boundary is! RenderRepaintBoundary) return;
     await SchedulerBinding.instance.endOfFrame;
     if (!mounted ||
         generation != _captureGeneration ||
         widget.chatKey != key ||
-        !boundary.attached) {
+        !boundary.attached ||
+        _active ||
+        _moving) {
       return;
     }
     ui.Image image;
     try {
       image = await boundary.toImage(
-        pixelRatio: math.min(MediaQuery.devicePixelRatioOf(context), 2),
+        pixelRatio: math.min(
+          MediaQuery.devicePixelRatioOf(context),
+          math.min(1.5, 1280 / _size.longestSide),
+        ),
       );
     } catch (_) {
       return;
     }
-    if (!mounted || generation != _captureGeneration) {
+    if (!mounted || generation != _captureGeneration || _active || _moving) {
       image.dispose();
       return;
     }
-    _captures.remove(key)?.dispose();
-    _captures[key] = image;
+    _snapshots.record(key, image, live: true);
+    _liveDirty = false;
     setState(() {});
   }
 
   void _clearCaptures() {
     ++_captureGeneration;
-    for (final image in _captures.values) {
-      image.dispose();
-    }
-    _captures.clear();
+    _idleTimer?.cancel();
+    _snapshots.clear();
+    _previewVersions.clear();
+    _liveDirty = true;
     _previews.clear();
+    _placeholders.clear();
   }
 
   void _notifyPresentation() {
@@ -214,7 +316,8 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
 
   void _start(ConversationGestureSample sample) {
     if (!_canGesture) return;
-    unawaited(_capture());
+    _idleTimer?.cancel();
+    ++_captureGeneration;
     final origin = _active
         ? _focusedIndex
         : math.max(0, widget.session.selectedIndex);
@@ -227,13 +330,12 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     _gesture = sample.kind;
     _pinchPosition = _motion.position;
     _pinchLift = _motion.lift.clamp(0.0, 1.0);
-    _active = true;
+    setState(() => _active = true);
     _preparedIndex = -1;
     if (sample.kind != ConversationGestureKind.pinch) {
       _motion.spring(lift: 1, zoom: 0, reducedMotion: _reduced);
     }
     _notifyPresentation();
-    _prepareVisible();
     _update(sample);
   }
 
@@ -251,8 +353,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       _motion.pinch(_pinchLift + (1 - _pinchLift) * progress, progress);
       return;
     }
-    final unit =
-        _size.width * (sample.kind == ConversationGestureKind.scrub ? .5 : .77);
+    final unit = _size.width * .77;
     var position = _startPosition + sample.delta.dx / unit;
     if (sample.kind == ConversationGestureKind.slide) {
       position = position.clamp(-1.0, 1.0);
@@ -286,11 +387,9 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       }
       return;
     }
-    final offset = -_motion.position.round();
-    final index = kind == ConversationGestureKind.scrub
-        ? _base + offset
-        : _motion.position.abs() > .22 / .77 ||
-              (_motion.position.abs() > .08 / .77 && _velocity.abs() > 1.2)
+    final index =
+        _motion.position.abs() > .22 / .77 ||
+            (_motion.position.abs() > .08 / .77 && _velocity.abs() > 1.2)
         ? _base + (_motion.position.isNegative ? 1 : -1)
         : _base;
     if (index == _base) {
@@ -319,14 +418,12 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     if (!_active) {
       _base = math.max(0, widget.session.selectedIndex);
       _motion.jump(position: 0, lift: 0, zoom: 0);
-      unawaited(_capture());
     }
     setState(() {
       _active = _stack = true;
       _gesture = null;
     });
     _preparedIndex = -1;
-    _prepareVisible();
     _notifyPresentation();
     _settleStack(_motion.position.roundToDouble());
   }
@@ -337,7 +434,10 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       lift: 1,
       zoom: 1,
       reducedMotion: _reduced,
-      settled: _syncCueAdmission,
+      settled: () {
+        _syncCueAdmission();
+        _queueIdleWork();
+      },
     );
     _syncCueAdmission();
   }
@@ -380,67 +480,81 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     });
     _motion.jump(position: 0, lift: 0, zoom: 0);
     _notifyPresentation();
+    _queueIdleWork();
   }
 
   Future<void> selectAdjacent(int delta) =>
       _select(math.max(0, widget.session.selectedIndex) + delta);
 
-  Future<void> _select(int index) async {
-    if (_selecting || !widget.session.active) return;
+  Future<void> _select(int index) {
+    if (_selecting || !widget.session.active) return Future.value();
     final key = widget.session.entryAt(index).key;
     if (key == widget.session.selected) {
       _returnToChat(cardIndex: index);
-      return;
+      return Future.value();
     }
-    _selecting = true;
-    if (!_active) {
-      _base = math.max(0, widget.session.selectedIndex);
-      _active = true;
-      unawaited(_capture());
-      _notifyPresentation();
-    }
-    _motion.spring(
-      position: (_base - index).toDouble(),
-      lift: 1,
-      zoom: _stack ? 1 : 0,
-      reducedMotion: _reduced,
-    );
-    _syncCueAdmission();
-    final opened = await widget.session.select(key);
-    if (!mounted) return;
-    if (!opened) {
-      _selecting = false;
-      if (!_stack && widget.session.error != null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: StudioError(widget.session.error!)));
-      }
-      if (_stack) {
-        _settleStack(_motion.position.roundToDouble());
-      } else {
-        _returnToChat();
-      }
-      return;
-    }
-    await SchedulerBinding.instance.endOfFrame;
-    if (!mounted) return;
-    await _capture();
-    if (!mounted) return;
-    // The command and new capture are settled. A new gesture may now interrupt
-    // expansion without starting overlapping navigation or exposing stale text.
-    _selecting = _stack = false;
+    final fromStack = _stack;
+    _idleTimer?.cancel();
+    ++_captureGeneration;
+    final completion = _selectionCompletion = Completer<void>();
+    setState(() {
+      _selecting = _active = true;
+      _stack = false;
+    });
     _notifyPresentation();
+    // Expand existing pixels first. Resume and real-chat construction start only
+    // after the animation, so backend latency cannot hold up finger feedback.
     _motion.spring(
       position: (_base - index).toDouble(),
       lift: 0,
       zoom: 0,
       reducedMotion: _reduced,
-      settled: () {
-        if (!mounted) return;
-        _base = math.max(0, widget.session.selectedIndex);
-        _finishPresentation();
-      },
+      settled: () => unawaited(_openSelected(index, fromStack, completion)),
     );
+    return completion.future;
+  }
+
+  Future<void> _openSelected(
+    int index,
+    bool fromStack,
+    Completer<void> completion,
+  ) async {
+    final session = widget.session;
+    try {
+      if (!mounted || !session.active) return;
+      final opened = await session.select(session.entryAt(index).key);
+      if (!mounted || !session.active || widget.session != session) return;
+      if (!opened) {
+        setState(() {
+          _selecting = false;
+          _stack = fromStack;
+        });
+        if (fromStack) {
+          _settleStack(_motion.position.roundToDouble());
+        } else {
+          if (widget.session.error case final error?) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: StudioError(error)));
+          }
+          _returnToChat();
+        }
+        return;
+      }
+      await SchedulerBinding.instance.endOfFrame;
+      if (!mounted || !session.active || widget.session != session) return;
+      _liveDirty = true;
+      _finishPresentation();
+    } finally {
+      if (!completion.isCompleted) completion.complete();
+      if (_selectionCompletion == completion) _selectionCompletion = null;
+    }
+  }
+
+  void _completeSelection() {
+    final completion = _selectionCompletion;
+    if (completion != null && !completion.isCompleted) completion.complete();
+    _selectionCompletion = null;
   }
 
   Offset? _browseStart;
@@ -574,12 +688,36 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
 
   Widget _cardContent(int index) {
     final key = widget.session.entryAt(index).key;
-    final capture = _captures[key];
-    if (capture != null) return RawImage(image: capture, fit: BoxFit.fill);
-    final card = widget.session.cardAt(index);
+    final capture = _snapshots.imageFor(key);
+    if (capture != null) {
+      return RawImage(
+        key: ValueKey((key, 'snapshot')),
+        image: capture,
+        fit: BoxFit.fill,
+        filterQuality: FilterQuality.low,
+      );
+    }
+    final prepared = _previews[key];
+    if (prepared != null) return prepared.view;
+    if (_placeholders.length >= 6 && !_placeholders.containsKey(key)) {
+      _placeholders.remove(_placeholders.keys.first);
+    }
+    return _placeholders.putIfAbsent(
+      key,
+      () => RepaintBoundary(
+        child: ConversationPreview(
+          card: RecentConversationCard(entry: widget.session.entryAt(index)),
+          connectionLabel: '',
+        ),
+      ),
+    );
+  }
+
+  Widget _previewFor(RecentConversationCard card) {
+    final key = card.entry.key;
     final cached = _previews[key];
     if (cached != null && identical(cached.card, card)) return cached.view;
-    final view = widget.previewBuilder(card);
+    final view = RepaintBoundary(child: widget.previewBuilder(card));
     _previews[key] = (card: card, view: view);
     return view;
   }
@@ -627,7 +765,11 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      _size = constraints.biggest;
+      if (_size != constraints.biggest) {
+        _size = constraints.biggest;
+        _clearCaptures();
+        _queueIdleWork();
+      }
       return RawGestureDetector(
         behavior: HitTestBehavior.translucent,
         gestures: {
@@ -641,9 +783,6 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                     event.position.dx > 24 &&
                     event.position.dx < MediaQuery.sizeOf(context).width - 24 &&
                     (_active || admitsConversationGesture(event));
-                recognizer.admitsScrub = (event) =>
-                    _active ||
-                    admitsConversationGesture(event, textAllowed: false);
                 recognizer.onStart = _start;
                 recognizer.onUpdate = _update;
                 recognizer.onEnd = _end;
@@ -652,13 +791,40 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
         },
         child: Stack(
           children: [
-            RepaintBoundary(
-              key: _liveBoundary,
-              child: ExcludeSemantics(
-                excluding: _active,
-                child: ExcludeFocus(
-                  excluding: _active,
-                  child: IgnorePointer(ignoring: _active, child: widget.child),
+            if (_stagingCard case final card?)
+              Positioned.fill(
+                child: ExcludeSemantics(
+                  child: IgnorePointer(
+                    child: RepaintBoundary(
+                      key: _previewBoundary,
+                      child: _previewFor(card),
+                    ),
+                  ),
+                ),
+              ),
+            NotificationListener<ScrollEndNotification>(
+              onNotification: (_) {
+                _liveDirty = true;
+                _queueIdleWork();
+                return false;
+              },
+              child: TickerMode(
+                enabled: !_active,
+                child: Offstage(
+                  offstage: _active,
+                  child: RepaintBoundary(
+                    key: _liveBoundary,
+                    child: ExcludeSemantics(
+                      excluding: _active,
+                      child: ExcludeFocus(
+                        excluding: _active,
+                        child: IgnorePointer(
+                          ignoring: _active,
+                          child: widget.child,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -671,7 +837,17 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                   child: ClipRect(
                     child: Stack(
                       children: [
-                        _cards(),
+                        AnimatedBuilder(
+                          animation: _motion,
+                          builder: (context, _) => _cards(),
+                        ),
+                        if (_selecting && !_motion.animating)
+                          Positioned(
+                            top: MediaQuery.paddingOf(context).top,
+                            left: 0,
+                            right: 0,
+                            child: const LinearProgressIndicator(minHeight: 2),
+                          ),
                         if (_stack)
                           Positioned.fill(
                             child: GestureDetector(
@@ -701,7 +877,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                             child: IconButton.filledTonal(
                               tooltip: 'Return to conversation',
                               onPressed: _selecting ? null : _returnToChat,
-                              icon: const Icon(Icons.arrow_back),
+                              icon: const Icon(Icons.close),
                             ),
                           ),
                         if (_stack)
@@ -792,6 +968,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     _motion.dispose();
     _pulse.dispose();
     _clearCaptures();
+    _completeSelection();
     super.dispose();
   }
 }

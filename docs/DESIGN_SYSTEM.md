@@ -120,12 +120,12 @@ showing background-task details, partial-profile failures and loading feedback.
 A chat opened from Recents retains the exact displayed filter, membership and
 ongoing-before-history order for that visit. Last and first link circularly.
 The normal chat, Activity, message actions and composer remain the resting screen.
-No permanent carousel controls or status strip are added.
+No permanent carousel controls or status strip are added. The chat header has the
+hamburger on the left and overflow on the right, with no back arrow; Android Back
+retains stack and Recents navigation.
 
 - Two fingers swiping horizontally on the transcript pull the chat into
   a card and commit the adjacent conversation on release. A short drag returns.
-- Double tap blank transcript space, hold the second touch and scrub sideways to
-  browse several cards; release commits the nearest. Moving upward cancels.
 - Pinch inward with two fingers to zoom into a persistent card stack. Lifting
   fingers leaves it open. One-finger swipes browse; tapping the center or a visible
   neighboring card commits and expands that conversation. Back returns to the
@@ -134,17 +134,23 @@ No permanent carousel controls or status strip are added.
   already hidden with Android Back stays hidden. The obscured chat cannot receive
   focus, including when a menu restores its previous focus target.
 
-Cards use the existing chat capture or passive saved-history renderers. They
-keep stable per-card widget identity as paint order changes. Unchanged passive
-preview widgets are retained within the same bounded neighborhood, so dragging
-transforms their existing message trees rather than reconstructing them per frame.
-Cards round and gain shadows only during motion; scale is about .86 during a switch
+Moving cards use cached viewport images. The normal chat stays mounted but is
+offstage with its tickers paused while covered. Capture and passive preview reads
+run only after motion settles; they never start from pointer movement. Neighbor
+renditions use the existing chat frame with at most two clipped plain-text messages,
+without Markdown, decoded attachments or activity trees. Missing images show a
+static chat frame until idle preparation completes. Genuine visited snapshots keep
+their reading position. The cache is limited to 12 MiB and the visible neighborhood
+plus the committed chat; discarded images are disposed. Side previews use lower
+resolution. Selecting expands cached pixels before resume or real-chat construction,
+then reveals the actual chat after its completed layout frame. Cards keep stable
+physical identities as paint order changes. They round and gain shadows only during
+motion; scale is about .86 during a switch
 and .72 in the stack. Independent numerical springs retain current positions and
 velocities when interrupted; reduced motion settles directly. Input uses native
 pointer timestamps for velocity. A new gesture can interrupt a returning card
-once selection and its capture have settled. Two-finger gestures admit unselected
-transcript prose; double tap/scrub requires
-blank transcript space. Both exclude Android's 24 dp edge zones. Active text
+once selection has settled. Two-finger gestures admit unselected transcript prose
+and exclude Android's 24 dp edge zones. Active text
 selection, code, message actions, Activity controls, pending-input panels, composer,
 voice and queued-prompt editing keep their input. The existing Chat actions menu
 provides Previous / Next / Choose recent conversation; accessible navigation

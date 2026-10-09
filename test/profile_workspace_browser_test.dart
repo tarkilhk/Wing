@@ -105,7 +105,7 @@ void main() {
     expect(find.byKey(const ValueKey('move-project-p2')), findsNothing);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Back to sessions'));
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('chat-filter-profile')), findsOneWidget);
   });
@@ -145,7 +145,7 @@ void main() {
     await show(tester);
     await tester.pumpAndSettle();
     expect(find.text('Project unavailable'), findsOneWidget);
-    expect(find.byTooltip('Back to sessions'), findsOneWidget);
+    expect(find.byTooltip('Open navigation menu'), findsOneWidget);
   });
 
   testWidgets('grouped browser keeps project actions and chats together', (

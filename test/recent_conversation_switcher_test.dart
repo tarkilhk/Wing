@@ -24,6 +24,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:wing/core/widgets/recent_conversations/conversation_card_motion.dart';
+import 'package:wing/core/widgets/recent_conversations/conversation_card_snapshots.dart';
 import 'package:wing/core/widgets/recent_conversations/conversation_gestures.dart';
 import 'package:wing/core/widgets/recent_conversations/conversation_preview.dart';
 import 'package:wing/core/widgets/recent_conversations/recent_conversation_switcher.dart';
@@ -62,11 +63,16 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   final waitingPreviews =
       <ProfileSessionKey, Completer<RecentConversationPreview>>{};
   bool rejectOpen = false;
+  Completer<void>? waitingOpen;
+  int previewReads = 0;
   @override
   bool admits(ProfileSessionKey key) => current;
   @override
-  RecentConversationPreview? cachedPreview(RecentConversationEntry entry) =>
-      waitingPreviews.containsKey(entry.key) ? null : _readyPreview(entry);
+  RecentConversationPreview? cachedPreview(RecentConversationEntry entry) {
+    previewReads++;
+    return waitingPreviews.containsKey(entry.key) ? null : _readyPreview(entry);
+  }
+
   RecentConversationPreview _readyPreview(RecentConversationEntry entry) =>
       RecentConversationPreview(
         entry: entry,
@@ -86,6 +92,8 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
     if (!isCurrent()) return;
     if (rejectOpen) throw StateError('Owned fixture resume rejection');
     opens.add(key);
+    await waitingOpen?.future;
+    if (!isCurrent()) return;
     selected = key;
     notifyListeners();
   }
@@ -180,10 +188,12 @@ class _ScreenFixture extends ProfileBrowserFixture {
 }
 
 Future<void> _finishFrames(WidgetTester tester) async {
-  await tester.pumpAndSettle();
-  await tester.runAsync(
-    () => Future<void>.delayed(const Duration(milliseconds: 30)),
-  );
+  for (var pass = 0; pass < 4; pass++) {
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+  }
   await tester.pumpAndSettle();
 }
 
@@ -282,12 +292,15 @@ void main() {
         ),
       );
 
-      // The rebuild is queued, but the live boundary is not paint-dirty yet.
+      // Idle preparation must observe the completed repaint, never a stale frame.
       color.value = Colors.green;
+      await _finishFrames(tester);
       switcher.currentState!.openStack();
       await _finishFrames(tester);
       final image = tester
-          .widgetList<RawImage>(find.byType(RawImage))
+          .widgetList<RawImage>(
+            find.byKey(ValueKey((source.selected, 'snapshot'))),
+          )
           .map((widget) => widget.image)
           .whereType<ui.Image>()
           .first;
@@ -307,6 +320,7 @@ void main() {
       Brightness brightness = Brightness.dark,
       bool accessible = false,
       bool reduced = false,
+      Widget Function(RecentConversationCard)? buildPreview,
     }) async {
       await session.select(source.selected);
       source.opens.clear();
@@ -332,11 +346,15 @@ void main() {
               gesturesEnabled: true,
               nudgesEnabled: true,
               onPresentationChanged: (_, _) {},
-              previewBuilder: (card) => Scaffold(
-                body: Center(
-                  child: Text(card.preview?.scopeLabel ?? 'Preview pending'),
-                ),
-              ),
+              previewBuilder:
+                  buildPreview ??
+                  (card) => Scaffold(
+                    body: Center(
+                      child: Text(
+                        card.preview?.scopeLabel ?? 'Preview pending',
+                      ),
+                    ),
+                  ),
               child: Scaffold(
                 body: ConversationGestureBoundary(
                   child: ColoredBox(
@@ -364,7 +382,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await _finishFrames(tester);
     }
 
     testWidgets('accessibility service leaves expert gestures available', (
@@ -392,10 +410,14 @@ void main() {
       final entry = source.entries[1];
       final pending = Completer<RecentConversationPreview>();
       source.waitingPreviews[entry.key] = pending;
-      await mount(tester);
+      await mount(
+        tester,
+        buildPreview: (card) =>
+            ColoredBox(color: card.preview == null ? Colors.red : Colors.green),
+      );
       switcher.currentState!.openStack();
       await _finishFrames(tester);
-      expect(find.text('Preview pending'), findsOneWidget);
+      expect(find.byKey(ValueKey((entry.key, 'snapshot'))), findsNothing);
       pending.complete(
         RecentConversationPreview(
           entry: entry,
@@ -408,12 +430,19 @@ void main() {
         ),
       );
       await _finishFrames(tester);
-      expect(find.text('Loaded saved conversation'), findsOneWidget);
-      expect(find.text('Preview pending'), findsNothing);
+      final image = tester
+          .widget<RawImage>(find.byKey(ValueKey((entry.key, 'snapshot'))))
+          .image!;
+      final pixels = await tester.runAsync(
+        () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+      );
+      expect(pixels!.getUint8(0), 76);
+      expect(pixels.getUint8(1), 175);
+      expect(pixels.getUint8(2), 80);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('browsing preserves side-card identity and rich preview builds', (
+    testWidgets('dragging keeps snapshots and starts no preview work', (
       tester,
     ) async {
       await session.select(source.selected);
@@ -470,24 +499,19 @@ void main() {
           ),
         ),
       );
+      await _finishFrames(tester);
       switcher.currentState!.openStack();
       await _finishFrames(tester);
+      expect(find.byType(RawImage), findsNWidgets(3));
+      expect(find.byType(_MountedCard), findsNothing);
       final before = previewsBuilt;
+      final readsBefore = source.previewReads;
       final drag = await tester.startGesture(const Offset(180, 400));
       for (var step = 1; step <= 10; step++) {
         await drag.moveTo(Offset(180 + step * 8, 400));
         await tester.pump(const Duration(milliseconds: 16));
-        for (final state in tester.stateList<_MountedCardState>(
-          find.byType(_MountedCard),
-        )) {
-          expect(
-            state.initialOwner,
-            state.widget.owner,
-            reason:
-                'A neighboring card must retain its own transcript state '
-                'when paint order changes.',
-          );
-        }
+        expect(find.byType(_MountedCard), findsNothing);
+        expect(find.byType(RawImage), findsNWidgets(3));
       }
       expect(
         previewsBuilt,
@@ -496,11 +520,86 @@ void main() {
             'Dragging transforms already loaded rich previews; it must '
             'not reconstruct their message trees every animation frame.',
       );
+      expect(
+        source.previewReads,
+        readsBefore,
+        reason: 'History admission cannot start on a drag frame.',
+      );
       await drag.up();
       await _finishFrames(tester);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
+
+    testWidgets('card expands before a slow conversation resume', (
+      tester,
+    ) async {
+      await mount(tester);
+      source.waitingOpen = Completer<void>();
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      final selection = switcher.currentState!.selectAdjacent(1);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        source.opens,
+        isEmpty,
+        reason: 'Resume must not compete with the expansion.',
+      );
+      for (var frame = 0; frame < 50; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(source.opens, [source.entries[1].key]);
+      final bounds = tester.getRect(
+        find.byKey(ValueKey((source.entries[1].key, 'snapshot'))),
+      );
+      expect(bounds.left.abs(), lessThan(1));
+      expect(bounds.top.abs(), lessThan(1));
+      expect(bounds.width, closeTo(360, 1));
+      expect(bounds.height, closeTo(800, 1));
+      expect(find.text('Swipe to browse · tap to open'), findsNothing);
+      source.waitingOpen!.complete();
+      await _finishFrames(tester);
+      await selection;
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'snapshot memory is bounded and discarded pixels are released',
+      (tester) async {
+        Future<ui.Image> pixels(int size) async {
+          final recorder = ui.PictureRecorder();
+          Canvas(recorder).drawRect(
+            Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble()),
+            Paint()..color = Colors.teal,
+          );
+          final picture = recorder.endRecording();
+          final image = await tester.runAsync(
+            () => picture.toImage(size, size),
+          );
+          picture.dispose();
+          return image!;
+        }
+
+        final cache = ConversationCardSnapshots(byteLimit: 3200);
+        addTearDown(cache.clear);
+        final images = [for (var i = 0; i < 3; i++) await pixels(20)];
+        for (var i = 0; i < 3; i++) {
+          cache.record(source.entries[i].key, images[i], live: i == 0);
+        }
+        expect(cache.imageFor(source.entries[0].key), isNull);
+        expect(images[0].debugDisposed, isTrue);
+        expect(cache.imageFor(source.entries[1].key), isNotNull);
+        final oversized = await pixels(40);
+        cache.record(source.entries[0].key, oversized, live: true);
+        expect(oversized.debugDisposed, isTrue);
+        expect(cache.imageFor(source.entries[1].key), isNotNull);
+        cache.retain({source.entries[1].key});
+        expect(images[2].debugDisposed, isTrue);
+        cache.clear();
+        expect(images[1].debugDisposed, isTrue);
+      },
+    );
 
     testWidgets('two-finger horizontal movement switches once and wraps', (
       tester,
@@ -674,32 +773,39 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('double tap hold scrub commits and upward movement cancels', (
+    testWidgets('double tap and one-finger drag never switch chats', (
       tester,
     ) async {
       await mount(tester);
       await tester.tapAt(const Offset(220, 400));
       await tester.pump(const Duration(milliseconds: 80));
-      final scrub = await tester.startGesture(const Offset(220, 400));
-      await scrub.moveBy(const Offset(-130, 0));
+      final drag = await tester.startGesture(const Offset(220, 400));
+      await drag.moveBy(const Offset(-130, 0));
       await tester.pump(const Duration(milliseconds: 50));
-      await scrub.up();
+      await drag.up();
       await _finishFrames(tester);
-      expect(source.opens, [source.entries[1].key]);
-      await tester.tapAt(const Offset(220, 400));
-      await tester.pump(const Duration(milliseconds: 80));
-      final cancelled = await tester.startGesture(const Offset(220, 400));
-      await cancelled.moveBy(const Offset(-100, -100));
-      await tester.pump();
-      await cancelled.up();
-      await _finishFrames(tester);
-      expect(source.opens, hasLength(1));
+      expect(source.opens, isEmpty);
+      expect(find.text('Swipe to browse · tap to open'), findsNothing);
     });
 
     testWidgets(
       'blocked messages keep their gestures and accessibility exposes navigation',
       (tester) async {
         await mount(tester);
+        expect(find.text('Swipe to browse · tap to open'), findsNothing);
+        expect(
+          admitsConversationGesture(
+            const PointerDownEvent(position: Offset(180, 70)),
+          ),
+          isFalse,
+        );
+        expect(
+          admitsConversationGesture(
+            const PointerDownEvent(position: Offset(40, 30)),
+          ),
+          isFalse,
+          reason: 'Exclusion covers empty padding as well as painted text.',
+        );
         await _twoContacts(
           tester,
           const Offset(80, 70),
@@ -801,15 +907,6 @@ void main() {
         expect(
           admitsConversationGesture(
             PointerDownEvent(
-              position: tester.getCenter(find.text('Prose message')),
-            ),
-            textAllowed: false,
-          ),
-          isFalse,
-        );
-        expect(
-          admitsConversationGesture(
-            PointerDownEvent(
               position: tester.getCenter(find.text('Selectable prose')),
             ),
           ),
@@ -840,7 +937,7 @@ void main() {
       await mount(tester, reduced: true);
       switcher.currentState!.openStack();
       await _finishFrames(tester);
-      expect(find.text('personal'), findsWidgets);
+      expect(find.byType(RawImage), findsNWidgets(3));
       expect(source.opens, isEmpty);
       expect(switcher.currentState!.dismissStack(), isTrue);
       await _finishFrames(tester);
@@ -1035,7 +1132,15 @@ void main() {
           await tester.tap(find.text('Choose recent conversation'));
           await _finishFrames(tester);
           expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
-          final composerFocus = tester.widget<TextField>(field).focusNode!;
+          final composerFocus = tester
+              .widget<TextField>(
+                find.widgetWithText(
+                  TextField,
+                  'Return to this draft',
+                  skipOffstage: false,
+                ),
+              )
+              .focusNode!;
           composerFocus.requestFocus();
           await tester.pump();
           expect(
@@ -1114,7 +1219,9 @@ void main() {
             expect(find.text('Swipe to browse · tap to open'), findsNothing);
             expect(controller.visible, isTrue);
           }
-          await tester.tap(find.byTooltip('Back to Recents'));
+          expect(find.byTooltip('Back to Recents'), findsNothing);
+          expect(find.byTooltip('Open navigation menu'), findsOneWidget);
+          await tester.binding.handlePopRoute();
           await _finishFrames(tester);
           expect(find.text('Recents'), findsOneWidget);
           expect(controller.current!.chat, isNull);

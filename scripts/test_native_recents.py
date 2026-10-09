@@ -84,7 +84,7 @@ def main() -> None:
             shell("wm", "size", "840x2240" if item["large"] else "reset")
             shell("settings", "put", "system", "font_scale", "2.0" if item["large"] else "1.0")
             time.sleep(.8)
-        elif kind in ("one", "two", "scrub", "interrupt"):
+        elif kind in ("one", "two", "interrupt"):
             coordinates = [str(round(number * ratio, 3))
                            for contact in item["contacts"] for number in contact]
             command = [kind, *coordinates, str(item["milliseconds"])]

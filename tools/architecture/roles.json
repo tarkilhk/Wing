@@ -2011,6 +2011,11 @@
       "feature": "conversation",
       "library": "lib/core/widgets/recent_conversations/conversation_card_motion.dart"
     },
+    "lib/core/widgets/recent_conversations/conversation_card_snapshots.dart": {
+      "role": "presentation",
+      "feature": "conversation",
+      "library": "lib/core/widgets/recent_conversations/conversation_card_snapshots.dart"
+    },
     "lib/core/widgets/recent_conversations/conversation_gestures.dart": {
       "role": "view",
       "feature": "conversation",

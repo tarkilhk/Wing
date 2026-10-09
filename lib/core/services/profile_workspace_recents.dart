@@ -1,5 +1,7 @@
 part of 'profile_workspace_controller.dart';
 
+const _recentPreviewMessageLimit = 6;
+
 final class _WorkspaceRecentConversationSource
     implements RecentConversationSource {
   _WorkspaceRecentConversationSource(this.controller);
@@ -35,7 +37,9 @@ final class _WorkspaceRecentConversationSource
     return _preview(
       entry,
       TranscriptReadingSnapshot(
-        messages: rows.skip(math.max(0, rows.length - 50)),
+        messages: rows.skip(
+          math.max(0, rows.length - _recentPreviewMessageLimit),
+        ),
         historySessionId: chat.reading.historySessionId,
       ),
       chat.composer.observation.displayedText,
@@ -71,7 +75,10 @@ final class _WorkspaceRecentConversationSource
     final cached = cachedPreview(entry);
     if (cached != null) return cached;
     final resource = controller._resource(entry.key.workspace.profileName);
-    final page = await resource.gateway.history(entry.key.sessionId, limit: 50);
+    final page = await resource.gateway.history(
+      entry.key.sessionId,
+      limit: _recentPreviewMessageLimit,
+    );
     if (!admits(entry.key) || page.sessionId != entry.key.sessionId) {
       throw StateError('Conversation preview changed');
     }
