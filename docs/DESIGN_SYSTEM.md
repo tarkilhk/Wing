@@ -718,6 +718,13 @@ finger drift. Fade ticks in over 140 ms only while scrubbing, and prefix the
 destination preview with its section number. Cancellation, leaving the app and
 disposal must cancel pending activation. Reduced motion suppresses animation.
 
+Contents fits its section count, with at most six equal-height rows visible and
+independent scrolling for longer lists. Row height accommodates up to two lines
+of a heading at the reader's text size; the available viewport can reduce the
+visible count. Tapping the sheet header or empty space dismisses it; tapping a
+section navigates and dismisses. Retain the accessible close control and normal
+outside-tap/back dismissal.
+
 Skill activity metrics retain their distinct API meanings. Use the directly
 returned `use_count` and `patch_count` for the main metrics. The stock learning
 graph's `useCount` describes the same recorded loads/references but its filtered

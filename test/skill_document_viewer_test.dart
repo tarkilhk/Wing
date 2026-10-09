@@ -258,6 +258,107 @@ void main() {
       });
     }
   }
+  for (final theme in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'Contents fits rows, caps six and closes on repeat taps ${theme.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final heights = <int, double>{};
+          for (final count in [3, 6, 9]) {
+            final boundary = GlobalKey();
+            await tester.pumpWidget(
+              RepaintBoundary(
+                key: boundary,
+                child: MaterialApp(
+                  theme: wingTheme(theme),
+                  debugShowCheckedModeBanner: false,
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(textScaler: TextScaler.linear(scale)),
+                    child: child!,
+                  ),
+                  home: SkillDocumentViewer(
+                    document: SkillDocument.fromReceived(
+                      name: 'guide-$count',
+                      content:
+                          '# Guide\n\n${List.generate(count, (i) => '## Section ${i + 1}\n\n${i == 0 ? List.filled(20, 'Read the instructions.').join('\n\n') : 'Read the instructions.'}\n').join('\n')}',
+                    ),
+                  ),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            final opener = find.text('Section 1').last;
+            await tester.tap(opener);
+            await tester.pumpAndSettle();
+            final modal = find.byType(BottomSheet);
+            heights[count] = tester.getSize(modal).height;
+            final first = find.descendant(
+              of: modal,
+              matching: find.text('Section 1'),
+            );
+            final row = find
+                .ancestor(of: first, matching: find.byType(InkWell))
+                .first;
+            final scroll = find.descendant(
+              of: modal,
+              matching: find.byType(SingleChildScrollView),
+            );
+            expect(
+              tester.getSize(scroll).height,
+              closeTo(
+                tester.getSize(row).height * (count > 6 ? 6 : count) + 16,
+                .1,
+              ),
+            );
+            await capture(
+              tester,
+              boundary,
+              'contents-${theme.name}-${scale.toInt()}-$count',
+            );
+            expect(tester.takeException(), isNull);
+            if (count > 6) {
+              await tester.drag(scroll, const Offset(0, -400));
+              await tester.pumpAndSettle();
+              expect(find.text('Contents'), findsOneWidget);
+              await tester.tap(
+                find.descendant(of: modal, matching: find.text('Section 9')),
+              );
+              await tester.pumpAndSettle();
+              expect(find.byType(BottomSheet), findsNothing);
+              expect(find.text('9 / 9'), findsOneWidget);
+              await tester.tap(find.text('Section 9').last);
+              await tester.pumpAndSettle();
+            }
+            await tester.tap(find.text('Contents'));
+            await tester.pumpAndSettle();
+            expect(find.byType(BottomSheet), findsNothing);
+            final dock = find.text('Section ${count > 6 ? 9 : 1}').last;
+            await tester.tap(dock);
+            await tester.pumpAndSettle();
+            final list = tester.getRect(
+              find.descendant(
+                of: find.byType(BottomSheet),
+                matching: find.byType(SingleChildScrollView),
+              ),
+            );
+            await tester.tapAt(Offset(list.left + 2, list.top + 2));
+            await tester.pumpAndSettle();
+            expect(find.byType(BottomSheet), findsNothing);
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox.shrink());
+            await tester.pumpAndSettle();
+          }
+          expect(heights[3], lessThan(heights[6]!));
+          expect(heights[9], closeTo(heights[6]!, .1));
+        },
+      );
+    }
+  }
   testWidgets(
     'grip is dedicated, tolerates drift, tracks continuously and cancels',
     (tester) async {

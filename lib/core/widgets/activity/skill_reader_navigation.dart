@@ -237,6 +237,9 @@ class _SkillReaderNavigationState extends State<_SkillReaderNavigation>
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .85,
+      ),
       backgroundColor: WingTokens.of(context).raised,
       shape: const RoundedRectangleBorder(borderRadius: WingRadius.sheet),
       builder: (sheet) {
@@ -244,86 +247,124 @@ class _SkillReaderNavigationState extends State<_SkillReaderNavigation>
           final target = keys[active].currentContext;
           if (target != null) Scrollable.ensureVisible(target, alignment: .5);
         });
-        return SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(sheet).height * .7,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Contents',
-                          style: WingTokens.of(sheet).typography.section,
-                        ),
-                      ),
-                      ActivityDetailAction(
-                        label: 'Close contents',
-                        icon: Icons.close,
-                        onPressed: () => Navigator.pop(sheet),
-                      ),
-                    ],
-                  ),
-                ),
-                const _SkillRule(),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(8),
-                    child: Column(
-                      children: [
-                        for (var i = 0; i < widget.headings.length; i++)
-                          Material(
-                            key: keys[i],
-                            color: i == active
-                                ? Theme.of(sheet).colorScheme.primaryContainer
-                                : Colors.transparent,
-                            borderRadius: WingRadius.control,
-                            child: InkWell(
-                              borderRadius: WingRadius.control,
-                              onTap: () {
-                                Navigator.pop(sheet);
-                                _jump(i);
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    SizedBox(
-                                      width: 24,
-                                      child: Text(
-                                        (i + 1).toString(),
-                                        style: WingTokens.of(sheet)
-                                            .typography
-                                            .label
-                                            .copyWith(
-                                              color: WingTokens.of(sheet).muted,
-                                            ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        widget.headings[i].label,
-                                        style: WingTokens.of(
-                                          sheet,
-                                        ).typography.body,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+        return LayoutBuilder(
+          builder: (sheet, constraints) {
+            final style = WingTokens.of(sheet).typography.body;
+            final scaler = MediaQuery.textScalerOf(sheet);
+            final labelWidth = math.max(1.0, constraints.maxWidth - 64);
+            var rowHeight = 48.0;
+            for (final heading in widget.headings) {
+              final label = TextPainter(
+                text: TextSpan(text: heading.label, style: style),
+                textDirection: Directionality.of(sheet),
+                textScaler: scaler,
+                maxLines: 2,
+                ellipsis: '…',
+              )..layout(maxWidth: labelWidth);
+              rowHeight = math.max(rowHeight, label.height + 24);
+              label.dispose();
+            }
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              excludeFromSemantics: true,
+              onTap: () => Navigator.pop(sheet),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Contents',
+                              style: WingTokens.of(sheet).typography.section,
                             ),
                           ),
-                      ],
+                          ActivityDetailAction(
+                            label: 'Close contents',
+                            icon: Icons.close,
+                            onPressed: () => Navigator.pop(sheet),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    const _SkillRule(),
+                    Flexible(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight:
+                              rowHeight * math.min(6, widget.headings.length) +
+                              16,
+                        ),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            children: [
+                              for (var i = 0; i < widget.headings.length; i++)
+                                SizedBox(
+                                  height: rowHeight,
+                                  child: Material(
+                                    key: keys[i],
+                                    color: i == active
+                                        ? Theme.of(
+                                            sheet,
+                                          ).colorScheme.primaryContainer
+                                        : Colors.transparent,
+                                    borderRadius: WingRadius.control,
+                                    child: InkWell(
+                                      borderRadius: WingRadius.control,
+                                      onTap: () {
+                                        Navigator.pop(sheet);
+                                        _jump(i);
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            SizedBox(
+                                              width: 24,
+                                              child: Text(
+                                                (i + 1).toString(),
+                                                style: WingTokens.of(sheet)
+                                                    .typography
+                                                    .label
+                                                    .copyWith(
+                                                      color: WingTokens.of(
+                                                        sheet,
+                                                      ).muted,
+                                                    ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              child: Text(
+                                                widget.headings[i].label,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: style,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
