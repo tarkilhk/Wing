@@ -26,6 +26,19 @@ server instructions.
 | `usage.html` | `ADMINISTRATION.md`: period charts, token usage and cost estimates |
 | `get-started.html` | `GETTING_STARTED.md`, `SELF_HOSTING.md`, `KNOWN_LIMITATIONS.md`, `NOTIFICATIONS.md`, `CONFIGURATION_BACKUPS.md` and `PRIVACY.md` |
 
+The README gives a short introduction, demonstrates profile switching and
+Recents, and sends readers to the website for feature walkthroughs and connection
+help. Keep server/proxy instructions, contributor information and complete
+policies in the repository. Do not duplicate the website's full guides in the
+README.
+
+The README's public website links target `https://tarkilhk.github.io/Wing/`.
+This is the planned GitHub Pages address, not evidence of an existing deployment.
+Before publishing the revised README, publish the reviewed website and verify
+those links, or replace the base address with the selected public domain. Local
+README previews map that base address to the website's LAN preview. They do not
+change the committed link destinations or publish either artifact.
+
 ## Local preview
 
 From the checkout root:

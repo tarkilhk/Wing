@@ -78,6 +78,14 @@ summary:active { color: var(--teal); }
 .source-link { border: 1px solid var(--dark-rule); }
 .hero { display: grid; grid-template-columns: 1fr 1.1fr; gap: 2rem; align-items: center; padding-block: 1.25rem 3rem; }
 .hero-copy { padding-block: 3rem; }
+@media (width >= 49rem) {
+  .site-header { padding-block: .75rem; }
+  .site-header .brand { --header-logo-size: clamp(4rem, 5.25vw, 5.25rem); gap: .875rem; }
+  .site-header .brand-portrait { inline-size: var(--header-logo-size); block-size: var(--header-logo-size); }
+  .site-header .brand-wordmark { inline-size: calc(var(--header-logo-size) * 2.14); block-size: calc(var(--header-logo-size) * 1.07); }
+  .hero { padding-block: .25rem 2rem; }
+  .hero-copy { align-self: start; padding-block: 1.5rem; }
+}
 .hero-description { color: var(--on-navy-muted); font-size: 1.25rem; line-height: 1.6; max-inline-size: 28rem; margin-block-start: 1.75rem; }
 .hero-description a { color: var(--cream); }
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; margin-block-start: 2rem; }
@@ -244,7 +252,6 @@ summary:active { color: var(--teal); }
 .guide-hero h1 { font-size: clamp(3rem, 1.5rem + 3.5vw, 5.5rem); }
 .guide-layout { display: grid; grid-template-columns: minmax(0, .45fr) minmax(0, 1fr); gap: 4rem; border-block-start: 1px solid var(--rule); padding-block: 4rem 5rem; }
 .guide-toc { display: flex; flex-direction: column; align-items: start; gap: .4rem; position: sticky; inset-block-start: 2rem; max-inline-size: 15rem; }
-.guide-toc > p { font-size: .9375rem; color: var(--muted); margin-block-end: .75rem; }
 .guide-toc > a { font-size: 1rem; line-height: 1.45; padding-block: .6rem; text-decoration: none; }
 @media (hover: hover) and (pointer: fine) {
   .guide-toc > a:hover { color: var(--teal); text-decoration: underline; }
@@ -279,7 +286,6 @@ summary:active { color: var(--teal); }
   .guide-hero { padding-block: 3rem; }
   .guide-layout { grid-template-columns: minmax(0, 1fr); padding-block-start: 2rem; }
   .guide-toc { position: static; max-inline-size: none; flex-direction: row; flex-wrap: wrap; gap: .25rem 1.5rem; padding-block-end: 1.5rem; border-block-end: 1px solid var(--rule); }
-  .guide-toc > p { flex-basis: 100%; }
   .guide-copy { max-inline-size: none; }
   .control-copy h3 { font-size: 1.5rem; }
   .control-features .guide-shot { inline-size: min(100%, 18rem); }
