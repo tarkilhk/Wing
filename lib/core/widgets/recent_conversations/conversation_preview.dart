@@ -27,7 +27,11 @@ class ConversationPreview extends StatelessWidget {
     final preview = card.preview;
     final rows = preview?.reading.messages ?? const <Map<String, dynamic>>[];
     final messages = rows
-        .where((row) => row['role'] == 'user' || row['role'] == 'assistant')
+        .where(
+          (row) =>
+              (row['role'] == 'user' || row['role'] == 'assistant') &&
+              _excerpt(row['content'], 800).isNotEmpty,
+        )
         .toList();
     final visible = messages.skip(
       messages.length > 2 ? messages.length - 2 : 0,
@@ -64,13 +68,17 @@ class ConversationPreview extends StatelessWidget {
         body: Column(
           children: [
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    for (final message in visible)
-                      Expanded(
-                        child: Padding(
+              child: SingleChildScrollView(
+                reverse: true,
+                physics: const NeverScrollableScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final message in visible)
+                        Padding(
                           padding: const EdgeInsets.only(bottom: 16),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -80,20 +88,18 @@ class ConversationPreview extends StatelessWidget {
                                 style: Theme.of(context).textTheme.labelMedium,
                               ),
                               const SizedBox(height: 8),
-                              Expanded(
-                                child: Text(
-                                  _excerpt(message['content'], 800),
-                                  maxLines: 12,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodyLarge,
-                                ),
+                              Text(
+                                _excerpt(message['content'], 800),
+                                maxLines: 12,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodyLarge,
                               ),
                             ],
                           ),
                         ),
-                      ),
-                    if (card.error != null) Text(card.error!),
-                  ],
+                      if (card.error != null) Text(card.error!),
+                    ],
+                  ),
                 ),
               ),
             ),

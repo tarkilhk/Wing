@@ -133,14 +133,14 @@ Map<String, Object?> _touch(
   WidgetTester tester,
   String mode,
   List<(Offset, Offset)> contacts, {
-  int milliseconds = 320,
+  int? milliseconds,
 }) => {
   'type': mode,
   'contacts': [
     for (final contact in contacts)
       [contact.$1.dx, contact.$1.dy, contact.$2.dx, contact.$2.dy],
   ],
-  'milliseconds': milliseconds,
+  'milliseconds': milliseconds ?? (mode == 'one' ? 1000 : 320),
 };
 
 Map<String, Object?> _tap(WidgetTester tester, Finder finder) {
@@ -192,8 +192,10 @@ void main() {
     ..framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
   const enabled = bool.fromEnvironment('RECENTS_NATIVE_INPUT');
   const codeOnly = bool.fromEnvironment('RECENTS_CODE_ONLY');
+  const momentumOnly = bool.fromEnvironment('RECENTS_MOMENTUM_ONLY');
   for (final brightness in [Brightness.dark, Brightness.light]) {
     for (final large in [false, true]) {
+      if (momentumOnly && (brightness != Brightness.dark || large)) continue;
       testWidgets(
         'native Recents ${brightness.name} ${large ? 'large' : 'normal'}${codeOnly ? ' code' : ''}',
         (tester) async {
@@ -439,6 +441,63 @@ void main() {
             );
             expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
             expect(controller.visible, isFalse);
+          }
+
+          if (momentumOnly) {
+            await pinch('momentum-stack');
+            final resumes = host.resumes;
+            await _native(
+              tester,
+              '$prefix-momentum-fling',
+              actions: [
+                _touch(tester, 'one', [
+                  (Offset(w * .8, mid.dy), Offset(w * .2, mid.dy)),
+                ], milliseconds: 140),
+              ],
+            );
+            final indices = tester
+                .widgetList<Positioned>(find.byType(Positioned))
+                .where((item) => item.key is ValueKey<int>)
+                .map((item) => (item.key! as ValueKey<int>).value)
+                .toList();
+            expect(
+              indices.reduce((a, b) => a > b ? a : b) - origin,
+              greaterThan(2),
+              reason: 'One flick must cross several circular cards.',
+            );
+            expect(host.resumes, resumes);
+            expect(controller.current!.chat!.key, first.key);
+            var center = indices.reduce((a, b) => a < b ? a : b) + 1;
+            if (visit.entryAt(center).key == first.key) {
+              await _native(
+                tester,
+                '$prefix-momentum-slow-browse',
+                actions: [
+                  _touch(tester, 'one', [
+                    (Offset(w * .8, mid.dy), Offset(w * .2, mid.dy)),
+                  ]),
+                ],
+              );
+              final currentIndices = tester
+                  .widgetList<Positioned>(find.byType(Positioned))
+                  .where((item) => item.key is ValueKey<int>)
+                  .map((item) => (item.key! as ValueKey<int>).value);
+              center = currentIndices.reduce((a, b) => a < b ? a : b) + 1;
+            }
+            final chosen = visit.entryAt(center).key;
+            await _native(
+              tester,
+              '$prefix-momentum-select',
+              actions: [
+                {'type': 'tap', 'x': mid.dx, 'y': mid.dy},
+              ],
+            );
+            expect(controller.current!.chat!.key, chosen);
+            expect(find.text('Swipe to browse · tap to open'), findsNothing);
+            expect(find.text('Opening conversation…'), findsNothing);
+            expect(controller.visible, isTrue);
+            expect(tester.takeException(), isNull);
+            return;
           }
 
           final file = File('${Directory.systemTemp.path}/recents-qa.txt');

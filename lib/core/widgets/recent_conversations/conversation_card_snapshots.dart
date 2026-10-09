@@ -10,6 +10,7 @@ final class ConversationCardSnapshots {
   final int byteLimit;
   final _images = <ProfileSessionKey, ({ui.Image image, bool live})>{};
   int _bytes = 0;
+  Set<ProfileSessionKey> _neighborhood = {};
 
   ui.Image? imageFor(ProfileSessionKey key) => _images[key]?.image;
   bool isLive(ProfileSessionKey key) => _images[key]?.live ?? false;
@@ -23,15 +24,26 @@ final class ConversationCardSnapshots {
     }
     _remove(key);
     while (_bytes + bytes > byteLimit && _images.isNotEmpty) {
-      _remove(_images.keys.first);
+      final victim = _images.keys.firstWhere(
+        (key) => !_neighborhood.contains(key),
+        orElse: () => _images.keys.first,
+      );
+      _remove(victim);
     }
     _images[key] = (image: image, live: live);
     _bytes += bytes;
   }
 
   void retain(Set<ProfileSessionKey> keys) {
+    _neighborhood = Set.of(keys);
     for (final key in _images.keys.toList()) {
-      if (!keys.contains(key)) _remove(key);
+      // Genuine viewports survive neighborhood changes within the byte budget.
+      // Returning to a visited chat must not expand a newly invented rendition.
+      if (!keys.contains(key) && !_images[key]!.live) _remove(key);
+    }
+    for (final key in keys) {
+      final entry = _images.remove(key);
+      if (entry != null) _images[key] = entry;
     }
   }
 
@@ -43,6 +55,7 @@ final class ConversationCardSnapshots {
   }
 
   void clear() {
+    _neighborhood = {};
     for (final key in _images.keys.toList()) {
       _remove(key);
     }

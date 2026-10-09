@@ -49,6 +49,10 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     duration: const Duration(milliseconds: 650),
   );
   final _liveBoundary = GlobalKey();
+  late final AnimationController _reveal = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 100),
+  );
   final _snapshots = ConversationCardSnapshots();
   final _previewBoundary = GlobalKey();
   final _placeholders = <ProfileSessionKey, Widget>{};
@@ -58,6 +62,9 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   bool _preparing = false, _preparationRequested = false, _liveDirty = true;
   Object? _renderEnvironment;
   Completer<void>? _selectionCompletion;
+  ProfileSessionKey? _openingKey;
+  bool _paintingSelected = false, _selectionPainted = false;
+  bool _expansionFinished = false;
   bool get _moving => _gesture != null || _motion.animating || _selecting;
 
   final _previews =
@@ -461,10 +468,8 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     // nearest copy on Back, rather than rewinding every lap the user browsed.
     _motion.position += target - _base;
     _base = target;
-    _motion.spring(
+    _motion.expand(
       position: 0,
-      lift: 0,
-      zoom: 0,
       reducedMotion: _reduced,
       settled: _finishPresentation,
     );
@@ -473,6 +478,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
 
   void _finishPresentation() {
     if (!mounted) return;
+    _completeSelection();
     setState(() {
       _active = _stack = _selecting = false;
       _base = math.max(0, widget.session.selectedIndex);
@@ -497,21 +503,45 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     _idleTimer?.cancel();
     ++_captureGeneration;
     final completion = _selectionCompletion = Completer<void>();
+    _openingKey = key;
+    _paintingSelected = _selectionPainted = _expansionFinished = false;
+    _reveal.value = 0;
     setState(() {
       _selecting = _active = true;
       _stack = false;
     });
     _notifyPresentation();
-    // Expand existing pixels first. Resume and real-chat construction start only
-    // after the animation, so backend latency cannot hold up finger feedback.
-    _motion.spring(
+    // Opening and expansion overlap. Live content paints beneath the cover;
+    // reveal requires both final geometry and its completed paint frame.
+    _motion.expand(
       position: (_base - index).toDouble(),
-      lift: 0,
-      zoom: 0,
       reducedMotion: _reduced,
-      settled: () => unawaited(_openSelected(index, fromStack, completion)),
+      settled: () {
+        _expansionFinished = true;
+        _tryReveal(completion);
+      },
     );
+    unawaited(_openSelected(index, fromStack, completion));
     return completion.future;
+  }
+
+  void _tryReveal(Completer<void> completion) {
+    if (!mounted ||
+        _selectionCompletion != completion ||
+        !_expansionFinished ||
+        !_selectionPainted ||
+        _reveal.isAnimating) {
+      return;
+    }
+    if (_reduced) {
+      _finishPresentation();
+    } else {
+      _reveal.forward().whenCompleteOrCancel(() {
+        if (mounted && _selectionCompletion == completion) {
+          _finishPresentation();
+        }
+      });
+    }
   }
 
   Future<void> _openSelected(
@@ -523,8 +553,15 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     try {
       if (!mounted || !session.active) return;
       final opened = await session.select(session.entryAt(index).key);
-      if (!mounted || !session.active || widget.session != session) return;
+      if (!mounted ||
+          !session.active ||
+          widget.session != session ||
+          _selectionCompletion != completion) {
+        return;
+      }
       if (!opened) {
+        _motion.stop();
+        _completeSelection();
         setState(() {
           _selecting = false;
           _stack = fromStack;
@@ -541,20 +578,33 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
         }
         return;
       }
+      setState(() => _paintingSelected = true);
       await SchedulerBinding.instance.endOfFrame;
-      if (!mounted || !session.active || widget.session != session) return;
+      if (!mounted ||
+          !session.active ||
+          widget.session != session ||
+          _selectionCompletion != completion) {
+        return;
+      }
       _liveDirty = true;
-      _finishPresentation();
+      _selectionPainted = true;
+      _tryReveal(completion);
     } finally {
-      if (!completion.isCompleted) completion.complete();
-      if (_selectionCompletion == completion) _selectionCompletion = null;
+      if ((!mounted || !session.active || widget.session != session) &&
+          !completion.isCompleted) {
+        completion.complete();
+      }
     }
   }
 
   void _completeSelection() {
     final completion = _selectionCompletion;
-    if (completion != null && !completion.isCompleted) completion.complete();
     _selectionCompletion = null;
+    _reveal.stop();
+    _reveal.value = 0;
+    _openingKey = null;
+    _paintingSelected = _selectionPainted = _expansionFinished = false;
+    if (completion != null && !completion.isCompleted) completion.complete();
   }
 
   Offset? _browseStart;
@@ -581,15 +631,15 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     if (_browseStart == null || _selecting) return;
     _browseStart = null;
     _gesture = null;
-    _motion.positionVelocity =
-        (details.velocity.pixelsPerSecond.dx / (_size.width * .67)).clamp(
-          -8.0,
-          8.0,
-        );
-    final target =
-        (_motion.position + (_motion.positionVelocity * .13).clamp(-.55, .55))
-            .roundToDouble();
-    _settleStack(target);
+    _motion.coast(
+      velocity: details.velocity.pixelsPerSecond.dx / (_size.width * .67),
+      reducedMotion: _reduced,
+      settled: () {
+        _syncCueAdmission();
+        _queueIdleWork();
+      },
+    );
+    _syncCueAdmission();
   }
 
   int? _hitCard(Offset point) {
@@ -689,6 +739,37 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   Widget _cardContent(int index) {
     final key = widget.session.entryAt(index).key;
     final capture = _snapshots.imageFor(key);
+    final content = _preparedCard(index, key, capture);
+    if (key != _openingKey || _snapshots.isLive(key)) return content;
+    // An excerpt is useful in a thumbnail, but isn't the normal chat. Fade it
+    // into an opening frame instead of magnifying a different transcript.
+    final excerptOpacity = _motion.lift.clamp(0.0, 1.0);
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Opacity(opacity: excerptOpacity, child: content),
+        ),
+        Positioned.fill(
+          child: Opacity(
+            opacity: 1 - excerptOpacity,
+            child: Stack(
+              children: [
+                Positioned.fill(child: _placeholder(index)),
+                Center(
+                  child: Text(
+                    'Opening conversation…',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _preparedCard(int index, ProfileSessionKey key, ui.Image? capture) {
     if (capture != null) {
       return RawImage(
         key: ValueKey((key, 'snapshot')),
@@ -699,6 +780,11 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     }
     final prepared = _previews[key];
     if (prepared != null) return prepared.view;
+    return _placeholder(index);
+  }
+
+  Widget _placeholder(int index) {
+    final key = widget.session.entryAt(index).key;
     if (_placeholders.length >= 6 && !_placeholders.containsKey(key)) {
       _placeholders.remove(_placeholders.keys.first);
     }
@@ -811,7 +897,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
               child: TickerMode(
                 enabled: !_active,
                 child: Offstage(
-                  offstage: _active,
+                  offstage: _active && !_paintingSelected,
                   child: RepaintBoundary(
                     key: _liveBoundary,
                     child: ExcludeSemantics(
@@ -830,124 +916,137 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
             ),
             if (_active)
               Positioned.fill(
-                child: Material(
-                  color: Theme.of(context).brightness == Brightness.light
-                      ? const Color(0xffbccac7)
-                      : const Color(0xff202c33),
-                  child: ClipRect(
-                    child: Stack(
-                      children: [
-                        AnimatedBuilder(
-                          animation: _motion,
-                          builder: (context, _) => _cards(),
-                        ),
-                        if (_selecting && !_motion.animating)
-                          Positioned(
-                            top: MediaQuery.paddingOf(context).top,
-                            left: 0,
-                            right: 0,
-                            child: const LinearProgressIndicator(minHeight: 2),
+                child: FadeTransition(
+                  opacity: ReverseAnimation(_reveal),
+                  child: Material(
+                    color: Theme.of(context).brightness == Brightness.light
+                        ? const Color(0xffbccac7)
+                        : const Color(0xff202c33),
+                    child: ClipRect(
+                      child: Stack(
+                        children: [
+                          AnimatedBuilder(
+                            animation: _motion,
+                            builder: (context, _) => _cards(),
                           ),
-                        if (_stack)
-                          Positioned.fill(
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onHorizontalDragDown: _browseDown,
-                              onHorizontalDragUpdate: _browseUpdate,
-                              onHorizontalDragEnd: _browseEnd,
-                              onHorizontalDragCancel: () {
-                                _browseStart = null;
-                                _gesture = null;
-                                _settleStack(_motion.position.roundToDouble());
-                              },
-                              onTapUp: (details) {
-                                final index = _hitCard(details.localPosition);
-                                _gesture = null;
-                                _browseStart = null;
-                                if (index != null && !_selecting) {
-                                  unawaited(_select(index));
-                                }
-                              },
+                          if (_selecting && !_motion.animating)
+                            Positioned(
+                              top: MediaQuery.paddingOf(context).top,
+                              left: 0,
+                              right: 0,
+                              child: const LinearProgressIndicator(
+                                minHeight: 2,
+                              ),
                             ),
-                          ),
-                        if (_stack)
-                          Positioned(
-                            top: MediaQuery.paddingOf(context).top + 8,
-                            left: 8,
-                            child: IconButton.filledTonal(
-                              tooltip: 'Return to conversation',
-                              onPressed: _selecting ? null : _returnToChat,
-                              icon: const Icon(Icons.close),
+                          if (_stack)
+                            Positioned.fill(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onHorizontalDragDown: _browseDown,
+                                onHorizontalDragUpdate: _browseUpdate,
+                                onHorizontalDragEnd: _browseEnd,
+                                onHorizontalDragCancel: () {
+                                  _browseStart = null;
+                                  _gesture = null;
+                                  _settleStack(
+                                    _motion.position.roundToDouble(),
+                                  );
+                                },
+                                onTapUp: (details) {
+                                  final index = _hitCard(details.localPosition);
+                                  _gesture = null;
+                                  _browseStart = null;
+                                  if (index != null && !_selecting) {
+                                    unawaited(_select(index));
+                                  }
+                                },
+                              ),
                             ),
-                          ),
-                        if (_stack)
-                          Positioned(
-                            bottom: MediaQuery.paddingOf(context).bottom + 16,
-                            left: 16,
-                            right: 16,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (!_selecting && widget.session.error != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: StudioError(widget.session.error!),
-                                  ),
-                                if (!_selecting)
-                                  Semantics(
-                                    liveRegion: _stack,
-                                    label:
-                                        '${widget.session.entryAt(_focusedIndex).title}, conversation ${_focusedIndex % widget.session.entries.length + 1} of ${widget.session.entries.length}',
-                                    child: Text(
-                                      MediaQuery.accessibleNavigationOf(context)
-                                          ? 'Choose a conversation'
-                                          : 'Swipe to browse · tap to open',
-                                      textAlign: TextAlign.center,
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodySmall,
+                          if (_stack)
+                            Positioned(
+                              top: MediaQuery.paddingOf(context).top + 8,
+                              left: 8,
+                              child: IconButton.filledTonal(
+                                tooltip: 'Return to conversation',
+                                onPressed: _selecting ? null : _returnToChat,
+                                icon: const Icon(Icons.close),
+                              ),
+                            ),
+                          if (_stack)
+                            Positioned(
+                              bottom: MediaQuery.paddingOf(context).bottom + 16,
+                              left: 16,
+                              right: 16,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (!_selecting &&
+                                      widget.session.error != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: StudioError(widget.session.error!),
                                     ),
-                                  ),
-                                if (_selecting) const LinearProgressIndicator(),
-                                if (MediaQuery.accessibleNavigationOf(context))
-                                  Wrap(
-                                    alignment: WrapAlignment.center,
-                                    children: [
-                                      IconButton(
-                                        tooltip: 'Previous conversation',
-                                        onPressed: _selecting
-                                            ? null
-                                            : () => _settleStack(
-                                                _motion.position
-                                                        .roundToDouble() +
-                                                    1,
-                                              ),
-                                        icon: const Icon(Icons.chevron_left),
+                                  if (!_selecting)
+                                    Semantics(
+                                      liveRegion: _stack,
+                                      label:
+                                          '${widget.session.entryAt(_focusedIndex).title}, conversation ${_focusedIndex % widget.session.entries.length + 1} of ${widget.session.entries.length}',
+                                      child: Text(
+                                        MediaQuery.accessibleNavigationOf(
+                                              context,
+                                            )
+                                            ? 'Choose a conversation'
+                                            : 'Swipe to browse · tap to open',
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodySmall,
                                       ),
-                                      IconButton(
-                                        tooltip: 'Open conversation',
-                                        onPressed: _selecting
-                                            ? null
-                                            : () => _select(_focusedIndex),
-                                        icon: const Icon(Icons.open_in_full),
-                                      ),
-                                      IconButton(
-                                        tooltip: 'Next conversation',
-                                        onPressed: _selecting
-                                            ? null
-                                            : () => _settleStack(
-                                                _motion.position
-                                                        .roundToDouble() -
-                                                    1,
-                                              ),
-                                        icon: const Icon(Icons.chevron_right),
-                                      ),
-                                    ],
-                                  ),
-                              ],
+                                    ),
+                                  if (_selecting)
+                                    const LinearProgressIndicator(),
+                                  if (MediaQuery.accessibleNavigationOf(
+                                    context,
+                                  ))
+                                    Wrap(
+                                      alignment: WrapAlignment.center,
+                                      children: [
+                                        IconButton(
+                                          tooltip: 'Previous conversation',
+                                          onPressed: _selecting
+                                              ? null
+                                              : () => _settleStack(
+                                                  _motion.position
+                                                          .roundToDouble() +
+                                                      1,
+                                                ),
+                                          icon: const Icon(Icons.chevron_left),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Open conversation',
+                                          onPressed: _selecting
+                                              ? null
+                                              : () => _select(_focusedIndex),
+                                          icon: const Icon(Icons.open_in_full),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Next conversation',
+                                          onPressed: _selecting
+                                              ? null
+                                              : () => _settleStack(
+                                                  _motion.position
+                                                          .roundToDouble() -
+                                                      1,
+                                                ),
+                                          icon: const Icon(Icons.chevron_right),
+                                        ),
+                                      ],
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -969,6 +1068,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     _pulse.dispose();
     _clearCaptures();
     _completeSelection();
+    _reveal.dispose();
     super.dispose();
   }
 }

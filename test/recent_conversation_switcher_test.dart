@@ -531,7 +531,7 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('card expands before a slow conversation resume', (
+    testWidgets('card opens during expansion and waits for a painted chat', (
       tester,
     ) async {
       await mount(tester);
@@ -542,8 +542,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
       expect(
         source.opens,
-        isEmpty,
-        reason: 'Resume must not compete with the expansion.',
+        [source.entries[1].key],
+        reason:
+            'Opening overlaps expansion rather than waiting for its spring.',
       );
       for (var frame = 0; frame < 50; frame++) {
         await tester.pump(const Duration(milliseconds: 16));
@@ -561,6 +562,88 @@ void main() {
       await _finishFrames(tester);
       await selection;
       expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'quick stack flick coasts across several cards and can be caught',
+      (tester) async {
+        await mount(tester);
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        await tester.flingFrom(
+          const Offset(250, 400),
+          const Offset(-110, 0),
+          2800,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 220));
+        final catchGesture = await tester.startGesture(const Offset(180, 400));
+        await tester.pump();
+        final visible = tester
+            .widgetList<Positioned>(find.byType(Positioned))
+            .where((widget) => widget.key is ValueKey<int>)
+            .map((widget) => (widget.key! as ValueKey<int>).value)
+            .toList();
+        expect(visible.reduce((a, b) => a > b ? a : b), greaterThan(2));
+        final caught = tester.getRect(find.byKey(ValueKey(visible.first)));
+        await tester.pump(const Duration(milliseconds: 160));
+        expect(tester.getRect(find.byKey(ValueKey(visible.first))), caught);
+        expect(source.opens, isEmpty);
+        final center = visible.reduce((a, b) => a < b ? a : b) + 1;
+        await catchGesture.up();
+        await _finishFrames(tester);
+        expect(
+          source.selected,
+          source.entries[center % source.entries.length].key,
+          reason:
+              'A tap catches and opens the card actually visible beneath it.',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('live chat paints under the cover before expansion finishes', (
+      tester,
+    ) async {
+      await mount(tester);
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      var finished = false;
+      final selection = switcher.currentState!
+          .selectAdjacent(1)
+          .then((_) => finished = true);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(source.selected, source.entries[1].key);
+      expect(finished, isFalse);
+      final live = tester.widget<Offstage>(
+        find
+            .ancestor(
+              of: find.text('Selectable message', skipOffstage: false),
+              matching: find.byType(Offstage),
+            )
+            .first,
+      );
+      expect(
+        live.offstage,
+        isFalse,
+        reason: 'The real chat must paint beneath the still-opaque card.',
+      );
+      final cover = tester.widget<FadeTransition>(
+        find
+            .descendant(
+              of: find.byType(RecentConversationSwitcher),
+              matching: find.byType(FadeTransition),
+            )
+            .first,
+      );
+      expect(cover.opacity.value, 1);
+      await tester.pump(const Duration(milliseconds: 170));
+      await tester.pump(const Duration(milliseconds: 120));
+      await selection;
+      expect(find.byType(RawImage), findsNothing);
+      expect(find.text('Opening conversation…'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -596,8 +679,18 @@ void main() {
         expect(cache.imageFor(source.entries[1].key), isNotNull);
         cache.retain({source.entries[1].key});
         expect(images[2].debugDisposed, isTrue);
+        cache.record(source.entries[0].key, await pixels(20), live: true);
+        final visited = cache.imageFor(source.entries[0].key)!;
+        cache.retain({source.entries[1].key});
+        expect(cache.isLive(source.entries[0].key), isTrue);
+        expect(
+          visited.debugDisposed,
+          isFalse,
+          reason: 'Visited real viewports survive ring neighborhood changes.',
+        );
         cache.clear();
         expect(images[1].debugDisposed, isTrue);
+        expect(visited.debugDisposed, isTrue);
       },
     );
 

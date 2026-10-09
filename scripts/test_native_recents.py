@@ -27,6 +27,8 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--source-directory", type=Path, default=Path.cwd())
     parser.add_argument("--name", help="Run one named Flutter case when recovering a failure")
+    parser.add_argument("--momentum-only", action="store_true",
+                        help="Run the limited circular-fling and painted-selection journey")
     parser.add_argument("--code-only", action="store_true",
                         help="Run only independent code-copy/exclusion and Android-edge probes")
     args = parser.parse_args()
@@ -126,6 +128,8 @@ def main() -> None:
                    "integration_test/recent_conversation_native_test.dart"]
         if args.code_only:
             command.append("--dart-define=RECENTS_CODE_ONLY=true")
+        if args.momentum_only:
+            command.append("--dart-define=RECENTS_MOMENTUM_ONLY=true")
         if args.name:
             command.extend(["--name", args.name])
         print("Installing and running native Recents acceptance:", args.device, flush=True)

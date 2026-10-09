@@ -91,7 +91,9 @@ multitouch, pinch persistence, circular laps, browse/commit, interrupted springs
 pointer-time fling decisions, accessible
 controls alongside expert gestures when an accessibility service is enabled,
 snapshot-only dragging without preview reads or construction, bounded pixel
-ownership/disposal, delayed-resume expansion, removed double-tap switching and
+ownership/disposal and genuine visited-viewport retention, multi-card coasting,
+touch-to-catch and exact moving-card selection, overlapping expansion/resume and
+opaque-cover first-paint ordering, removed double-tap switching and
 completed asynchronous preview publication,
 theme paint and the production Recents route with draft/cursor/Back
 restoration at normal and enlarged text in both themes.
@@ -121,6 +123,8 @@ For native acceptance, run the isolated API 36 emulator driver:
 
 ```sh
 python3 scripts/test_native_recents.py --device <emulator-id> --output build/emulator-acceptance/recents
+# Limited recovery/acceptance for circular momentum and live-chat selection:
+python3 scripts/test_native_recents.py --device <emulator-id> --momentum-only --output build/emulator-acceptance/recents-motion
 ```
 
 It builds `integration_test/recent_conversation_native_test.dart` and compiles a

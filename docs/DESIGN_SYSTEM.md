@@ -127,7 +127,8 @@ retains stack and Recents navigation.
 - Two fingers swiping horizontally on the transcript pull the chat into
   a card and commit the adjacent conversation on release. A short drag returns.
 - Pinch inward with two fingers to zoom into a persistent card stack. Lifting
-  fingers leaves it open. One-finger swipes browse; tapping the center or a visible
+  fingers leaves it open. One-finger swipes coast through multiple circular
+  cards according to their release velocity. A new touch catches the stack immediately; tapping the center or a visible
   neighboring card commits and expands that conversation. Back returns to the
   committed conversation before a second Back returns to the preserved Recents
   filter. Returning from cards restores an originally visible keyboard; a keyboard
@@ -140,14 +141,21 @@ run only after motion settles; they never start from pointer movement. Neighbor
 renditions use the existing chat frame with at most two clipped plain-text messages,
 without Markdown, decoded attachments or activity trees. Missing images show a
 static chat frame until idle preparation completes. Genuine visited snapshots keep
-their reading position. The cache is limited to 12 MiB and the visible neighborhood
-plus the committed chat; discarded images are disposed. Side previews use lower
-resolution. Selecting expands cached pixels before resume or real-chat construction,
-then reveals the actual chat after its completed layout frame. Cards keep stable
-physical identities as paint order changes. They round and gain shadows only during
+their reading position. The cache is limited to 12 MiB. Passive previews retain
+only the visible neighborhood plus the committed chat; genuine visited viewports survive
+neighborhood changes until budget eviction. Discarded images are disposed. Side
+previews use lower resolution. Selection begins opening alongside a 240 ms
+expansion. The real chat paints
+beneath the opaque cover before a 100 ms reveal after both painting and expansion
+complete. Genuine snapshots keep their exact viewport throughout; an uncaptured
+excerpt fades into an opening frame rather than becoming a false full-screen
+transcript. Reduced motion reveals directly after the completed paint frame.
+Cards keep stable physical identities as paint order changes. They round and gain shadows only during
 motion; scale is about .86 during a switch
-and .72 in the stack. Independent numerical springs retain current positions and
-velocities when interrupted; reduced motion settles directly. Input uses native
+and .72 in the stack. Friction carries a quick swipe through the ring, then a
+small spring snaps to the projected card. Touch stops coasting at its current position; independent
+numerical springs retain positions and velocities when retargeted; reduced motion
+settles directly. Input uses native
 pointer timestamps for velocity. A new gesture can interrupt a returning card
 once selection has settled. Two-finger gestures admit unselected transcript prose
 and exclude Android's 24 dp edge zones. Active text
