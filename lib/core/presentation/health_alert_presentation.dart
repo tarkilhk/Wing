@@ -19,6 +19,21 @@ String healthAlertMetricLabel(HostMetric metric) => switch (metric) {
   _ => 'CPU usage',
 };
 
+String? healthAlertNativeCriticalLabel(HostMetric metric) => switch (metric) {
+  HostMetric.memoryUsedPercent => 'Native Hermes critical pressure alert (95%)',
+  HostMetric.diskUsedPercent =>
+    'Native Hermes critical pressure alert (95% + low free space)',
+  _ => null,
+};
+
+String healthAlertNativeCriticalDetail(HostMetric metric) => switch (metric) {
+  HostMetric.memoryUsedPercent =>
+    'Below 5% available RAM or 64 MiB free. Alerts immediately.',
+  HostMetric.diskUsedPercent =>
+    'Below 256 MiB free, or at least 95% used with under 1 GiB free. Alerts immediately.',
+  _ => throw ArgumentError.value(metric, 'metric', 'No native pressure signal'),
+};
+
 /// Preserve editable precision while omitting the redundant decimal for integers.
 String healthAlertPercentage(double value) => value == value.truncateToDouble()
     ? value.toInt().toString()

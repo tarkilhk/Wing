@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/health_alert.dart';
 import 'background_monitoring_service.dart';
@@ -26,7 +25,6 @@ class HealthAlertsCoordinator extends ChangeNotifier {
   final _sessions = <ProfileWorkspaceController, HealthAlertsSession>{};
   final _listeners = <ProfileWorkspaceController, VoidCallback>{};
   bool _foreground = true, _closed = false;
-  Timer? _reminder;
   List<HealthAlert> get alerts {
     final result = _sessions.values.expand((s) => s.alerts).toList();
     result.sort((a, b) {
@@ -93,41 +91,15 @@ class HealthAlertsCoordinator extends ChangeNotifier {
 
   void _changed() {
     if (_closed) return;
-    _reminder?.cancel();
-    _reminder = null;
-    if (_foreground ||
-        monitoring.value == BackgroundMonitoringState.active ||
-        monitoring.value == BackgroundMonitoringState.batteryRestricted) {
-      final now = DateTime.now();
-      final deadlines =
-          alerts
-              .where(
-                (a) =>
-                    !a.acknowledged &&
-                    a.snoozedUntil != null &&
-                    a.snoozedUntil!.isAfter(now),
-              )
-              .map((a) => a.snoozedUntil!)
-              .toList()
-            ..sort();
-      if (deadlines.isNotEmpty) {
-        _reminder = Timer(deadlines.first.difference(now), _changed);
-      }
-    }
     notifyListeners();
   }
 
   ProfileWorkspaceController? ownerFor(HealthAlert alert) => _sessions.keys
       .where((owner) => owner.connectionIdentity == alert.connectionIdentity)
       .firstOrNull;
-  void acknowledge(HealthAlert alert) =>
-      _sessions[ownerFor(alert)]?.acknowledge(alert.id);
-  void snooze(HealthAlert alert) =>
-      _sessions[ownerFor(alert)]?.snooze(alert.id);
   @override
   void dispose() {
     _closed = true;
-    _reminder?.cancel();
     registry.removeListener(_reconcile);
     monitoring.removeListener(_reconcile);
     settings.removeListener(_reconcile);

@@ -45,11 +45,7 @@ class _HealthAlertNoticeState extends State<HealthAlertNotice> {
   void _changed() {
     if (!mounted || _scope == null) return;
     final alerts = _scope!.alerts.alerts;
-    final fresh = alerts
-        .where(
-          (a) => _seen[a.id] != a.occurrence && a.remindsAt(DateTime.now()),
-        )
-        .firstOrNull;
+    final fresh = alerts.where((a) => _seen[a.id] != a.occurrence).firstOrNull;
     _seen
       ..clear()
       ..addEntries(alerts.map((a) => MapEntry(a.id, a.occurrence)));

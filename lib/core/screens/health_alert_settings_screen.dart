@@ -54,14 +54,17 @@ class HealthAlertSettingsScreen extends StatelessWidget {
                     subtitle: Text(
                       settings.rules[metric]!.enabled
                           ? 'Alert after ${settings.rules[metric]!.alertMinutes} min · clear below ${healthAlertPercentage(settings.rules[metric]!.clearBelow)}% after ${settings.rules[metric]!.clearMinutes} min'
+                          : settings.rules[metric]!.nativeCriticalEnabled
+                          ? 'Native critical pressure only'
                           : 'Not watched',
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          '${healthAlertPercentage(settings.rules[metric]!.warnAbove)}%',
-                        ),
+                        if (settings.rules[metric]!.enabled)
+                          Text(
+                            '${healthAlertPercentage(settings.rules[metric]!.warnAbove)}%',
+                          ),
                         const Icon(Icons.chevron_right, size: 18),
                       ],
                     ),
@@ -74,7 +77,7 @@ class HealthAlertSettingsScreen extends StatelessWidget {
               ],
             ),
             const Text(
-              'Reported critical memory or disk pressure alerts immediately when its rule is enabled.',
+              'Native critical pressure alerts immediately when enabled.',
             ),
             const SizedBox(height: 16),
             const Text('Server & profile'),
@@ -242,7 +245,7 @@ class _RuleEditorState extends State<_RuleEditor> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _row(
-                      'Enabled',
+                      'Usage warning',
                       Switch(
                         value: _rule.enabled,
                         onChanged: (value) => widget.session.updateRule(
@@ -265,6 +268,26 @@ class _RuleEditorState extends State<_RuleEditor> {
                       _clear,
                       'Recovery',
                     ),
+                    if (healthAlertNativeCriticalLabel(widget.metric)
+                        case final label?) ...[
+                      const SizedBox(height: 8),
+                      const Divider(height: 1),
+                      SwitchListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                        ),
+                        title: Text(label),
+                        subtitle: Text(
+                          healthAlertNativeCriticalDetail(widget.metric),
+                        ),
+                        value: _rule.nativeCriticalEnabled,
+                        onChanged: (value) => widget.session.updateRule(
+                          widget.metric,
+                          (current) =>
+                              current.copyWith(nativeCriticalEnabled: value),
+                        ),
+                      ),
+                    ],
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: _SaveError(session: widget.session),

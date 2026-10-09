@@ -385,7 +385,10 @@ small status icon and its tint; keep the title readable, the triggering usage an
 threshold/duration immediately below it, and the connection name secondary
 and dismissal icon-only in a 48 dp target. At enlarged text, place the icon above
 full-width labels and dismissal in the upper trailing corner. Use the shared 200 ms entrance and
-settle immediately with reduced motion. See [Health alerts](ADMINISTRATION.md#health-alerts).
+settle immediately with reduced motion. Health alert dialogs offer icon-only Close
+and Open Hermes health actions, plus previous/next issue controls when needed.
+Do not add acknowledgement or snooze controls. Closing the dialog retains the
+issue count and severity colour until recovery. See [Health alerts](ADMINISTRATION.md#health-alerts).
 
 Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/composer corners, 24-28 sp page titles, 16 sp body text and 12-13 sp metadata. Primary action paint can be about 40 dp high inside a minimum 48 dp touch area. Text scaling must allow rows and controls to grow. Keep established compact activity density; improve touch areas without adding visible card padding.
 

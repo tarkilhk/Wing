@@ -34,6 +34,26 @@ class HealthAlertEvaluator {
   String hostKey(HostMetric metric) =>
       '$connectionIdentity:host:${metric.name}';
 
+  void applyHostRule(HostMetric metric, HealthAlertRule rule) {
+    final key = hostKey(metric);
+    final alert = _alerts[key];
+    if (!rule.enabled && !rule.nativeCriticalEnabled ||
+        alert != null &&
+            (alert.severity == HealthAlertSeverity.critical
+                ? !rule.nativeCriticalEnabled
+                : !rule.enabled)) {
+      remove(key);
+    }
+  }
+
+  void restartHostWarning(HostMetric metric) {
+    final key = hostKey(metric);
+    _periods.remove(key);
+    if (_alerts[key]?.severity == HealthAlertSeverity.warning) {
+      _alerts.remove(key);
+    }
+  }
+
   void host({
     required HostMetric metric,
     required HealthAlertRule rule,
@@ -44,8 +64,8 @@ class HealthAlertEvaluator {
     bool pressureKnown = true,
   }) {
     final key = hostKey(metric);
-    if (!rule.enabled) {
-      remove(key);
+    applyHostRule(metric, rule);
+    if (!rule.enabled && !rule.nativeCriticalEnabled) {
       return;
     }
     if (sampledAt == null || value == null && !critical) {
@@ -57,7 +77,7 @@ class HealthAlertEvaluator {
       usedPercent: value,
       warningAbovePercent: rule.warnAbove,
       alertMinutes: rule.alertMinutes,
-      criticalPressure: critical,
+      criticalPressure: critical && rule.nativeCriticalEnabled,
     );
     final label = switch (metric) {
       HostMetric.memoryUsedPercent => 'Memory usage',
@@ -71,7 +91,7 @@ class HealthAlertEvaluator {
           HostMetric.diskUsedPercent => 'Low free space can prevent Hermes from saving chats or writing files.',
           _ => 'Sustained CPU usage may slow replies and tools.',
         }}';
-    if (critical) {
+    if (critical && rule.nativeCriticalEnabled) {
       _periods.remove(key);
       _put(
         key,
@@ -86,12 +106,13 @@ class HealthAlertEvaluator {
       );
       return;
     }
+    if (!rule.enabled && existing == null) return;
     if (value == null) return;
     final clearing =
         existing != null &&
         value < rule.clearBelow &&
         (existing.severity != HealthAlertSeverity.critical || pressureKnown);
-    final raising = existing == null && value > rule.warnAbove;
+    final raising = rule.enabled && existing == null && value > rule.warnAbove;
     if (!clearing && !raising) {
       _periods.remove(key);
     } else {
@@ -136,8 +157,6 @@ class HealthAlertEvaluator {
         observedAt: sampledAt,
         occurrence: alert.occurrence,
         trigger: alert.trigger,
-        acknowledged: alert.acknowledged,
-        snoozedUntil: alert.snoozedUntil,
         lastKnown:
             alert.severity == HealthAlertSeverity.critical && !pressureKnown,
       );
@@ -196,21 +215,7 @@ class HealthAlertEvaluator {
       profileName: profileName,
       trigger: escalated ? trigger : old.trigger,
       occurrence: escalated ? ++_occurrence : old.occurrence,
-      acknowledged: !escalated && old.acknowledged,
-      snoozedUntil: escalated ? null : old.snoozedUntil,
     );
-  }
-
-  void acknowledge(String id) {
-    if (_alerts[id] case final alert?) {
-      _alerts[id] = alert.copyWith(acknowledged: true);
-    }
-  }
-
-  void snooze(String id, DateTime until) {
-    if (_alerts[id] case final alert?) {
-      _alerts[id] = alert.copyWith(snoozedUntil: until);
-    }
   }
 }
 

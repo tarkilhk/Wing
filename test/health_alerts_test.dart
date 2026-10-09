@@ -53,6 +53,7 @@ void main() {
     );
     rule = HealthAlertRule(
       enabled: true,
+      nativeCriticalEnabled: true,
       warnAbove: 90,
       clearBelow: 85,
       alertMinutes: 2,
@@ -75,6 +76,147 @@ void main() {
       sample(i, value);
     }
   }
+
+  for (final metric in [ram, HostMetric.diskUsedPercent]) {
+    test('native-only ${metric.name} alerts immediately and can recover', () {
+      final nativeOnly = rule.copyWith(enabled: false);
+      void read(int seconds, double value, {bool critical = false}) =>
+          evaluator.host(
+            metric: metric,
+            rule: nativeOnly,
+            now: start.add(Duration(seconds: seconds)),
+            sampledAt: start.add(Duration(seconds: seconds)),
+            value: value,
+            critical: critical,
+          );
+      read(0, 99);
+      read(120, 99);
+      expect(evaluator.alerts, isEmpty);
+      read(135, 99, critical: true);
+      expect(evaluator.alerts.single.severity, HealthAlertSeverity.critical);
+      read(150, 80);
+      read(270, 80);
+      expect(evaluator.alerts, isEmpty);
+    });
+    test('disabled native ${metric.name} cannot escalate a Wing warning', () {
+      final warningOnly = rule.copyWith(nativeCriticalEnabled: false);
+      void read(int seconds) => evaluator.host(
+        metric: metric,
+        rule: warningOnly,
+        now: start.add(Duration(seconds: seconds)),
+        sampledAt: start.add(Duration(seconds: seconds)),
+        value: 99,
+        critical: true,
+      );
+      read(0);
+      expect(evaluator.alerts, isEmpty);
+      read(120);
+      final warning = evaluator.alerts.single;
+      expect(warning.severity, HealthAlertSeverity.warning);
+      expect(
+        healthAlertTriggerSummary(warning),
+        '99% used · above 90% for 2 min',
+      );
+      read(135);
+      expect(evaluator.alerts.single.occurrence, warning.occurrence);
+    });
+  }
+
+  test(
+    'older saved rules without native toggles require reconfiguration',
+    () async {
+      final data = HealthAlertSettings().encode();
+      for (final savedRule in (data['rules'] as Map).values) {
+        (savedRule as Map).remove('nativeCriticalEnabled');
+      }
+      SharedPreferences.setMockInitialValues({
+        HealthAlertSettingsStore.key: jsonEncode(data),
+      });
+      final session = HealthAlertSettingsSession(
+        HealthAlertSettingsStore(await SharedPreferences.getInstance()),
+      );
+      expect(session.settings.enabled, isFalse);
+      expect(session.error, contains('could not be read'));
+      await session.update((current) => current.copyWith(enabled: true));
+      expect(session.settings.enabled, isTrue);
+      expect(session.error, isNull);
+      session.dispose();
+    },
+  );
+
+  test(
+    'native toggles own polling and incidents independently of warnings',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final fixture = HostResourcesFixture();
+      fixture.pressure = hostPressurePayload(now: start);
+      fixture.pressure['memory']['pressure'] = 'critical';
+      fixture.pressure['disk']['pressure'] = 'critical';
+      final host = HostResourcesSession(fixture.server, now: () => start);
+      final health = AdministrationHealth(fixture.server, now: () => start);
+      final connection = ServerConnectionStatus('Home');
+      final store = HealthAlertSettingsStore(
+        await SharedPreferences.getInstance(),
+      );
+      final settings = HealthAlertSettingsSession(store);
+      await settings.update(
+        (current) => current.copyWith(
+          rules: {
+            for (final entry in current.rules.entries)
+              entry.key: entry.value.copyWith(enabled: entry.key == ram),
+          },
+        ),
+      );
+      final session = HealthAlertsSession(
+        host: host,
+        health: health,
+        connection: connection,
+        settings: settings,
+        now: () => start,
+      );
+      session.setActive(true);
+      await host.refresh();
+      expect(
+        session.alerts.map((a) => a.title),
+        unorderedEquals(['Critical memory pressure', 'Critical disk pressure']),
+      );
+      final memoryAlert = session.alerts.firstWhere(
+        (a) => a.title == 'Critical memory pressure',
+      );
+      await settings.updateRule(
+        ram,
+        (current) => current.copyWith(enabled: false),
+      );
+      final retained = session.alerts.firstWhere((a) => a.id == memoryAlert.id);
+      expect(retained.occurrence, memoryAlert.occurrence);
+      session.setActive(false);
+      await settings.updateRule(
+        ram,
+        (current) => current.copyWith(nativeCriticalEnabled: false),
+      );
+      expect(session.alerts.single.title, 'Critical disk pressure');
+      expect(store.read().rules[ram]!.nativeCriticalEnabled, isFalse);
+      expect(
+        store.read().rules[HostMetric.diskUsedPercent]!.nativeCriticalEnabled,
+        isTrue,
+      );
+      await settings.updateRule(
+        HostMetric.diskUsedPercent,
+        (current) => current.copyWith(nativeCriticalEnabled: false),
+      );
+      expect(session.alerts, isEmpty);
+      final requests = fixture.requests.length;
+      session.setActive(true);
+      await Future<void>.delayed(Duration.zero);
+      expect(fixture.requests, hasLength(requests));
+      session.dispose();
+      host.dispose();
+      health.dispose();
+      connection.dispose();
+      settings.dispose();
+      fixture.server.close();
+    },
+  );
 
   test('warning and recovery use independent durations', () {
     rule = rule.copyWith(alertMinutes: 1, clearMinutes: 3);
@@ -108,8 +250,6 @@ void main() {
       reading(135, 96.1);
       expect(evaluator.alerts.single.trigger, same(alert.trigger));
       expect(evaluator.alerts.single.detail, contains('96% used'));
-      evaluator.acknowledge(alert.id);
-      evaluator.snooze(alert.id, start.add(const Duration(minutes: 30)));
       evaluator.unknown(alert.id);
       expect(evaluator.alerts.single.trigger, same(alert.trigger));
       expect(evaluator.alerts.single.lastKnown, isTrue);
@@ -290,45 +430,33 @@ void main() {
         healthAlertTriggerSummary(evaluator.alerts.single),
         'Usage unavailable · critical pressure reported',
       );
-      final id = evaluator.alerts.single.id;
-      evaluator.acknowledge(id);
-      expect(evaluator.alerts.single.acknowledged, isTrue);
+      final initialOccurrence = evaluator.alerts.single.occurrence;
       sample(15, 99, critical: true);
-      expect(evaluator.alerts.single.acknowledged, isTrue);
+      expect(evaluator.alerts.single.occurrence, initialOccurrence);
       period(30, 150, 80);
       expect(evaluator.alerts, isEmpty);
       sample(165, 99, critical: true);
-      expect(evaluator.alerts.single.acknowledged, isFalse);
+      expect(
+        evaluator.alerts.single.occurrence,
+        greaterThan(initialOccurrence),
+      );
       expect(
         healthAlertTriggerSummary(evaluator.alerts.single),
         '99% used · critical pressure reported',
       );
     },
   );
-  test(
-    'escalation starts a new occurrence and snooze preserves current count',
-    () {
-      period(0, 120, 93);
-      final initial = evaluator.alerts.single;
-      evaluator.acknowledge(initial.id);
-      sample(135, 99, critical: true);
-      final escalated = evaluator.alerts.single;
-      expect(escalated.occurrence, greaterThan(initial.occurrence));
-      expect(escalated.acknowledged, isFalse);
-      expect(initial.trigger!.usedPercent, 93);
-      expect(escalated.trigger!.usedPercent, 99);
-      expect(escalated.trigger!.criticalPressure, isTrue);
-      evaluator.snooze(escalated.id, start.add(const Duration(minutes: 30)));
-      expect(evaluator.alerts, hasLength(1));
-      expect(evaluator.alerts.single.remindsAt(start), isFalse);
-      expect(
-        evaluator.alerts.single.remindsAt(
-          start.add(const Duration(minutes: 30)),
-        ),
-        isTrue,
-      );
-    },
-  );
+  test('escalation starts a new occurrence and preserves current count', () {
+    period(0, 120, 93);
+    final initial = evaluator.alerts.single;
+    sample(135, 99, critical: true);
+    final escalated = evaluator.alerts.single;
+    expect(escalated.occurrence, greaterThan(initial.occurrence));
+    expect(initial.trigger!.usedPercent, 93);
+    expect(escalated.trigger!.usedPercent, 99);
+    expect(escalated.trigger!.criticalPressure, isTrue);
+    expect(evaluator.alerts, hasLength(1));
+  });
   test(
     'profile incidents remain attached to their original scope; unknown is not recovery',
     () {
@@ -696,8 +824,20 @@ void main() {
         now = start.add(Duration(seconds: seconds));
         fixture.pressure = hostPressurePayload(now: now);
         await host.refresh();
+        if (seconds == 60) {
+          await settings.updateRule(
+            ram,
+            (current) => current.copyWith(nativeCriticalEnabled: false),
+          );
+        }
       }
       expect(session.alerts.single.severity, HealthAlertSeverity.warning);
+      final warning = session.alerts.single;
+      await settings.updateRule(
+        ram,
+        (current) => current.copyWith(nativeCriticalEnabled: true),
+      );
+      expect(session.alerts.single.occurrence, warning.occurrence);
       final before = publications;
       await host.refresh();
       expect(publications, before);

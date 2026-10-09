@@ -133,15 +133,6 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
                               const Text(
                                 'A fresh reading is needed to confirm recovery.',
                               ),
-                            if (alert.acknowledged)
-                              const Text(
-                                'Acknowledged. This issue remains until it recovers.',
-                              ),
-                            if (alert.snoozedUntil != null &&
-                                alert.snoozedUntil!.isAfter(DateTime.now()))
-                              Text(
-                                'Reminders paused until ${TimeOfDay.fromDateTime(alert.snoozedUntil!.toLocal()).format(context)}.',
-                              ),
                           ],
                         ),
                 ),
@@ -151,18 +142,6 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    IconButton(
-                      tooltip: 'Acknowledge issue',
-                      onPressed: alert.acknowledged
-                          ? null
-                          : () => widget.scope.alerts.acknowledge(alert),
-                      icon: const Icon(Icons.done),
-                    ),
-                    IconButton(
-                      tooltip: 'Pause reminders for 30 minutes',
-                      onPressed: () => widget.scope.alerts.snooze(alert),
-                      icon: const Icon(Icons.notifications_paused_outlined),
-                    ),
                     IconButton(
                       tooltip: 'Open Hermes health',
                       onPressed: () {

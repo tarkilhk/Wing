@@ -538,8 +538,19 @@ CPU is off initially; its editable defaults are 95%, 80% and three minutes.
 The compact editor reads “Alert after [minutes] if above [percent]” and
 “Clear after [minutes] if below [percent]”. Warning and recovery durations are
 independent, accept 1–30 minutes, and preserve decimal percentages. Existing
-shared durations are copied into both fields in the approved one-time local migration. Reported critical memory/disk pressure alerts
-immediately when that rule is enabled, even if its percentage is unavailable.
+shared durations are copied into both fields in the approved one-time local migration.
+Memory and disk editors have a separate “Native Hermes critical pressure alert”
+toggle below a divider after the warning/recovery fields. The “Usage warning”
+toggle controls only Wing's configurable thresholds; the native toggle controls
+Hermes-reported critical pressure independently. Both native toggles start enabled
+for fresh settings. Either mechanism can remain enabled while the other is off.
+Native critical pressure alerts immediately, even if its percentage is unavailable.
+Memory's fixed trigger is below 5% available RAM or 64 MiB free. Disk's fixed
+trigger is below 256 MiB free, or at least 95% used with under 1 GiB free.
+These toggles control Wing's alerts on this device, not Hermes' classifications.
+The new saved rule format requires the native-toggle field; earlier settings
+without it are unreadable and alerts stay disabled until reconfigured. No new
+compatibility migration is applied.
 Toggles and valid threshold edits save automatically. Back and closing the compact
 editor need no confirmation or Save action. Invalid numeric text does not replace
 the last valid rule. The clear percentage must be lower than the alert percentage;
@@ -601,9 +612,11 @@ the same retained values “At alert”. Text wraps at enlarged sizes; the icon-
 dismiss target remains 48 dp. Tap the notice to open alerts, or dismiss it while
 retaining the issue in the bell. It expires after 5.5 seconds and respects reduced
 motion. Tap the bell for one
-issue at a time, ordered by severity, with browsing arrows when needed. Acknowledge
-quiets that occurrence; snooze pauses reminders for 30 minutes. Both retain the
-issue and count. Recovery removes it; recurrence/escalation starts a new occurrence.
+issue at a time, ordered by severity, with browsing arrows when needed. The
+dialog offers Close and Open Hermes health; it has no acknowledgement or snooze
+actions. Closing it leaves the issue, count and severity-coloured bell visible.
+Recovery removes the issue; recurrence/escalation starts a new occurrence and can
+animate the bell and show a brief notice again.
 The modal links to Hermes health, and configuration stays on Health's settings
 row. No notification permission is requested for these in-app alerts.
 
@@ -613,8 +626,9 @@ against upstream `b56a10246e81e23d10bf6f49ae176c082db53ed9`, including
 `gateway/disk_status.py`. No backend change or alternative endpoint is used.
 
 Ownership is mapped in [ARCHITECTURE.md](ARCHITECTURE.md). The regressions in
-`test/health_alerts_test.dart` cover duration, hysteresis, unknown data, escalation,
-snooze, independent durations, ordered autosave/retry, approved migration
+`test/health_alerts_test.dart` cover independent native/warning admission and
+polling, strict native-toggle persistence, duration, hysteresis, unknown data, escalation,
+independent durations, ordered autosave/retry, approved migration
 preservation/failure, diagnostic exclusion and inactive late reads. Timestamped
 regressions cover three-times-duration gaps at and beyond the limit, sliding
 retention, repeated 30-second background pauses, independent recovery retention,
@@ -639,7 +653,7 @@ not a source pattern; these behavioral checks guard title geometry. Run with
 
 `integration_test/health_alerts_native_test.dart` exercises the actual Wing app
 and routes on a disposable Android emulator with synthetic health observations.
-It checks the one-shot bell motion, notice, focused modal, snooze, Health/settings
+It checks the one-shot bell motion, notice, focused modal, Health/settings
 navigation, persistence and native-keyboard action reachability in both themes.
 It also verifies a nonempty working Recents session whose search result resolves
 to a compression successor, plus Analytics failure and explicit Refresh recovery

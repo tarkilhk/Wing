@@ -54,7 +54,8 @@ The title-row bell warns about issues affecting Hermes while Wing is open or
 already monitoring work. Tap it for one issue at a time. Configure device-local
 thresholds under **Hermes health → Alert settings**; RAM and disk warnings start
 above 90% for two minutes. [Health alerts](ADMINISTRATION.md#health-alerts)
-explains recovery, acknowledgement and snooze.
+explains recovery and investigation. Closing the alert dialog leaves unresolved
+issues visible in the bell; there are no acknowledgement or snooze controls.
 
 ## Make it yours
 

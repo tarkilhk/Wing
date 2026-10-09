@@ -33,8 +33,6 @@ class HealthAlert {
     this.profileName,
     this.trigger,
     this.lastKnown = false,
-    this.acknowledged = false,
-    this.snoozedUntil,
   });
   final String id, connectionIdentity, connectionLabel, title, detail;
   final String? profileName;
@@ -43,15 +41,8 @@ class HealthAlert {
   final HealthAlertSeverity severity;
   final DateTime observedAt;
   final int occurrence;
-  final bool lastKnown, acknowledged;
-  final DateTime? snoozedUntil;
-  bool remindsAt(DateTime now) =>
-      !acknowledged && (snoozedUntil == null || !now.isBefore(snoozedUntil!));
-  HealthAlert copyWith({
-    bool? lastKnown,
-    bool? acknowledged,
-    DateTime? snoozedUntil,
-  }) => HealthAlert(
+  final bool lastKnown;
+  HealthAlert copyWith({bool? lastKnown}) => HealthAlert(
     id: id,
     connectionIdentity: connectionIdentity,
     connectionLabel: connectionLabel,
@@ -64,14 +55,13 @@ class HealthAlert {
     profileName: profileName,
     trigger: trigger,
     lastKnown: lastKnown ?? this.lastKnown,
-    acknowledged: acknowledged ?? this.acknowledged,
-    snoozedUntil: snoozedUntil ?? this.snoozedUntil,
   );
 }
 
 class HealthAlertRule {
   HealthAlertRule({
     required this.enabled,
+    this.nativeCriticalEnabled = false,
     required this.warnAbove,
     required this.clearBelow,
     required this.alertMinutes,
@@ -99,17 +89,19 @@ class HealthAlertRule {
       );
     }
   }
-  final bool enabled;
+  final bool enabled, nativeCriticalEnabled;
   final double warnAbove, clearBelow;
   final int alertMinutes, clearMinutes;
   HealthAlertRule copyWith({
     bool? enabled,
+    bool? nativeCriticalEnabled,
     double? warnAbove,
     double? clearBelow,
     int? alertMinutes,
     int? clearMinutes,
   }) => HealthAlertRule(
     enabled: enabled ?? this.enabled,
+    nativeCriticalEnabled: nativeCriticalEnabled ?? this.nativeCriticalEnabled,
     warnAbove: warnAbove ?? this.warnAbove,
     clearBelow: clearBelow ?? this.clearBelow,
     alertMinutes: alertMinutes ?? this.alertMinutes,
@@ -117,6 +109,7 @@ class HealthAlertRule {
   );
   Map<String, Object> encode() => {
     'enabled': enabled,
+    'nativeCriticalEnabled': nativeCriticalEnabled,
     'warnAbove': warnAbove,
     'clearBelow': clearBelow,
     'alertMinutes': alertMinutes,
@@ -124,6 +117,7 @@ class HealthAlertRule {
   };
   factory HealthAlertRule.decode(Map value) => HealthAlertRule(
     enabled: value['enabled'] as bool,
+    nativeCriticalEnabled: value['nativeCriticalEnabled'] as bool,
     warnAbove: (value['warnAbove'] as num).toDouble(),
     clearBelow: (value['clearBelow'] as num).toDouble(),
     alertMinutes: value['alertMinutes'] as int,
@@ -144,6 +138,7 @@ class HealthAlertSettings {
              {
                HostMetric.memoryUsedPercent: HealthAlertRule(
                  enabled: true,
+                 nativeCriticalEnabled: true,
                  warnAbove: 90,
                  clearBelow: 85,
                  alertMinutes: 2,
@@ -151,6 +146,7 @@ class HealthAlertSettings {
                ),
                HostMetric.diskUsedPercent: HealthAlertRule(
                  enabled: true,
+                 nativeCriticalEnabled: true,
                  warnAbove: 90,
                  clearBelow: 85,
                  alertMinutes: 2,

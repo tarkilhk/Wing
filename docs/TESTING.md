@@ -166,6 +166,23 @@ gesture journey or depend on its retained transcript scroll position.
 
 ## Connection notice recovery
 
+Health alert dialogs offer Close and Open Hermes health, with previous/next
+controls only for multiple issues. Closing and reopening retains unresolved
+issues and the severity-coloured bell; acknowledgement and snooze are absent.
+The existing header/editor widget matrix checks this in both themes at normal
+and enlarged text, and the native journey checks the remaining navigation.
+
+In Alert settings, open Memory usage and Disk usage. Each editor has a native
+critical-pressure toggle below a divider after the Wing warning/recovery fields;
+CPU has no native toggle. Turn off Usage warning while leaving native alerts on:
+reported critical pressure must still alert immediately. Turn native alerts off
+while leaving Usage warning on: sustained usage must still warn, and reported
+critical pressure must not escalate it. Reopen the editors to verify independent
+autosave. Existing settings without the native-toggle field require reconfiguration.
+Run `health_alerts_test.dart`, `health_alerts_ui_test.dart` and
+`studio_selection_test.dart`; `CAPTURE_ALERTS=true` with `CAPTURE_ALERT_DIR` exports
+memory/disk editor renders in both themes at normal and enlarged text.
+
 Switch away and return while the network wakes or automatic retries are active:
 no connection health notice or bell issue should appear. Exhaust the recovery
 burst with the connection still unavailable: Wing should show “Connection needs

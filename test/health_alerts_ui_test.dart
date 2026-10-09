@@ -651,6 +651,35 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.text('Critical memory pressure'), findsOneWidget);
           expect(find.byTooltip('Alert settings'), findsNothing);
+          expect(find.byTooltip('Acknowledge issue'), findsNothing);
+          expect(
+            find.byTooltip('Pause reminders for 30 minutes'),
+            findsNothing,
+          );
+          expect(
+            find.descendant(
+              of: find.byType(Dialog),
+              matching: find.byType(IconButton),
+            ),
+            findsNWidgets(2),
+          );
+          await tester.tap(find.byTooltip('Close alerts'));
+          await tester.pumpAndSettle();
+          expect(fixture.coordinator.alerts, hasLength(1));
+          final bellIcon = tester.widget<Icon>(
+            find.descendant(
+              of: find.byKey(const ValueKey('health-alert-bell')),
+              matching: find.byIcon(Icons.notifications_none),
+            ),
+          );
+          expect(
+            bellIcon.color,
+            WingTokens.of(
+              tester.element(find.byKey(const ValueKey('health-alert-bell'))),
+            ).danger,
+          );
+          await tester.tap(find.byKey(const ValueKey('health-alert-bell')));
+          await tester.pumpAndSettle();
           await shot(tester, '${brightness.name}-$scale-alert');
           await tester.tap(find.byTooltip('Open Hermes health'));
           await tester.pumpAndSettle();
@@ -689,6 +718,32 @@ void main() {
           await tester.tap(find.text('Memory usage'));
           await tester.pumpAndSettle();
           await shot(tester, '${brightness.name}-$scale-editor');
+          const nativeMemoryLabel =
+              'Native Hermes critical pressure alert (95%)';
+          final nativeMemory = find.widgetWithText(
+            SwitchListTile,
+            nativeMemoryLabel,
+          );
+          expect(nativeMemory, findsOneWidget);
+          await tester.ensureVisible(nativeMemory);
+          await tester.pumpAndSettle();
+          await shot(tester, '${brightness.name}-$scale-native-memory');
+          await tester.tap(nativeMemory);
+          await tester.pumpAndSettle();
+          expect(
+            fixture.settings.settings.rules.values.first.nativeCriticalEnabled,
+            isFalse,
+          );
+          expect(fixture.settings.settings.rules.values.first.enabled, isTrue);
+          final prefs = await SharedPreferences.getInstance();
+          expect(
+            HealthAlertSettingsStore(
+              prefs,
+            ).read().rules.values.first.nativeCriticalEnabled,
+            isFalse,
+          );
+          await tester.ensureVisible(find.text('Usage warning'));
+          await tester.pumpAndSettle();
           expect(find.byType(TextField), findsNWidgets(4));
           final fields = find.byType(TextField);
           expect(
@@ -713,10 +768,12 @@ void main() {
           );
           await shot(tester, '${brightness.name}-$scale-invalid-rule');
           await tester.tap(
-            find.descendant(
-              of: find.byType(Dialog),
-              matching: find.byType(Switch),
-            ),
+            find
+                .descendant(
+                  of: find.byType(Dialog),
+                  matching: find.byType(Switch),
+                )
+                .first,
           );
           await tester.pumpAndSettle();
           expect(fixture.settings.settings.rules.values.first.enabled, isFalse);
@@ -770,6 +827,45 @@ void main() {
             fixture.settings.settings.rules.values.first.clearBelow,
             85.25,
           );
+          await tester.scrollUntilVisible(
+            find.text('Disk usage'),
+            160,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.tap(find.text('Disk usage'));
+          await tester.pumpAndSettle();
+          final nativeDisk = find.widgetWithText(
+            SwitchListTile,
+            'Native Hermes critical pressure alert (95% + low free space)',
+          );
+          expect(nativeDisk, findsOneWidget);
+          await tester.ensureVisible(nativeDisk);
+          await tester.pumpAndSettle();
+          await shot(tester, '${brightness.name}-$scale-native-disk');
+          await tester.tap(nativeDisk);
+          await tester.pumpAndSettle();
+          expect(
+            HealthAlertSettingsStore(
+              prefs,
+            ).read().rules.values.elementAt(1).nativeCriticalEnabled,
+            isFalse,
+          );
+          expect(
+            fixture.settings.settings.rules.values.elementAt(1).enabled,
+            isTrue,
+          );
+          await tester.tap(find.byTooltip('Close rule editor'));
+          await tester.pumpAndSettle();
+          await tester.scrollUntilVisible(
+            find.text('CPU usage'),
+            160,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.tap(find.text('CPU usage'));
+          await tester.pumpAndSettle();
+          expect(find.textContaining('Native Hermes critical'), findsNothing);
+          await tester.tap(find.byTooltip('Close rule editor'));
+          await tester.pumpAndSettle();
           await tester.pageBack();
           await tester.pumpAndSettle();
           expect(find.byType(HealthAlertSettingsScreen), findsNothing);

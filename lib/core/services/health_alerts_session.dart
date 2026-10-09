@@ -47,7 +47,9 @@ class HealthAlertsSession extends ChangeNotifier {
   List<Object> _published = const [];
   bool get _wantsHost =>
       settings.settings.enabled &&
-      settings.settings.rules.values.any((rule) => rule.enabled);
+      settings.settings.rules.values.any(
+        (rule) => rule.enabled || rule.nativeCriticalEnabled,
+      );
   void setActive(bool value) {
     if (_active == value) return;
     _active = value;
@@ -85,11 +87,10 @@ class HealthAlertsSession extends ChangeNotifier {
                 rule.alertMinutes,
                 rule.clearMinutes,
               )) {
-        _evaluator.remove(_evaluator.hostKey(metric));
+        _evaluator.restartHostWarning(metric);
       }
     }
     // A new rule starts a new sustained period under its own limits.
-    _evaluator.resetPeriods();
     _evaluatedHost = null;
     _watch.setActive(_active && _wantsHost);
     _changed();
@@ -110,9 +111,7 @@ class HealthAlertsSession extends ChangeNotifier {
       }
     }
     for (final metric in hostAlertMetrics) {
-      if (!policy.rules[metric]!.enabled) {
-        _evaluator.remove(_evaluator.hostKey(metric));
-      }
+      _evaluator.applyHostRule(metric, policy.rules[metric]!);
     }
     if (!_active) {
       _publish();
@@ -207,16 +206,6 @@ class HealthAlertsSession extends ChangeNotifier {
     _publish();
   }
 
-  void acknowledge(String id) {
-    _evaluator.acknowledge(id);
-    _publish();
-  }
-
-  void snooze(String id) {
-    _evaluator.snooze(id, _now().add(const Duration(minutes: 30)));
-    _publish();
-  }
-
   void _publish() {
     final next = alerts
         .map(
@@ -231,8 +220,6 @@ class HealthAlertsSession extends ChangeNotifier {
             a.profileName,
             a.trigger,
             a.lastKnown,
-            a.acknowledged,
-            a.snoozedUntil,
           ),
         )
         .toList();

@@ -26,7 +26,7 @@ class _HealthAlertBellState extends State<HealthAlertBell>
   }
 
   HealthAlertsScope? _scope;
-  final _seen = <String, String>{};
+  final _seen = <String, int>{};
   bool _updateScheduled = false;
   @override
   void didChangeDependencies() {
@@ -38,7 +38,7 @@ class _HealthAlertBellState extends State<HealthAlertBell>
       _scope?.alerts.addListener(_changed);
       _seen.clear();
       for (final a in _scope?.alerts.alerts ?? <HealthAlert>[]) {
-        _seen[a.id] = '${a.occurrence}:${a.remindsAt(DateTime.now())}';
+        _seen[a.id] = a.occurrence;
       }
     }
     if (MediaQuery.disableAnimationsOf(context)) _motion.stop();
@@ -57,12 +57,11 @@ class _HealthAlertBellState extends State<HealthAlertBell>
     }
     final scope = _scope;
     if (!mounted || scope == null) return;
-    final now = DateTime.now(), current = <String, String>{};
+    final current = <String, int>{};
     var arrived = false;
     for (final a in scope.alerts.alerts) {
-      final fingerprint = '${a.occurrence}:${a.remindsAt(now)}';
-      current[a.id] = fingerprint;
-      if (a.remindsAt(now) && _seen[a.id] != fingerprint) arrived = true;
+      current[a.id] = a.occurrence;
+      if (_seen[a.id] != a.occurrence) arrived = true;
     }
     _seen
       ..clear()
@@ -84,10 +83,7 @@ class _HealthAlertBellState extends State<HealthAlertBell>
       return const SizedBox(width: 48, height: 48);
     }
     final tokens = WingTokens.of(context);
-    final active = alerts.any((a) => a.remindsAt(DateTime.now()));
-    final color = !active
-        ? tokens.muted
-        : alerts.first.severity == HealthAlertSeverity.critical
+    final color = alerts.first.severity == HealthAlertSeverity.critical
         ? tokens.danger
         : tokens.warning;
     return IconButton(

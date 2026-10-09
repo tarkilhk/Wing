@@ -319,9 +319,8 @@ void main() {
       expect(find.text('Critical memory pressure'), findsOneWidget);
       expect(find.byTooltip('Alert settings'), findsNothing);
       await _capture('$label-alert');
-      await tester.tap(find.byTooltip('Pause reminders for 30 minutes'));
-      await _settleScreen(tester);
-      expect(find.textContaining('Reminders paused'), findsOneWidget);
+      expect(find.byTooltip('Acknowledge issue'), findsNothing);
+      expect(find.byTooltip('Pause reminders for 30 minutes'), findsNothing);
       await tester.tap(find.byTooltip('Open Hermes health'));
       await _settleScreen(tester);
       await _capture('$label-health');
@@ -334,11 +333,19 @@ void main() {
       await tester.tap(find.text('Memory usage'));
       await _settleScreen(tester);
       await _capture('$label-rule');
-      // Remove current critical pressure before the new limit autosaves;
-      // replacing the rule should retire the previous incident.
+      // Disable native critical alerts independently before editing the Wing
+      // warning. Changing warning limits must not retire a native incident.
       observations.memoryCritical = false;
       await observations.owner.hostResources().refresh();
+      final nativeMemory = find.widgetWithText(
+        SwitchListTile,
+        'Native Hermes critical pressure alert (95%)',
+      );
+      await tester.ensureVisible(nativeMemory);
+      await tester.tap(nativeMemory);
+      await _settleScreen(tester);
       final fields = find.byType(TextField);
+      await tester.ensureVisible(fields.at(1));
       await tester.tap(fields.at(1));
       await tester.enterText(fields.at(1), '96.5');
       await tester.showKeyboard(fields.at(1));
@@ -354,6 +361,13 @@ void main() {
       await _capture('$label-keyboard');
       expect(prefs.getString('wing-health-alert-settings'), contains('96.5'));
       expect(find.byTooltip('Save health alert settings'), findsNothing);
+      final nativeMemorySwitch = find.descendant(
+        of: nativeMemory,
+        matching: find.byType(Switch),
+      );
+      await tester.ensureVisible(nativeMemorySwitch);
+      await tester.tap(nativeMemorySwitch);
+      await _settleScreen(tester);
       await tester.tap(find.byTooltip('Close rule editor'));
       await _settleScreen(tester);
       expect(prefs.getString('wing-health-alert-settings'), contains('96.5'));
@@ -388,8 +402,6 @@ void main() {
       await _settleScreen(tester);
       expect(find.text('Critical memory pressure'), findsOneWidget);
       expect(find.text('Critical disk pressure'), findsNothing);
-      await tester.tap(find.byTooltip('Acknowledge issue'));
-      await _settleScreen(tester);
       await _capture('$label-multiple-issues');
       await tester.tap(find.byTooltip('Close alerts'));
       await _settleScreen(tester);
