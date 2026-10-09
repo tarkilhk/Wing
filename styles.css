@@ -320,7 +320,8 @@ summary:active { color: var(--teal); }
 .work-panel > .text-link { color: var(--teal); justify-self: start; }
 .control-features > article > .text-link { color: var(--teal); }
 .analytics-section { border-block-start: 1px solid var(--rule); }
-.analytics-section .guide-shot { inline-size: min(100%, 24rem); }
+/* Leave room for this taller capture to grow in the full-viewport viewer. */
+.analytics-shot { inline-size: min(100%, 20rem, calc((100svh - 8rem) * 780 / 2080)); }
 .analytics-description { max-inline-size: 42rem; color: var(--muted); margin-block-end: 2rem; }
 .analytics-note { max-inline-size: 45rem; color: var(--muted); margin-block-start: 2.5rem; }
 .guide-copy section > .text-link { margin-block-start: .75rem; }
