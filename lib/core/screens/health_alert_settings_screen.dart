@@ -188,8 +188,15 @@ class _RuleEditorState extends State<_RuleEditor> {
       setState(() => _error = null);
     } on FormatException {
       _invalid();
-    } on ArgumentError {
-      _invalid();
+    } on ArgumentError catch (error) {
+      if (error.name == 'clearBelow') {
+        setState(
+          () => _error =
+              'Not saved: clear below ${_clear.text}% must be lower than alert above ${_warn.text}%.',
+        );
+      } else {
+        _invalid();
+      }
     }
   }
 

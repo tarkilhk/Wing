@@ -542,7 +542,11 @@ shared durations are copied into both fields in the approved one-time local migr
 immediately when that rule is enabled, even if its percentage is unavailable.
 Toggles and valid threshold edits save automatically. Back and closing the compact
 editor need no confirmation or Save action. Invalid numeric text does not replace
-the last valid rule. The settings owner composes rapid edits and serializes writes,
+the last valid rule. The clear percentage must be lower than the alert percentage;
+an overlapping pair shows both entered values in the error. For example, an alert
+above 50% can clear below 45%, but cannot clear below 85%. Correct either field
+and the valid pair saves automatically. The settings owner composes rapid edits
+and serializes writes,
 which continue after leaving the screen. Failed writes retain the selected values
 for an icon-only retry while the confirmed policy remains active. Damaged local
 settings disable collection until repaired through an edit or retry. None of these
@@ -590,7 +594,10 @@ preservation/failure, diagnostic exclusion and inactive late reads.
 `test/health_alerts_ui_test.dart` covers activity admission, shared title alignment,
 conditional bell, Health navigation, focused details and immediate settings persistence in
 both themes at normal and 320 dp/200% text, plus quiet foreground return and
-connection notices gated by stopped recovery. `server_connection_status_test.dart`
+connection notices gated by stopped recovery. Its overlapping-threshold regression
+protects the specific validation message, retention of the saved rule and persistence
+after correction; static checks cannot establish this input/error/save journey.
+`server_connection_status_test.dart`
 and `profile_workspace_controller_test.dart` cover multiple recovery owners,
 stale chat failures, exhausted startup/live retries and refresh recovery. These
 are behavioral guards: a static source rule cannot establish retry completion or

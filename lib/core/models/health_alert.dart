@@ -64,13 +64,20 @@ class HealthAlertRule {
         warnAbove > 100 ||
         warnAbove <= 0 ||
         clearBelow < 0 ||
-        clearBelow >= warnAbove ||
+        clearBelow > 100 ||
         alertMinutes < 1 ||
         alertMinutes > 30 ||
         clearMinutes < 1 ||
         clearMinutes > 30) {
       throw ArgumentError(
         'Use 0–100%, a recovery limit below the warning, and 1–30 minutes.',
+      );
+    }
+    if (clearBelow >= warnAbove) {
+      throw ArgumentError.value(
+        clearBelow,
+        'clearBelow',
+        'The clear percentage must be lower than the alert percentage.',
       );
     }
   }

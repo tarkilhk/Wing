@@ -77,6 +77,45 @@ void main() {
   }
 
   testWidgets(
+    'overlapping thresholds explain how to correct the unsaved rule',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final session = HealthAlertSettingsSession(
+        HealthAlertSettingsStore(prefs),
+      );
+      await tester.pumpWidget(
+        MaterialApp(home: HealthAlertSettingsScreen(session: session)),
+      );
+      await tester.tap(find.text('Memory usage'));
+      await tester.pumpAndSettle();
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(1), '50');
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Not saved: clear below 85% must be lower than alert above 50%.',
+        ),
+        findsOneWidget,
+      );
+      expect(session.error, isNull);
+      expect(session.settings.rules.values.first.warnAbove, 90);
+      expect(
+        HealthAlertSettingsStore(prefs).read().rules.values.first.warnAbove,
+        90,
+      );
+      await tester.enterText(fields.at(3), '45');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Not saved:'), findsNothing);
+      final saved = HealthAlertSettingsStore(prefs).read().rules.values.first;
+      expect(saved.warnAbove, 50);
+      expect(saved.clearBelow, 45);
+      await tester.pumpWidget(const SizedBox());
+      session.dispose();
+    },
+  );
+
+  testWidgets(
     'Back never blocks autosave; failed edits remain retryable on return',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
@@ -508,6 +547,15 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.textContaining('Not saved:'), findsOneWidget);
           expect(fixture.settings.settings.rules.values.first.warnAbove, 90);
+          await tester.enterText(fields.at(1), '50');
+          await tester.pumpAndSettle();
+          expect(
+            find.text(
+              'Not saved: clear below 85% must be lower than alert above 50%.',
+            ),
+            findsOneWidget,
+          );
+          await shot(tester, '${brightness.name}-$scale-invalid-rule');
           await tester.tap(
             find.descendant(
               of: find.byType(Dialog),
