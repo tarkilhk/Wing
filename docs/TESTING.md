@@ -64,8 +64,11 @@ rather than repeated action labels or headings outside a lazily built viewport.
 
 Required published-release and CI gates remain mandatory. A failed or interrupted
 full command is not a passing full run; a focused recovery does not waive a gate
-that explicitly requires one. Ordinary local delivery can use the completed
-checks and their stated limits without manufacturing another release campaign.
+that explicitly requires one. For user-requested local phone delivery, reuse
+completed checks, build and verify the signed APK, then install it while GitHub
+CI runs independently. GitHub CI completion is not a prerequisite for phone
+installation. Report its status separately; published-release gates apply to
+publication.
 
 ## Recents conversation switching
 
