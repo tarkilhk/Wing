@@ -130,7 +130,7 @@ async function checkScreenshotViewer(page, label, all = false) {
     await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => !!document.activeElement.closest('dialog')), true, `${label}: focus remains in viewer`);
     await dialog.locator('.viewer-picture').click();
-    await dialog.waitFor({ state: 'hidden' });
+    await dialog.waitFor({ state: 'hidden', timeout: 1500 });
     assert.ok(Math.abs(await page.evaluate(() => scrollY) - scroll) < 1, `${label}: returns to the same page position`);
     assert.equal(await thumbnail.evaluate(el => el === document.activeElement && getComputedStyle(el).visibility === 'visible'), true, `${label}: focus and thumbnail restored`);
   }
@@ -140,7 +140,7 @@ async function checkScreenshotViewer(page, label, all = false) {
   await page.locator('.screenshot-viewer[open]').waitFor({ state: 'visible' });
   // An outside click during entry must interrupt smoothly and complete the return.
   await page.mouse.click(4, 4);
-  await page.locator('.screenshot-viewer[open]').waitFor({ state: 'hidden' });
+  await page.locator('.screenshot-viewer[open]').waitFor({ state: 'hidden', timeout: 1500 });
   await thumbnail.focus();
   await page.keyboard.press('Enter');
   await page.locator('.screenshot-viewer[open]').waitFor({ state: 'visible' });
