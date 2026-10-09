@@ -17,14 +17,12 @@ Every feature is included without a Wing subscription. Your server and model pro
   <img src="website/assets/screenshots/steer-dark.png" alt="Wing's held composer action menu with Steer selected during live work" width="285">
 </p>
 
-<p align="center"><em>Real Wing interfaces, shown with demo content.</em></p>
+## What Wing does
 
-## Keep the work moving
-
-- Keep work organized across profiles and projects. Search, pin and group conversations, then use Recents to switch between recent chats, running work and conversations that need input.
+- Keep work organized across profiles and projects. Search, pin and group conversations, then use Recents to switch between recent chats, running work and conversations that need input. Unsent drafts and attached files stay with each chat across navigation and restart.
 - Follow streaming replies, tool activity, delegated tasks and available reasoning. Steer live work, queue a follow-up, or stop a run.
-- Bring photos and files from Android. Dictate into an editable draft, read replies aloud, and save or share output files.
-- Read properly formatted Markdown and tables, copy or wrap code, and preview, save or share supported output files. Keep unsent drafts and staged files across navigation and restart.
+- Bring photos and files from Android. Dictate into an editable draft and check it before sending.
+- Read formatted Markdown and tables, copy or wrap code, and preview, save or share output files. Copy whole replies or listen to them with read aloud.
 - Manage supported profiles, models, identity, skills, connectors and scheduled tasks. Check host resources, server diagnostics and profile readiness in Health, and explore token usage in analytics.
 
 [Full feature guide](docs/FEATURES.md) · [Current limitations](docs/KNOWN_LIMITATIONS.md)
@@ -37,7 +35,7 @@ Every feature is included without a Wing subscription. Your server and model pro
 
 The [self-hosting guide](docs/SELF_HOSTING.md) covers dashboard access and proxy setup. A model-provider API key alone is not enough to connect Wing.
 
-## Your server, your conversations
+## Privacy and connections
 
 The maintainer does not relay your conversations. Your chosen Hermes server and model providers process your content. [Privacy policy](PRIVACY.md).
 

@@ -14170,6 +14170,21 @@
       "path": "website/workspaces.html",
       "area": "website",
       "provenance": "tracked"
+    },
+    {
+      "path": "website/recents.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/scheduled-tasks.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/usage.html",
+      "area": "website",
+      "provenance": "tracked"
     }
   ],
   "direct_dependencies": {

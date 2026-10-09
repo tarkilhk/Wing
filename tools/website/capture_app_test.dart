@@ -470,7 +470,7 @@ void main() {
                   message: TranscriptMessage.fromRow({
                     'role': 'assistant',
                     'content':
-                        '## Your launch plan\n\nThe research is ready. **Start with a focused pilot**, then expand from what you learn.\n\n| Step | Result |\n| --- | --- |\n| Review | A clear recommendation |\n| Pilot | Feedback from real use |\n| Expand | A tested plan |\n\n> Keep the source dates with the findings.\n\n```python\nfrom pathlib import Path\nreport = Path("comparison.md")\nprint(report.read_text())\n```\n\nThe complete report: [comparison.md](/workspace/comparison.md)',
+                        '## Workshop checklist\n\n**Book a room for 12 people** and plan a 90-minute session.\n\n| Task | Due |\n| --- | --- |\n| Book the room | Monday |\n| Send invitations | Tuesday |\n| Print handouts | Friday |\n\n> Ask about accessibility needs in the invitation.\n\n```python\nfrom pathlib import Path\nreport = Path("workshop-plan.md")\nprint(report.read_text())\n```\n\nThe complete plan: [workshop-plan.md](/workspace/workshop-plan.md)',
                   }),
                   onOpenRemoteFile: (_) async {},
                   onDownloadRemoteFile: (_) async => true,

@@ -165,7 +165,7 @@ async function review(engineName) {
   await page.locator('#tab-steer').click();
   await page.screenshot({ path: resolve(output, `${engineName}-steer.png`), fullPage: true });
   await page.locator('.workspace-section').screenshot({ path: resolve(output, `${engineName}-workspaces-section.png`) });
-  for (const name of ['workspaces', 'live-work', 'results', 'health', 'administration', 'get-started']) {
+  for (const name of ['workspaces', 'recents', 'live-work', 'results', 'health', 'administration', 'scheduled-tasks', 'usage', 'get-started']) {
     const result = await page.goto(new URL(`${name}.html`, baseUrl).href);
     assert.equal(result.status(), 200, `${name}: loads`);
     await page.addStyleTag({ content: 'html { scroll-behavior: auto !important; }' });
@@ -198,7 +198,7 @@ async function review(engineName) {
   assert.equal(await staticPage.locator('[role="tabpanel"]:visible').count(), 3, 'All workflows remain readable without JavaScript');
   await checkLayout(staticPage, `${engineName} JavaScript disabled`);
   await staticBrowser.close();
-  return `${engineName}: 30 homepage viewport/theme/workflow combinations; six guides at five widths; local links and cross-page anchors; keyboard tabs; disclosures; text contrast; 200% text on every page; reduced motion; no-JavaScript reading.`;
+  return `${engineName}: 30 homepage viewport/theme/workflow combinations; nine guides at five widths; local links and cross-page anchors; keyboard tabs; disclosures; text contrast; 200% text on every page; reduced motion; no-JavaScript reading.`;
 }
 
 (async () => {

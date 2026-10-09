@@ -16,11 +16,14 @@ server instructions.
 
 | Website page | Authoritative feature/setup references |
 | --- | --- |
-| `workspaces.html` | `FEATURES.md`: profiles, projects, Chats filters, Recents and drafts |
+| `workspaces.html` | `FEATURES.md`: profiles, projects, Chats filters and drafts |
+| `recents.html` | `FEATURES.md`: recent and ongoing chats, status filters and launcher shortcut |
 | `live-work.html` | `FEATURES.md` and `TOOL_ACTIVITY.md`: live activity, steering and tool details |
 | `results.html` | `FEATURES.md`, production `ProfileMessage`, `MarkdownMessageContent` and resource viewers |
 | `health.html` | `ADMINISTRATION.md`: Host, Server and Profile checks and their limits |
-| `administration.html` | `ADMINISTRATION.md` and its ownership handoff: supported profile controls and analytics |
+| `administration.html` | `ADMINISTRATION.md` and its ownership handoff: profile settings, skills and access |
+| `scheduled-tasks.html` | `ADMINISTRATION.md`: schedules, delivery, pause/run and recent-run history |
+| `usage.html` | `ADMINISTRATION.md`: period charts, token usage and cost estimates |
 | `get-started.html` | `GETTING_STARTED.md`, `SELF_HOSTING.md`, `KNOWN_LIMITATIONS.md`, `NOTIFICATIONS.md`, `CONFIGURATION_BACKUPS.md` and `PRIVACY.md` |
 
 ## Local preview
@@ -67,10 +70,17 @@ current production source. Do not add comparative rankings, testimonials,
 performance figures, guaranteed notification delivery, or server operations
 without evidence.
 
+Give each guide one reader task. Recents, scheduled tasks and usage have their
+own pages; link to those explanations instead of repeating them in longer guides.
+Headings name the feature or action. Keep code controls with code, message actions
+with messages, and input attachments with chat composition. Remove slogans,
+implementation commentary and captions that repeat the surrounding text.
+
 ## App capture provenance
 
 All visible app images use actual Wing widgets with authored demo data, not an
-HTML recreation of the app. The page identifies the demo content.
+HTML recreation of the app. Capture provenance is recorded here; visitor-facing
+copy explains capabilities rather than capture tooling or fixtures.
 
 | Asset | Source |
 | --- | --- |
@@ -115,7 +125,7 @@ node tools/website/review.cjs \
 ```
 
 It checks five widths (320, 390, 768, 1024 and 1440), both app appearances and
-every homepage workflow, then all six guides at the same widths. It also checks
+every homepage workflow, then all nine guides at the same widths. It also checks
 assets, local links and cross-page anchors, keyboard tabs, disclosures, visible
 text contrast, 200% text on every page, reduced motion and reading without
 JavaScript. Shared navigation uses real anchors; guide reading has no JavaScript
