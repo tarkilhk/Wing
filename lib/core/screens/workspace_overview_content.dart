@@ -184,15 +184,6 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
             _chatRow(history[i], now, displayed, ongoing: false),
           ],
         ],
-        if (activity.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Text(
-              'Older chats are in Chats',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
       ],
     );
   }
