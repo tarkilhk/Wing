@@ -2,6 +2,7 @@
 // Run manually; this is asset tooling, not a production application change.
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/presentation/tool_call_presentation.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -302,6 +304,63 @@ class _WebsiteAdministration extends AdministrationDesignFixture {
   }
 }
 
+/// One consistent demo history supplies the year, period and model totals.
+class _WebsiteAnalytics extends AdministrationDesignFixture {
+  late final _year = _dailyRows();
+
+  List<Map<String, dynamic>> _dailyRows() {
+    final random = math.Random(20261009);
+    final end = DateTime.utc(2026, 10, 9);
+    return [
+      for (var i = 0; i < 365; i++)
+        (() {
+          final date = end.subtract(Duration(days: 364 - i));
+          final idle = random.nextInt(100) < (date.weekday >= 6 ? 42 : 12);
+          return <String, dynamic>{
+            'day': date.toIso8601String().substring(0, 10),
+            'input_tokens': idle ? 0 : 9000 + random.nextInt(70000),
+            'cache_read_tokens': idle ? 0 : 26000 + random.nextInt(180000),
+            'output_tokens': idle ? 0 : 1800 + random.nextInt(24000),
+          };
+        })(),
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> send(
+    String method,
+    String path,
+    Map<String, String> query,
+    Map<String, dynamic>? body,
+  ) async {
+    if (path != 'analytics/usage' && path != 'analytics/models') {
+      return super.send(method, path, query, body);
+    }
+    final days = int.parse(query['days']!);
+    final rows = _year.skip(_year.length - days).toList();
+    if (path == 'analytics/usage') return {'daily': rows};
+    final totals = {
+      for (final key in ['input_tokens', 'cache_read_tokens', 'output_tokens'])
+        key: rows.fold<int>(0, (sum, row) => sum + (row[key] as int)),
+    };
+    return {
+      'period_days': days,
+      'models': [
+        for (final model in ['gpt-6-astra', 'gpt-5.6-sol'])
+          {
+            'model': model,
+            'provider': 'openai-codex',
+            'estimated_cost': 0,
+            for (final entry in totals.entries)
+              entry.key: model == 'gpt-6-astra'
+                  ? entry.value * 7 ~/ 10
+                  : entry.value - entry.value * 7 ~/ 10,
+          },
+      ],
+    };
+  }
+}
+
 void main() {
   _CaptureBinding();
   const frame = ValueKey('website-capture');
@@ -346,6 +405,34 @@ void main() {
       image.dispose();
     });
   }
+
+  testWidgets('export analytics with 30 days selected', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 1040);
+    addTearDown(tester.view.reset);
+    final fixture = _WebsiteAnalytics();
+    addTearDown(fixture.server.close);
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: frame,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: wingTheme(Brightness.dark),
+          home: AnalyticsPage(profile: fixture.server.profile('personal')),
+        ),
+      ),
+    );
+    await tester.runAsync(
+      () => rootBundle.loadString('assets/pricing/openai.json'),
+    );
+    await tester.pumpAndSettle(const Duration(milliseconds: 250));
+    await tester.tap(find.text('30D'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 250));
+    expect(find.text('30D selected'), findsOneWidget);
+    expect(find.text('Last 30 days · all models'), findsOneWidget);
+    await capture(tester, 'analytics-dark');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   for (final brightness in Brightness.values) {
     testWidgets('export ${brightness.name} website demo screens', (

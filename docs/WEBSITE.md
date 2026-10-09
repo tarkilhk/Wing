@@ -194,7 +194,7 @@ copy explains capabilities rather than capture tooling or fixtures.
 | `health-profile-{dark,light}.png` | Same Health destination scrolled to its profile checks in a shorter viewport |
 | `tool-{dark,light}.png` | Production `ProfileToolCall`, an expanded code execution receipt with supplied code and output |
 | `agents-{dark,light}.png` | Existing `build/activity-family/agents-{dark,light}-1.png` production-widget captures with demo task and live output |
-| `analytics-dark.png` | Existing public `docs/screenshots/analytics-dark.png` demo analytics capture |
+| `analytics-dark.png` | Production `AnalyticsPage`, with a deterministic 365-day demo history and 30D selected; period totals and model breakdowns use the same daily records. Also copied to `docs/screenshots/analytics-dark.png` for repository guides. |
 | `welcome-light.png` | Existing public `docs/screenshots/welcome-light.png` production welcome capture |
 | `wing.png` | Production 192px Android launcher rendition, `android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png` |
 
@@ -208,6 +208,12 @@ Wing icon font comes from the checkout. Follow the existing font setup in
 flutter test --no-pub tools/website/capture_app_test.dart \
   --dart-define=WING_CAPTURE_FONTS=/absolute/path/to/capture-fonts
 ```
+
+To regenerate only Analytics, add
+`--plain-name 'export analytics with 30 days selected'`. Its sample history ends
+on 9 October 2026 and uses a fixed random seed so captures remain repeatable.
+Copy the exported `analytics-dark.png` to `docs/screenshots/analytics-dark.png`
+after reviewing it; the website and README use the website asset directly.
 
 Live status intentionally animates continuously, so the capture runner uses
 bounded frame pumping instead of waiting for the whole app to settle.
