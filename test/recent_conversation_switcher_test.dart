@@ -370,6 +370,9 @@ void main() {
                     color: Theme.of(context).colorScheme.surface,
                     child: Column(
                       children: [
+                        Text(
+                          'Mounted conversation ${source.selected.sessionId}',
+                        ),
                         const ConversationGestureBoundary(
                           blocked: true,
                           child: SizedBox(
@@ -612,47 +615,92 @@ void main() {
       },
     );
 
-    testWidgets('live chat paints under the cover before expansion finishes', (
+    testWidgets(
+      'conversation construction waits for expansion before first paint',
+      (tester) async {
+        await mount(tester);
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        var finished = false;
+        final selection = switcher.currentState!
+            .selectAdjacent(1)
+            .then((_) => finished = true);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 80));
+        expect(source.selected, source.entries[1].key);
+        expect(finished, isFalse);
+        final live = tester.widget<Offstage>(
+          find
+              .ancestor(
+                of: find.text('Selectable message', skipOffstage: false),
+                matching: find.byType(Offstage),
+              )
+              .first,
+        );
+        expect(
+          live.offstage,
+          isTrue,
+          reason: 'Moving cards must not mount or lay out the selected chat.',
+        );
+        expect(
+          find.text('Mounted conversation 0', skipOffstage: false),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Mounted conversation 1', skipOffstage: false),
+          findsNothing,
+        );
+        final cover = tester.widget<FadeTransition>(
+          find
+              .descendant(
+                of: find.byType(RecentConversationSwitcher),
+                matching: find.byType(FadeTransition),
+              )
+              .first,
+        );
+        expect(cover.opacity.value, 1);
+        await tester.pump(const Duration(milliseconds: 170));
+        await tester.pump();
+        expect(
+          find.text('Mounted conversation 0', skipOffstage: false),
+          findsNothing,
+        );
+        expect(find.text('Mounted conversation 1'), findsOneWidget);
+        expect(
+          cover.opacity.value,
+          1,
+          reason: 'Reveal must wait for the selected chat paint.',
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(finished, isFalse);
+        expect(
+          cover.opacity.value,
+          1,
+          reason:
+              'Deferred reading layout needs an opaque paint frame before reveal.',
+        );
+        await tester.pump(const Duration(milliseconds: 120));
+        await selection;
+        expect(find.byType(RawImage), findsNothing);
+        expect(find.text('Opening conversation…'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('disposing during expansion releases the pending paint wait', (
       tester,
     ) async {
       await mount(tester);
-      switcher.currentState!.openStack();
-      await _finishFrames(tester);
-      var finished = false;
+      var completed = false;
       final selection = switcher.currentState!
           .selectAdjacent(1)
-          .then((_) => finished = true);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 80));
+          .then((_) => completed = true);
+      await tester.pump(const Duration(milliseconds: 16));
       expect(source.selected, source.entries[1].key);
-      expect(finished, isFalse);
-      final live = tester.widget<Offstage>(
-        find
-            .ancestor(
-              of: find.text('Selectable message', skipOffstage: false),
-              matching: find.byType(Offstage),
-            )
-            .first,
-      );
-      expect(
-        live.offstage,
-        isFalse,
-        reason: 'The real chat must paint beneath the still-opaque card.',
-      );
-      final cover = tester.widget<FadeTransition>(
-        find
-            .descendant(
-              of: find.byType(RecentConversationSwitcher),
-              matching: find.byType(FadeTransition),
-            )
-            .first,
-      );
-      expect(cover.opacity.value, 1);
-      await tester.pump(const Duration(milliseconds: 170));
-      await tester.pump(const Duration(milliseconds: 120));
+      expect(completed, isFalse);
+      await tester.pumpWidget(const SizedBox());
       await selection;
-      expect(find.byType(RawImage), findsNothing);
-      expect(find.text('Opening conversation…'), findsNothing);
+      expect(completed, isTrue);
       expect(tester.takeException(), isNull);
     });
 

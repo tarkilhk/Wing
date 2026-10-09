@@ -144,10 +144,13 @@ static chat frame until idle preparation completes. Genuine visited snapshots ke
 their reading position. The cache is limited to 12 MiB. Passive previews retain
 only the visible neighborhood plus the committed chat; genuine visited viewports survive
 neighborhood changes until budget eviction. Discarded images are disposed. Side
-previews use lower resolution. Selection begins opening alongside a 240 ms
-expansion. The real chat paints
-beneath the opaque cover before a 100 ms reveal after both painting and expansion
-complete. For a previously loaded conversation, reveal the canonical retained
+previews use lower resolution. Selection starts server work alongside a 240 ms
+expansion. Retain the original mounted view throughout that motion; admitting
+cached reading must not build or lay out the selected transcript on animation
+frames. After expansion, the selected chat and its deferred
+reading-layout corrections paint beneath the opaque cover before a 100 ms
+reveal. Cancellation releases the retained view and any paint wait. For a
+previously loaded conversation, reveal the canonical retained
 transcript, draft and reading position without waiting for session resume or
 history refresh. Retained loaded profiles can be selected without rereading
 discovery, chat lists or projects. Keep the thin loading bar at the top while

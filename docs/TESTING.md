@@ -84,6 +84,10 @@ ordinary gestures. Use Chat actions with accessibility enabled. Verify an
 adjacent fresh reply cue in both themes, confirmed input amber, suppression while
 editing/manipulating and direct settling with reduced motion.
 
+The construction-order regression is a behavioral work budget: the selected
+mounted subtree stays absent during expansion, and reveal follows its initial
+and deferred-layout paints. Static inspection cannot establish frame admission or cancellation order.
+
 `recent_conversation_session_test.dart` covers frozen scoped identity, circular
 policy, bounded physical reads, eviction, cancellation, external selection and
 cue admission/coalescing. `recent_conversation_switcher_test.dart` covers real
@@ -93,7 +97,9 @@ controls alongside expert gestures when an accessibility service is enabled,
 snapshot-only dragging without preview reads or construction, bounded pixel
 ownership/disposal and genuine visited-viewport retention, multi-card coasting,
 touch-to-catch and exact moving-card selection, overlapping expansion/resume and
-opaque-cover first-paint ordering, removed double-tap switching and
+retained mounted-view identity during expansion, post-expansion opaque-cover
+first/deferred-paint ordering and disposal releasing pending paint waits,
+removed double-tap switching and
 completed asynchronous preview publication,
 theme paint and the production Recents route with draft/cursor/Back
 restoration at normal and enlarged text in both themes. Its held-resume case

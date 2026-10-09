@@ -62,6 +62,8 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   bool _preparing = false, _preparationRequested = false, _liveDirty = true;
   Object? _renderEnvironment;
   Completer<void>? _selectionCompletion;
+  Completer<void>? _expansionCompletion;
+  Widget? _selectionChild;
   ProfileSessionKey? _openingKey;
   bool _paintingSelected = false, _selectionPainted = false;
   bool _expansionFinished = false;
@@ -503,6 +505,8 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     _idleTimer?.cancel();
     ++_captureGeneration;
     final completion = _selectionCompletion = Completer<void>();
+    final expansion = _expansionCompletion = Completer<void>();
+    _selectionChild = widget.child;
     _openingKey = key;
     _paintingSelected = _selectionPainted = _expansionFinished = false;
     _reveal.value = 0;
@@ -511,17 +515,18 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       _stack = false;
     });
     _notifyPresentation();
-    // Opening and expansion overlap. Live content paints beneath the cover;
-    // reveal requires both final geometry and its completed paint frame.
+    // Start I/O immediately, but retain the mounted child during pixel motion.
+    // Building the selected transcript here can stall the expansion animation.
     _motion.expand(
       position: (_base - index).toDouble(),
       reducedMotion: _reduced,
       settled: () {
         _expansionFinished = true;
+        if (!expansion.isCompleted) expansion.complete();
         _tryReveal(completion);
       },
     );
-    unawaited(_openSelected(index, fromStack, completion));
+    unawaited(_openSelected(index, fromStack, completion, expansion.future));
     return completion.future;
   }
 
@@ -548,6 +553,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     int index,
     bool fromStack,
     Completer<void> completion,
+    Future<void> expansion,
   ) async {
     final session = widget.session;
     try {
@@ -578,13 +584,24 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
         }
         return;
       }
-      setState(() => _paintingSelected = true);
-      await SchedulerBinding.instance.endOfFrame;
+      await expansion;
       if (!mounted ||
           !session.active ||
           widget.session != session ||
           _selectionCompletion != completion) {
         return;
+      }
+      setState(() => _paintingSelected = true);
+      // The first layout can schedule Markdown/reading-position corrections.
+      // Give those a paint frame under the opaque cover before fading it away.
+      for (var frame = 0; frame < 2; frame++) {
+        await SchedulerBinding.instance.endOfFrame;
+        if (!mounted ||
+            !session.active ||
+            widget.session != session ||
+            _selectionCompletion != completion) {
+          return;
+        }
       }
       _liveDirty = true;
       _selectionPainted = true;
@@ -600,6 +617,10 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   void _completeSelection() {
     final completion = _selectionCompletion;
     _selectionCompletion = null;
+    final expansion = _expansionCompletion;
+    _expansionCompletion = null;
+    if (expansion != null && !expansion.isCompleted) expansion.complete();
+    _selectionChild = null;
     _reveal.stop();
     _reveal.value = 0;
     _openingKey = null;
@@ -906,7 +927,9 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                         excluding: _active,
                         child: IgnorePointer(
                           ignoring: _active,
-                          child: widget.child,
+                          child: _selecting && !_paintingSelected
+                              ? _selectionChild ?? widget.child
+                              : widget.child,
                         ),
                       ),
                     ),
