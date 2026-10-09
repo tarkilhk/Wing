@@ -145,9 +145,6 @@ class BotsRepository {
         final canonical = row['canonical_session'] == null
             ? null
             : _map(row['canonical_session']);
-        final recent = row['last_session'] == null
-            ? null
-            : _map(row['last_session']);
         final profileScope = _profileScope(profile.name);
         final hash = profile.name.codeUnits.fold(
           0,
@@ -187,9 +184,6 @@ class BotsRepository {
           chat: canonical == null
               ? null
               : ProfileSessionKey(profileScope, _requiredText(canonical['id'])),
-          recentChat: recent == null
-              ? null
-              : ProfileSessionKey(profileScope, _requiredText(recent['id'])),
           preview: canonical == null ? '' : _text(canonical['preview']),
         );
       }),
@@ -276,7 +270,6 @@ class BotsRepository {
       revision: bot.revision,
       metadata: bot.metadata,
       chat: bot.chat,
-      recentChat: bot.recentChat,
       preview: bot.preview,
       presence: presence,
       avatar: avatar,

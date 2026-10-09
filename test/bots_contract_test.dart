@@ -17,12 +17,13 @@ void main() {
     () async {
       final fixture = BotsFixture();
       fixture.profiles.first['canonical_session'] = null;
+      // Latest-session metadata is irrelevant to the canonical bot roster.
+      fixture.profiles[1]['last_session'] = {'id': null};
       final bots = await fixture.repository.bots();
       expect(bots.first.chat, isNull);
       expect(bots.first.preview, isEmpty);
       expect(bots[1].chat!.sessionId, 'mira-chat');
       expect(bots[1].preview, contains('review is ready'));
-      expect(bots[1].recentChat!.sessionId, 'mira-cron');
       expect(
         () => (bots.first.metadata['unrelated'] as Map)['nested'] = [],
         throwsUnsupportedError,

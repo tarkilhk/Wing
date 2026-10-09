@@ -152,10 +152,15 @@ gesture journey or depend on its retained transcript scroll position.
 Open the drawer → Bots. Verify Bots/Groups tabs, one continuous list with pins
 first, the pin glyph, canonical last-message truncation, search and live filters.
 Tap the avatar to open Edit name & appearance without opening chat; tap the
-name/message area to open chat. Avatar actions have accessible labels and 48 dp targets.
+name/message area to open chat. Avatar actions have accessible labels and 48 dp targets. The bot row menu
+contains only View screen, Pin/Unpin, Hide/Show and Bot settings. In Bot settings,
+verify appearance, duplicate, Advanced → Rename profile and the bottom delete
+confirmation, including the protected default profile. Back from an appearance
+edit and reopen it: the acknowledged values must remain. Confirmed rename/delete
+must retire the old settings route on return from profile management.
 Open a bot and use Back: the original tab, query and filter must remain. Open a
 bot from another saved instance: the secure workspace identity must match the
-captured row before opening its chat. Change appearance, then open Profile
+captured row before opening its chat. Change appearance, then open Bot
 settings and exercise the existing identity/model/account/capability editors.
 Verify that a concurrent desktop edit requires reload/review, and that partial
 saves retain the remaining draft without repeating acknowledged sections.

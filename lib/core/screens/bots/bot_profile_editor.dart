@@ -5,7 +5,6 @@ import '../../theme/profile_colors.dart';
 import '../../widgets/bot_avatar.dart';
 import '../../widgets/studio_error.dart';
 import '../../widgets/wing_app_bar.dart';
-import 'bot_settings_screen.dart';
 
 class BotProfileEditor extends StatefulWidget {
   const BotProfileEditor({super.key, required this.createSession});
@@ -287,28 +286,6 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
             'Generation uses this profile’s image provider. Upload PNG, JPEG or WebP, up to 2 MB.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: 24),
-          if (_session.repository.server != null)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Profile settings'),
-              subtitle: const Text(
-                'Role, instructions, model, accounts and tools',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _session.busy
-                  ? null
-                  : () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => BotSettingsScreen(
-                          profile: _session.repository.server!.profile(
-                            _session.bot.profile.name,
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
         ],
       ),
     ),

@@ -199,7 +199,7 @@ selected tab determining bot or group creation. Omit the all-instances subtitle
 and all manual refresh controls, including pull-to-refresh and overflow refresh.
 Roster updates happen automatically. Keep 88 dp of trailing list padding so
 every row action can scroll above the FAB.
-Creation and appearance are scrollable pages; profile settings reuse Wing's
+Creation and appearance are scrollable pages; bot settings reuse Wing's
 existing captured-profile editors.
 Appearance edits save automatically; omit the permanent confirmation tick.
 Keep typing and shape/color choices responsive during writes. Back flushes
@@ -211,6 +211,7 @@ Conflicts pause autosave until reload/review and retry or a new edit.
 | --- | --- | --- |
 | All-instances subtitle and header refresh/+ | Title and overflow above the tabs; contextual floating + | Reduces header weight and brings creation within thumb reach |
 | Permanent appearance confirmation tick and red reload-success message | Automatic saving and silent successful reload | Removes unnecessary confirmation and reserves red for failures |
+| Ten bot-menu actions mix shortcuts and administration | Four actions; appearance/duplicate/rename/delete move into Bot settings | Keeps everyday actions quick and configuration together |
 | Appearance requires the row menu | Avatar opens the same appearance editor directly | Makes the visible identity editable in one tap |
 | Small bot name beside a heavier preview | 16 sp semibold name above a muted preview | Identity leads the compact row |
 | Separate pinned region in the earlier exploration | One list, pinned first with glyph | Follows the owner's selected arrangement |
@@ -221,6 +222,12 @@ Native captures cover roster, groups, anchored menus, new-bot page and both ends
 of the appearance page plus its settings handoff in light/dark at both text
 sizes. [Bots](BOTS.md) records action scope, failure behavior and current desktop
 differences. Synthetic previews do not establish production render acceptance.
+
+The bot row menu contains only View screen, Pin/Unpin, Hide/Show and Bot settings.
+Bot settings places appearance first, duplication below the configuration editors,
+Rename profile under Advanced, and confirmed deletion at the bottom. Keep chat
+entry on the name/message area and appearance entry on the avatar. Session
+history stays in Recents.
 
 ## App and notification identity
 

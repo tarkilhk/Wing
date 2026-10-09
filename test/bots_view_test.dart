@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/screens/bots/bots_content.dart';
 import 'package:wing/core/screens/bots/bot_profile_editor.dart';
+import 'package:wing/core/screens/bots/bot_settings_screen.dart';
 import 'package:wing/core/screens/bots/bots_create_screen.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -67,6 +68,7 @@ void main() {
         (tester) async {
           SharedPreferences.setMockInitialValues({});
           final administration = AdministrationFixture('Home server');
+          administration.configs['atlas'] = {};
           final fixture = BotsFixture(server: administration.server);
           final session = BotsSession((_) async => [fixture.repository]);
           await session.refresh();
@@ -170,7 +172,22 @@ void main() {
           await tester.tap(find.byTooltip('Actions for Atlas'));
           await tester.pumpAndSettle();
           await _capture(tester, frame, 'menu-${brightness.name}-$scale');
-          await tester.tap(find.byKey(const ValueKey('bot-menu-edit')));
+          expect(
+            tester
+                .widgetList<PopupMenuItem<String>>(
+                  find.byType(PopupMenuItem<String>),
+                )
+                .map((item) => item.value)
+                .whereType<String>()
+                .toList(),
+            ['screen', 'pin', 'hide', 'settings'],
+          );
+          await tester.tap(find.byKey(const ValueKey('bot-menu-settings')));
+          await tester.pumpAndSettle();
+          expect(find.text('Bot settings'), findsOneWidget);
+          expect(find.text('Rename profile'), findsNothing);
+          await _capture(tester, frame, 'settings-${brightness.name}-$scale');
+          await tester.tap(find.text('Edit name & appearance'));
           await tester.pumpAndSettle();
           expect(find.byType(BotProfileEditor), findsOneWidget);
           expect(find.byTooltip('Save appearance'), findsNothing);
@@ -218,7 +235,7 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.byTooltip('Retry saving appearance'), findsNothing);
           await tester.scrollUntilVisible(
-            find.text('Profile settings'),
+            find.byTooltip('Generate avatar'),
             240,
             scrollable: find
                 .descendant(
@@ -234,12 +251,6 @@ void main() {
           );
           expect(find.byTooltip('Upload avatar'), findsOneWidget);
           expect(find.byTooltip('Generate avatar'), findsOneWidget);
-          await tester.tap(find.text('Profile settings'));
-          await tester.pumpAndSettle();
-          expect(find.text('Role & instructions'), findsOneWidget);
-          await _capture(tester, frame, 'settings-${brightness.name}-$scale');
-          await tester.pageBack();
-          await tester.pumpAndSettle();
           await tester.scrollUntilVisible(
             find.widgetWithText(TextField, 'Bot name'),
             -300,
@@ -260,6 +271,80 @@ void main() {
           expect(find.text('Discard edits?'), findsNothing);
           expect(find.byType(BotProfileEditor), findsNothing);
           expect(fixture.commands.last.$2, 'profiles.configure');
+          // Reopening from settings uses the acknowledged appearance, not the
+          // roster snapshot captured when this settings route was opened.
+          await tester.tap(find.text('Edit name & appearance'));
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .widget<TextField>(find.widgetWithText(TextField, 'Bot name'))
+                .controller!
+                .text,
+            'Atlas revised',
+          );
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          await tester.scrollUntilVisible(find.text('Duplicate bot'), 240);
+          await tester.tap(find.text('Duplicate bot'));
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .widget<BotsCreateScreen>(find.byType(BotsCreateScreen))
+                .clone!
+                .profile
+                .name,
+            'atlas',
+          );
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          await tester.scrollUntilVisible(find.text('Advanced'), 240);
+          await tester.tap(find.text('Advanced'));
+          await tester.pumpAndSettle();
+          await tester.scrollUntilVisible(find.text('Rename profile'), 240);
+          expect(
+            find.text('Change the underlying profile name'),
+            findsOneWidget,
+          );
+          await tester.tap(find.text('Rename profile'));
+          await tester.pumpAndSettle();
+          expect(find.byType(AlertDialog), findsOneWidget);
+          await tester.tap(find.text('Cancel').last);
+          await tester.pumpAndSettle();
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          expect(find.text('Bot settings'), findsOneWidget);
+          await tester.scrollUntilVisible(find.byTooltip('Delete bot'), 240);
+          expect(
+            tester
+                .widget<IconButton>(
+                  find.byWidgetPredicate(
+                    (widget) =>
+                        widget is IconButton && widget.tooltip == 'Delete bot',
+                  ),
+                )
+                .onPressed,
+            isNotNull,
+          );
+          await _capture(
+            tester,
+            frame,
+            'settings-bottom-${brightness.name}-$scale',
+          );
+          await tester.tap(find.byTooltip('Delete bot'));
+          await tester.pumpAndSettle();
+          expect(find.byType(AlertDialog), findsOneWidget);
+          await tester.tap(find.text('Cancel').last);
+          await tester.pumpAndSettle();
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          expect(find.text('Bot settings'), findsOneWidget);
+          expect(
+            administration.requests.where((request) => request.$1 != 'GET'),
+            isEmpty,
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pageBack();
+          await tester.pumpAndSettle();
           session.setVisible(false);
           await tester.tap(find.byTooltip('Create bot'));
           await tester.pumpAndSettle();
@@ -390,6 +475,112 @@ void main() {
     expect(fixture.commands, isEmpty);
     await tester.pumpWidget(const SizedBox());
   });
+
+  for (final action in ['default', 'rename', 'delete']) {
+    testWidgets(
+      'Bot settings protects or retires the captured profile: $action',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final administration = AdministrationFixture('Captured server');
+        final name = action == 'default' ? 'default' : 'atlas';
+        administration.configs[name] = {};
+        final fixture = BotsFixture(server: administration.server);
+        fixture.profiles
+          ..clear()
+          ..add(BotsFixture.profile(name, 'Atlas'));
+        final session = BotsSession((_) async => [fixture.repository]);
+        addTearDown(session.dispose);
+        await session.refresh();
+        var writes = 0;
+        administration.mutationOverride =
+            (method, path, query, body, canDispatch, onDispatched) async {
+              expect(canDispatch(), true);
+              onDispatched();
+              writes++;
+              expect(path, 'profiles/atlas');
+              expect(method, action == 'rename' ? 'PATCH' : 'DELETE');
+              administration.configs.remove('atlas');
+              if (action == 'rename') administration.configs['renamed'] = {};
+              return {'ok': true, 'path': '/profiles/atlas', 'name': 'renamed'};
+            };
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(Brightness.dark),
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: IconButton(
+                  tooltip: 'Open settings',
+                  icon: const Icon(Icons.tune),
+                  onPressed: () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => BotSettingsScreen(
+                        profile: administration.server.profile(name),
+                        bot: session.state.bots.single,
+                        session: session,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.byTooltip('Open settings'));
+        await tester.pumpAndSettle();
+        if (action == 'default') {
+          await tester.scrollUntilVisible(find.byTooltip('Delete bot'), 240);
+          expect(
+            tester
+                .widget<IconButton>(
+                  find.byWidgetPredicate(
+                    (widget) =>
+                        widget is IconButton && widget.tooltip == 'Delete bot',
+                  ),
+                )
+                .onPressed,
+            isNull,
+          );
+          expect(
+            find.text('The default profile cannot be deleted'),
+            findsOneWidget,
+          );
+          expect(writes, 0);
+        } else {
+          if (action == 'rename') {
+            await tester.scrollUntilVisible(find.text('Advanced'), 240);
+            await tester.tap(find.text('Advanced'));
+            await tester.pumpAndSettle();
+            await tester.scrollUntilVisible(find.text('Rename profile'), 240);
+            await tester.tap(find.text('Rename profile'));
+            await tester.pumpAndSettle();
+            await tester.enterText(find.byType(TextFormField), 'renamed');
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Continue'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Rename').last);
+          } else {
+            await tester.scrollUntilVisible(find.byTooltip('Delete bot'), 240);
+            await tester.tap(find.byTooltip('Delete bot'));
+            await tester.pumpAndSettle();
+            expect(writes, 0);
+            await tester.tap(find.text('Delete profile'));
+          }
+          await tester.pumpAndSettle();
+          expect(writes, 1);
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          expect(find.byType(BotSettingsScreen), findsNothing);
+          expect(find.byTooltip('Open settings'), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
 
   testWidgets(
     'Bots drawer opens a canonical chat and Back retains the roster search',

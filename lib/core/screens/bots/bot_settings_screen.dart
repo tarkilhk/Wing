@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../models/bots.dart';
+import '../../models/profiles_management.dart';
 import '../../services/administration_repository.dart';
+import '../../services/bot_profile_edit_session.dart';
+import '../../services/bots_session.dart';
+import '../../services/profiles_management_session.dart';
 import '../../services/android_voice.dart';
 import '../../services/profile_capabilities_session.dart';
 import '../../services/profile_identity_edit_session.dart';
@@ -9,6 +14,9 @@ import '../../services/profile_tool_setup_session.dart';
 import '../../widgets/server_connection_label.dart';
 import '../../widgets/wing_app_bar.dart';
 import '../profile_capabilities_screen.dart';
+import '../administration/admin_profiles_page.dart';
+import 'bot_profile_editor.dart';
+import 'bots_create_screen.dart';
 import '../administration/admin_defaults_page.dart';
 import '../administration/admin_identity_page.dart';
 import '../administration/admin_plugins_page.dart';
@@ -20,9 +28,60 @@ import '../administration/admin_voice_routes.dart';
 
 /// Settings handoff to Wing's established captured-profile editors. No copied
 /// account/model/settings form and no mutation of the selected chat's profile.
-class BotSettingsScreen extends StatelessWidget {
-  const BotSettingsScreen({super.key, required this.profile});
+class BotSettingsScreen extends StatefulWidget {
+  const BotSettingsScreen({
+    super.key,
+    required this.profile,
+    required this.bot,
+    required this.session,
+  });
   final ProfileAdministration profile;
+  final BotRecord bot;
+  final BotsSession session;
+  @override
+  State<BotSettingsScreen> createState() => _BotSettingsScreenState();
+}
+
+class _BotSettingsScreenState extends State<BotSettingsScreen> {
+  ProfileAdministration get profile => widget.profile;
+  late BotRecord _bot = widget.bot;
+
+  Future<void> _appearance() async {
+    late BotProfileEditSession editor;
+    await _push(
+      context,
+      BotProfileEditor(
+        createSession: () => editor = BotProfileEditSession(
+          widget.session.repository(_bot.scope.connectionIdentity),
+          _bot,
+        ),
+      ),
+    );
+    if (mounted) setState(() => _bot = editor.bot);
+  }
+
+  Future<void> _manage(ProfileManagementEntry action) async {
+    late ProfilesManagementSession management;
+    await _push(
+      context,
+      AdminProfilesPage(
+        initialProfile: profile.name,
+        initialAction: action,
+        createSession: () => management = ProfilesManagementSession(
+          server: profile.server,
+          openProfile: (_) async => true,
+        ),
+      ),
+    );
+    final outcome = management.state.outcome;
+    if (mounted &&
+        (outcome?.announcesSuccess == true ||
+            outcome?.kind ==
+                ProfilesManagementOutcomeKind.deletedSettlementPending)) {
+      Navigator.pop(context);
+    }
+  }
+
   Widget _scoped(Widget child) {
     final status = profile.gateway.connectionStatus;
     return status == null
@@ -74,15 +133,19 @@ class BotSettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _scoped(
     Scaffold(
-      appBar: WingAppBar(
-        context: context,
-        title: const Text('Profile settings'),
-      ),
+      appBar: WingAppBar(context: context, title: const Text('Bot settings')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(profile.label, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 16),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Edit name & appearance'),
+            subtitle: const Text('Display name, shape, color and avatar'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _appearance,
+          ),
           for (final (title, subtitle, icon, page)
               in <(String, String, IconData, Widget Function())>[
                 (
@@ -120,6 +183,59 @@ class BotSettingsScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _push(context, page()),
             ),
+          const Divider(),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Duplicate bot'),
+            subtitle: const Text('Create a bot from this configuration'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _push(
+              context,
+              BotsCreateScreen(
+                session: widget.session,
+                group: false,
+                clone: _bot,
+              ),
+            ),
+          ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Advanced'),
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Rename profile'),
+                subtitle: Text(
+                  profile.name == 'default'
+                      ? 'Change the default profile’s display name'
+                      : 'Change the underlying profile name',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _manage(ProfileManagementEntry.rename),
+              ),
+            ],
+          ),
+          const Divider(),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              'Delete bot',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            subtitle: Text(
+              profile.name == 'default'
+                  ? 'The default profile cannot be deleted'
+                  : 'Delete this profile. Confirmation required.',
+            ),
+            trailing: IconButton(
+              tooltip: 'Delete bot',
+              icon: const Icon(Icons.delete_outline),
+              color: Theme.of(context).colorScheme.error,
+              onPressed: profile.name == 'default'
+                  ? null
+                  : () => _manage(ProfileManagementEntry.delete),
+            ),
+          ),
         ],
       ),
     ),

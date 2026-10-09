@@ -18,9 +18,19 @@ connection cannot retarget an old row's request.
 
 ## Profile options
 
-The row menu offers chat, screen preview, pin/unpin, hide/show, appearance,
-profile settings, duplicate, recent session, rename and delete. Show hidden bots
-is in the roster overflow. Default cannot be deleted. New bot and Duplicate
+The row menu offers View screen, Pin to top/Unpin, Hide bot/Show bot and
+**Bot settings**. Show hidden bots remains in the roster overflow. Chat opens
+from the name/message area; appearance opens from the avatar or Bot settings.
+Recent conversations remain in Recents rather than the bot menu.
+
+Bot settings puts appearance first, followed by the existing configuration
+editors and Duplicate bot. Advanced contains Rename profile, which changes the
+underlying profile name rather than the display title (the default profile
+retains its identity and only its display name can change). Delete bot sits at the
+bottom and retains the existing confirmation; default cannot be deleted.
+After a confirmed rename/delete, returning from profile management closes the
+old settings route so subsequent actions cannot target an obsolete profile.
+New bot and Duplicate
 use stock profile creation; duplication excludes channel bindings to avoid
 taking over messaging channels. Fresh profiles inherit the instance's launch
 credentials/model defaults, as indicated before creation.
@@ -39,7 +49,7 @@ explicit retry or another edit. Metadata and asset saves acknowledge separately,
 so a retry does not resend an already-saved section. If pending edits cannot be
 saved when leaving, the editor offers Keep editing or Discard.
 
-**Profile settings** opens the existing role/SOUL, model/defaults, provider
+**Bot settings** opens the existing role/SOUL, model/defaults, provider
 accounts/credentials and skills/tools/library/hub/plugin editors for that
 captured profile. A row's display title and its canonical profile name are
 separate choices.

@@ -166,9 +166,7 @@ void main() {
         expect(tester.widget<TextField>(search).controller!.text, 'Atlas');
 
         Future<void> edit(String title) async {
-          await tester.tap(find.byTooltip('Actions for $title'));
-          await tester.pumpAndSettle();
-          await tester.tap(find.byKey(const ValueKey('bot-menu-edit')));
+          await tester.tap(find.byTooltip('Edit name & appearance for $title'));
           await tester.pumpAndSettle();
         }
 
@@ -223,14 +221,6 @@ void main() {
           fixture.commands.where((call) => call.$2 == 'profiles.set_asset'),
           isEmpty,
         );
-        await tester.ensureVisible(find.text('Profile settings'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Profile settings'));
-        await tester.pumpAndSettle();
-        expect(find.text('Role & instructions'), findsOneWidget);
-        await _native(tester, '$label-settings');
-        await _native(tester, '$label-settings-back', action: 'back');
-        await tester.pumpAndSettle();
         await tester.ensureVisible(find.byTooltip('Color 1'));
         await tester.pumpAndSettle();
         await tester.tap(find.byTooltip('Color 1'));
@@ -242,6 +232,15 @@ void main() {
           isNot('#65c7bc'),
         );
         expect(find.byType(BotsContent), findsOneWidget);
+        await tester.tap(find.byTooltip('Actions for Atlas Native'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('bot-menu-edit')), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('bot-menu-settings')));
+        await tester.pumpAndSettle();
+        expect(find.text('Role & instructions'), findsOneWidget);
+        await _native(tester, '$label-settings');
+        await _native(tester, '$label-settings-back', action: 'back');
+        await tester.pumpAndSettle();
 
         await tester.tap(find.byTooltip('Create bot'));
         await tester.pumpAndSettle();

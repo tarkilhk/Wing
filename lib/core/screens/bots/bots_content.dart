@@ -5,13 +5,11 @@ import '../../services/bot_group_session.dart';
 import '../../services/bot_profile_edit_session.dart';
 import '../../services/bot_screen_session.dart';
 import '../../services/bots_session.dart';
-import '../../services/profiles_management_session.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/bot_avatar.dart';
 import '../../widgets/studio_error.dart';
 import '../../widgets/wing_app_bar.dart';
 import '../../widgets/workspace_action_menu.dart';
-import '../administration/admin_profiles_page.dart';
 import 'bot_group_screen.dart';
 import 'bot_profile_editor.dart';
 import 'bot_screen_view.dart';
@@ -113,7 +111,6 @@ class _BotsContentState extends State<BotsContent> {
       bot.title,
       '${bot.instance} · ${bot.profile.name}',
       [
-        ('open', 'Open bot chat', Icons.chat_bubble_outline, true),
         ('screen', 'View screen', Icons.desktop_windows_outlined, true),
         (
           'pin',
@@ -127,42 +124,16 @@ class _BotsContentState extends State<BotsContent> {
           Icons.visibility_outlined,
           true,
         ),
-        ('edit', 'Edit name & appearance', Icons.edit_outlined, true),
-        ('settings', 'Profile settings', Icons.tune_outlined, server != null),
-        ('duplicate', 'Duplicate bot', Icons.copy_outlined, true),
-        (
-          'recent',
-          'Open recent session',
-          Icons.history,
-          bot.recentChat != null,
-        ),
-        (
-          'rename',
-          'Rename profile',
-          Icons.drive_file_rename_outline,
-          server != null,
-        ),
-        (
-          'delete',
-          'Delete bot',
-          Icons.delete_outline,
-          server != null && bot.profile.name != 'default',
-        ),
+        ('settings', 'Bot settings', Icons.tune_outlined, server != null),
       ],
       keyPrefix: 'bot-menu',
     );
     if (!mounted || action == null) return;
     switch (action) {
-      case 'open':
-        await _open(bot);
-      case 'recent':
-        if (bot.recentChat != null) await widget.onOpenChat(bot.recentChat!);
       case 'pin':
         await widget.session.setPinned(bot, canUse: _canUse);
       case 'hide':
         await widget.session.setHidden(bot, canUse: _canUse);
-      case 'edit':
-        await _editAppearance(bot);
       case 'screen':
         await _push(
           BotScreenView(createSession: () => BotScreenSession(repository, bot)),
@@ -170,25 +141,10 @@ class _BotsContentState extends State<BotsContent> {
       case 'settings':
         if (server != null) {
           await _push(
-            BotSettingsScreen(profile: server.profile(bot.profile.name)),
-          );
-        }
-      case 'duplicate':
-        await _push(
-          BotsCreateScreen(session: widget.session, group: false, clone: bot),
-        );
-      case 'rename' || 'delete':
-        if (server != null) {
-          await _push(
-            AdminProfilesPage(
-              initialProfile: bot.profile.name,
-              initialAction: action == 'rename'
-                  ? ProfileManagementEntry.rename
-                  : ProfileManagementEntry.delete,
-              createSession: () => ProfilesManagementSession(
-                server: server,
-                openProfile: (_) async => true,
-              ),
+            BotSettingsScreen(
+              profile: server.profile(bot.profile.name),
+              bot: bot,
+              session: widget.session,
             ),
           );
         }

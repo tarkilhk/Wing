@@ -32,7 +32,6 @@ class BotRecord {
     required this.revision,
     required Map<String, Object?> metadata,
     this.chat,
-    this.recentChat,
     this.preview = '',
     this.presence = BotPresence.unknown,
     Uint8List? avatar,
@@ -46,7 +45,7 @@ class BotRecord {
   final int revision;
   // Opaque, recursively frozen stock metadata. Only the repository merges it.
   final Map<String, Object?> metadata;
-  final ProfileSessionKey? chat, recentChat;
+  final ProfileSessionKey? chat;
   final BotPresence presence;
   final Uint8List? avatar;
   String get id => '${scope.connectionIdentity}/${profile.name}';
@@ -72,7 +71,6 @@ class BotRecord {
     revision: revision,
     metadata: metadata,
     chat: chat,
-    recentChat: recentChat,
     preview: preview,
     presence: presence,
     avatar: avatar,
