@@ -6066,6 +6066,23 @@
       "source": "docs/TOOL_ACTIVITY.md; test/activity_family_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "website-app-capture",
+      "kind": "manual-or-ci-cli",
+      "path": "tools/website/capture_app_test.dart",
+      "purpose": "Export real Wing widgets with public-safe demo content for website app captures",
+      "source": "docs/WEBSITE.md",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "website-browser-review",
+      "kind": "manual-or-ci-cli",
+      "path": "tools/website/review.cjs",
+      "purpose": "Local browser acceptance of website layouts, interactions, accessibility and assets",
+      "source": "docs/WEBSITE.md",
+      "status": "supported"
     }
   ],
   "files": [
@@ -13948,6 +13965,126 @@
       "path": "lib/core/widgets/activity/skill_document_viewer.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "docs/WEBSITE.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "tools/website/capture_app_test.dart",
+      "area": "tools",
+      "provenance": "tracked"
+    },
+    {
+      "path": "tools/website/review.cjs",
+      "area": "tools",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/.nojekyll",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/fonts/MANROPE-OFL.txt",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/fonts/SOURCE-SANS-3-OFL.txt",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/fonts/manrope.woff2",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/fonts/source-sans-3.woff2",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/agents-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/agents-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/analytics-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/chats-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/chats-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/conversation-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/conversation-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/steer-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/steer-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/tool-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/tool-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/wing.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/wordmark.svg",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/index.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/script.js",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/styles.css",
+      "area": "website",
+      "provenance": "tracked"
     }
   ],
   "direct_dependencies": {
@@ -14427,7 +14564,8 @@
         "tools/performance/live_stream.dart",
         "tools/performance/streaming_replay.dart",
         "tools/performance/workspace_navigation_soak.dart",
-        "tools/performance/workspace_streaming_replay.dart"
+        "tools/performance/workspace_streaming_replay.dart",
+        "tools/website/capture_app_test.dart"
       ],
       "status": "retain",
       "dynamic_evidence": "Current authored header import/export directive consumers; SDK/build registration where applicable"
@@ -14750,7 +14888,8 @@
         "test/workspace_snapshot_limits_test.dart",
         "test/workspace_snapshot_work_budget_test.dart",
         "tools/performance/workspace_navigation_soak.dart",
-        "tools/performance/workspace_streaming_replay.dart"
+        "tools/performance/workspace_streaming_replay.dart",
+        "tools/website/capture_app_test.dart"
       ],
       "status": "retain",
       "dynamic_evidence": "Current authored header import/export directive consumers; SDK/build registration where applicable"
@@ -15504,7 +15643,8 @@
         "test/workspace_snapshot_controller_work_test.dart",
         "test/workspace_snapshot_limits_test.dart",
         "test/workspace_snapshot_work_budget_test.dart",
-        "test/workspace_streaming_replay_test.dart"
+        "test/workspace_streaming_replay_test.dart",
+        "tools/website/capture_app_test.dart"
       ],
       "status": "retain",
       "dynamic_evidence": "Current authored header import/export directive consumers; SDK/build registration where applicable"
