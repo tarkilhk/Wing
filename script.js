@@ -54,6 +54,7 @@ let activeThumbnail;
 let closingViewer = false;
 let viewerOperation = 0;
 let viewerAnimations = [];
+let viewerCloseTimer;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const imageEase = getComputedStyle(document.documentElement).getPropertyValue('--ease-out').trim();
 
@@ -95,6 +96,7 @@ function thumbnailTransform() {
 }
 
 function cancelViewerAnimations() {
+  clearTimeout(viewerCloseTimer);
   for (const animation of viewerAnimations) animation.cancel();
   viewerAnimations = [];
 }
@@ -149,11 +151,13 @@ function closeScreenshot(animate) {
     finish();
     return;
   }
+  const duration = 180;
   viewerAnimations = [
-    viewerImage.animate([{ transform: currentTransform }, { transform: end }], { duration: 180, easing: imageEase, fill: 'forwards' }),
-    viewerScrim.animate([{ opacity: currentOpacity }, { opacity: 0 }], { duration: 180, easing: imageEase, fill: 'forwards' }),
+    viewerImage.animate([{ transform: currentTransform }, { transform: end }], { duration, easing: imageEase, fill: 'forwards' }),
+    viewerScrim.animate([{ opacity: currentOpacity }, { opacity: 0 }], { duration, easing: imageEase, fill: 'forwards' }),
   ];
-  Promise.all(viewerAnimations.map(animation => animation.finished.catch(() => {}))).then(finish);
+  // The close action owns its duration; animation promises must not hold it open.
+  viewerCloseTimer = setTimeout(finish, duration);
 }
 
 document.addEventListener('click', event => {
