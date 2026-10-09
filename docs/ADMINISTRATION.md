@@ -497,6 +497,16 @@ Refresh failure retains the previous observation with its last-checked time. Mal
 
 Track background actions by returned name and PID. A same-name replacement is not the original action's success. Authenticated DELETE retries must preserve the request body and report the backend's real outcome.
 
+Analytics and administration routes borrow the workspace's captured server adapter.
+Its sign-in and HTTP pool survive route re-entry; leaving a screen disposes only
+its presentation/session observers. The workspace alone retires the adapter.
+This prevents repeated screen visits from exhausting Hermes' password-login
+admission. Explicit Refresh reloads failed sections and preserves last successful
+sections during a subsequent failure. The auth/admission and HTTP recovery
+contracts are exercised by `test/analytics_content_test.dart` and
+`test/usage_analytics_session_test.dart`; response/lifetime behavior requires
+controlled I/O tests, beyond checking constructor spelling in source.
+
 Usage supports **1D, 7D, 30D, 90D and 365D** using profile-scoped model and daily analytics reads plus a separately cached year-wide daily read. A single scrollable band of week columns browses a year ending at the latest returned server date. Previously loaded periods are cached while the page remains open, and Refresh reloads year and period data. Day/grouping/measure selection makes no network requests. Daily model history and daily API-equivalent costs are explicitly unavailable; the daily token-type chart is supported. Stock Hermes filters a rolling N × 24 hours, then groups session starts by server-local calendar date with per-row DST handling. It supplies no timezone or calendar cutoff dates. Wing preserves all returned date keys, including adjacent-year dates; trend counts span those keys and gaps between them have zero returned usage. Calendar padding outside the year response's recorded date span is unknown, with no invented zero counts. A separately loaded period can extend the grid without replacing year counts with period counts. The outline surrounds the continuous span from the first through the last date returned for the selected period, including zero-usage days and gaps between returned dates. It does not infer calendar boundaries beyond that span. First and last dates may be partial; daily records exclude auxiliary usage included in model totals. This contract was checked against stock upstream `8d30c4eaabd85edb77a02fef6c5388d9344ef80c` on 30 September 2026.
 
 For `openai-codex` only, Wing multiplies the already-uncached input, cached input and output counters by the exact provider/model prices returned by stock `model/options`, shared with the model picker. Output includes reasoning; it is not charged again. Other providers, including paid OpenAI API routes, retain Hermes's estimate. This rule uses provider identity, never a zero cost or model-name prefix.
@@ -571,6 +581,12 @@ not a source pattern; these behavioral checks guard title geometry. Run with
 and routes on a disposable Android emulator with synthetic health observations.
 It checks the one-shot bell motion, notice, focused modal, snooze, Health/settings
 navigation, persistence and native-keyboard action reachability in both themes.
+It also verifies a nonempty working Recents session whose search result resolves
+to a compression successor, plus Analytics failure and explicit Refresh recovery
+while host observation remains active. It uses bounded frame pumps because
+ongoing-work animation deliberately never settles. These transport fixtures
+establish Android behavior; authenticated read-only probes establish live data
+contracts separately.
 Run once at the ordinary Android viewport/font size, then at 320 dp with Android
 font scale 2 and `--dart-define=ALERT_EXPECT_LARGE=true`. Do not override the
 Flutter test viewport: this journey verifies the Android-provided constraints.

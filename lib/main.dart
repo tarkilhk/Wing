@@ -396,9 +396,9 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   void _openPreferenceRepair() {
     _navigatorKey.currentState?.push<void>(
       MaterialPageRoute(
-        builder: (_) => Scaffold(
+        builder: (routeContext) => Scaffold(
           appBar: WingAppBar(
-            context: context,
+            context: routeContext,
             title: const Text('App settings'),
           ),
           body: AppSettingsContent(

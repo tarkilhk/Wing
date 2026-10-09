@@ -726,8 +726,10 @@ void main() {
             await tester.pumpAndSettle();
             await tester.settleMarkdown();
             expect(find.text('Inspect build'), findsOneWidget);
-            expect(find.text('License'), findsOneWidget);
-            expect(find.text('MIT'), findsOneWidget);
+            expect(find.text('Version'), findsOneWidget);
+            expect(find.text('1.0'), findsOneWidget);
+            expect(find.text('Author'), findsOneWidget);
+            expect(find.text('Example'), findsOneWidget);
             expect(tester.takeException(), isNull);
             if (_capture) {
               await tester.runAsync(() async {

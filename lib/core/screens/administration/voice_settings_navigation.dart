@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
-import '../../services/connection_access.dart';
 import '../../services/server_connection_status.dart';
 import 'admin_voice_routes.dart';
 import '../../services/android_voice.dart';
@@ -10,29 +9,18 @@ import '../../widgets/server_connection_label.dart';
 /// an administration navigation redesign only needs to change this entry point.
 Future<void> openProfileVoiceSettings(
   BuildContext context, {
-  required ConnectionAccess access,
-  required String connectionIdentity,
+  required ProfileAdministration profile,
   required ServerConnectionStatus connectionStatus,
-  required String profileName,
 }) async {
-  final repository = AdministrationRepository.forConnection(
-    access,
-    connectionIdentity,
-    connectionStatus: connectionStatus,
-  );
-  try {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => ServerConnectionScope(
-          status: connectionStatus,
-          child: profileSpeechSynthesisPage(
-            repository.profile(profileName),
-            device: AndroidVoice.instance,
-          ),
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (_) => ServerConnectionScope(
+        status: connectionStatus,
+        child: profileSpeechSynthesisPage(
+          profile,
+          device: AndroidVoice.instance,
         ),
       ),
-    );
-  } finally {
-    repository.close();
-  }
+    ),
+  );
 }

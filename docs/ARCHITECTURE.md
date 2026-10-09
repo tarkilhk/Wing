@@ -49,7 +49,7 @@ Each row names the existing authoritative owner and the UI's responsibility. Dee
 | administration-memory | RetainedMemoryCatalogSession graph/query/filter/read recovery; RetainedMemoryDetailSession captured node identity and read lifetime; pure retained-memory values | Views render typed cards/details and retain query input and expansion geometry; memory configuration uses SettingsEditSession |
 | administration-skills-tools | ProfileSkillsSession library/Hub/provenance/detail/editor leases, baseline/conflict/commands/ACK/readback; SkillReaderRepository stock-API category, reference discovery and cross-profile observations, SkillReaderSession read/viewer leases; ProfileToolSetupSession readiness/catalog/provider/model edit policy | Skills/Hub/editor/preview/tool views render typed observations. Focus, search input and dialogs stay UI; issued tool editor retirement revokes unsent work |
 | scheduled-tasks | ScheduledTasksRepository captured stock reads/writes; ScheduledTasksController retained snapshot/journal/busy/uncertainty; ScheduledTaskEditSession schedule/body/baseline/review/preflight; ScheduledTaskDetailSession detail polling and observations | Views retain input controllers, filters, formatting, confirmations and routes. Commands preserve immutable task/profile capture; stock cron owner hints do not provide atomic fencing |
-| usage-analytics | UsageAnalyticsSession period/cache/partial recovery/lifetime; UsageAnalyticsReader stock usage I/O and year reads, borrowing the captured ProfileModelCatalog for prices; ModelUsageCost pure token valuation from exact provider/model catalog observations, forwarding each selected rolling window | Views render copied readonly observations; charts, calendar and visual filters stay presentation. The calendar browses a year and outlines the continuous selected date span, including zero-usage gaps; period totals can match when all recorded usage falls within the shortest selected window |
+| usage-analytics | ProfileWorkspaceController captured administration adapter and shared authentication/pool lifetime; UsageAnalyticsSession period/cache/partial recovery/lifetime; UsageAnalyticsReader stock usage I/O and year reads, borrowing the captured ProfileModelCatalog for prices; ModelUsageCost pure token valuation from exact provider/model catalog observations, forwarding each selected rolling window | Analytics and administration routes borrow the canonical server adapter and never close it. Views render copied readonly observations; charts, calendar and visual filters stay presentation. The calendar browses a year and outlines the continuous selected date span, including zero-usage gaps; period totals can match when all recorded usage falls within the shortest selected window |
 | versions-updates | VersionsController and BackendUpdateController scoped observations/commands; installed-app PackageInfo metadata | Cards/routes render typed backend facts and retain confirmation. Installed-app metadata loading and fixed release-link navigation remain bounded presentation |
 | app-preferences-backup | AppPreferences saved theme/accent/default action/text size/profile selection/color/browser/voice choices; BackupSession captured file/passphrase workflow; ConfigBackupCodec/Service/IO format/validation/adapters; ConnectionManager secure persistence | Settings/backup views render typed controls/outcomes and retain choice/passphrase dialogs. Durable owners commit configuration; storage formats change only with explicit approval |
 | privacy | Bundled PRIVACY.md | PrivacyPolicyScreen loads the bundled presentation asset and renders Markdown/links; no business forwarding owner is needed |
@@ -72,6 +72,17 @@ retain their trust/install context without inventing local activity. See
 `skill_reader_session_test.dart` / `skill_document_viewer_test.dart` regressions.
 
 ## Interface and direction contracts
+
+Recents live ownership, notification ownership and recovered titles use
+`ProfileGateway.sessionMetadata` for exact, profile-scoped session-detail reads.
+Search is discovery: Hermes can return a compression successor instead of the
+requested durable ID. Only the typed stock session-not-found response establishes
+absence; malformed, failed or ambiguous ownership remains unavailable.
+This contract was checked against upstream main
+`5f045f842a60184748dda30acb9fecbd961cc18b` on 9 October 2026.
+`test/profile_live_activity_test.dart` covers lineage, malformed identity,
+profile failures and subsequent recovery; notification and browser regressions
+cover the other callers and preserve ordinary search semantics.
 
 Analytics forwards the selected `days` and captured `profile` to both stock
 aggregate endpoints. Upstream main

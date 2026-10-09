@@ -68,8 +68,10 @@ void main() {
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
   late ValueNotifier<ChatNoticeActivity?> activity;
+  var controllerDisposed = false;
 
   setUp(() async {
+    controllerDisposed = false;
     PackageInfo.setMockInitialValues(
       appName: 'Wing',
       packageName: 'com.tarkilhk.wing',
@@ -102,7 +104,7 @@ void main() {
     await controller.initialize();
   });
   tearDown(() {
-    controller.dispose();
+    if (!controllerDisposed) controller.dispose();
     activity.dispose();
     appPreferences.dispose();
   });
@@ -714,10 +716,15 @@ void main() {
           return;
         }
         await tester.pumpWidget(const SizedBox.shrink());
+        // The workspace owns the shared HTTP pool. Finish that lifetime before
+        // Flutter checks for idle connection timers at the end of the test.
+        controllerDisposed = true;
+        controller.dispose();
         await tester.runAsync(() async {
           await subscription.cancel();
           await server.close(force: true);
         });
+        await tester.pump();
         fixtureClosed = true;
       }
 

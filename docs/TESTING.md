@@ -46,6 +46,22 @@ and formatting; they do not need runtime test campaigns.
    stops testing, terminate the active owned run and start no replacement campaign.
    Continue other authorized work where its prerequisites are satisfied.
 
+When shared app composition adds ongoing I/O, include the affected data consumers
+in the verification scope. Exercise nonempty success and recovery through their
+production repository/transport seams while the watcher is active. Fixtures must
+retain the stock response semantics involved, including exact identity versus
+search/lineage resolution. Assert visible results and cleared error states;
+header geometry and absence of Flutter exceptions do not establish data health.
+Report fixture layout, contract/recovery, live read-only and phone installation
+checks separately. A startup PID or screenshot count is not a live feature journey.
+
+Native journeys with ongoing animation use bounded, state-based waits. Keep live
+rendering enabled across external screenshot waits when observing motion; an
+explicit-pump-only frame policy can discard native timestamps and skip a short
+animation after the clock catches up. Check transient notices before capture,
+and allow their normal expiry during host I/O. Scroll to unique recovered data
+rather than repeated action labels or headings outside a lazily built viewport.
+
 Required published-release and CI gates remain mandatory. A failed or interrupted
 full command is not a passing full run; a focused recovery does not waive a gate
 that explicitly requires one. Ordinary local delivery can use the completed
@@ -311,7 +327,7 @@ It navigates the real app but does not send messages or modify settings.
 | Context occupancy and composition | `test/context_ring_test.dart`, `test/profile_context_usage_test.dart`; render with `--dart-define=CONTEXT_RING_REVIEW=true` and the existing `build/studio-roboto.ttf` / `build/studio-icons.otf` review fonts. Captures and ring coordinates go to ignored `build/context-ring-review/` for pixel inspection |
 | Design renders | `test/studio_layout_test.dart`, `test/studio_controls_test.dart`, `test/studio_layout_regressions_test.dart`, `test/administration_navigation_test.dart` |
 | [Accepted activity family](DESIGN_SYSTEM.md#accepted-activity-detail-family) | `test/activity_family_test.dart` extends real-font review to Tasks, saved/live Agents, Work, goals, reasoning, search, writes and web results (`CAPTURE_ACTIVITY_FAMILY=true`). `test/profile_tool_call_test.dart` compares visible content/icon edges, compact toolbar height, neutral completion footers and retained actions across code/read/edit/vision in both themes at ordinary and enlarged text. Capture with `CAPTURE_TOOL_RESULTS=true` and actual review fonts as described in [tool activity verification](TOOL_ACTIVITY.md#inline-requests-and-receipts); inspect the family together |
-| Health alerts and shared screen headers | `test/health_alerts_test.dart`, `test/health_alerts_ui_test.dart`, `integration_test/health_alerts_native_test.dart` on a disposable Android emulator; [capture and contract](ADMINISTRATION.md#health-alerts) |
+| Health alerts, shared headers, populated Recents and Analytics recovery | `test/health_alerts_test.dart`, `test/health_alerts_ui_test.dart`, `integration_test/health_alerts_native_test.dart` on a disposable Android emulator; [capture and contract](ADMINISTRATION.md#health-alerts) |
 | Host resources and reusable alert inputs | `test/host_resources_session_test.dart`, `test/host_thresholds_test.dart`, `test/host_health_view_test.dart`; render with `CAPTURE_HOST_HEALTH=true` and `CAPTURE_FONT_DIR=<Flutter SDK>/bin/cache/artifacts/material_fonts` into ignored `build/host-health/` |
 
 Read a driver's environment flags, mutations and cleanup before running it. Use disposable profiles/chats and owned fixtures on an authorized server. Live tests may invoke models, modify profile settings or start host tools. Restore changed values and independently verify cleanup; a green assertion that records `backend_limited` is not successful feature acceptance.

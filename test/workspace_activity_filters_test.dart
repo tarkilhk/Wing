@@ -58,6 +58,15 @@ class _ActivityHost {
                   },
             ],
           }
+        : RegExp(r'^sessions/[^/]+$').hasMatch(path)
+        ? const <Map<String, dynamic>>[
+            {'id': 'running', 'title': 'Running job', 'profile': 'main'},
+            {'id': 'needs-input', 'title': 'Question', 'profile': 'main'},
+            {'id': 'side-work', 'title': 'Deploy checks', 'profile': 'main'},
+            {'id': 'idle-old', 'title': 'Idle old server', 'profile': 'main'},
+          ].singleWhere(
+            (row) => row['id'] == Uri.decodeComponent(path.split('/')[1]),
+          )
         : path == 'sessions'
         ? {
             'sessions': [

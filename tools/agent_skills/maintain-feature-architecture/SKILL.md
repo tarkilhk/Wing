@@ -59,6 +59,20 @@ in `AGENTS.md` and the user's instructions.
 
 ## Verify and hand off
 
+Finish the active user scope before reviewing or integrating unrelated features.
+For coordinated delivery, accept only a READY handoff with frozen source,
+explicit file/hunk ownership, completed scoped checks and stated limits. A
+progress message or passing partial run is not readiness. Reconcile shared
+hunks against the published base; preserve already published contributions.
+Keep unfinished work out of the tested candidate.
+
+Use the workspace's canonical coordination record when multiple sessions share
+builds or devices. Assign each emulator to one acknowledged owner. Transfer it
+only after that owner has stopped its work and released the lease; queuing a
+message does not establish release. Keep APK assembly under the shared build
+lease. Reuse completed checks according to the verification policy below.
+
+
 Use the applicable independent commands in `tools/architecture/README.md`.
 File-set changes require `python3 tools/architecture/rules/authored_census.py`;
 Dart role changes require `dart run tools/architecture/rules/role_inventory.dart`;

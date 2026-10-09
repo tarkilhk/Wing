@@ -9,6 +9,7 @@ import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/models/health_alert.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/screens/administration/admin_usage_dashboard.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/health_alert_settings_store.dart';
@@ -36,9 +37,45 @@ class _Credentials implements CredentialStore {
 /// Only the transport is synthetic. The app, registry, alert owners, routes,
 /// Android viewport and native keyboard are the shipped implementations.
 class _Observations extends ProfileBrowserFixture {
+  _Observations() {
+    liveSessions['personal'] = [
+      {
+        'id': 'native-live-runtime',
+        'session_key': 'native-live-durable',
+        'status': 'working',
+      },
+    ];
+  }
+
+  @override
+  List<Map<String, dynamic>> sessions(String profile) => [
+    ...super.sessions(profile),
+    if (profile == 'personal')
+      {
+        'id': 'native-live-durable',
+        'profile': 'personal',
+        'title': 'Active native QA conversation',
+        'last_active': now - 30,
+      },
+  ];
+
+  @override
+  List<Map<String, dynamic>> searchRows(String profile, String query) =>
+      query == 'native-live-durable' && profile == 'personal'
+      ? [
+          {
+            'session_id': 'native-live-compression-tip',
+            'profile': 'personal',
+            'title': 'Active native QA conversation',
+          },
+        ]
+      : super.searchRows(profile, query);
   final administration = AdministrationDesignFixture();
   final stats = hostStatsPayload();
   bool memoryCritical = false, diskCritical = false;
+  bool analyticsUnavailable = false;
+  int hostReads = 0;
+  final analyticsReads = <String>[];
   late ProfileWorkspaceController owner;
 
   @override
@@ -47,7 +84,14 @@ class _Observations extends ProfileBrowserFixture {
     return ProfileGateway(
       scope: scope,
       discover: browser.discover,
-      rpc: browser.call,
+      rpc: (method, params) async {
+        final response = await browser.call(method, params);
+        if (method == 'session.resume' &&
+            params['session_id'] == 'native-live-durable') {
+          return {...response, 'running': true};
+        }
+        return response;
+      },
       get: (path, query) => path.startsWith('sessions')
           ? browser.read(path, query)
           : administration.send('GET', path, query, null),
@@ -72,7 +116,16 @@ class _Observations extends ProfileBrowserFixture {
     ownedMutation: (_, _, _, _, _, _) async =>
         throw StateError('Unexpected mutation'),
     request: (method, path, query, body) async {
-      if (method == 'GET' && path == 'system/stats') return stats;
+      if (method == 'GET' && path.startsWith('analytics/')) {
+        analyticsReads.add(path);
+        if (analyticsUnavailable) {
+          throw DashboardHttpException(503, path);
+        }
+      }
+      if (method == 'GET' && path == 'system/stats') {
+        hostReads++;
+        return stats;
+      }
       if (method == 'GET' && path == 'status') {
         final value = hostPressurePayload();
         value['memory']['pressure'] = memoryCritical ? 'critical' : 'ok';
@@ -102,8 +155,26 @@ Future<void> _capture(String name) async {
   throw StateError('Android screenshot driver did not capture $name');
 }
 
+/// Ongoing work intentionally animates. Waiting for every frame to stop would
+/// never finish; allow route transitions to finish, then assert the visible state.
+Future<void> _settleScreen(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 600));
+}
+
+Future<void> _waitFor(WidgetTester tester, Finder target) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 20));
+  while (target.evaluate().isEmpty && DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  expect(target, findsWidgets);
+}
+
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  // Keep the native frame clock running through capture and I/O waits. Working
+  // rows animate continuously, so route checks use bounded pumps, not settling.
+  binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
   const large = bool.fromEnvironment('ALERT_EXPECT_LARGE');
   for (final theme in [AppThemePreference.dark, AppThemePreference.light]) {
     testWidgets('Android health alerts ${theme.name}, large=$large', (
@@ -117,7 +188,7 @@ void main() {
       final preferences = AppPreferences(prefs);
       addTearDown(() async {
         await tester.pumpWidget(const SizedBox());
-        await tester.pumpAndSettle();
+        await _settleScreen(tester);
         preferences.dispose();
       });
       await preferences.setTheme(theme);
@@ -162,7 +233,8 @@ void main() {
           profileControllers: registry,
         ),
       );
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
+      await _waitFor(tester, find.text('Chats'));
       final bell = find.byKey(const ValueKey('health-alert-bell'));
       expect(bell, findsNothing);
       expect(find.text('Chats'), findsWidgets);
@@ -184,61 +256,94 @@ void main() {
             .first,
       );
       await tester.tap(find.text('Improve the conversation list'));
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       await _capture('$label-conversation-healthy');
 
-      observations.memoryCritical = true;
-      observations.stats['memory']['percent'] = 94.0;
-      observations.stats['memory']['used'] =
-          (observations.stats['memory']['total'] * .94).round();
-      observations.stats['memory']['available'] =
-          observations.stats['memory']['total'] -
-          observations.stats['memory']['used'];
-      await observations.owner.hostResources().refresh();
-      // The first native frame establishes the ticker's start timestamp.
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
-      expect(bell, findsOneWidget);
-      expect(MediaQuery.disableAnimationsOf(tester.element(bell)), isFalse);
       final rotation = find.descendant(
         of: bell,
         matching: find.byType(Transform),
       );
-      expect(
-        tester.widget<Transform>(rotation).transform.storage[1].abs(),
-        greaterThan(0),
-      );
+      var observedRotation = 0.0;
+      var observingMotion = true;
+      void observeFrame(Duration _) {
+        final elements = rotation.evaluate();
+        if (elements.length == 1) {
+          final widget = elements.single.widget;
+          if (widget is Transform) {
+            final angle = widget.transform.storage[1].abs();
+            if (angle > observedRotation) observedRotation = angle;
+          }
+        }
+        if (observingMotion) binding.addPostFrameCallback(observeFrame);
+      }
+
+      // Observe rendered native frames from before the incident arrives. A
+      // one-shot can finish while asynchronous refresh/capture work is awaited;
+      // sampling only after that await can miss motion that was displayed.
+      await tester.pump();
+      await tester.pump();
+      binding.addPostFrameCallback(observeFrame);
+      try {
+        observations.memoryCritical = true;
+        observations.stats['memory']['percent'] = 94.0;
+        observations.stats['memory']['used'] =
+            (observations.stats['memory']['total'] * .94).round();
+        observations.stats['memory']['available'] =
+            observations.stats['memory']['total'] -
+            observations.stats['memory']['used'];
+        await observations.owner.hostResources().refresh();
+        await tester.pump();
+        expect(bell, findsOneWidget);
+        expect(MediaQuery.disableAnimationsOf(tester.element(bell)), isFalse);
+        for (var frame = 0; frame < 20 && observedRotation == 0; frame++) {
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        expect(observedRotation, greaterThan(0));
+      } finally {
+        observingMotion = false;
+      }
       expect(find.byType(Dialog), findsNothing);
+      final dismissNotice = find.byTooltip('Dismiss health notice');
+      expect(dismissNotice, findsOneWidget);
       await _capture('$label-notice');
-      await tester.tap(find.byTooltip('Dismiss health notice'));
-      await tester.pumpAndSettle();
+      // The real transient notice can expire while the host captures Android.
+      // Its presence was checked before waiting; the persistent bell remains.
+      if (dismissNotice.evaluate().isNotEmpty) {
+        await tester.tap(dismissNotice);
+      }
+      await _settleScreen(tester);
       expect(tester.widget<Transform>(rotation).transform.storage[1], 0);
       await _capture('$label-bell');
       await tester.tap(bell);
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       expect(find.text('Critical memory pressure'), findsOneWidget);
       expect(find.byTooltip('Alert settings'), findsNothing);
       await _capture('$label-alert');
       await tester.tap(find.byTooltip('Pause reminders for 30 minutes'));
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       expect(find.textContaining('Reminders paused'), findsOneWidget);
       await tester.tap(find.byTooltip('Open Hermes health'));
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       await _capture('$label-health');
       await tester.tap(
         find.byKey(const ValueKey('health-alert-settings-entry')),
       );
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       await _capture('$label-settings');
       await tester.ensureVisible(find.text('Memory usage'));
       await tester.tap(find.text('Memory usage'));
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       await _capture('$label-rule');
       final fields = find.byType(TextField);
       await tester.tap(fields.at(0));
       await tester.enterText(fields.at(0), '96.5');
-      await tester.pumpAndSettle();
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.showKeyboard(fields.at(0));
+      final keyboardDeadline = DateTime.now().add(const Duration(seconds: 5));
+      while (tester.view.viewInsets.bottom == 0 &&
+          DateTime.now().isBefore(keyboardDeadline)) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await _settleScreen(tester);
       // Dialog removes inherited insets after applying them to its own padding.
       expect(tester.view.viewInsets.bottom, greaterThan(0));
       expect(
@@ -247,20 +352,20 @@ void main() {
       );
       await _capture('$label-keyboard');
       await tester.tap(find.byTooltip('Apply this rule to the settings draft'));
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       observations.memoryCritical = false;
       await observations.owner.hostResources().refresh();
       await tester.tap(find.byTooltip('Save health alert settings'));
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       expect(prefs.getString('wing-health-alert-settings'), contains('96.5'));
       expect(bell, findsNothing);
       await tester.pageBack();
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       await tester.pageBack();
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       expect(find.text('Improve the conversation list'), findsWidgets);
       await tester.tap(find.byIcon(Icons.arrow_back).first);
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       expect(find.text('Chats'), findsWidgets);
 
       observations.memoryCritical = true;
@@ -272,23 +377,23 @@ void main() {
           observations.stats['disk']['total'] -
           observations.stats['disk']['used'];
       await observations.owner.hostResources().refresh();
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       if (find.byTooltip('Dismiss health notice').evaluate().isNotEmpty) {
         await tester.tap(find.byTooltip('Dismiss health notice'));
       }
       await tester.tap(bell);
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       expect(find.text('Critical disk pressure'), findsOneWidget);
       expect(find.text('Critical memory pressure'), findsNothing);
       await tester.tap(find.byTooltip('Next issue'));
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       expect(find.text('Critical memory pressure'), findsOneWidget);
       expect(find.text('Critical disk pressure'), findsNothing);
       await tester.tap(find.byTooltip('Acknowledge issue'));
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       await _capture('$label-multiple-issues');
       await tester.tap(find.byTooltip('Close alerts'));
-      await tester.pumpAndSettle();
+      await _settleScreen(tester);
       final chatsCenter = tester.getCenter(find.text('Chats').first).dy;
       for (final destination in [
         AppDestination.activity,
@@ -296,11 +401,11 @@ void main() {
         AppDestination.health,
       ]) {
         await tester.tap(find.byTooltip('Open navigation menu'));
-        await tester.pumpAndSettle();
+        await _settleScreen(tester);
         final row = find.byKey(ValueKey('nav-${destination.name}'));
         await tester.ensureVisible(row);
         await tester.tap(row);
-        await tester.pumpAndSettle();
+        await _settleScreen(tester);
         expect(bell, findsOneWidget);
         final title = find.descendant(
           of: find.byType(AppBar),
@@ -309,9 +414,72 @@ void main() {
         if (!large) {
           expect(tester.getCenter(title).dy, closeTo(chatsCenter, .01));
         }
+        if (destination == AppDestination.activity) {
+          await observations.owner.refreshActivity();
+          await _settleScreen(tester);
+          expect(find.text('Active native QA conversation'), findsOneWidget);
+          expect(
+            find.textContaining('profile could not be verified'),
+            findsNothing,
+          );
+        }
         await _capture('$label-${destination.name}-header');
         expect(tester.takeException(), isNull);
       }
+      expect(observations.hostReads, greaterThan(0));
+      observations.analyticsUnavailable = true;
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await _settleScreen(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('nav-analytics')));
+      await tester.tap(find.byKey(const ValueKey('nav-analytics')));
+      await _settleScreen(tester);
+      await _waitFor(
+        tester,
+        find.textContaining('Could not load model totals.'),
+      );
+      expect(
+        find.textContaining('Could not load model totals.'),
+        findsOneWidget,
+      );
+      expect(find.text('Unavailable'), findsWidgets);
+      await _capture('$label-analytics-unavailable');
+
+      observations.analyticsUnavailable = false;
+      final refresh = find.widgetWithText(TextButton, 'Refresh');
+      final analyticsScroll = find
+          .descendant(
+            of: find.byType(UsageDashboard),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.scrollUntilVisible(
+        refresh,
+        250,
+        scrollable: analyticsScroll,
+      );
+      await tester.tap(refresh);
+      await _settleScreen(tester);
+      await tester.scrollUntilVisible(
+        find.text('639K'),
+        -250,
+        scrollable: analyticsScroll,
+      );
+      expect(find.textContaining('Could not load model totals.'), findsNothing);
+      expect(find.text('Unavailable'), findsNothing);
+      expect(find.text('639K'), findsOneWidget);
+      expect(
+        observations.analyticsReads
+            .where((p) => p == 'analytics/models')
+            .length,
+        greaterThanOrEqualTo(2),
+      );
+      expect(
+        observations.analyticsReads.where((p) => p == 'analytics/usage').length,
+        greaterThanOrEqualTo(4),
+      );
+      expect(bell, findsOneWidget);
+      await _capture('$label-analytics-recovered');
+      expect(tester.takeException(), isNull);
     });
   }
 }

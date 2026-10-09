@@ -14,6 +14,116 @@ import 'package:wing/core/services/server_connection_status.dart';
 import 'support/administration_fixture.dart';
 
 void main() {
+  test(
+    'Refresh reloads all unavailable analytics sections through real HTTP',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final requests = <Uri>[];
+      var unavailable = true;
+      final subscription = server.listen((request) async {
+        requests.add(request.uri);
+        request.response.headers.contentType = ContentType.json;
+        if (unavailable) {
+          request.response.statusCode = HttpStatus.notFound;
+          request.response.write(jsonEncode({'detail': 'Unavailable'}));
+        } else {
+          request.response.write(
+            jsonEncode({
+              if (request.uri.path == '/api/analytics/models')
+                'models': [
+                  {
+                    'model': 'example',
+                    'provider': 'example',
+                    'estimated_cost': 2,
+                    'input_tokens': 100,
+                    'cache_read_tokens': 0,
+                    'output_tokens': 10,
+                  },
+                ]
+              else
+                'daily': [
+                  {
+                    'day': '2026-10-09',
+                    'input_tokens': 100,
+                    'cache_read_tokens': 0,
+                    'output_tokens': 10,
+                  },
+                ],
+            }),
+          );
+        }
+        await request.response.close();
+      });
+      final status = ServerConnectionStatus('Test');
+      final repository = AdministrationRepository.forConnection(
+        ConnectionAccess(
+          connection: SavedConnection(
+            id: 'analytics-recovery',
+            label: 'Test',
+            host: '127.0.0.1',
+            port: server.port,
+            dashboardPortOverride: server.port,
+            dashboardProxied: true,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
+        ),
+        'analytics-recovery-http',
+        connectionStatus: status,
+      );
+      final owner = UsageAnalyticsSession(
+        UsageAnalyticsReader(repository.profile('default')),
+      );
+      addTearDown(() async {
+        owner.dispose();
+        repository.close();
+        status.dispose();
+        await server.close(force: true);
+        await subscription.cancel();
+      });
+      await owner.load();
+      expect(owner.state.data!.models, isNull);
+      expect(owner.state.data!.daily, isNull);
+      expect(owner.state.data!.modelsError, 'Could not load model totals.');
+      expect(owner.state.data!.dailyError, 'Could not load daily usage.');
+      expect(owner.state.year, isNull);
+      expect(owner.state.yearError, isNotNull);
+      expect(owner.state.loading, isFalse);
+      final failedCount = requests.length;
+      unavailable = false;
+      await owner.refresh();
+      expect(owner.state.data!.models!.tokens.total, 110);
+      expect(owner.state.data!.daily!.reportedDates, {'2026-10-09'});
+      expect(owner.state.year!.reportedDates, {'2026-10-09'});
+      expect(owner.state.data!.modelsError, isNull);
+      expect(owner.state.data!.dailyError, isNull);
+      expect(owner.state.yearError, isNull);
+      expect(owner.state.loading, isFalse);
+      expect(requests.skip(failedCount), hasLength(3));
+      final retainedModels = owner.state.data!.models;
+      final retainedDaily = owner.state.data!.daily;
+      final retainedYear = owner.state.year;
+      unavailable = true;
+      await owner.refresh();
+      expect(owner.state.data!.models, same(retainedModels));
+      expect(owner.state.data!.daily, same(retainedDaily));
+      expect(owner.state.year, same(retainedYear));
+      expect(owner.state.data!.modelsError, isNotNull);
+      expect(owner.state.data!.dailyError, isNotNull);
+      expect(owner.state.yearError, contains('Showing retained activity'));
+      expect(owner.state.loading, isFalse);
+      unavailable = false;
+      await owner.refresh();
+      expect(owner.state.data!.modelsError, isNull);
+      expect(owner.state.data!.dailyError, isNull);
+      expect(owner.state.yearError, isNull);
+      expect(
+        requests.every((uri) => uri.queryParameters['profile'] == 'default'),
+        isTrue,
+      );
+    },
+  );
+
   for (final (name, ages, expected) in [
     (
       '30, 90 and 365 day totals remain distinct through real HTTP',

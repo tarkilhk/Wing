@@ -1034,6 +1034,28 @@ class ProfileGateway {
     return ProfileHistoryPage(resolved, rows, offset, limit);
   }
 
+  /// Exact, read-only ownership observation. Search is a discovery surface:
+  /// stock Hermes may resolve a matched ID to its compression successor.
+  /// Only the stock session-not-found receipt establishes absence; transport,
+  /// profile and malformed response failures remain unavailable observations.
+  Future<Map<String, dynamic>?> sessionMetadata(String sessionId) async {
+    if (sessionId.isEmpty) throw ArgumentError('Missing session');
+    await requireProfile();
+    final endpoint = 'sessions/${Uri.encodeComponent(sessionId)}';
+    final Map<String, dynamic> row;
+    try {
+      row = await read(endpoint);
+    } on DashboardSessionNotFound catch (failure) {
+      if (failure.endpoint != endpoint) rethrow;
+      await requireProfile();
+      return null;
+    }
+    if (row['id'] != sessionId || row['profile'] != scope.profileName) {
+      throw const FormatException('Invalid session metadata owner');
+    }
+    return row;
+  }
+
   /// Stock search is profile-bound but does not stamp owners in its response.
   /// Keep results in this client's scope; reject any contradictory owner field.
   Future<List<Map<String, dynamic>>> search(

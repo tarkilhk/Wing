@@ -24,19 +24,7 @@ class HermesAnalyticsContent extends StatefulWidget {
 }
 
 class _HermesAnalyticsContentState extends State<HermesAnalyticsContent> {
-  late final _server =
-      widget.repository ??
-      AdministrationRepository.forConnection(
-        widget.controller.access,
-        widget.controller.connectionIdentity,
-        connectionStatus: widget.controller.connectionStatus,
-      );
-
-  @override
-  void dispose() {
-    if (widget.repository == null) _server.close();
-    super.dispose();
-  }
+  late final _server = widget.repository ?? widget.controller.administration();
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(

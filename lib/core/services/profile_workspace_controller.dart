@@ -412,6 +412,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
   AdministrationHealthSession? _healthSession;
   HostResourcesSession? _hostResources;
 
+  /// Routes borrow the captured connection's server adapter. Its authentication
+  /// and pool survive screen re-entry; only the workspace retires the adapter.
+  /// Constructing the health owner does not dispatch diagnostics.
+  AdministrationRepository administration() => healthSession().server;
+
   /// One host-data owner per captured connection, shared by all surfaces.
   HostResourcesSession hostResources({AdministrationRepository? repository}) =>
       _hostResources ??= HostResourcesSession(
@@ -2091,14 +2096,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
           try {
             final matches = <String, Map<String, dynamic>>{};
             for (final sessionId in sessionIds) {
-              final exact = (await resource.gateway.search(
+              final metadata = await resource.gateway.sessionMetadata(
                 sessionId,
-                visibility: SessionVisibility.all,
-              )).where((row) => row['id'] == sessionId).toList();
-              if (exact.length > 1) {
-                throw const FormatException('Ambiguous session metadata');
-              }
-              if (exact.length == 1) matches[sessionId] = exact.single;
+              );
+              if (metadata != null) matches[sessionId] = metadata;
             }
             return (
               profile: profile.name,
@@ -7151,14 +7152,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
           final resource = _resource(profile.name);
           final matches = <String, Map<String, dynamic>>{};
           for (final sessionId in sessionIds) {
-            final exact = (await resource.gateway.search(
-              sessionId,
-              visibility: SessionVisibility.all,
-            )).where((row) => row['id'] == sessionId).toList();
-            if (exact.length > 1) {
-              throw const FormatException('Ambiguous session metadata');
-            }
-            if (exact.length == 1) matches[sessionId] = exact.single;
+            final metadata = await resource.gateway.sessionMetadata(sessionId);
+            if (metadata != null) matches[sessionId] = metadata;
           }
           return (resource: resource, matches: matches);
         }),
@@ -7699,12 +7694,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (title is String && title.trim().isNotEmpty) return title.trim();
     }
     try {
-      final matches = (await resource.gateway.search(
-        sessionId,
-        visibility: SessionVisibility.all,
-      )).where((row) => row['id'] == sessionId).toList();
-      if (matches.length == 1) {
-        final title = matches.single['title'];
+      final metadata = await resource.gateway.sessionMetadata(sessionId);
+      if (metadata != null) {
+        final title = metadata['title'];
         if (title is String && title.trim().isNotEmpty) return title.trim();
       }
     } catch (_) {

@@ -24,6 +24,9 @@ class ActivityHost {
   final failedProfiles = <String>{};
   final profiles = ['a', 'b'];
   bool resumedRunning = false;
+  final searchTips = <String, String>{};
+  final metadataFailures = <String, Object>{};
+  final metadataOverrides = <String, Map<String, dynamic>>{};
 
   Future<ProfileDiscovery> discover() async => ProfileDiscovery(
     profiles: profiles.map((name) => HermesProfile(name: name)).toList(),
@@ -45,13 +48,27 @@ class ActivityHost {
               .where((row) => row['id'] == query['q'])
               .map(
                 (row) => {
-                  'session_id': row['id'],
+                  'session_id': searchTips[row['id']] ?? row['id'],
                   'title': row['title'],
                   'profile': row['profile'],
                 },
               )
               .toList(),
         };
+      }
+      if (RegExp(r'^sessions/[^/]+$').hasMatch(path)) {
+        if (failedProfiles.contains(scope.profileName)) {
+          throw StateError('Profile offline');
+        }
+        final failure = metadataFailures[scope.profileName];
+        if (failure != null) throw failure;
+        final id = Uri.decodeComponent(path.split('/')[1]);
+        final matches =
+            (saved[scope.profileName] ?? const <Map<String, dynamic>>[])
+                .where((row) => row['id'] == id)
+                .toList();
+        if (matches.isEmpty) throw DashboardSessionNotFound(path);
+        return metadataOverrides[scope.profileName] ?? matches.single;
       }
       if (path == 'sessions') {
         final rows = saved[scope.profileName] ?? <Map<String, dynamic>>[];
@@ -233,7 +250,7 @@ void main() {
     );
     expect(
       host.reads
-          .where((read) => read.$2 == 'sessions/search')
+          .where((read) => read.$2 == 'sessions/same')
           .map((read) => read.$1)
           .toSet(),
       {'a', 'b', 'c'},
@@ -242,6 +259,78 @@ void main() {
     expect(controller.current!.chat, same(selected));
     expect(host.calls.where((call) => call.$2 == 'session.resume'), isEmpty);
   });
+
+  test(
+    'verifies live ownership by exact ID when search resolves a compression tip',
+    () async {
+      host.searchTips['same'] = 'compressed-tip';
+      host.live.add({
+        'id': 'remote-runtime',
+        'session_key': 'same',
+        'status': 'working',
+      });
+
+      await controller.refreshActivity();
+
+      expect(controller.liveActivity, hasLength(1));
+      expect(controller.liveActivity.single.workspace.profileName, 'a');
+      expect(controller.liveActivity.single.sessionId, 'same');
+      expect(controller.activityProfileErrors, isEmpty);
+      expect(host.reads.where((read) => read.$2 == 'sessions/search'), isEmpty);
+      expect(host.calls.where((call) => call.$2 == 'session.resume'), isEmpty);
+    },
+  );
+
+  for (final failure in <Object>[
+    const DashboardHttpException(404, 'sessions/same'),
+    const DashboardSessionNotFound('sessions/another'),
+    const FormatException('Malformed response'),
+  ]) {
+    test('unavailable profile metadata remains uncertain: $failure', () async {
+      host.metadataFailures['b'] = failure;
+      host.live.add({
+        'id': 'remote-runtime',
+        'session_key': 'same',
+        'status': 'working',
+      });
+
+      await controller.refreshActivity();
+
+      expect(controller.liveActivity, isEmpty);
+      expect(
+        controller.activityProfileErrors.keys,
+        containsAll(['b', 'ownership']),
+      );
+
+      host.metadataFailures.clear();
+      await controller.refreshActivity();
+      expect(controller.liveActivity.single.workspace.profileName, 'a');
+      expect(controller.activityProfileErrors, isEmpty);
+    });
+  }
+
+  for (final invalid in <Map<String, dynamic>>[
+    {'id': 'same', 'profile': 'b'},
+    {'id': 'compression-tip', 'profile': 'a'},
+    {'id': 'same'},
+  ]) {
+    test('rejects contradictory exact detail metadata: $invalid', () async {
+      host.metadataOverrides['a'] = invalid;
+      host.live.add({
+        'id': 'remote-runtime',
+        'session_key': 'same',
+        'status': 'working',
+      });
+
+      await controller.refreshActivity();
+
+      expect(controller.liveActivity, isEmpty);
+      expect(
+        controller.activityProfileErrors.keys,
+        containsAll(['a', 'ownership']),
+      );
+    });
+  }
 
   test('removes ended entries from the global snapshot', () async {
     final completed = await controller.createChat(canDispatch: () => true);

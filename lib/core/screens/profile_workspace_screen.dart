@@ -224,17 +224,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   VoidCallback? _hermesSpeechSettingsLink(BuildContext context) {
     final profile = controller.current?.scope.profileName;
     if (profile == null) return null;
-    final access = controller.access;
-    final identity = controller.connectionIdentity;
+    final target = controller.administration().profile(profile);
     final status = controller.connectionStatus;
     return () => unawaited(
       _run(
         () => openProfileVoiceSettings(
           context,
-          access: access,
-          connectionIdentity: identity,
+          profile: target,
           connectionStatus: status,
-          profileName: profile,
         ),
       ),
     );
@@ -2259,10 +2256,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         refreshModels: () => controller.refreshModelChoices(chat),
         reviewProviderAccess: () => openProfileProviderAccess(
           context,
-          access: controller.access,
-          connectionIdentity: controller.connectionIdentity,
+          profile: controller.administration().profile(
+            chat.key.workspace.profileName,
+          ),
           connectionStatus: controller.connectionStatus,
-          profileName: chat.key.workspace.profileName,
         ),
         onCommit: (selection) async {
           return controller.setIntelligence(

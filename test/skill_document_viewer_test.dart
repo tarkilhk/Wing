@@ -322,12 +322,24 @@ void main() {
             );
             expect(tester.takeException(), isNull);
             if (count > 5) {
-              await tester.drag(scroll, const Offset(0, -400));
-              await tester.pumpAndSettle();
-              expect(find.text('Contents'), findsOneWidget);
-              await tester.tap(
-                find.descendant(of: modal, matching: find.text('Section 9')),
+              final lastSection = find.descendant(
+                of: modal,
+                matching: find.text('Section 9'),
               );
+              await tester.dragUntilVisible(
+                lastSection.hitTestable(),
+                scroll,
+                const Offset(0, -200),
+                maxIteration: 10,
+              );
+              await tester.pumpAndSettle();
+              expect(lastSection.hitTestable(), findsOneWidget);
+              expect(
+                tester.getRect(scroll).contains(tester.getCenter(lastSection)),
+                isTrue,
+              );
+              expect(find.text('Contents'), findsOneWidget);
+              await tester.tap(lastSection);
               await tester.pumpAndSettle();
               expect(find.byType(BottomSheet), findsNothing);
               expect(find.text('9 / 9'), findsOneWidget);

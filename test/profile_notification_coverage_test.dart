@@ -42,7 +42,7 @@ class NotificationCoverageHost {
   Map<String, dynamic> resumeOverrides = {};
   final workingProfiles = <String>{};
   final waitingProfiles = <String>{};
-  final failedSearchProfiles = <String>{};
+  final failedMetadataProfiles = <String>{};
 
   Future<ProfileDiscovery> discover() async => ProfileDiscovery(
     profiles: const [
@@ -59,7 +59,7 @@ class NotificationCoverageHost {
         discover: discover,
         get: (path, query) async {
           if (path == 'sessions/search') {
-            if (failedSearchProfiles.contains(scope.profileName)) {
+            if (failedMetadataProfiles.contains(scope.profileName)) {
               throw StateError('profile unavailable');
             }
             return {
@@ -74,6 +74,18 @@ class NotificationCoverageHost {
                   )
                   .toList(),
             };
+          }
+          if (RegExp(r'^sessions/[^/]+$').hasMatch(path)) {
+            if (failedMetadataProfiles.contains(scope.profileName)) {
+              throw StateError('profile unavailable');
+            }
+            final id = Uri.decodeComponent(path.split('/')[1]);
+            final rows =
+                (saved[scope.profileName] ?? const <Map<String, dynamic>>[])
+                    .where((row) => row['id'] == id)
+                    .toList();
+            if (rows.isEmpty) throw DashboardSessionNotFound(path);
+            return rows.single;
           }
           if (path == 'sessions') {
             final rows = saved[scope.profileName] ?? const [];
@@ -131,10 +143,8 @@ class NotificationCoverageHost {
             }
             return {
               'session_id': '$sessionId-runtime',
-              if (method == 'session.create')
-                'stored_session_id': sessionId,
-              if (method == 'session.resume')
-                'session_key': sessionId,
+              if (method == 'session.create') 'stored_session_id': sessionId,
+              if (method == 'session.resume') 'session_key': sessionId,
               'running':
                   method == 'session.resume' &&
                   workingProfiles.contains(scope.profileName),
@@ -779,11 +789,11 @@ void main() {
     expect(alerts, isEmpty);
 
     host.saved['b'] = [];
-    host.failedSearchProfiles.add('b');
+    host.failedMetadataProfiles.add('b');
     host.active = [row('outside-runtime-2', 'outside', 'working', 3)];
     host.changed();
     await waitForReads(host, 3);
-    host.failedSearchProfiles.clear();
+    host.failedMetadataProfiles.clear();
     host.active = [row('outside-runtime-2', 'outside', 'idle', 4)];
     host.changed();
     await waitForReads(host, 4);

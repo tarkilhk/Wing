@@ -31,46 +31,34 @@ class TargetFixture extends ProfileBrowserFixture {
   final rowUpdates = <String, Map<String, dynamic>>{};
   final tokenInputs = <int, num>{};
 
-  @override
-  List<Map<String, dynamic>> searchRows(String profile, String query) {
-    if (liveSessions.values
-        .expand((rows) => rows)
-        .any((row) => row['session_key'] == query)) {
-      return [
-        for (final row in sessions(profile))
-          if (row['id'] == query &&
-              (liveSessions[profile] ?? []).any(
-                (live) => live['session_key'] == query,
-              ))
-            {...row, 'session_id': row['id']},
-      ];
-    }
-    return super.searchRows(profile, query);
-  }
+  // Activity rows without a runtime profile require one actual stored owner.
+  final exclusiveOwners = <String, String>{};
 
   @override
   List<Map<String, dynamic>> sessions(String profile) => [
     for (var i = 0; i < 12; i++)
-      {
-        'id': 'session-$i',
-        'profile': profile,
-        'title': [
-          'Prepare release notes',
-          'Summarize a research paper',
-          'Sketch a landing page',
-          'Plan a weekend hike',
-        ][i % 4],
-        'message_count': i == 4 ? 0 : 10,
-        'last_active': now - i * 3600,
-        'started_at': now - i * 86400,
-        'input_tokens': tokenInputs[i] ?? 1000,
-        'output_tokens': 500,
-        'unread': i == 0,
-        'pinned': i == 11,
-        'source': i == 8 ? 'cron' : 'cli',
-        'archived': false,
-        ...?rowUpdates['$profile/session-$i'],
-      },
+      if (exclusiveOwners['session-$i'] == null ||
+          exclusiveOwners['session-$i'] == profile)
+        {
+          'id': 'session-$i',
+          'profile': profile,
+          'title': [
+            'Prepare release notes',
+            'Summarize a research paper',
+            'Sketch a landing page',
+            'Plan a weekend hike',
+          ][i % 4],
+          'message_count': i == 4 ? 0 : 10,
+          'last_active': now - i * 3600,
+          'started_at': now - i * 86400,
+          'input_tokens': tokenInputs[i] ?? 1000,
+          'output_tokens': 500,
+          'unread': i == 0,
+          'pinned': i == 11,
+          'source': i == 8 ? 'cron' : 'cli',
+          'archived': false,
+          ...?rowUpdates['$profile/session-$i'],
+        },
   ];
   @override
   List<Map<String, dynamic>> projects(String profile) => [
@@ -718,6 +706,7 @@ void main() {
   testWidgets('unopened chat activity updates without rebuilding the index', (
     tester,
   ) async {
+    fixture.exclusiveOwners['session-1'] = 'personal';
     await show(tester, workspace: true, reducedMotion: true);
     await select(tester, 'profile', 'personal');
     final list = find.byKey(const ValueKey('chat-list-false'));
@@ -753,6 +742,7 @@ void main() {
   testWidgets('global completion notification does not rebuild the index', (
     tester,
   ) async {
+    fixture.exclusiveOwners['session-1'] = 'personal';
     fixture.liveSessions['personal'] = [
       {
         'id': 'outside-runtime',
@@ -888,9 +878,10 @@ void main() {
     testWidgets(
       'late $boundary activity read cannot reorder already loaded chats',
       (tester) async {
+        fixture.exclusiveOwners['session-1'] = 'personal';
         if (boundary == 'refresh') await show(tester, workspace: true);
         final delay = Completer<void>();
-        fixture.searchDelays['session-1'] = delay;
+        fixture.sessionMetadataDelays[('personal', 'session-1')] = delay;
         fixture.liveSessions['personal'] = [
           {
             'id': 'answer-runtime',
@@ -923,7 +914,8 @@ void main() {
         expect(
           fixture.reads.any(
             (read) =>
-                read.$1 == 'sessions/search' && read.$2['q'] == 'session-1',
+                read.$1 == 'sessions/session-1' &&
+                read.$2['profile'] == 'personal',
           ),
           isTrue,
         );
@@ -1161,6 +1153,7 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('working border ${brightness.name} $scale', (tester) async {
+        fixture.exclusiveOwners['session-11'] = 'personal';
         await show(tester, brightness: brightness, scale: scale);
         final row = find.byKey(const ValueKey('chat-personal-session-11'));
         final initialBounds = tester.getRect(row);

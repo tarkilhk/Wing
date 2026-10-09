@@ -144,14 +144,25 @@ void main() {
         );
         await tester.pumpAndSettle();
         final edit = find.byKey(const ValueKey('edit-message-4'));
+        final transcriptScroll = find
+            .descendant(
+              of: find.byKey(const ValueKey('profile-transcript')),
+              matching: find.byType(Scrollable),
+            )
+            .first;
         if (edit.evaluate().isEmpty) {
           await tester.scrollUntilVisible(
             edit,
             160,
-            scrollable: find.byType(Scrollable).first,
+            scrollable: transcriptScroll,
           );
         }
-        await tester.ensureVisible(edit);
+        // Keep the target clear of both fixed chrome and the Latest overlay,
+        // then finish the reversed transcript's layout before measuring it.
+        await Scrollable.ensureVisible(tester.element(edit), alignment: 0.5);
+        await tester.pumpAndSettle();
+        expect(tester.widget<IconButton>(edit).onPressed, isNotNull);
+        expect(edit.hitTestable(), findsOneWidget);
         await tester.tap(edit);
         await tester.pumpAndSettle();
         tester.view.viewInsets = FakeViewPadding(

@@ -221,7 +221,19 @@ void main() {
           );
           if (scale == 1) {
             final title = find.text('Find budget car rental in Perth');
-            expect(tester.getRect(selector).right, tester.getRect(title).right);
+            final scope = tester.getRect(
+              find.byKey(const ValueKey('chat-scope-inline')),
+            );
+            final target = tester.getRect(selector);
+            expect(target.right, scope.right);
+            expect(target.left, greaterThanOrEqualTo(scope.left));
+            expect(target.top, greaterThanOrEqualTo(scope.top));
+            expect(target.bottom, lessThanOrEqualTo(scope.bottom));
+            expect(
+              target.top,
+              greaterThanOrEqualTo(tester.getRect(title).bottom),
+            );
+            expect(selector.hitTestable(), findsOneWidget);
           }
           await screenshot(tester, 'header-assigned-${brightness.name}-$scale');
         },

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 
 /// Authored UI data, never used by the production application or a live server.
@@ -18,6 +19,7 @@ class ProfileBrowserFixture {
   bool failSearch = false;
   final historyDelays = <(String, int), Completer<void>>{};
   final searchDelays = <String, Completer<void>>{};
+  final sessionMetadataDelays = <(String, String), Completer<void>>{};
   final liveSessions = <String, List<Map<String, dynamic>>>{};
   List<Map<String, dynamic>> historyRows(String profile, String id) => [];
   List<Map<String, dynamic>> searchRows(String profile, String query) => [
@@ -163,6 +165,15 @@ class ProfileBrowserFixture {
         await searchDelays[q]?.future;
         if (failSearch) throw StateError('Search offline');
         return {'results': rows};
+      }
+      if (RegExp(r'^sessions/[^/]+$').hasMatch(path)) {
+        final id = Uri.decodeComponent(path.split('/')[1]);
+        await sessionMetadataDelays[(scope.profileName, id)]?.future;
+        final rows = sessions(
+          scope.profileName,
+        ).where((row) => row['id'] == id).toList();
+        if (rows.isEmpty) throw DashboardSessionNotFound(path);
+        return rows.single;
       }
       if (path != 'sessions') {
         throw StateError('Unhandled fixture GET: $path');

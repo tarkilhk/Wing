@@ -335,16 +335,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(reads, ['$folder/report.md', '$folder/details.md']);
     expect(find.text('Appendix contents'), findsOneWidget);
+    final contentTop = tester.getRect(find.byType(AppBar)).bottom;
     expect(
       tester.getRect(find.text('The six health checks')).top,
-      inInclusiveRange(56, 156),
+      inInclusiveRange(contentTop, contentTop + 100),
     );
     await tester.tap(find.text('Corrections', findRichText: true));
     await tester.pumpAndSettle();
     expect(reads, ['$folder/report.md', '$folder/details.md']);
     expect(
       tester.getRect(find.text('Exact correction targets')).top,
-      inInclusiveRange(56, 156),
+      inInclusiveRange(contentTop, contentTop + 100),
     );
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();

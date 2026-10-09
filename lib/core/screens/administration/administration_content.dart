@@ -68,14 +68,7 @@ class _HermesAdministrationContentState
   late final _healthSession = widget.controller.healthSession(
     repository: widget.repository,
   );
-  late final _server = widget.healthOnly
-      ? _healthSession.server
-      : widget.repository ??
-            AdministrationRepository.forConnection(
-              widget.controller.access,
-              widget.controller.connectionIdentity,
-              connectionStatus: widget.controller.connectionStatus,
-            );
+  late final _server = _healthSession.server;
   String _search = '';
   ProfileOverviewSession? _overviewSession;
   String? _healthProfileName;
@@ -225,10 +218,6 @@ class _HermesAdministrationContentState
     _overviewSession?.removeListener(_overviewChanged);
     _overviewSession?.dispose();
     _searchInput.dispose();
-    if (!widget.healthOnly && widget.repository == null) {
-      final server = _server;
-      scheduleMicrotask(server.close);
-    }
     super.dispose();
   }
 
