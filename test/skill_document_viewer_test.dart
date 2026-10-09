@@ -486,7 +486,8 @@ void main() {
                   )
                   .decoration!
               as BoxDecoration;
-      expect(gripPaint().color, Colors.transparent);
+      expect(gripPaint().color!.a, closeTo(.28, .01));
+      expect((gripPaint().border! as Border).top.color.a, closeTo(.55, .01));
       expect(gripPaint().boxShadow, isEmpty);
       await tester.tap(grip);
       await tester.pumpAndSettle();
@@ -498,7 +499,7 @@ void main() {
       await gesture.moveBy(const Offset(0, 8));
       await tester.pump(const Duration(milliseconds: 60));
       expect(find.text('1 · First'), findsOneWidget);
-      expect(gripPaint().color, isNot(Colors.transparent));
+      expect(gripPaint().color!.a, 1);
       expect(tester.getCenter(grip).dy, closeTo(position.dy + 8, .5));
       await gesture.moveBy(const Offset(0, 32));
       await tester.pump();
@@ -506,7 +507,8 @@ void main() {
       await gesture.cancel();
       await tester.pumpAndSettle();
       expect(find.textContaining(' · First'), findsNothing);
-      expect(gripPaint().color, Colors.transparent);
+      expect(gripPaint().color!.a, closeTo(.28, .01));
+      expect((gripPaint().border! as Border).top.color.a, closeTo(.55, .01));
       expect(gripPaint().boxShadow, isEmpty);
       final pending = await tester.startGesture(tester.getCenter(grip));
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);

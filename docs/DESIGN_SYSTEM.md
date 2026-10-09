@@ -716,10 +716,10 @@ dp grip target, 4 dp from the right edge, around a 44 × 44 dp painted button.
 Start its rail 64 dp lower than the original 20%-of-screen placement and keep
 the resting button below the trigger text, including at enlarged text sizes.
 Activate on a 250 ms hold or deliberate 12 dp vertical drag; tolerate small
-finger drift. The idle grip has a transparent background and no shadow, with
-visible muted dots; grabbing it makes it solid. Fade ticks in over 140 ms only
-while scrubbing, and prefix the
-destination preview with its section number. Cancellation, leaving the app and
+finger drift. Keep the idle grip discoverable without obscuring document text:
+use a 28%-opaque accent fill, a 55%-opaque accent outline, high-contrast dots
+and no shadow. Grabbing it makes it solid. Fade ticks in over 140 ms only
+while scrubbing, and prefix the destination preview with its section number. Cancellation, leaving the app and
 disposal must cancel pending activation. Reduced motion suppresses animation.
 
 Contents fits its section count, with at most five equal-height rows visible and
