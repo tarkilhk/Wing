@@ -55,15 +55,22 @@ The Latin font subsets and their OFL notices are checked in.
 
 The opening pairs a conversation with the expanded tool details behind it.
 Profiles, projects and Recents lead the feature story immediately afterward,
-with real Chats and Recents captures side by side. Result handling has a dedicated
-section showing Markdown structure, code controls and file actions. Health and
-Administration each have their own visible screen and reader-facing guide.
-The workflow explorer shows following work, steering a conversation, and reading
-the result. Its appearance controls change the app captures, not the page theme.
+with a Chats capture below its explanation and a Recents capture below its own.
+Result handling shows formatting, code controls, message actions and file actions
+with the corresponding production widgets. Health and Administration each have
+their own visible screen and reader-facing guide. Analytics has its own homepage
+section with the activity grid, model breakdown and token trends.
+The workflow explorer stays focused on following work and steering a conversation.
+Result handling has its own section. Its appearance controls change the app captures, not the page theme.
 Tabs support arrow keys, Home and End. Native disclosures provide answers to
 setup questions. Icon actions retain accessible names and tooltips. The page
 remains readable without JavaScript, and reduced motion disables the opening
-animation. The requirements and provider/server costs remain visible.
+animation. Every screenshot is an enlargement link. The shared native-dialog
+viewer animates from the thumbnail and returns to it on an image tap or outside
+click. Escape and keyboard openings are immediate; reduced motion removes
+movement. It locks background scrolling, contains focus and restores the trigger
+without changing the reading position. No separate enlargement icon is shown.
+The requirements and provider/server costs remain visible.
 
 Keep descriptions grounded in `FEATURES.md`, the relevant user guide and the
 current production source. Do not add comparative rankings, testimonials,
@@ -76,6 +83,43 @@ Headings name the feature or action. Keep code controls with code, message actio
 with messages, and input attachments with chat composition. Remove slogans,
 implementation commentary and captions that repeat the surrounding text.
 
+## Page and section purposes
+
+These are editorial constraints, not visitor-facing labels. A section earns its
+place by explaining a specific action or outcome and demonstrating the detail
+that makes it easier. Put the relevant screenshot after that explanation, with
+further-reading links last. Avoid disconnected screenshots in guide headers.
+A screenshot may establish context for several controls on the same screen;
+do not repeat it merely to illustrate another sentence.
+
+| Page | Reader question and outcome | Wing detail to demonstrate | Further reading |
+| --- | --- | --- | --- |
+| Home | Can Wing help me run several pieces of work from my phone? | Cross-profile/project navigation, Recents, inspectable activity, reusable results, settings and analytics | Focused guides and download |
+| Profiles and projects | How do I find and organize conversations for different agents and projects? | Combined profile filters, project grouping, pins and retained drafts | Recents; profile settings |
+| Recents | Which chats are running or waiting for me, and how do I return to them? | Running/Needs input filters; opening a chat selects its profile; back returns to Recents | Live controls; Chats organization |
+| Live work | What is the agent doing, and how can I respond or change direction? | Timeline/Tasks/Agents tabs; requests and results; steering/queueing; editable input | Recents; using results |
+| Results | How do I read, reuse or export what the agent produced? | Markdown layout; separate code and message actions; file previews and Android sharing | Tool details; sending attachments |
+| Health | Where is my setup having trouble, and what can I check? | Host/Server/Profile scopes, timestamps, diagnostic findings and targeted repair links | Profile settings; connection recovery |
+| Administration | How do I change the intended agent's configuration without losing my edits? | Selected profile identity; setting search; model/skill/access controls; confirmed saves | Schedules; usage; Health |
+| Scheduled tasks | How do I arrange recurring work and see what a run returned? | Schedule editing, delivery choices, pause/run actions and recent results | Administration; result handling |
+| Usage | Which profiles and models account for my activity and tokens? | Daily activity, period/model breakdowns and clearly explained cost estimates | Model/provider settings |
+| Get connected | What do I need, how do I connect, and what if a check fails? | Install/Cloud/address choices, connection checks and specific recovery steps | Profiles/projects; Recents |
+
+| Homepage section | One message | Demonstration |
+| --- | --- | --- |
+| Opening | Wing is the Android client for your Hermes setup | Actual conversation and expanded tool output |
+| Profiles/projects and Recents | Manage several conversations without losing drafts or the selected profile | Text followed by Chats; Recents text followed by Recents |
+| Follow and steer | Inspect work before deciding whether to correct, queue or stop it | Activity with all three tabs on Timeline; held composer controls |
+| Markdown/code/files | Read and reuse the exact part of an answer you need | Formatted reply; code controls; message actions; file actions, each after its own text |
+| Health and settings | Inspect a problem and change the correct profile's setup from the phone | Health and Administration after their respective explanations |
+| Analytics | See activity and model usage, with cost estimates clearly identified | Production analytics screen; link to the usage guide last |
+| Download and connection | Install Wing with the prerequisites understood | Signed download, requirements and questions; connection links last |
+
+For each edit, check that the heading, explanation, screenshot and final link
+answer the same question. A feature name alone is insufficient: the explanation
+must say what the visitor can do, while the image demonstrates the controls or
+readability that support that outcome. Preserve actual capability limits.
+
 ## App capture provenance
 
 All visible app images use actual Wing widgets with authored demo data, not an
@@ -85,6 +129,8 @@ copy explains capabilities rather than capture tooling or fixtures.
 | Asset | Source |
 | --- | --- |
 | `conversation-{dark,light}.png` | Production `ProfileWorkspaceScreen`, public-safe research history and context-usage fixture |
+| `activity-{dark,light}.png` | Production `ProfileWorkspaceScreen` with authored saved tool calls, a complete todo snapshot and a delegated-agent result; actual Timeline/Tasks/Agents tabs remain on Timeline with code expanded |
+| `code-{dark,light}.png`, `message-actions-{dark,light}.png`, `files-{dark,light}.png` | Focused production `ProfileMessage` captures of a code block, reply actions and output file actions, respectively |
 | `steer-{dark,light}.png` | Same screen with a live message-start fixture, a drafted instruction and the actual held composer overlay |
 | `chats-{dark,light}.png` | Production chat browser with demo conversations grouped into Launch and Research projects across two profiles |
 | `recents-{dark,light}.png` | Production `ProfileWorkspaceScreen` Recents destination, with recent messages, one running chat and one needing input across two profiles |
@@ -125,15 +171,20 @@ node tools/website/review.cjs \
 ```
 
 It checks five widths (320, 390, 768, 1024 and 1440), both app appearances and
-every homepage workflow, then all nine guides at the same widths. It also checks
+both live-work workflows, then all nine guides at the same widths. It also checks
 assets, local links and cross-page anchors, keyboard tabs, disclosures, visible
 text contrast, 200% text on every page, reduced motion and reading without
-JavaScript. Shared navigation uses real anchors; guide reading has no JavaScript
+JavaScript. It opens every visible screenshot, checks enlargement and complete
+viewport fit, closes by image/outside/close-button/Escape, checks keyboard and
+reduced-motion behavior, interrupts entry, verifies focus restoration and reading
+position, and checks that further reading follows the screenshots. Shared navigation uses real anchors; guide reading has no JavaScript
 dependency. No client router or deployment fallback is required.
 Screenshots and the verification report go under ignored `build/website-preview/`.
 To use locally installed browser executables, pass a fourth argument naming a
 JSON file that maps `chromium`, `firefox` and `webkit` to their executable paths.
-Keep that machine-specific file outside tracked source.
+Keep that machine-specific file outside tracked source. To repeat only affected
+engines, append a fifth argument such as `firefox,webkit` after the executable
+configuration. The default reviews all three engines.
 Inspect those renders before accepting a design; automated checks do not judge
 composition or copy quality. Browser engines do not substitute for a physical
 Android browser acceptance run.

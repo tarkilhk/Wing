@@ -14185,6 +14185,46 @@
       "path": "website/usage.html",
       "area": "website",
       "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/activity-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/activity-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/code-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/code-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/message-actions-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/message-actions-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/files-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/files-light.png",
+      "area": "website",
+      "provenance": "tracked"
     }
   ],
   "direct_dependencies": {

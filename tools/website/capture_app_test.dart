@@ -159,6 +159,81 @@ class _WebsiteFixture extends ProfileBrowserFixture {
   }
 }
 
+class _ActivityFixture extends _WebsiteFixture {
+  @override
+  List<Map<String, dynamic>> historyRows(String profile, String id) => [
+    {
+      'id': 21,
+      'role': 'user',
+      'content': 'Check the source dates and save the comparison.',
+    },
+    {
+      'id': 22,
+      'role': 'tool',
+      'tool_name': 'todo',
+      'content': jsonEncode({
+        'revision': 1,
+        'todos': [
+          {
+            'id': 'read',
+            'content': 'Read the seven source records',
+            'status': 'completed',
+          },
+          {
+            'id': 'dates',
+            'content': 'Check publication dates',
+            'status': 'completed',
+          },
+          {
+            'id': 'report',
+            'content': 'Save the comparison report',
+            'status': 'completed',
+          },
+        ],
+      }),
+    },
+    {
+      'id': 23,
+      'role': 'tool',
+      'tool_name': 'delegate_task',
+      'args': {
+        'tasks': [
+          {'goal': 'Check the publication dates in all seven source records.'},
+        ],
+      },
+      'content': jsonEncode({
+        'results': [
+          {
+            'task_index': 0,
+            'status': 'completed',
+            'summary': 'All seven records include a publication date.',
+            'duration_seconds': 12,
+          },
+        ],
+      }),
+    },
+    {
+      'id': 24,
+      'role': 'tool',
+      'tool_name': 'execute_code',
+      'args': {
+        'code':
+            'from pathlib import Path\n\nrows = Path("research.csv").read_text().splitlines()\nprint(f"Checked {len(rows) - 1} records")',
+      },
+      'content': jsonEncode({
+        'output': 'Checked 7 records\nSource dates preserved',
+        'success': true,
+      }),
+    },
+    {
+      'id': 25,
+      'role': 'assistant',
+      'content':
+          'The seven records are checked. The comparison is saved in `comparison.md`.',
+    },
+  ];
+}
+
 class _WebsiteAdministration extends AdministrationDesignFixture {
   @override
   Future<Map<String, dynamic>> send(
@@ -519,6 +594,102 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 250));
       await capture(tester, 'tool-${brightness.name}');
+
+      tester.view.physicalSize = const Size(390, 844);
+      final activityController = ProfileWorkspaceController(
+        access: controller.access,
+        connectionIdentity: 'website-activity',
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: _ActivityFixture().gateway,
+      );
+      addTearDown(activityController.dispose);
+      await activityController.initialize();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: frame,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: wingTheme(brightness),
+            home: ProfileWorkspaceScreen(
+              key: const ValueKey('activity-capture'),
+              controller: activityController,
+            ),
+          ),
+        ),
+      );
+      await activityController.openSession(
+        ProfileSessionKey(activityController.current!.scope, 'newest'),
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.tap(find.text('Activity'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Timeline'), findsOneWidget);
+      expect(find.text('Tasks 3'), findsOneWidget);
+      expect(find.text('Agents 1'), findsOneWidget);
+      await tester.settleMarkdown();
+      final transcript = tester.widget<ListView>(
+        find.byKey(const ValueKey('profile-transcript')),
+      );
+      transcript.controller!.jumpTo(0);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Ran code').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('Ran code'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.settleMarkdown();
+      transcript.controller!.jumpTo(0);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Timeline').hitTestable(), findsOneWidget);
+      expect(find.text('Tasks 3').hitTestable(), findsOneWidget);
+      expect(find.text('Agents 1').hitTestable(), findsOneWidget);
+      await capture(tester, 'activity-${brightness.name}');
+
+      for (final detail in [
+        (
+          name: 'code',
+          height: 290.0,
+          content:
+              '```python\nfrom pathlib import Path\nreport = Path("workshop-plan.md")\nprint(report.read_text())\n```',
+        ),
+        (
+          name: 'message-actions',
+          height: 190.0,
+          content:
+              'Book a room for 12 people and plan a 90-minute session. Ask about accessibility needs in the invitation.',
+        ),
+        (
+          name: 'files',
+          height: 260.0,
+          content:
+              'The workshop plan is ready.\n\n[workshop-plan.md](/workspace/workshop-plan.md)',
+        ),
+      ]) {
+        tester.view.physicalSize = Size(390, detail.height);
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: frame,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              home: Scaffold(
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: ProfileMessage(
+                    message: TranscriptMessage.fromRow({
+                      'role': 'assistant',
+                      'content': detail.content,
+                    }),
+                    onOpenRemoteFile: (_) async {},
+                    onDownloadRemoteFile: (_) async => true,
+                    onReadAloud: () {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await capture(tester, '${detail.name}-${brightness.name}');
+      }
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }

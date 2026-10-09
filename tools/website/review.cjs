@@ -97,6 +97,81 @@ async function checkLocalLinks(page) {
   }
 }
 
+async function checkScreenshotViewer(page, label, all = false) {
+  // The hero receipt overlaps the lower corner of the conversation screenshot.
+  // Click the exposed upper area, as a visitor would.
+  const clickThumbnail = async thumbnail => {
+    await thumbnail.scrollIntoViewIfNeeded();
+    const box = await thumbnail.boundingBox();
+    await thumbnail.click({ position: { x: box.width / 2, y: Math.min(40, box.height / 4) } });
+  };
+  assert.equal(await page.locator('.expand-image').count(), 0, `${label}: no separate enlargement buttons`);
+  const links = page.locator('main [data-screenshot]');
+  const screenshotCount = await page.locator('main img[src^="assets/screenshots/"]').count();
+  assert.equal(await links.count(), screenshotCount, `${label}: every screenshot is a link`);
+  const candidates = all ? await links.all() : [links.first()];
+  for (const thumbnail of candidates) {
+    if (!await thumbnail.isVisible()) continue;
+    const source = await thumbnail.locator('img').getAttribute('src');
+    assert.equal(await thumbnail.getAttribute('href'), source, `${label}: thumbnail opens its current appearance`);
+    await thumbnail.scrollIntoViewIfNeeded();
+    const original = await thumbnail.boundingBox();
+    const scroll = await page.evaluate(() => scrollY);
+    await clickThumbnail(thumbnail);
+    const dialog = page.locator('.screenshot-viewer[open]');
+    await dialog.waitFor({ state: 'visible' });
+    await page.waitForFunction(() => !document.querySelector('.viewer-image').getAnimations().some(animation => animation.playState === 'running'));
+    assert.equal(await dialog.locator('img').getAttribute('src').then(src => new URL(src).pathname.endsWith(source)), true, `${label}: displayed screenshot`);
+    const large = await dialog.locator('img').boundingBox();
+    assert.ok(large.width > original.width, `${label}: screenshot enlarges`);
+    const viewport = page.viewportSize();
+    assert.ok(large.x >= 0 && large.y >= 0 && large.x + large.width <= viewport.width + 1 && large.y + large.height <= viewport.height + 1, `${label}: entire screenshot fits`);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY), 'hidden', `${label}: page scroll locked`);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => !!document.activeElement.closest('dialog')), true, `${label}: focus remains in viewer`);
+    await dialog.locator('.viewer-picture').click();
+    await dialog.waitFor({ state: 'hidden' });
+    assert.ok(Math.abs(await page.evaluate(() => scrollY) - scroll) < 1, `${label}: returns to the same page position`);
+    assert.equal(await thumbnail.evaluate(el => el === document.activeElement && getComputedStyle(el).visibility === 'visible'), true, `${label}: focus and thumbnail restored`);
+  }
+  if (!await links.count()) return;
+  const thumbnail = links.first();
+  await clickThumbnail(thumbnail);
+  await page.locator('.screenshot-viewer[open]').waitFor({ state: 'visible' });
+  // An outside click during entry must interrupt smoothly and complete the return.
+  await page.mouse.click(4, 4);
+  await page.locator('.screenshot-viewer[open]').waitFor({ state: 'hidden' });
+  await thumbnail.focus();
+  await page.keyboard.press('Enter');
+  await page.locator('.screenshot-viewer[open]').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('.viewer-image').evaluate(el => el.getAnimations().length), 0, `${label}: keyboard opens without movement`);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.screenshot-viewer[open]').count(), 0, `${label}: Escape closes immediately`);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await clickThumbnail(thumbnail);
+  await page.locator('.screenshot-viewer[open]').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('.viewer-image').evaluate(el => el.getAnimations().length), 0, `${label}: reduced motion opens without movement`);
+  await page.locator('.viewer-close').click();
+  assert.equal(await page.locator('.screenshot-viewer[open]').count(), 0, `${label}: close control works`);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+}
+
+async function checkReadingOrder(page, label) {
+  const failures = await page.evaluate(() => {
+    const results = [];
+    for (const group of document.querySelectorAll('.feature-story, .work-panel, .control-features article, .guide-copy section')) {
+      if (!group.getBoundingClientRect().height) continue;
+      const images = [...group.querySelectorAll('figure')];
+      const links = [...group.querySelectorAll(':scope > .text-link')];
+      for (const link of links) {
+        if (images.some(image => image.getBoundingClientRect().bottom > link.getBoundingClientRect().top + 1)) results.push(link.textContent.trim());
+      }
+    }
+    return results;
+  });
+  assert.deepEqual(failures, [], `${label}: further reading follows screenshots`);
+}
+
 async function review(engineName) {
   const browser = await playwright[engineName].launch(launchOptions(engineName));
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -105,6 +180,14 @@ async function review(engineName) {
   page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
   const response = await page.goto(baseUrl);
   assert.equal(response.status(), 200);
+  // Keyboard navigation can reach an offscreen image before lazy loading starts.
+  const coldScreenshot = page.locator('#panel-follow [data-screenshot]');
+  await coldScreenshot.focus();
+  await page.keyboard.press('Enter');
+  await page.locator('.screenshot-viewer[open]').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('.viewer-image').evaluate(el => el.getAnimations().length), 0, `${engineName}: keyboard opens a lazy screenshot without movement`);
+  await page.keyboard.press('Escape');
+  assert.equal(await coldScreenshot.evaluate(el => el === document.activeElement), true, `${engineName}: lazy screenshot focus restored`);
   await page.addStyleTag({ content: 'html { scroll-behavior: auto !important; }' });
   await loadedImages(page);
   assert.equal(await page.locator('main').count(), 1, 'One main landmark');
@@ -115,14 +198,15 @@ async function review(engineName) {
     for (const theme of ['dark', 'light']) {
       await page.locator(`[data-theme="${theme}"]`).click();
       await loadedImages(page);
-      for (const name of ['follow', 'steer', 'results']) {
+      for (const name of ['follow', 'steer']) {
         await page.locator(`#tab-${name}`).click();
         assert.equal(await page.locator('[role="tabpanel"]:visible').count(), 1);
         assert.equal(await page.locator(`#tab-${name}`).getAttribute('aria-selected'), 'true');
         assert.equal(await page.locator(`#panel-${name} img`).getAttribute('src').then(src => src.endsWith(`-${theme}.png`)), true);
         const image = await page.locator(`#panel-${name} img`).getAttribute('src');
-        assert.equal(await page.locator(`#panel-${name} [data-expand-image]`).getAttribute('href'), image);
+        assert.equal(await page.locator(`#panel-${name} [data-screenshot]`).getAttribute('href'), image);
         await checkLayout(page, `${engineName} ${width} ${theme} ${name}`);
+        await checkReadingOrder(page, `${engineName} ${width} ${name}`);
       }
     }
     await page.locator('#tab-follow').click();
@@ -135,13 +219,19 @@ async function review(engineName) {
     }
   }
 
+  assert.equal(await page.locator('#analytics img[src*="analytics"]').count(), 1, 'Analytics has its own illustrated homepage section');
+  assert.equal(await page.locator('#panel-follow img').getAttribute('data-app-image'), 'activity', 'Activity is the first workflow example');
+  await checkScreenshotViewer(page, `${engineName} homepage`, true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await checkScreenshotViewer(page, `${engineName} phone homepage`);
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.locator('#tab-follow').focus();
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.locator('#tab-steer').getAttribute('aria-selected'), 'true');
   assert.equal(await page.evaluate(() => document.activeElement.id), 'tab-steer');
   assert.equal(await page.locator('.work-stage').getAttribute('data-pointer-change'), 'false', 'Keyboard changes do not animate');
   await page.keyboard.press('End');
-  assert.equal(await page.locator('#tab-results').getAttribute('aria-selected'), 'true');
+  assert.equal(await page.locator('#tab-steer').getAttribute('aria-selected'), 'true');
   await page.keyboard.press('Home');
   assert.equal(await page.locator('#tab-follow').getAttribute('aria-selected'), 'true');
   for (const question of await page.locator('details').all()) {
@@ -177,11 +267,13 @@ async function review(engineName) {
     for (const width of [320, 390, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: width < 600 ? 844 : 1000 });
       await checkLayout(page, `${engineName} ${name} ${width}`);
+      await checkReadingOrder(page, `${engineName} ${name} ${width}`);
       if (width === 390 || width === 1440) {
         await page.evaluate(() => scrollTo(0, 0));
         await page.screenshot({ path: resolve(output, `${engineName}-${name}-${width}.png`), fullPage: true });
       }
     }
+    if (await page.locator('[data-screenshot]').count()) await checkScreenshotViewer(page, `${engineName} ${name}`, true);
     for (const width of [390, 1024]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.evaluate(() => document.documentElement.style.fontSize = '200%');
@@ -195,15 +287,17 @@ async function review(engineName) {
   const staticBrowser = await playwright[engineName].launch(launchOptions(engineName));
   const staticPage = await staticBrowser.newPage({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
   await staticPage.goto(baseUrl);
-  assert.equal(await staticPage.locator('[role="tabpanel"]:visible').count(), 3, 'All workflows remain readable without JavaScript');
+  assert.equal(await staticPage.locator('[role="tabpanel"]:visible').count(), 2, 'All workflows remain readable without JavaScript');
   await checkLayout(staticPage, `${engineName} JavaScript disabled`);
   await staticBrowser.close();
-  return `${engineName}: 30 homepage viewport/theme/workflow combinations; nine guides at five widths; local links and cross-page anchors; keyboard tabs; disclosures; text contrast; 200% text on every page; reduced motion; no-JavaScript reading.`;
+  return `${engineName}: 20 homepage viewport/theme/workflow combinations; nine guides at five widths; local links and cross-page anchors; keyboard tabs; disclosures; text contrast; 200% text on every page; reduced motion; screenshot enlargement, return, outside click, Escape, keyboard focus and interruption; section reading order; no-JavaScript reading.`;
 }
 
 (async () => {
   const reports = [];
-  for (const engine of ['chromium', 'firefox', 'webkit']) {
+  const engines = process.argv[6]?.split(',') || ['chromium', 'firefox', 'webkit'];
+  for (const engine of engines) {
+    assert.ok(['chromium', 'firefox', 'webkit'].includes(engine), `Unknown browser engine: ${engine}`);
     reports.push(await review(engine));
     console.log(reports.at(-1));
   }
