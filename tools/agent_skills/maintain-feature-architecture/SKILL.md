@@ -73,6 +73,10 @@ message does not establish release. Keep APK assembly under the shared build
 lease. Reuse completed checks according to the verification policy below.
 
 
+Include affected shared UI contracts in a feature handoff. Adding selection
+controls requires `test/studio_selection_test.dart` alongside the feature tests;
+it checks the Studio selection rule across production sources.
+
 Use the applicable independent commands in `tools/architecture/README.md`.
 File-set changes require `python3 tools/architecture/rules/authored_census.py`;
 Dart role changes require `dart run tools/architecture/rules/role_inventory.dart`;

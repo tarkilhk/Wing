@@ -419,6 +419,7 @@ class _BotsContentState extends State<BotsContent> {
                                     ('Needs input', BotPresence.needsInput),
                                   ])
                                 ChoiceChip(
+                                  showCheckmark: false,
                                   label: Text(label),
                                   selected: view.filter == filter,
                                   onSelected: (_) => _change(
