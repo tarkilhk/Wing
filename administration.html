@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0c304a">
-<meta name="description" content="Look after each agent from your phone. Wing brings profile identity, models, capabilities, access and scheduled tasks together, while keeping the selected profile visible.">
-<title>Hermes administration · Wing</title>
+<meta name="description" content="Change models, agent instructions, skills and provider access from your phone. Choose a profile before editing its settings.">
+<title>Profile settings · Wing</title>
 <link rel="icon" type="image/png" href="assets/wing.png">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -24,69 +24,59 @@
 </nav>
 </header>
 </div>
-<nav class="topic-nav page-width" aria-label="Wing feature guides"><a href="workspaces.html">Profiles & projects</a><a href="live-work.html">Live work</a><a href="results.html">Results</a><a href="health.html">Health</a><a href="administration.html" aria-current="page">Administration</a><a href="get-started.html">Get connected</a>
+<nav class="topic-nav page-width" aria-label="Wing feature guides"><a href="workspaces.html">Profiles &amp; projects</a><a href="recents.html">Recents</a><a href="live-work.html">Live work</a><a href="results.html">Results</a><a href="health.html">Health</a><a href="administration.html" aria-current="page">Administration</a><a href="scheduled-tasks.html">Schedules</a><a href="usage.html">Usage</a><a href="get-started.html">Get connected</a>
 </nav>
 <main id="main">
 <section class="guide-hero page-width" aria-labelledby="guide-title">
 <div>
-<h1 id="guide-title">Your setup.<br> Your way of working.</h1>
-<p class="guide-lede">Look after each agent from your phone. Wing brings profile identity, models, capabilities, access and scheduled tasks together, while keeping the selected profile visible.</p>
-<p class="guide-demo">Real Wing interfaces · Demo content</p><a class="text-link" href="#guide-content">Take a closer look</a>
+<h1 id="guide-title">Manage your<br> Hermes profiles</h1>
+<p class="guide-lede">Change models, agent instructions, skills and provider access from your phone. Choose a profile before editing its settings.</p>
+<a class="text-link" href="#guide-content">Read this guide</a>
 </div>
 <figure class="guide-shot ">
 <div class="app-frame"><img src="assets/screenshots/administration-dark.png" width="780" height="1688" alt="Wing Administration with profile selector, settings search and grouped controls" loading="lazy">
 </div><a class="icon-button expand-image" href="assets/screenshots/administration-dark.png" target="_blank" rel="noopener" aria-label="Open full wing administration with profile selector, settings search and grouped controls screenshot" title="Open full screenshot">
 <svg><use href="#expand"/></svg></a>
-<figcaption>The selected profile stays visible while you manage it.
-</figcaption>
 </figure>
 </section>
 <div class="guide-layout page-width" id="guide-content">
 <aside>
 <nav class="guide-toc" aria-label="On this page">
-<p>On this page</p><a href="#profile">A profile with a purpose.</a><a href="#capabilities">Put the right capabilities in reach.</a><a href="#schedules">Give recurring work a place.</a><a href="#find">Find a setting. Keep its context.</a><a href="#usage">Understand where the work goes.</a>
+<p>On this page</p><a href="#profile">Set models and agent instructions</a><a href="#capabilities">Manage skills, providers and connectors</a><a href="#find">Find a setting and review changes</a><a href="#schedules">Manage scheduled tasks</a><a href="#usage">Review activity and token usage</a>
 </nav>
 </aside>
 <div class="guide-copy">
 <section id="profile" aria-labelledby="profile-title">
-<h2 id="profile-title">A profile with a purpose.</h2>
-<p>Choose the profile before changing its supported settings. Edit the agent’s description and instructions, set its model defaults and reasoning options, and adjust memory budgets and supported behavior.</p>
-<p>Profile defaults apply to new conversations. The model for an existing conversation has its own control in Chats.</p>
-<p>Create, clone configuration, rename or delete supported profiles from Manage profiles. Profile colors are local to this device and connection, helping you recognize the agent throughout Wing.</p>
+<h2 id="profile-title">Set models and agent instructions</h2>
+<p>Edit the agent description and instructions. Choose model defaults, reasoning options where available, and memory settings.</p>
+<p>Profile defaults apply to new conversations. Change the model for an existing conversation in Chats.</p>
+<p>Manage profiles lets you create a profile, clone its configuration, rename it or delete a non-default profile.</p>
 </section>
 <section id="capabilities" aria-labelledby="capabilities-title">
-<h2 id="capabilities-title">Put the right capabilities in reach.</h2>
-<p>Browse installed skills and their formatted instructions. Inspect provenance, discover skills through the official Hub, and use supported installation and update controls.</p>
-<p>Skills and tools separates enabled capabilities from the ones that need setup. MCP connectors bring external tools and sources into your agent’s setup. Provider access and connectors have their own settings and status, so credentials and integrations stay with the intended profile.</p>
-</section>
-<section id="schedules" aria-labelledby="schedules-title">
-<h2 id="schedules-title">Give recurring work a place.</h2>
-<p>Manage server-run scheduled tasks for the profile: search and filter the list, open instructions, create or edit a schedule, and review recent runs.</p>
-<p>Choose from supported schedules and server templates. Pause, resume or run a task when you need to. Hermes executes the work; Wing gives you the controls and returned results.</p>
-<p>A recent run can open its conversation or show supplied script output. A paused schedule does not stop a run already underway.</p>
+<h2 id="capabilities-title">Manage skills, providers and connectors</h2>
+<p>Read installed skills and their instructions, inspect their source, or discover skills through the official Hub. Skills and tools shows what is enabled and what still needs setup.</p>
+<p>Manage model-provider access and MCP connectors for the selected profile. Connectors give the agent access to external tools and data.</p>
 </section>
 <section id="find" aria-labelledby="find-title">
-<h2 id="find-title">Find a setting. Keep its context.</h2>
-<p>Search Administration using the task you have in mind. Results show the setting’s location and take you to the relevant field.</p>
-<p>Editors identify their target and unsaved changes. Failed or uncertain saves retain the form and its explanation. Wing reads back supported changes so a submitted request is not confused with a confirmed result.</p>
+<h2 id="find-title">Find a setting and review changes</h2>
+<p>Search Administration to jump to a setting. Editors show the profile you are changing and keep unsaved edits if a save fails or its outcome is uncertain.</p>
+<p>Wing reads back settings to confirm changes. Controls depend on what the connected Hermes server makes available.</p>
+</section>
+<section id="schedules" aria-labelledby="schedules-title">
+<h2 id="schedules-title">Manage scheduled tasks</h2>
+<p>Create a recurring task, edit its instructions or check recent runs for this profile.</p>
+<a class="text-link" href="scheduled-tasks.html">Schedules and recent runs</a>
 </section>
 <section id="usage" aria-labelledby="usage-title">
-<h2 id="usage-title">Understand where the work goes.</h2>
-<p>Hermes analytics shows activity, token trends and model breakdowns across available time ranges. Estimated costs and subscription API-equivalent values are labeled as estimates.</p>
-<figure class="guide-shot guide-inline-shot">
-<div class="app-frame"><img src="assets/screenshots/analytics-dark.png" width="780" height="1266" alt="Wing Hermes analytics with activity, token usage and estimated cost" loading="lazy">
-</div><a class="icon-button expand-image" href="assets/screenshots/analytics-dark.png" target="_blank" rel="noopener" aria-label="Open full wing hermes analytics with activity, token usage and estimated cost screenshot" title="Open full screenshot">
-<svg><use href="#expand"/></svg></a>
-<figcaption>Activity and usage, with estimates clearly labeled.
-</figcaption>
-</figure>
-<p>Health is a separate destination for host resources, diagnostics and profile checks.</p><a class="text-link" href="health.html">Explore Health</a>
+<h2 id="usage-title">Review activity and token usage</h2>
+<p>Open Hermes analytics to see activity over time, token usage and model breakdowns for a profile.</p>
+<a class="text-link" href="usage.html">Explore usage charts</a>
 </section>
 </div>
 </div>
 <div class="guide-next page-width">
-<h2>Keep exploring.</h2>
-<nav aria-label="Related guides"><a class="text-link" href="health.html">Check the setup</a><a class="text-link" href="workspaces.html">Organize work across profiles</a>
+<h2>Related guides</h2>
+<nav aria-label="Related guides"><a class="text-link" href="health.html">Check profile health</a><a class="text-link" href="workspaces.html">Organize conversations</a>
 </nav><a class="button button-navy" href="https://github.com/tarkilhk/Wing/releases/latest">Download Wing</a>
 <p>Android 7.0+ · Requires a reachable Hermes server</p>
 </div>

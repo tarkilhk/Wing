@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0c304a">
-<meta name="description" content="Check the machine, the server and the selected profile in one place. Wing keeps their observations distinct, with check times and a path to the settings that need attention.">
+<meta name="description" content="See host resources, run server diagnostics and check the selected profile. Health shows when each result was checked and links to settings that need attention.">
 <title>Hermes health · Wing</title>
 <link rel="icon" type="image/png" href="assets/wing.png">
 <link rel="stylesheet" href="styles.css">
@@ -24,62 +24,57 @@
 </nav>
 </header>
 </div>
-<nav class="topic-nav page-width" aria-label="Wing feature guides"><a href="workspaces.html">Profiles & projects</a><a href="live-work.html">Live work</a><a href="results.html">Results</a><a href="health.html" aria-current="page">Health</a><a href="administration.html">Administration</a><a href="get-started.html">Get connected</a>
+<nav class="topic-nav page-width" aria-label="Wing feature guides"><a href="workspaces.html">Profiles &amp; projects</a><a href="recents.html">Recents</a><a href="live-work.html">Live work</a><a href="results.html">Results</a><a href="health.html" aria-current="page">Health</a><a href="administration.html">Administration</a><a href="scheduled-tasks.html">Schedules</a><a href="usage.html">Usage</a><a href="get-started.html">Get connected</a>
 </nav>
 <main id="main">
 <section class="guide-hero page-width" aria-labelledby="guide-title">
 <div>
-<h1 id="guide-title">Know what<br> needs attention.</h1>
-<p class="guide-lede">Check the machine, the server and the selected profile in one place. Wing keeps their observations distinct, with check times and a path to the settings that need attention.</p>
-<p class="guide-demo">Real Wing interfaces · Demo content</p><a class="text-link" href="#guide-content">Take a closer look</a>
+<h1 id="guide-title">Check your<br> Hermes setup</h1>
+<p class="guide-lede">See host resources, run server diagnostics and check the selected profile. Health shows when each result was checked and links to settings that need attention.</p>
+<a class="text-link" href="#guide-content">Read this guide</a>
 </div>
 <figure class="guide-shot ">
 <div class="app-frame"><img src="assets/screenshots/health-light.png" width="780" height="1688" alt="Wing Hermes health showing host resources, server diagnostics and profile checks" loading="lazy">
 </div><a class="icon-button expand-image" href="assets/screenshots/health-light.png" target="_blank" rel="noopener" aria-label="Open full wing hermes health showing host resources, server diagnostics and profile checks screenshot" title="Open full screenshot">
 <svg><use href="#expand"/></svg></a>
-<figcaption>Host, Server and Profile each have their own observations.
-</figcaption>
 </figure>
 </section>
 <div class="guide-layout page-width" id="guide-content">
 <aside>
 <nav class="guide-toc" aria-label="On this page">
-<p>On this page</p><a href="#host">See the machine behind your agent.</a><a href="#server">Look into a server problem.</a><a href="#profile">Check the agent you are using.</a><a href="#limits">Clear results have clear limits.</a>
+<p>On this page</p><a href="#host">Check CPU, memory and disk</a><a href="#server">Run diagnostics and read logs</a><a href="#profile">Check the selected profile</a><a href="#limits">What the checks establish</a>
 </nav>
 </aside>
 <div class="guide-copy">
 <section id="host" aria-labelledby="host-title">
-<h2 id="host-title">See the machine behind your agent.</h2>
-<p>Host shows the connected machine and available CPU, memory, disk, uptime and load observations. Open its details when you need a closer look, or refresh the resource readings.</p>
-<p>If the server does not supply a measurement, Wing keeps it unavailable. When a refresh fails, the last observation keeps its read time.</p>
+<h2 id="host-title">Check CPU, memory and disk</h2>
+<p>Host shows available CPU, memory and disk readings, uptime and load. Open the machine details for more information or refresh the readings.</p>
+<p>Missing measurements stay unavailable. If a refresh fails, the last reading keeps its timestamp.</p>
 </section>
 <section id="server" aria-labelledby="server-title">
-<h2 id="server-title">Look into a server problem.</h2>
-<p>Server brings Doctor, the security audit and logs together. Diagnostics retain their own progress and results; open a result to read the findings. Logs can be narrowed by category, severity and search.</p>
-<p>A completed diagnostic is an invitation to review what it reported. Wing does not turn separate checks into an overall “everything is healthy” promise.</p>
+<h2 id="server-title">Run diagnostics and read logs</h2>
+<p>Run Doctor or a security audit, then open the result to read the findings. Filter server logs by category and severity, or search for a particular error.</p>
 </section>
 <section id="profile" aria-labelledby="profile-title">
-<h2 id="profile-title">Check the agent you are using.</h2>
-<p>Profile checks cover model access, tool setup, connectors and scheduled tasks. Choose a profile in the header to check that agent’s setup; observations stay with the profile they belong to.</p>
+<h2 id="profile-title">Check the selected profile</h2>
+<p>Profile checks cover model access, tool setup, MCP connectors and scheduled tasks. Switch profiles in the header to check another agent.</p>
 <figure class="guide-shot guide-inline-shot">
 <div class="app-frame"><img src="assets/screenshots/health-profile-dark.png" width="780" height="1120" alt="Wing profile health with model access, tool setup, connectors and scheduled task counts" loading="lazy">
 </div><a class="icon-button expand-image" href="assets/screenshots/health-profile-dark.png" target="_blank" rel="noopener" aria-label="Open full wing profile health with model access, tool setup, connectors and scheduled task counts screenshot" title="Open full screenshot">
 <svg><use href="#expand"/></svg></a>
-<figcaption>Read the check, its scope and its result.
-</figcaption>
 </figure>
-<p>When access needs fixing, Wing opens the owning account editor. Incomplete checks offer a retry. The <strong>What’s checked?</strong> explanation tells you what the checks establish.</p>
+<p>Use <strong>Fix access</strong> to open the account editor when credentials are missing. Retry incomplete checks from Health.</p>
 </section>
 <section id="limits" aria-labelledby="limits-title">
-<h2 id="limits-title">Clear results have clear limits.</h2>
-<p>Model access checks credential resolution, not successful replies or remaining quota. Tool setup checks configuration, connector checks do not exercise every action, and schedule checks do not run jobs.</p>
-<p>Use Health to understand the setup, then use Administration to change its supported settings.</p><a class="text-link" href="administration.html">Explore Administration</a>
+<h2 id="limits-title">What the checks establish</h2>
+<p>Model access checks whether credentials are available; it does not send a model request or check remaining quota. Tool setup checks configuration. Connector checks test a connection, not every tool action. Schedule checks report recorded problems without running the tasks.</p>
+<p>Each check reports its own result. Open <strong>What's checked?</strong> in Health for the details.</p>
 </section>
 </div>
 </div>
 <div class="guide-next page-width">
-<h2>Keep exploring.</h2>
-<nav aria-label="Related guides"><a class="text-link" href="administration.html">Change the right settings</a><a class="text-link" href="get-started.html">Connection help</a>
+<h2>Related guides</h2>
+<nav aria-label="Related guides"><a class="text-link" href="administration.html">Change profile settings</a><a class="text-link" href="get-started.html#connection-help">Connection troubleshooting</a>
 </nav><a class="button button-navy" href="https://github.com/tarkilhk/Wing/releases/latest">Download Wing</a>
 <p>Android 7.0+ · Requires a reachable Hermes server</p>
 </div>
