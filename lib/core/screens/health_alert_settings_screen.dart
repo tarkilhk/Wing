@@ -260,13 +260,6 @@ class _RuleEditorState extends State<_RuleEditor> {
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        'Changes save automatically.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: _SaveError(session: widget.session),
                     ),
                     if (_error != null)
