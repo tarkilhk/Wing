@@ -288,26 +288,35 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                       childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                       title: Text(title, style: theme.textTheme.bodyLarge),
                       subtitle: Text(row.subtitle(_kind), style: metadataStyle),
-                      trailing: CompactSwitch(
-                        semanticLabel: 'Enable $title',
-                        value: row.enabled,
-                        onChanged: !_state.canToggle
-                            ? null
-                            : (value) => _session.toggle(
-                                _kind,
-                                name,
-                                value,
-                                confirm: _confirmEnable,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_skills)
+                            SizedBox.square(
+                              dimension: 48,
+                              child: IconButton(
+                                tooltip: 'Read instructions for $title',
+                                onPressed: () => _readSkill(name),
+                                icon: const Icon(Icons.visibility_outlined),
                               ),
+                            ),
+                          CompactSwitch(
+                            semanticLabel: 'Enable $title',
+                            value: row.enabled,
+                            onChanged: !_state.canToggle
+                                ? null
+                                : (value) => _session.toggle(
+                                    _kind,
+                                    name,
+                                    value,
+                                    confirm: _confirmEnable,
+                                  ),
+                          ),
+                        ],
                       ),
                       expandedCrossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(row.description),
-                        if (_skills)
-                          TextButton(
-                            onPressed: () => _readSkill(name),
-                            child: const Text('Read instructions'),
-                          ),
                         if (!_skills)
                           TextButton.icon(
                             onPressed: _state.busy

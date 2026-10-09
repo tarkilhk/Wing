@@ -53,7 +53,9 @@ capabilities and Not enabled. Installed skills is the adjacent view; the selecto
 stacks at narrow widths or enlarged text. Tool details combine
 separate enablement/setup/platform facts with the owning setup route. Skill library,
 Discover skills and Agent plugins remain distinct secondary destinations in the
-Browse and manage skills menu.
+Browse and manage skills menu. Each installed skill has an eye action beside its
+enablement switch to open instructions directly; expanding the row shows its
+description.
 Installed skill details reuse the same `SkillDocumentViewer` and received-document
 selection as Activity skill reads. The name's copy button copies only the name;
 raw/formatted, share and content-copy controls belong to the instructions card.

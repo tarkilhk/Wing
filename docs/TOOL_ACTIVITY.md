@@ -703,3 +703,22 @@ uninstall, install and read-recovery authority. No synthetic tool call is create
 for administration. `test/administration_screens_test.dart` and
 `test/profile_capabilities_screen_test.dart` guard the shared production entry
 points and preserve exact editor input without issuing a mutation on viewing.
+
+## Plugin skill document envelope, 9 October 2026
+
+Verified current unmodified upstream main
+`b13de7dbcd876f9ba3fb9d64de0e85eec635ba15`,
+`tools/skills_tool_plugin.py::_serve_plugin_skill`: a namespaced main-skill result
+prepends a bracketed bundle-context banner, optionally containing sibling names,
+to the original/preprocessed SKILL.md content. This is a tool-response envelope;
+the dashboard skills/content route reads the underlying file separately.
+
+`SkillDocument.fromReceived` owns presentation parsing for every reader entry.
+Recognize only the producer's leading banner with the matching namespace, then
+extract the initial YAML declaration. Raw content remains the exact received
+string; formatted content and Contents use only the instructions. Ordinary
+introductions and mismatched namespaces remain document text.
+`test/skill_reader_session_test.dart` covers both banner forms, declaration
+extraction and raw preservation; `test/skill_document_viewer_test.dart` checks
+formatted instructions, actual Contents headings and raw mode in both themes
+at ordinary and enlarged text.

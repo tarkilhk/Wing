@@ -216,9 +216,9 @@ void main() {
       await tester.enterText(find.byType(TextField), 'evidence');
       await tester.pumpAndSettle();
       expect(find.text('writing'), findsNothing);
-      await tester.tap(find.text('research'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Read instructions'));
+      expect(find.text('Read instructions'), findsNothing);
+      expect(find.text('Find evidence'), findsNothing);
+      await tester.tap(find.byTooltip('Read instructions for research'));
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
       expect(find.byType(SkillDocumentViewer), findsOneWidget);
