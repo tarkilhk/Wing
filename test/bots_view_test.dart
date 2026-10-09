@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -6,6 +7,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/models/transcript_message.dart';
+import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/core/widgets/bot_avatar.dart';
+import 'package:wing/core/widgets/playful_portrait.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/screens/bots/bots_content.dart';
 import 'package:wing/core/screens/bots/bot_profile_editor.dart';
 import 'package:wing/core/screens/bots/bot_settings_screen.dart';
@@ -15,6 +22,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'support/bots_fixture.dart';
 import 'support/administration_fixture.dart';
 import 'support/profile_browser_fixture.dart';
+import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -22,6 +30,44 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 
 const _export = bool.fromEnvironment('STUDIO_REVIEW');
+
+class _BotConversationBrowser extends ProfileBrowserFixture {
+  @override
+  List<Map<String, dynamic>> sessions(String profile) => [
+    ...super.sessions(profile),
+    {
+      'id': 'canonical-root',
+      'title': 'Bot Chat',
+      'profile': profile,
+      'last_active': now,
+      'unread': false,
+    },
+    {
+      'id': 'canonical-tip',
+      'title': 'Compacted conversation',
+      'profile': profile,
+      'last_active': now,
+      'unread': false,
+    },
+    {
+      'id': 'ordinary',
+      'title': 'Bot Chat',
+      'profile': profile,
+      'last_active': now,
+      'unread': false,
+    },
+  ];
+
+  @override
+  List<Map<String, dynamic>> historyRows(String profile, String id) => [
+    {'id': 1, 'role': 'user', 'content': 'Can you help me plan my week?'},
+    {
+      'id': 2,
+      'role': 'assistant',
+      'content': 'Of course. What would you like to make time for this week?',
+    },
+  ];
+}
 
 class _ReviewBinding extends AutomatedTestWidgetsFlutterBinding {
   @override
@@ -285,6 +331,8 @@ void main() {
           await tester.pageBack();
           await tester.pumpAndSettle();
           await tester.scrollUntilVisible(find.text('Duplicate bot'), 240);
+          await tester.ensureVisible(find.text('Duplicate bot'));
+          await tester.pumpAndSettle();
           await tester.tap(find.text('Duplicate bot'));
           await tester.pumpAndSettle();
           expect(
@@ -588,7 +636,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
       final appPreferences = AppPreferences(preferences);
-      final browser = ProfileBrowserFixture();
+      final browser = _BotConversationBrowser();
       final controller = ProfileWorkspaceController(
         access: ConnectionAccess(
           connection: SavedConnection(
@@ -644,6 +692,25 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.current!.chat!.key.sessionId, 'pin-one');
       expect(controller.current!.chat!.key.workspace.profileName, 'personal');
+      expect(find.byType(BotAvatar), findsOneWidget);
+      final chatScaffold = tester.state<ScaffoldState>(
+        find.byType(Scaffold).first,
+      );
+      chatScaffold.openDrawer();
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<AppDrawer>(find.byType(AppDrawer)).selected,
+        AppDestination.chats,
+      );
+      await tester.tap(find.byKey(const ValueKey('nav-bots')));
+      await tester.pumpAndSettle();
+      bots.profiles.single['ui_meta']['hermes-bots']['shape'] = 'triangle';
+      await tester.tap(find.text('Atlas').last);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<BotAvatar>(find.byType(BotAvatar)).shape,
+        'triangle',
+      );
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(BotsContent), findsOneWidget);
@@ -660,4 +727,218 @@ void main() {
       appPreferences.dispose();
     },
   );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'canonical bot name and reply avatar in ${brightness.name} at $scale',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          final preferences = await SharedPreferences.getInstance();
+          final appPreferences = AppPreferences(preferences);
+          final browser = _BotConversationBrowser();
+          final controller = ProfileWorkspaceController(
+            access: ConnectionAccess(
+              connection: SavedConnection(
+                id: 'host',
+                label: 'Home server',
+                host: 'localhost',
+                port: 1,
+                apiKey: '',
+              ),
+              dashboardOAuth: null,
+            ),
+            connectionIdentity: 'instance-1',
+            preferences: preferences,
+            appPreferences: appPreferences,
+            gatewayFactory: browser.gateway,
+          );
+          await controller.initialize();
+          final scope = controller.current!.scope;
+          await controller.openSession(
+            ProfileSessionKey(scope, 'canonical-root'),
+          );
+          final bots = BotsFixture();
+          bots.profiles
+            ..clear()
+            ..add(BotsFixture.profile('personal', 'Atlas'));
+          bots.profiles.single['canonical_session'] = {
+            'id': 'canonical-root',
+            'resolved_id': 'canonical-tip',
+          };
+          var rosterReads = 0;
+          Completer<Map<String, dynamic>?>? heldRoster;
+          bots.readHook = (_, method, _) async {
+            if (method == 'profiles.list') {
+              rosterReads++;
+              if (heldRoster != null) return heldRoster.future;
+            }
+            return null;
+          };
+          final frame = GlobalKey();
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final semantics = tester.ensureSemantics();
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () =>
+                    BotsSession((_) async => [bots.repository]),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Bot Chat'), findsNothing);
+          expect(find.text('Atlas'), findsNWidgets(2));
+          expect(
+            find.descendant(
+              of: find.byType(AppBar),
+              matching: find.byType(BotAvatar),
+            ),
+            findsNothing,
+          );
+          final reply = find.byWidgetPredicate(
+            (widget) =>
+                widget is ProfileMessage && widget.message.role == 'assistant',
+          );
+          expect(
+            find.descendant(of: reply, matching: find.byType(BotAvatar)),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: reply, matching: find.text('Atlas')),
+            findsOneWidget,
+          );
+          final copy = find.descendant(
+            of: reply,
+            matching: find.byTooltip('Copy message'),
+          );
+          expect(
+            tester.getRect(copy).right,
+            closeTo(tester.getRect(reply).right, 1),
+          );
+          expect(find.byType(PlayfulPortrait), findsNothing);
+          expect(find.text('Hermes'), findsNothing);
+          final avatar = tester.widget<BotAvatar>(find.byType(BotAvatar));
+          expect(avatar.shape, 'squircle');
+          expect(avatar.color, '#65c7bc');
+          expect(find.byTooltip('Open navigation menu'), findsOneWidget);
+          expect(find.byTooltip('Chat actions'), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('chat-project-picker')),
+            findsOneWidget,
+          );
+          await tester.settleMarkdown();
+          await tester.pumpAndSettle();
+          expect(
+            find.text(
+              'Of course. What would you like to make time for this week?',
+              findRichText: true,
+            ),
+            findsOneWidget,
+          );
+          await _capture(tester, frame, 'bot-chat-${brightness.name}-$scale');
+          final reads = rosterReads;
+          await controller.updateDraft(
+            controller.current!.chat!,
+            'Hello Atlas',
+          );
+          await tester.pumpAndSettle();
+          expect(rosterReads, reads);
+          await controller.openSession(
+            ProfileSessionKey(scope, 'canonical-tip'),
+          );
+          await tester.pumpAndSettle();
+          expect(find.byType(BotAvatar), findsOneWidget);
+          expect(find.text('Compacted conversation'), findsNothing);
+          // A delayed lookup for one chat must not decorate a different chat.
+          heldRoster = Completer<Map<String, dynamic>?>();
+          await controller.openSession(
+            ProfileSessionKey(scope, 'canonical-root'),
+          );
+          await tester.pumpAndSettle();
+          // The root and tip share the same confirmed bot identity.
+          expect(find.text('Atlas'), findsNWidgets(2));
+          await controller.openSession(ProfileSessionKey(scope, 'ordinary'));
+          await tester.pumpAndSettle();
+          expect(find.byType(BotAvatar), findsNothing);
+          expect(find.text('Hermes'), findsOneWidget);
+          heldRoster.complete(null);
+          heldRoster = null;
+          await tester.pumpAndSettle();
+          expect(find.byType(BotAvatar), findsNothing);
+          expect(find.text('Bot Chat'), findsOneWidget);
+          expect(find.text('Hermes'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          semantics.dispose();
+          await tester.pumpWidget(const SizedBox());
+          controller.dispose();
+          appPreferences.dispose();
+        },
+      );
+    }
+  }
+
+  testWidgets('bot identity on saved and streaming replies fits long names', (
+    tester,
+  ) async {
+    final fixture = BotsFixture();
+    final bot = (await fixture.repository.bots()).first;
+    const name = 'Atlas research and development assistant';
+    final identity = bot.withMetadata(
+      metadata: bot.metadata,
+      revision: 3,
+      title: name,
+    );
+    tester.view.physicalSize = const Size(320, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    for (final scale in [1.0, 2.0]) {
+      for (final streaming in [false, true]) {
+        await tester.pumpMarkdownWidget(
+          MaterialApp(
+            theme: wingTheme(Brightness.dark),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: ProfileMessage(
+                message: TranscriptMessage.fromRow({
+                  'id': 1,
+                  'role': 'assistant',
+                  'content': 'I can help with that.',
+                }),
+                bot: identity,
+                streaming: streaming,
+                onReadAloud: () {},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(name), findsOneWidget);
+        expect(find.byType(BotAvatar), findsOneWidget);
+        expect(find.byType(PlayfulPortrait), findsNothing);
+        expect(
+          find.byTooltip('Copy message'),
+          streaming ? findsNothing : findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      }
+    }
+    await tester.pumpWidget(const SizedBox());
+  });
 }

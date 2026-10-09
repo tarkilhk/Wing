@@ -78,17 +78,18 @@ void main() {
                   children: [
                     ProfileActivitySection(
                       initiallyExpanded: true,
-                      tabs: const [
-                        ProfileActivityTab(
-                          id: 'tasks',
-                          label: 'Tasks 1/4',
-                          child: ProfileTodoPanel(
-                            todos: _todos,
-                            embedded: true,
+                      detailsBuilder: (_) => const ProfileActivityTabs(
+                        tabs: [
+                          ProfileActivityTab(
+                            id: 'tasks',
+                            label: 'Tasks 1/4',
+                            child: ProfileTodoPanel(
+                              todos: _todos,
+                              embedded: true,
+                            ),
                           ),
-                        ),
-                      ],
-                      children: const [],
+                        ],
+                      ),
                     ),
                   ],
                 ),

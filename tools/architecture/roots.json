@@ -4855,6 +4855,15 @@
       "selector": "main"
     },
     {
+      "id": "host-test-test/transcript_preparation_work_budget_test.dart",
+      "kind": "host-test",
+      "path": "test/transcript_preparation_work_budget_test.dart",
+      "purpose": "Viewport-only message preparation, fresh reading revisions and lazy Activity details",
+      "source": "docs/TESTING.md; test/transcript_preparation_work_budget_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
       "id": "host-test-test/studio_controls_test.dart",
       "kind": "host-test",
       "path": "test/studio_controls_test.dart",
@@ -12330,6 +12339,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/transcript_preparation_work_budget_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
       "path": "test/studio_controls_test.dart",
       "area": "test",
       "provenance": "tracked"
@@ -15182,6 +15196,7 @@
         "test/support_wing_section_test.dart",
         "test/task_snapshot_visibility_test.dart",
         "test/text_size_preference_test.dart",
+        "test/transcript_preparation_work_budget_test.dart",
         "test/usage_calendar_test.dart",
         "test/usage_selection_color_test.dart",
         "test/user_message_attachment_test.dart",
@@ -15522,6 +15537,7 @@
         "test/support/composer_fixture.dart",
         "test/support/health_alerts_fixture.dart",
         "test/text_size_preference_test.dart",
+        "test/transcript_preparation_work_budget_test.dart",
         "test/voice_preferences_lifetime_test.dart",
         "test/voice_preferences_session_test.dart",
         "test/voice_preferences_test.dart",
@@ -16266,6 +16282,7 @@
         "test/task_snapshot_visibility_test.dart",
         "test/text_size_preference_test.dart",
         "test/tool_setup_view_dependency_guard_test.dart",
+        "test/transcript_preparation_work_budget_test.dart",
         "test/turn_notification_service_test.dart",
         "test/usage_analytics_session_test.dart",
         "test/usage_analytics_test.dart",

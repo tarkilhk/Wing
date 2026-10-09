@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../models/chat_output.dart';
 import '../models/transcript_message.dart';
+import '../models/bots.dart';
+import 'bot_avatar.dart';
 import 'markdown_message_content.dart';
 import 'profile_tool_activity.dart';
 import 'profile_review_notice_card.dart';
@@ -16,6 +18,7 @@ import 'user_message_attachment.dart';
 class ProfileMessage extends StatelessWidget {
   final TranscriptMessage message;
   final bool streaming;
+  final BotRecord? bot;
 
   /// Passive snapshots render resource labels without acquiring image bytes.
   final bool loadImages;
@@ -32,6 +35,7 @@ class ProfileMessage extends StatelessWidget {
     super.key,
     required this.message,
     this.streaming = false,
+    this.bot,
     this.loadImages = true,
     this.onOpenRemoteFile,
     this.onShareRemoteFile,
@@ -315,7 +319,18 @@ class ProfileMessage extends StatelessWidget {
                 child: Row(
                   children: [
                     if (role == 'assistant')
-                      const PlayfulPortrait(size: 24)
+                      if (bot case final identity?)
+                        ExcludeSemantics(
+                          child: BotAvatar(
+                            name: identity.profile.name,
+                            shape: identity.shape,
+                            color: identity.color,
+                            image: identity.avatar,
+                            size: 24,
+                          ),
+                        )
+                      else
+                        const PlayfulPortrait(size: 24)
                     else
                       Container(
                         width: 24,
@@ -335,23 +350,36 @@ class ProfileMessage extends StatelessWidget {
                         ),
                       ),
                     const SizedBox(width: 8),
-                    Text(
-                      role == 'assistant' ? 'Hermes' : 'System',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        letterSpacing: 0.6,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
                     Expanded(
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: timestamp == null
-                            ? null
-                            : FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: timestamp,
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              role == 'assistant'
+                                  ? bot?.title ?? 'Hermes'
+                                  : 'System',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                letterSpacing: 0.6,
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
+                            ),
+                          ),
+                          if (timestamp != null) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: timestamp,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     if (!streaming &&

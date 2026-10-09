@@ -21,6 +21,7 @@ import 'package:wing/core/models/transcript_reading.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/chat_runtime.dart' as execution;
 import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
@@ -1542,11 +1543,21 @@ void main() {
                   children: [
                     ProfileActivitySection(
                       initiallyExpanded: true,
-                      children: [
-                        ProfileExecutionActivity(
-                          entries: owner.observation.activityEntries,
-                        ),
-                      ],
+                      detailsBuilder: (_) => ProfileActivityTabs(
+                        tabs: [
+                          ProfileActivityTab(
+                            id: 'timeline',
+                            label: 'Timeline',
+                            child: Column(
+                              children: [
+                                ProfileExecutionActivity(
+                                  entries: owner.observation.activityEntries,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

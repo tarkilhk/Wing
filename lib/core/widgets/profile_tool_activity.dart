@@ -15,19 +15,24 @@ import 'profile_review_notice_card.dart';
 import 'profile_transcript_disclosure.dart';
 
 /// Shared disclosure for saved tool calls and current execution details.
-class ProfileActivitySection extends StatelessWidget {
+class ProfileActivitySection extends StatefulWidget {
   const ProfileActivitySection({
     super.key,
-    required this.children,
+    required this.detailsBuilder,
     this.subtitle,
     this.initiallyExpanded = false,
-    this.tabs = const [],
   });
 
-  final List<Widget> children;
+  final WidgetBuilder detailsBuilder;
   final Widget? subtitle;
   final bool initiallyExpanded;
-  final List<ProfileActivityTab> tabs;
+
+  @override
+  State<ProfileActivitySection> createState() => _ProfileActivitySectionState();
+}
+
+class _ProfileActivitySectionState extends State<ProfileActivitySection> {
+  late bool _visited = widget.initiallyExpanded;
 
   @override
   Widget build(BuildContext context) => ConversationGestureBoundary(
@@ -35,24 +40,15 @@ class ProfileActivitySection extends StatelessWidget {
     child: ProfileTranscriptDisclosure(
       label: 'Activity',
       icon: Icons.bolt_rounded,
-      summary: subtitle,
-      initiallyExpanded: initiallyExpanded,
-      children: [
-        ProfileActivityTabs(
-          tabs: [
-            if (children.isNotEmpty)
-              ProfileActivityTab(
-                id: 'timeline',
-                label: 'Timeline',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
-                ),
-              ),
-            ...tabs,
-          ],
-        ),
-      ],
+      summary: widget.subtitle,
+      initiallyExpanded: widget.initiallyExpanded,
+      // Initially absent. First expansion admits the body; later collapse
+      // retains its selected tab and nested disclosure state.
+      maintainState: _visited,
+      onExpansionChanged: (expanded) {
+        if (expanded && !_visited) setState(() => _visited = true);
+      },
+      children: [Builder(builder: widget.detailsBuilder)],
     ),
   );
 }
@@ -107,12 +103,72 @@ class ProfileToolActivitySection extends StatelessWidget {
     final expanded =
         expandedMessageId != null &&
         section.containsMessage(expandedMessageId!);
+    return ProfileActivitySection(
+      initiallyExpanded: expanded,
+      subtitle: Text(
+        [
+          if (total > 0) '$total tool ${total == 1 ? 'call' : 'calls'}',
+          if (reviews > 0) '$reviews ${reviews == 1 ? 'review' : 'reviews'}',
+        ].join(' · '),
+      ),
+      detailsBuilder: _details,
+    );
+  }
+
+  Widget _details(BuildContext context) {
     final saved = SavedActivity(
       section.groups.expand((group) => group.toolResults),
     );
     final supplied = tabs.map((tab) => tab.id).toSet();
-    return ProfileActivitySection(
+    return ProfileActivityTabs(
       tabs: [
+        ProfileActivityTab(
+          id: 'timeline',
+          label: 'Timeline',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final group in section.groups)
+                if (group.isReasoning)
+                  ProfileReasoningDisclosure(
+                    key:
+                        group.messages.first.emptyAssistant &&
+                            expandedMessageId != null &&
+                            group.containsMessage(expandedMessageId!)
+                        ? focusedMessageKey
+                        : ValueKey((
+                            'saved-reasoning',
+                            group.messages.first.presentationId,
+                          )),
+                    text: group.messages.first.reasoning,
+                    initiallyExpanded:
+                        group.messages.first.emptyAssistant &&
+                        expandedMessageId != null &&
+                        group.containsMessage(expandedMessageId!),
+                  )
+                else if (group.reviewText case final review?)
+                  ProfileReviewNoticeRow(
+                    key: group.messages.last.id == expandedMessageId
+                        ? focusedMessageKey
+                        : null,
+                    text: review,
+                  )
+                else
+                  ProfileToolActivity(
+                    results: group.toolResults,
+                    loadImage: loadImage,
+                    onOpenResource: onOpenResource,
+                    onShareResource: onShareResource,
+                    initiallyExpanded:
+                        expandedMessageId != null &&
+                        group.containsMessage(expandedMessageId!),
+                    focusedMessageId: expandedMessageId,
+                    focusedMessageKey: focusedMessageKey,
+                  ),
+              ...currentActivity,
+            ],
+          ),
+        ),
         ...tabs,
         if (saved.todos.isNotEmpty && !supplied.contains('tasks'))
           ProfileActivityTab(
@@ -126,53 +182,6 @@ class ProfileToolActivitySection extends StatelessWidget {
             label: 'Agents ${saved.agents.length}',
             child: ProfileSavedAgents(agents: saved.agents),
           ),
-      ],
-      initiallyExpanded: expanded,
-      subtitle: Text(
-        [
-          if (total > 0) '$total tool ${total == 1 ? 'call' : 'calls'}',
-          if (reviews > 0) '$reviews ${reviews == 1 ? 'review' : 'reviews'}',
-        ].join(' · '),
-      ),
-      children: [
-        for (final group in section.groups)
-          if (group.isReasoning)
-            ProfileReasoningDisclosure(
-              key:
-                  group.messages.first.emptyAssistant &&
-                      expandedMessageId != null &&
-                      group.containsMessage(expandedMessageId!)
-                  ? focusedMessageKey
-                  : ValueKey((
-                      'saved-reasoning',
-                      group.messages.first.presentationId,
-                    )),
-              text: group.messages.first.reasoning,
-              initiallyExpanded:
-                  group.messages.first.emptyAssistant &&
-                  expandedMessageId != null &&
-                  group.containsMessage(expandedMessageId!),
-            )
-          else if (group.reviewText case final review?)
-            ProfileReviewNoticeRow(
-              key: group.messages.last.message.id == expandedMessageId
-                  ? focusedMessageKey
-                  : null,
-              text: review,
-            )
-          else
-            ProfileToolActivity(
-              results: group.toolResults,
-              loadImage: loadImage,
-              onOpenResource: onOpenResource,
-              onShareResource: onShareResource,
-              initiallyExpanded:
-                  expandedMessageId != null &&
-                  group.containsMessage(expandedMessageId!),
-              focusedMessageId: expandedMessageId,
-              focusedMessageKey: focusedMessageKey,
-            ),
-        ...currentActivity,
       ],
     );
   }

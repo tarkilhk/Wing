@@ -223,7 +223,15 @@ confirmation, including the protected default profile. Back from an appearance
 edit and reopen it: the acknowledged values must remain. Confirmed rename/delete
 must retire the old settings route on return from profile management.
 Open a bot and use Back: the original tab, query and filter must remain. Open a
-bot from another saved instance: the secure workspace identity must match the
+canonical bot chat and verify Chats stays selected in the drawer, its name
+replaces the title, and assistant messages show the bot avatar and name. Check
+saved and streaming replies, including long names at enlarged text.
+Check direct entry and the current compression tip; ordinary chats retain titles.
+Switch chats during a held appearance read: the old avatar must not appear in
+the new chat. These identity and async rendering properties use behavioral
+regressions in `bots_contract_test.dart` and `bots_view_test.dart`; static
+analysis cannot establish received canonical identity or completion ordering.
+Open a bot from another saved instance: the secure workspace identity must match the
 captured row before opening its chat. Change appearance, then open Bot
 settings and exercise the existing identity/model/account/capability editors.
 Verify that a concurrent desktop edit requires reload/review, and that partial
@@ -359,6 +367,17 @@ checks establish desktop Chromium enforcement and require separate Android
 WebView acceptance on a disposable emulator.
 
 ## Useful test entry points
+
+`TRANSCRIPT_PREPARATION_ADMISSION` is guarded by
+`test/transcript_preparation_work_budget_test.dart`. Timeline grouping, identity
+lookup and nearby selection must not read encoded attachment bodies; the mounted
+transcript prepares nearby bodies and admits more on scroll. Collapsed saved
+Activity must not prepare tool arguments, and first expansion admits its details.
+New reading revisions prepare fresh bodies even when message identities match.
+These behavioral checks use counted payload reads instead of timing assertions:
+static inspection cannot establish which lazy list or disclosure bodies actually
+mount. Run `flutter test --no-pub test/transcript_preparation_work_budget_test.dart`
+alongside the affected reading-anchor, Activity state and Recents motion suites.
 
 `INLINE_SKILL_COMPOSER` is guarded by `test/slash_commands_test.dart`: a slash after prose or a newline opens a skill-only helper; selection replaces just the token at a UTF-16 cursor, keeping the suffix and saving the exact draft. Catalog-confirmed skill emphasis retains plain text, IME underline and scope retirement. Inline sending uses stock skill dispatch, retains the visible message and preserves queued work on load failure; commands, URLs and paths in prose stay literal. Run the suite after composer/slash changes. The production screen cases cover 390 dp at ordinary text and 320 dp at 200% in both themes; `CAPTURE_SKILL_COMPOSER=1` exports actual Flutter captures under ignored `build/skill-composer/`, with optional `CAPTURE_SKILL_COMPOSER_FONTS` pointing at the SDK's material font directory. Static checks cannot establish cursor replacement, styled text editing or asynchronous callback admission. Host captures do not establish physical Android keyboard behavior.
 

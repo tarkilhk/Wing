@@ -34,36 +34,44 @@ void main() {
                     padding: const EdgeInsets.all(16),
                     child: ProfileActivitySection(
                       initiallyExpanded: true,
-                      tabs: [
-                        if (showTasks)
+                      detailsBuilder: (_) => ProfileActivityTabs(
+                        tabs: [
                           ProfileActivityTab(
-                            id: 'tasks',
-                            label: 'Tasks $completed/4',
-                            child: const Text('Task details'),
+                            id: 'timeline',
+                            label: 'Timeline',
+                            child: Column(
+                              children: [
+                                ProfileToolActivity(
+                                  results: [
+                                    TranscriptToolResult.fromRow({
+                                      'id': 1,
+                                      'role': 'tool',
+                                      'tool_name': 'skill_view',
+                                      'content': 'Saved tool detail',
+                                    }),
+                                  ],
+                                ),
+                                const ProfileReasoningDisclosure(
+                                  text: 'Reasoning details',
+                                  running: true,
+                                ),
+                              ],
+                            ),
                           ),
-                        ProfileActivityTab(
-                          id: 'agents',
-                          label: 'Agents 1/2',
-                          child: const Text('Agent details'),
-                          onSelected: () => activations++,
-                        ),
-                      ],
-                      children: [
-                        ProfileToolActivity(
-                          results: [
-                            TranscriptToolResult.fromRow({
-                              'id': 1,
-                              'role': 'tool',
-                              'tool_name': 'skill_view',
-                              'content': 'Saved tool detail',
-                            }),
-                          ],
-                        ),
-                        const ProfileReasoningDisclosure(
-                          text: 'Reasoning details',
-                          running: true,
-                        ),
-                      ],
+                          if (showTasks)
+                            ProfileActivityTab(
+                              id: 'tasks',
+                              label: 'Tasks $completed/4',
+                              child: const Text('Task details'),
+                            ),
+                          ProfileActivityTab(
+                            id: 'agents',
+                            label: 'Agents 1/2',
+                            child: const Text('Agent details'),
+                            onSelected: () => activations++,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

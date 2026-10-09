@@ -7,6 +7,7 @@ import '../widgets/studio_error.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import '../theme/wing_theme.dart';
 import '../services/profile_workspace_controller.dart';
 import '../services/completion_diagnostics.dart';
@@ -107,8 +108,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     _newestId = widget.timeline.entries
         .where((entry) => !entry.streaming)
         .lastOrNull
-        ?.message
-        .id;
+        ?.id;
     _streaming = widget.chat.reading.streaming;
     _streamingPresentationId = widget.timeline.entries
         .where((entry) => entry.streaming)
@@ -325,8 +325,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final newest = widget.timeline.entries
         .where((entry) => !entry.streaming)
         .lastOrNull
-        ?.message
-        .id;
+        ?.id;
     final segmentChanged = _segment != widget.chat.reading.historySessionId;
     final growingRow =
         _rows[_streamingPresentationId]?.currentContext?.findRenderObject()
@@ -441,13 +440,25 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         widget.currentActivity.isNotEmpty || widget.activityTabs.isNotEmpty;
     Widget currentActivity() => ProfileActivitySection(
       key: ValueKey(('activity', chat.key)),
-      tabs: widget.activityTabs,
       subtitle: widget.liveToolCount > 0
           ? Text(
               '${widget.liveToolCount} tool ${widget.liveToolCount == 1 ? 'call' : 'calls'}',
             )
           : null,
-      children: widget.currentActivity,
+      detailsBuilder: (_) => ProfileActivityTabs(
+        tabs: [
+          if (widget.currentActivity.isNotEmpty)
+            ProfileActivityTab(
+              id: 'timeline',
+              label: 'Timeline',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: widget.currentActivity,
+              ),
+            ),
+          ...widget.activityTabs,
+        ],
+      ),
     );
     final tailContent = [
       if (hasCurrentActivity && !joinCurrentActivity) currentActivity(),
@@ -510,7 +521,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           .whereType<GlobalKey>()
           .where((key) => !usedKeys.contains(key))
           .firstOrNull;
-      final id = group.last.message.id;
+      final id = group.last.id;
       final key = existing ?? GlobalKey();
       if (CompletionDiagnostics.enabled && existing == null) {
         if (id == null) {
@@ -597,6 +608,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             builder: (_, constraints) => ListView.builder(
               key: const ValueKey('profile-transcript'),
               controller: _scroll,
+              scrollCacheExtent: ScrollCacheExtent.pixels(
+                (constraints.maxHeight / 2).clamp(0.0, 250.0),
+              ),
               reverse: true,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.symmetric(vertical: WingSpacing.sm),
@@ -616,7 +630,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     child: Padding(
                       padding: EdgeInsets.only(
                         left: WingSpacing.lg,
-                        right: !section.isActivity && row.message.role == 'user'
+                        right: !section.isActivity && row.role == 'user'
                             ? 0
                             : WingSpacing.lg,
                       ),
@@ -875,7 +889,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                       left: WingSpacing.lg,
                       right:
                           !section.isActivity &&
-                              section.messages.last.message.role == 'user'
+                              section.messages.last.role == 'user'
                           ? 0
                           : WingSpacing.lg,
                     ),

@@ -12,6 +12,11 @@ This charter owns the appearance of new and existing UI. [Feature guides](FEATUR
 - Activity details follow the [accepted activity family](#accepted-activity-detail-family). Extend its shared components and verify the family together.
 - Use the compact context ring beside the model selector, confirmed by the owner after comparing it with the fuse. Do not allocate a row to token-count text or retain the fuse alongside it. The owner's 7 October refinement selects option A: show the percentage inside a 32 dp ring (up to 40 dp at enlarged text), in a 48 dp target, and open a 320 dp anchored popover above it. Center the digits and percent sign together using Roboto's cap-height baseline on the ring's canvas. Keep used/max tokens, percentage full, a 6 dp composition bar, aligned estimated category counts and supplied compression count compact. The bar represents category estimates; it never replaces measured occupancy. At enlarged text, put each category count below its full-width label and scroll the panel when needed. Preserve composer focus/keyboard, outside-tap dismissal and keyboard access; a chat change retires its open panel. Unknown occupancy uses a centered dash and broken neutral ring. The design exploration and owner selection are archived on local branch `prototype/context-window-studio` at `c655aa4`, under `plans/prototypes/context-window-studio`. Do not repeat the model or introduce a large duplicate gauge/account-limit card.
 - Keep familiar model/reasoning selection and Queue, Steer and Fork flows.
+- Canonical bot conversations stay in Chats. Replace the generic Bot Chat heading
+  with the bot's name in the existing title position. Assistant message headers
+  use the bot's 24 dp avatar and name in place of the Hermes portrait and label,
+  for both saved and streaming replies. Keep project controls in the context row
+  and preserve Back to the Bots roster. Ordinary conversations retain their titles.
 - Design dark mode fully and use coherent accents throughout.
 - Administration opens directly on Profile without tabs. A pharmacy-cross action in the top bar opens the dedicated Health route. Keep the selected connection visible and classify each operation by its actual ownership. See the [administration handoff](design/2026-09-14-administration-handoff.md) for navigation and unsupported memory/MCP writes.
 - Provider accounts and keys belong to the selected profile, including `default`. The global menu has a larger portrait aligned with Wing and a low, borderless split footer: saved connection icon, name and status LED on the left; server version and conditional update icon on the right. Connection identity opens details; server version opens Versions & updates. Client identity stays in App settings; upstream update checks and the circular-arrows indicator apply only to the server. Manage profiles is its own pill after the last profile in the horizontally scrolling selector. Follow the [administration ownership contract](design/2026-09-14-administration-handoff.md) for credential-source distinctions and pending editor corrections.
@@ -524,6 +529,12 @@ unchanged notices stay out of ordinary tool headers. Restore saved Tasks and
 Agents from delivered history, with passive output disclosures for past agents.
 Preserve category
 selection, guide and anchored expansion. Contract: [tool activity](TOOL_ACTIVITY.md).
+
+Saved transcript bodies are prepared within the visible lazy list and a small
+scroll buffer, capped at half the viewport or 250 dp. Collapsed Activity initially
+mounts only its existing header/counts; first expansion admits the existing
+details, and later collapse retains visited tabs and nested disclosure state.
+Keep all existing fields, actions, grouping and reading anchors intact.
 
 The owner's subsequent 7 October refinement requires zero vertical padding in
 tool-call headers and saved-agent rows. Size them to their text, with no minimum

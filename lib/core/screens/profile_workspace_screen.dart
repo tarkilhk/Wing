@@ -1,4 +1,5 @@
 import '../models/recent_conversation.dart';
+import '../models/bots.dart';
 import '../services/recent_conversation_session.dart';
 import '../widgets/chat_notice_activity_scope.dart';
 import '../widgets/recent_conversations/recent_conversation_switcher.dart';
@@ -188,6 +189,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _settingsRevision = 0;
   ProfileSessionKey? _composerKey;
+  Future<BotRecord?>? _conversationBot;
   ProfileSessionKey? _loadingIntelligence;
   final _notificationAnchors = <(ProfileSessionKey, String), GlobalKey>{};
   Widget _notificationAnchor(
@@ -453,7 +455,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     });
   }
 
-  Widget _withRecentSwitcher(ProfileChat chat, Widget child) {
+  Widget _withRecentSwitcher(ProfileChat chat, Widget child, BotRecord? bot) {
     final visit = _recentVisit;
     if (visit == null || !visit.active) return child;
     return ValueListenableBuilder<bool>(
@@ -465,6 +467,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         chatKey: chat.key,
         previewBuilder: (card) => ConversationPreview(
           card: card,
+          bot: bot?.describesConversation(card.entry.key) == true ? bot : null,
           connectionLabel: controller.connection.label,
           connectionIcon: controller.connection.icon,
           connectionStatus: controller.connectionStatus,
@@ -748,10 +751,28 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
+  Widget _conversationHeading(
+    ProfileChat chat,
+    BotRecord? bot,
+    VoidCallback? moveToProject,
+  ) => Tooltip(
+    message: 'Move to project',
+    child: InkWell(
+      borderRadius: WingRadius.card,
+      onTap: moveToProject,
+      child: Text(
+        bot?.title ?? chat.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    ),
+  );
+
   void _syncComposer(ProfileChat? chat) {
     if (_composerKey != chat?.key ||
         _composer.text != (chat?.composer.observation.displayedText ?? '')) {
       final changedChat = _composerKey != chat?.key;
+      if (changedChat) _conversationBot = null;
       if (changedChat && _recentVisit?.active == true && _composerKey != null) {
         _composerSelections[_composerKey!] = _composer.selection;
       }
@@ -821,261 +842,267 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         return _browser!;
       }
       _browser = null;
-      final parentSessionId = controller.parentSessionId(chat);
-      final stackChatScope =
-          MediaQuery.textScalerOf(context).scale(12) > 18 &&
-          MediaQuery.sizeOf(context).width < 480;
-      final canMoveProject =
-          !chat.runtime.opening &&
-          !chat.runtime.offline &&
-          !controller.switching &&
-          !(current?.mutatingSessions.contains(chat.key.sessionId) ?? false);
-      void openProjectPicker() => unawaited(
-        _run(() async {
-          final browser = ChatBrowserData(controller);
-          try {
-            final issued = browser.projectPickerFor(chat.key);
-            try {
-              if (mounted) await showChatProjectPicker(context, issued);
-            } finally {
-              issued.dispose();
-            }
-          } finally {
-            browser.dispose();
-          }
-        }),
-      );
-      final conversation = PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) {
-            if (_scaffoldKey.currentState?.isDrawerOpen == true) {
-              _scaffoldKey.currentState?.closeDrawer();
-            } else if (_recentSwitcher.currentState?.dismissStack() == true) {
-              return;
-            } else if (chat.composer.observation.editingEntry != null) {
-              unawaited(_run(() => controller.cancelQueuedPromptEdit(chat)));
-            } else {
-              _leaveChat();
-            }
-          }
+      _conversationBot ??= _bots.botForConversation(chat.key);
+      return FutureBuilder<BotRecord?>(
+        future: _conversationBot,
+        builder: (context, snapshot) {
+          final candidate = snapshot.data;
+          final bot = candidate?.describesConversation(chat.key) == true
+              ? candidate
+              : null;
+          return _conversationPage(context, chat, bot);
         },
-        child: Scaffold(
-          key: _scaffoldKey,
-          drawer: _drawer(),
-          appBar: WingAppBar(
-            context: context,
+      );
+    },
+  );
 
-            leading: IconButton(
-              icon: const Icon(Icons.menu),
-              tooltip: 'Open navigation menu',
-              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-            ),
-            // Share the project action across title and scope so the title
-            // doesn't need another empty 48 dp row above the scope controls.
-            title: Tooltip(
-              message: 'Move to project',
-              child: InkWell(
-                borderRadius: WingRadius.card,
-                onTap: canMoveProject ? openProjectPicker : null,
-                child: Text(
-                  chat.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-            contextHeight: stackChatScope ? 96 : 48,
-            contextRow: LayoutBuilder(
-              builder: (context, constraints) {
-                final scopeStyle = Theme.of(context).textTheme.labelMedium
-                    ?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w400,
-                    );
-                final projectLabel =
-                    chat.runtime.opening || chat.runtime.offline
-                    ? chat.key.workspace.profileName
-                    : controller.chatProjectLabel(chat);
-                final server = ServerConnectionLabel(
-                  alignment: Alignment.centerLeft,
-                  label: controller.connection.label,
-                  icon: controller.connection.icon,
-                  status: controller.connectionStatus,
-                  style: scopeStyle,
-                );
-                final project = Tooltip(
-                  message: 'Move to project: $projectLabel',
-                  child: Semantics(
-                    button: true,
-                    enabled: canMoveProject,
-                    focusable: canMoveProject,
-                    onTap: canMoveProject ? openProjectPicker : null,
-                    label: '$projectLabel. Move to project',
-                    excludeSemantics: true,
-                    child: InkWell(
-                      key: const ValueKey('chat-project-picker'),
-                      borderRadius: WingRadius.control,
-                      onTap: canMoveProject ? openProjectPicker : null,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          minHeight: 48,
-                          minWidth: 48,
-                        ),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: 1,
-                          heightFactor: 1,
-                          child: Text(
-                            projectLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: scopeStyle,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-                if (stackChatScope) {
-                  return Column(
-                    key: const ValueKey('chat-scope-stacked'),
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [server, project],
+  Widget _conversationPage(
+    BuildContext context,
+    ProfileChat chat,
+    BotRecord? bot,
+  ) {
+    final parentSessionId = controller.parentSessionId(chat);
+    final stackChatScope =
+        MediaQuery.textScalerOf(context).scale(12) > 18 &&
+        MediaQuery.sizeOf(context).width < 480;
+    final canMoveProject =
+        !chat.runtime.opening &&
+        !chat.runtime.offline &&
+        !controller.switching &&
+        !(controller.current?.mutatingSessions.contains(chat.key.sessionId) ??
+            false);
+    void openProjectPicker() => unawaited(
+      _run(() async {
+        final browser = ChatBrowserData(controller);
+        try {
+          final issued = browser.projectPickerFor(chat.key);
+          try {
+            if (mounted) await showChatProjectPicker(context, issued);
+          } finally {
+            issued.dispose();
+          }
+        } finally {
+          browser.dispose();
+        }
+      }),
+    );
+    final conversation = PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+            _scaffoldKey.currentState?.closeDrawer();
+          } else if (_recentSwitcher.currentState?.dismissStack() == true) {
+            return;
+          } else if (chat.composer.observation.editingEntry != null) {
+            unawaited(_run(() => controller.cancelQueuedPromptEdit(chat)));
+          } else {
+            _leaveChat();
+          }
+        }
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawer: _drawer(),
+        appBar: WingAppBar(
+          context: context,
+
+          leading: IconButton(
+            icon: const Icon(Icons.menu),
+            tooltip: 'Open navigation menu',
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
+          title: _conversationHeading(
+            chat,
+            bot,
+            canMoveProject ? openProjectPicker : null,
+          ),
+          contextHeight: stackChatScope ? 96 : 48,
+          contextRow: LayoutBuilder(
+            builder: (context, constraints) {
+              final scopeStyle = Theme.of(context).textTheme.labelMedium
+                  ?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w400,
                   );
-                }
-                return Row(
-                  key: const ValueKey('chat-scope-inline'),
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: constraints.maxWidth * .5,
+              final projectLabel = chat.runtime.opening || chat.runtime.offline
+                  ? chat.key.workspace.profileName
+                  : controller.chatProjectLabel(chat);
+              final server = ServerConnectionLabel(
+                alignment: Alignment.centerLeft,
+                label: controller.connection.label,
+                icon: controller.connection.icon,
+                status: controller.connectionStatus,
+                style: scopeStyle,
+              );
+              final project = Tooltip(
+                message: 'Move to project: $projectLabel',
+                child: Semantics(
+                  button: true,
+                  enabled: canMoveProject,
+                  focusable: canMoveProject,
+                  onTap: canMoveProject ? openProjectPicker : null,
+                  label: '$projectLabel. Move to project',
+                  excludeSemantics: true,
+                  child: InkWell(
+                    key: const ValueKey('chat-project-picker'),
+                    borderRadius: WingRadius.control,
+                    onTap: canMoveProject ? openProjectPicker : null,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: 48,
+                        minWidth: 48,
                       ),
-                      child: server,
-                    ),
-                    ExcludeSemantics(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Text('·', style: scopeStyle),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: 1,
+                        heightFactor: 1,
+                        child: Text(
+                          projectLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: scopeStyle,
+                        ),
                       ),
                     ),
-                    Expanded(child: project),
-                  ],
+                  ),
+                ),
+              );
+              if (stackChatScope) {
+                return Column(
+                  key: const ValueKey('chat-scope-stacked'),
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [server, project],
                 );
-              },
-            ),
-            actions: [
-              PopupMenuButton<String>(
-                tooltip: 'Chat actions',
-                icon: const Icon(Icons.more_vert),
-                onSelected: (action) {
-                  if (action == 'refresh') {
-                    unawaited(_run(controller.refresh));
-                  } else if (action == 'find') {
-                    unawaited(_openFind(chat));
-                  } else if (action == 'outputs') {
-                    unawaited(_run(() => _openOutputs(chat)));
-                  } else if (action == 'subagents') {
-                    unawaited(
-                      _openWorkDetails(
-                        ProfileSubagentPanel(
-                          session: _supervisionFor(chat),
-                          initiallyExpanded: true,
-                        ),
-                      ),
-                    );
-                  } else if (action == 'goal') {
-                    unawaited(
-                      _openWorkDetails(
-                        ProfileGoalPanel(
-                          session: _supervisionFor(chat),
-                          initiallyExpanded: true,
-                        ),
-                      ),
-                    );
-                  } else if (action == 'background') {
-                    unawaited(
-                      _openWorkDetails(
-                        ProfileBackgroundWorkPanel(
-                          session: _supervisionFor(chat),
-                          initiallyExpanded: true,
-                        ),
-                      ),
-                    );
-                  } else if (action == 'parent') {
-                    unawaited(_run(() => controller.openParentChat(chat)));
-                  }
-                },
-                itemBuilder: (_) => [
-                  if (parentSessionId != null)
-                    const PopupMenuItem(
-                      value: 'parent',
-                      child: Text('Parent chat'),
+              }
+              return Row(
+                key: const ValueKey('chat-scope-inline'),
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth * .5,
                     ),
-                  const PopupMenuItem(value: 'outputs', child: Text('Outputs')),
-                  const PopupMenuItem(
-                    value: 'subagents',
-                    child: Text('Subagents'),
+                    child: server,
                   ),
-                  const PopupMenuItem(value: 'goal', child: Text('Goal')),
-                  const PopupMenuItem(
-                    value: 'background',
-                    child: Text('Background work'),
+                  ExcludeSemantics(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text('·', style: scopeStyle),
+                    ),
                   ),
+                  Expanded(child: project),
+                ],
+              );
+            },
+          ),
+          actions: [
+            PopupMenuButton<String>(
+              tooltip: 'Chat actions',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (action) {
+                if (action == 'refresh') {
+                  unawaited(_run(controller.refresh));
+                } else if (action == 'find') {
+                  unawaited(_openFind(chat));
+                } else if (action == 'outputs') {
+                  unawaited(_run(() => _openOutputs(chat)));
+                } else if (action == 'subagents') {
+                  unawaited(
+                    _openWorkDetails(
+                      ProfileSubagentPanel(
+                        session: _supervisionFor(chat),
+                        initiallyExpanded: true,
+                      ),
+                    ),
+                  );
+                } else if (action == 'goal') {
+                  unawaited(
+                    _openWorkDetails(
+                      ProfileGoalPanel(
+                        session: _supervisionFor(chat),
+                        initiallyExpanded: true,
+                      ),
+                    ),
+                  );
+                } else if (action == 'background') {
+                  unawaited(
+                    _openWorkDetails(
+                      ProfileBackgroundWorkPanel(
+                        session: _supervisionFor(chat),
+                        initiallyExpanded: true,
+                      ),
+                    ),
+                  );
+                } else if (action == 'parent') {
+                  unawaited(_run(() => controller.openParentChat(chat)));
+                }
+              },
+              itemBuilder: (_) => [
+                if (parentSessionId != null)
                   const PopupMenuItem(
-                    value: 'find',
-                    child: Text('Find in chat'),
+                    value: 'parent',
+                    child: Text('Parent chat'),
                   ),
-                  const PopupMenuItem(
-                    value: 'refresh',
-                    child: Text('Refresh workspace'),
+                const PopupMenuItem(value: 'outputs', child: Text('Outputs')),
+                const PopupMenuItem(
+                  value: 'subagents',
+                  child: Text('Subagents'),
+                ),
+                const PopupMenuItem(value: 'goal', child: Text('Goal')),
+                const PopupMenuItem(
+                  value: 'background',
+                  child: Text('Background work'),
+                ),
+                const PopupMenuItem(value: 'find', child: Text('Find in chat')),
+                const PopupMenuItem(
+                  value: 'refresh',
+                  child: Text('Refresh workspace'),
+                ),
+              ],
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            if (controller.switching || chat.refreshingConversation)
+              const LinearProgressIndicator(),
+            WorkspaceConnectionStatus(
+              status: controller.connectionStatus,
+              showHint:
+                  chat.runtime.openingError == null &&
+                  (!chat.runtime.opening || chat.reading.messages.isNotEmpty),
+            ),
+            if (controller.error != null)
+              MaterialBanner(
+                content: StudioError(controller.error!),
+                actions: [
+                  TextButton(
+                    onPressed: () => _run(controller.retry),
+                    child: const Text('Retry'),
                   ),
                 ],
               ),
-            ],
-          ),
-          body: Column(
-            children: [
-              if (controller.switching || chat.refreshingConversation)
-                const LinearProgressIndicator(),
-              WorkspaceConnectionStatus(
-                status: controller.connectionStatus,
-                showHint:
-                    chat.runtime.openingError == null &&
-                    (!chat.runtime.opening || chat.reading.messages.isNotEmpty),
+            if (chat.runtime.openingError != null &&
+                chat.reading.messages.isNotEmpty)
+              MaterialBanner(
+                forceActionsBelow: true,
+                content: StudioError(chat.runtime.openingError!),
+                actions: [
+                  TextButton(
+                    onPressed: () => _run(controller.resumeConnection),
+                    child: const Text('Retry connection'),
+                  ),
+                ],
               ),
-              if (controller.error != null)
-                MaterialBanner(
-                  content: StudioError(controller.error!),
-                  actions: [
-                    TextButton(
-                      onPressed: () => _run(controller.retry),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              if (chat.runtime.openingError != null &&
-                  chat.reading.messages.isNotEmpty)
-                MaterialBanner(
-                  forceActionsBelow: true,
-                  content: StudioError(chat.runtime.openingError!),
-                  actions: [
-                    TextButton(
-                      onPressed: () => _run(controller.resumeConnection),
-                      child: const Text('Retry connection'),
-                    ),
-                  ],
-                ),
-              Expanded(child: _chat(chat, context)),
-            ],
-          ),
+            Expanded(child: _chat(chat, context, bot)),
+          ],
         ),
-      );
-      return _withRecentSwitcher(chat, conversation);
-    },
-  );
+      ),
+    );
+    return _withRecentSwitcher(chat, conversation, bot);
+  }
 
   Future<void> _openWorkDetails(Widget panel) => showModalBottomSheet<void>(
     context: context,
@@ -1221,6 +1248,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     ProfileChat chat,
     TranscriptTimelineEntry entry, {
     required List<Map<String, dynamic>> capturedRows,
+    BotRecord? bot,
     bool allowSavedActions = true,
   }) {
     if (entry.suppressed) return const SizedBox.shrink();
@@ -1245,6 +1273,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           ProfileMessage(
             key: ValueKey(entry.presentationId),
             message: entry.message,
+            bot: bot,
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
             onShareRemoteFile: (output) => _shareToolResource(chat, output),
@@ -1277,6 +1306,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         ProfileMessage(
           key: ValueKey(entry.presentationId),
           message: entry.message,
+          bot: bot,
           streaming: streaming,
           onReadAloud: entry.message.role == 'assistant'
               ? () => _run(() => _requestReadAloud(chat, message))
@@ -1508,7 +1538,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
   }
 
-  Widget _chat(ProfileChat chat, BuildContext context) {
+  Widget _chat(ProfileChat chat, BuildContext context, BotRecord? bot) {
     final nearby = controller.nearbyReadingMessages(chat);
     final live = nearby == null ? chat.reading.streamingMessage : null;
     final capturedRows = List<Map<String, dynamic>>.unmodifiable([
@@ -1534,7 +1564,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       );
     }
     final savedCallIds = <String>{
-      for (final entry in timeline.entries) ?entry.tool?.callId,
+      for (final row in capturedRows)
+        if (row['role'] == 'tool' && row['tool_call_id'] is String)
+          row['tool_call_id'] as String,
     };
     final visibleActivity = chat.runtime.activityEntries
         .where(
@@ -1569,6 +1601,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     chat,
                     entry,
                     capturedRows: capturedRows,
+                    bot: bot,
                     allowSavedActions: nearby == null,
                   ),
                   focusedMessageId: focus?.rowId,
@@ -2720,6 +2753,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   void _selectDestination(AppDestination destination) {
     _botNavigation++;
+    _conversationBot = null;
     _disposeRecentVisit();
     _chatOrigin = null;
     _cancelVoice();
