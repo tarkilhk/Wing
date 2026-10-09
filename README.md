@@ -76,7 +76,7 @@ Read formatted Markdown and wide tables, copy code or whole replies, listen to a
 
 ## Administration
 
-Manage models, instructions, skills, connectors and scheduled tasks for each profile, and check server or profile problems in Health.
+Manage models, instructions, skills, connectors and scheduled tasks for each profile.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/administration.html">
@@ -84,19 +84,19 @@ Manage models, instructions, skills, connectors and scheduled tasks for each pro
   </a>
 </p>
 
-[Explore Administration](https://tarkilhk.github.io/Wing/administration.html) · [Check Health](https://tarkilhk.github.io/Wing/health.html)
+[Explore Administration](https://tarkilhk.github.io/Wing/administration.html)
 
-## Health alerts
+## Health
 
-Inspect resource pressure and observed profile problems from the bell on any screen. Set memory, disk and CPU warning and recovery thresholds. Checks run while Wing is open or its background task monitor is active for ongoing work.
+Check host resources, run server diagnostics and inspect profile problems. Tap the bell on any screen to inspect current issues. In Health, set warning and recovery thresholds for memory, disk and CPU. Alerts are checked while Wing is open or monitoring ongoing work.
 
 <p align="center">
-  <a href="https://tarkilhk.github.io/Wing/health-alerts.html">
-    <img src="website/assets/screenshots/health-alerts-light.png" alt="Wing health alert with the triggering memory reading and an action to open Health" width="260">
+  <a href="https://tarkilhk.github.io/Wing/health.html">
+    <img src="website/assets/screenshots/health-light.png" alt="Wing Health with Alert settings, host resources, server diagnostics and profile checks" width="260">
   </a>
 </p>
 
-[Explore health alerts](https://tarkilhk.github.io/Wing/health-alerts.html)
+[Explore Health](https://tarkilhk.github.io/Wing/health.html)
 
 ## Analytics
 

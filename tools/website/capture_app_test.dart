@@ -588,9 +588,23 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 10)),
       );
     }
-    await tester.tap(find.byTooltip('Chat actions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose recent conversation'));
+    final first = await tester.startGesture(const Offset(90, 400), pointer: 1);
+    final second = await tester.startGesture(
+      const Offset(300, 400),
+      pointer: 2,
+    );
+    await tester.pump();
+    for (var i = 1; i <= 8; i++) {
+      await first.moveTo(
+        Offset.lerp(const Offset(90, 400), const Offset(155, 400), i / 8)!,
+      );
+      await second.moveTo(
+        Offset.lerp(const Offset(300, 400), const Offset(235, 400), i / 8)!,
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await first.up();
+    await second.up();
     for (var i = 0; i < 24; i++) {
       await tester.pump(const Duration(milliseconds: 80));
       await tester.runAsync(
@@ -601,6 +615,94 @@ void main() {
     await capture(tester, 'recents-stack-dark');
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'export ${brightness.name} health overview with alert settings',
+      (tester) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(390, 844);
+        addTearDown(tester.view.reset);
+        // Opt-in screenshot tooling runs outside test/ discovery.
+        // ignore: invalid_use_of_visible_for_testing_member
+        SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        final alerts = HealthAlertsFixture(preferences);
+        final workspace = _WebsiteFixture();
+        final administration = _WebsiteAdministration();
+        administration.jobs.add({
+          'id': 'morning-brief',
+          'name': 'Morning research brief',
+          'enabled': true,
+          'state': 'scheduled',
+          'schedule': {'kind': 'cron', 'expr': '0 8 * * 1-5'},
+          'next_run_at': DateTime.now()
+              .add(const Duration(hours: 12))
+              .toIso8601String(),
+        });
+        final controller = ProfileWorkspaceController(
+          access: ConnectionAccess(
+            connection: SavedConnection(
+              id: 'Home server',
+              label: 'My Hermes',
+              host: 'unused',
+              port: 1,
+              apiKey: '',
+            ),
+            dashboardOAuth: null,
+          ),
+          connectionIdentity: 'Home server-endpoint',
+          preferences: preferences,
+          appPreferences: alerts.appPreferences,
+          gatewayFactory: workspace.gateway,
+        );
+        await controller.initialize();
+        controller.connectionStatus.accessAvailable();
+        controller.connectionStatus.liveChanged('personal', true);
+        await tester.pumpWidget(
+          MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: wingTheme(brightness),
+            builder: (_, child) => HealthAlertsScope(
+              alerts: alerts.coordinator,
+              openHealth: (_) async {},
+              child: RepaintBoundary(key: frame, child: child!),
+            ),
+            home: Builder(
+              builder: (context) => Scaffold(
+                appBar: WingAppBar(
+                  context: context,
+                  title: const Text('Hermes health'),
+                  leading: const BackButton(),
+                ),
+                body: HermesAdministrationContent(
+                  controller: controller,
+                  repository: administration.server,
+                  onOpenMenu: () {},
+                  onOpenSession: (_) async {},
+                  healthOnly: true,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Alert settings'), findsOneWidget);
+        expect(find.text('Host'), findsOneWidget);
+        expect(find.text('Profile'), findsOneWidget);
+        await capture(tester, 'health-${brightness.name}');
+        tester.view.physicalSize = const Size(390, 560);
+        await tester.pump();
+        await tester.drag(find.byType(ListView).last, const Offset(0, -420));
+        await tester.pumpAndSettle();
+        await capture(tester, 'health-profile-${brightness.name}');
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+        administration.server.close();
+        alerts.dispose();
+      },
+    );
+  }
 
   testWidgets('export health alerts and resource thresholds', (tester) async {
     tester.view.devicePixelRatio = 1;
@@ -916,45 +1018,27 @@ void main() {
       });
       controller.connectionStatus.accessAvailable();
       controller.connectionStatus.liveChanged('personal', true);
-      for (final healthOnly in [false, true]) {
-        await tester.pumpWidget(
-          RepaintBoundary(
-            key: frame,
-            child: MaterialApp(
-              debugShowCheckedModeBanner: false,
-              theme: wingTheme(brightness),
-              home: Scaffold(
-                appBar: healthOnly
-                    ? AppBar(title: const Text('Hermes health'))
-                    : null,
-                body: HermesAdministrationContent(
-                  key: ValueKey(healthOnly),
-                  controller: controller,
-                  repository: administration.server,
-                  onOpenMenu: () {},
-                  onOpenSession: (_) async {},
-                  healthOnly: healthOnly,
-                ),
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: frame,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: wingTheme(brightness),
+            home: Scaffold(
+              body: HermesAdministrationContent(
+                controller: controller,
+                repository: administration.server,
+                onOpenMenu: () {},
+                onOpenSession: (_) async {},
               ),
             ),
           ),
-        );
-        for (var i = 0; i < 12; i++) {
-          await tester.pump(const Duration(milliseconds: 250));
-        }
-        await capture(
-          tester,
-          '${healthOnly ? 'health' : 'administration'}-${brightness.name}',
-        );
-        if (healthOnly) {
-          tester.view.physicalSize = const Size(390, 560);
-          await tester.pump(const Duration(milliseconds: 250));
-          await tester.drag(find.byType(ListView).last, const Offset(0, -420));
-          await tester.pump(const Duration(milliseconds: 250));
-          await capture(tester, 'health-profile-${brightness.name}');
-          tester.view.physicalSize = const Size(390, 844);
-        }
+        ),
+      );
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 250));
       }
+      await capture(tester, 'administration-${brightness.name}');
       await tester.pumpWidget(const SizedBox.shrink());
 
       tester.view.physicalSize = const Size(390, 800);

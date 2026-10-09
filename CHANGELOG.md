@@ -20,9 +20,8 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 - Switch between chats opened from Recents with a two-finger sideways swipe.
   Pinch inward to leave a card stack open, swipe through the circular stack with
-  momentum and tap a card to expand its conversation. The chat actions menu
-  offers the same navigation. Back restores the Recents filter; drafts stay
-  with their chats.
+  momentum and tap a card to expand its conversation. Back restores the Recents
+  filter; drafts stay with their chats.
 - Show soft edge cues for replies and confirmed requests for input in other
   recent conversations. Animate switching with retained conversation snapshots
   and keep available Recents rows visible during background refresh.
