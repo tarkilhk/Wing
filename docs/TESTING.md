@@ -103,9 +103,13 @@ removed double-tap switching and
 completed asynchronous preview publication, ten-card center-outward priority,
 cache reuse across regenerated workspace themes and revision replacement, Markdown readiness, read/render deadlines,
 resize invalidation and a terminal bounded-batch spinner,
-theme paint and the production Recents route with draft/cursor/Back
-restoration at normal and enlarged text in both themes. The passive-card cases
-render shared message/Markdown chrome with bullets, links, a table and code,
+theme paint, top-aligned opening titles without profile labels or status overlap,
+and the production Recents route with draft/cursor/Back
+restoration at normal and enlarged text in both themes.
+The opening-cover geometry regression checks actual rendered bounds because
+static analysis cannot establish text overlap across themes and text scales.
+The passive-card cases render shared message/Markdown chrome with bullets,
+links, a table and code,
 without initiating external-image loads. `profile_saved_history_test.dart` and
 `large_chat_outputs_test.dart` retain the explicit stock inline-image contract.
 Its held-resume case

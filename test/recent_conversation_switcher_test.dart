@@ -339,6 +339,8 @@ void main() {
       Brightness brightness = Brightness.dark,
       bool accessible = false,
       bool reduced = false,
+      double textScale = 1,
+      GlobalKey? frame,
       Widget Function(RecentConversationCard)? buildPreview,
     }) async {
       await session.select(source.selected);
@@ -353,8 +355,11 @@ void main() {
             data: MediaQuery.of(context).copyWith(
               accessibleNavigation: accessible,
               disableAnimations: reduced,
+              textScaler: TextScaler.linear(textScale),
             ),
-            child: child!,
+            child: frame == null
+                ? child!
+                : RepaintBoundary(key: frame, child: child!),
           ),
           home: ListenableBuilder(
             listenable: source,
@@ -846,6 +851,48 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
+
+    for (final brightness in Brightness.values) {
+      for (final scale in [1.0, 2.0]) {
+        testWidgets(
+          'opening cover separates title and status in ${brightness.name} at $scale',
+          (tester) async {
+            final frame = GlobalKey();
+            await mount(
+              tester,
+              brightness: brightness,
+              textScale: scale,
+              frame: frame,
+            );
+            source.waitingOpen = Completer<void>();
+            switcher.currentState!.openStack();
+            await _finishFrames(tester);
+            final selection = switcher.currentState!.selectAdjacent(1);
+            await _finishFrames(tester);
+            final title = tester.getRect(find.text(source.entries[1].title));
+            final status = tester.getRect(find.text('Opening conversation…'));
+            expect(title.top, lessThan(48));
+            expect(title.bottom, lessThan(status.top));
+            expect(title.left, greaterThanOrEqualTo(16));
+            expect(status.center.dy, closeTo(400, 1));
+            expect(
+              find.text(source.entries[1].key.workspace.profileName),
+              findsNothing,
+            );
+            await _captureCurrent(
+              tester,
+              frame,
+              'opening-${brightness.name}-$scale',
+            );
+            source.waitingOpen!.complete();
+            await _finishFrames(tester);
+            await selection;
+            expect(find.text('Opening conversation…'), findsNothing);
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
 
     testWidgets('card opens during expansion and waits for a painted chat', (
       tester,

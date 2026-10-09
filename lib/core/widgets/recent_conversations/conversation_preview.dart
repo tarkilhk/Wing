@@ -217,28 +217,21 @@ class ConversationCardPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ColoredBox(
     color: Theme.of(context).colorScheme.surface,
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(WingSpacing.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              entry.title,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: WingSpacing.sm),
-            Text(
-              entry.key.workspace.profileName,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+    child: SafeArea(
+      bottom: false,
+      child: Align(
+        alignment: AlignmentDirectional.topStart,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: WingSpacing.lg,
+            vertical: WingSpacing.md,
+          ),
+          child: Text(
+            entry.title,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: WingAppBar.titleStyle(context),
+          ),
         ),
       ),
     ),

@@ -135,7 +135,10 @@ retains stack and Recents navigation.
   already hidden with Android Back stays hidden. The obscured chat cannot receive
   focus, including when a menu restores its previous focus target.
 
-Moving cards use cached viewport images or static title/profile placeholders.
+Moving cards use cached viewport images or static title-only placeholders.
+Place placeholder titles at the top with the shared chat-title typography and
+safe-area spacing. Omit the profile label. On an uncaptured chat's opening cover,
+keep the temporary opening status separate in the center, below the title.
 At zoom-out admission, capture the actual chat's completed paint before hiding
 it offstage with its tickers and focus paused. Keep its latest image and reuse
 valid images on later stack openings; there is no recurring capture timer.
