@@ -67,6 +67,7 @@ void main() {
         'offset': '0',
         'order': 'latest',
         'include_compacted': 'true',
+        'inline_images': 'true',
       });
     },
   );

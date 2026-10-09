@@ -10,6 +10,7 @@ import '../../models/profile_session_key.dart';
 import '../../models/recent_conversation.dart';
 import '../../services/recent_conversation_session.dart';
 import '../studio_error.dart';
+import '../background_markdown_content.dart';
 import 'conversation_card_motion.dart';
 import 'conversation_card_snapshots.dart';
 import 'conversation_gestures.dart';
@@ -56,8 +57,15 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   final _snapshots = ConversationCardSnapshots();
   final _previewBoundary = GlobalKey();
   final _placeholders = <ProfileSessionKey, Widget>{};
-  final _previewVersions = <ProfileSessionKey, RecentConversationCard>{};
-  RecentConversationCard? _stagingCard;
+  Widget? _stagingView;
+  final _failures = <ProfileSessionKey, Object>{};
+  final _initialBatch = <ProfileSessionKey>{};
+  final _completed = <ProfileSessionKey>{};
+  Timer? _batchTimer;
+  Completer<void>? _preparationCancel;
+  Future<void>? _liveCapture;
+  bool get _batchPending => _initialBatch.difference(_completed).isNotEmpty;
+
   Timer? _idleTimer;
   bool _preparing = false, _preparationRequested = false, _liveDirty = true;
   Object? _renderEnvironment;
@@ -69,11 +77,9 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   bool _expansionFinished = false;
   bool get _moving => _gesture != null || _motion.animating || _selecting;
 
-  final _previews =
-      <ProfileSessionKey, ({RecentConversationCard card, Widget view})>{};
   int _captureGeneration = 0;
   bool _active = false, _stack = false, _selecting = false;
-  int _base = 0, _preparedIndex = -1;
+  int _base = 0;
   double _startPosition = 0, _pinchPosition = 0, _pinchLift = 0;
   ConversationGestureKind? _gesture;
   double _lastPosition = 0, _velocity = 0;
@@ -121,7 +127,6 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     }
     if (oldWidget.child != widget.child) {
       _liveDirty = true;
-      ++_captureGeneration;
     }
     _queueIdleWork();
     if (!widget.gesturesEnabled && _gesture != null) _cancel();
@@ -132,15 +137,27 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final media = MediaQuery.of(context);
+    final theme = Theme.of(context);
     final environment = (
-      Theme.of(context),
+      // Workspace rebuilds recreate ThemeData and its extension instances.
+      // Compare the supported appearance values, not extension identity.
+      theme.colorScheme,
+      theme.textTheme,
+      theme.iconTheme,
+      theme.appBarTheme,
+      theme.visualDensity,
+      theme.platform,
       media.size,
       media.padding,
+      media.viewInsets,
+      media.devicePixelRatio,
       media.textScaler,
+      Directionality.of(context),
     );
     if (_renderEnvironment != environment) {
       _renderEnvironment = environment;
       _clearCaptures();
+      if (_stack) _beginBatch();
       _queueIdleWork();
     }
   }
@@ -192,81 +209,197 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   }
 
   void _motionChanged() {
-    if (_moving) _idleTimer?.cancel();
+    if (_moving) _pausePreparation();
+  }
+
+  void _pausePreparation() {
+    _idleTimer?.cancel();
+    widget.session.pausePreparation();
+    final cancel = _preparationCancel;
+    if (cancel != null && !cancel.isCompleted) cancel.complete();
+  }
+
+  void _beginBatch() {
+    _batchTimer?.cancel();
+    _failures.clear();
+    _initialBatch
+      ..clear()
+      ..addAll(widget.session.keysAround(_focusedIndex));
+    _completed.clear();
+    for (final key in _initialBatch) {
+      if (_snapshots.imageFor(key) != null &&
+          _snapshots.revisionFor(key) == widget.session.previewRevision(key)) {
+        _completeCard(key);
+      }
+    }
+    _batchTimer = Timer(const Duration(seconds: 15), () {
+      if (!mounted) return;
+      for (final key in _initialBatch.difference(_completed)) {
+        _failures[key] = widget.session.previewRevision(key);
+      }
+      _pausePreparation();
+      setState(() => _completed.addAll(_initialBatch));
+    });
+  }
+
+  void _completeCard(ProfileSessionKey key) {
+    if (_initialBatch.contains(key)) _completed.add(key);
+  }
+
+  void _endBatch() {
+    _batchTimer?.cancel();
+    _initialBatch.clear();
+    _completed.clear();
+    _pausePreparation();
   }
 
   void _queueIdleWork() {
     _idleTimer?.cancel();
-    if (!mounted || _moving || !widget.session.active) return;
+    if (!mounted || !_active || !_stack || _moving || !widget.session.active) {
+      return;
+    }
     if (_preparing) {
       _preparationRequested = true;
       return;
     }
+    // This is event-driven gesture settling, not recurring prewarming or
+    // Priority.idle: an animated progress indicator cannot starve this queue.
     _idleTimer = Timer(const Duration(milliseconds: 80), () {
       if (mounted && !_moving) unawaited(_prepareIdle());
     });
   }
 
   Future<void> _prepareIdle() async {
-    if (_preparing || _moving || !widget.session.active || _size.isEmpty) {
+    if (_preparing ||
+        !_stack ||
+        _moving ||
+        !widget.session.active ||
+        _size.isEmpty) {
       return;
     }
     _preparing = true;
+    _preparationRequested = false;
     final generation = _captureGeneration;
+    final cancel = _preparationCancel = Completer<void>();
     bool current() =>
         mounted &&
         widget.session.active &&
+        _stack &&
         !_moving &&
-        generation == _captureGeneration;
+        generation == _captureGeneration &&
+        !cancel.isCompleted;
     try {
-      _preparedIndex = _active
-          ? _focusedIndex
-          : math.max(0, widget.session.selectedIndex);
-      widget.session.prepareAround(_preparedIndex);
-      final wanted = <ProfileSessionKey>{
-        widget.chatKey,
-        for (final offset in [-1, 0, 1])
-          widget.session.entryAt(_preparedIndex + offset).key,
+      // The departing real-page readback and synthetic readbacks share one lane.
+      if (_liveCapture != null) {
+        await Future.any<void>([_liveCapture!, cancel.future]);
+      }
+      if (!current()) return;
+      final neighborhood = widget.session.keysAround(_focusedIndex, limit: 3);
+      final order = <ProfileSessionKey>{
+        ...neighborhood,
+        ..._initialBatch.where((key) => !_completed.contains(key)),
       };
-      _snapshots.retain(wanted);
-      _previews.removeWhere((key, _) => !wanted.contains(key));
-      _placeholders.removeWhere((key, _) => !wanted.contains(key));
-      _previewVersions.removeWhere((key, _) => !wanted.contains(key));
-      if (_liveDirty && !_active) await _capture();
-      for (final offset in [0, -1, 1]) {
+      // Visible demand may replace distant speculative work, never enlarge
+      // the physical/passive preparation window beyond ten conversations.
+      final priorities = order
+          .take(RecentConversationSession.preparationLimit)
+          .toList();
+      _failures.removeWhere((key, _) => !priorities.contains(key));
+      _snapshots.retain(neighborhood.toSet());
+      final needed = <ProfileSessionKey>[];
+      for (final key in priorities) {
+        final revision = widget.session.previewRevision(key);
+        if (_snapshots.imageFor(key) != null &&
+            _snapshots.revisionFor(key) != revision) {
+          _snapshots.invalidate(key);
+        }
+        if (_snapshots.imageFor(key) != null || _failures[key] == revision) {
+          _completeCard(key);
+        } else {
+          needed.add(key);
+        }
+      }
+      widget.session.prepare(needed);
+      if (!current()) return;
+      for (final key in needed) {
         if (!current()) return;
-        final card = widget.session.cardAt(_preparedIndex + offset);
-        final key = card.entry.key;
-        if (_snapshots.isLive(key) ||
-            card.loading ||
-            identical(_previewVersions[key], card)) {
+        final index = _indexOf(key);
+        final card = widget.session.cardAt(index);
+        // In-flight history is admitted in parallel by the session, but never
+        // blocks a ready neighboring card's single rendering lane.
+        if (card.loading || card.preview == null && card.error == null) {
           continue;
         }
-        setState(() => _stagingCard = card);
-        await SchedulerBinding.instance.endOfFrame;
-        if (!current()) return;
-        final boundary = _previewBoundary.currentContext?.findRenderObject();
-        if (boundary is! RenderRepaintBoundary || !boundary.attached) continue;
-        ui.Image image;
+        final revision = widget.session.previewRevision(key);
+        if (card.error != null) {
+          _failures[key] = revision;
+          _completeCard(key);
+          continue;
+        }
+        final deadline = Timer(const Duration(seconds: 5), () {
+          _failures[key] = revision;
+          _completeCard(key);
+          if (!cancel.isCompleted) cancel.complete();
+          _preparationRequested = true;
+        });
         try {
-          image = await boundary.toImage(
-            pixelRatio: math.min(1, 768 / _size.longestSide),
-          );
-        } catch (_) {
-          continue;
+          setState(() => _stagingView = widget.previewBuilder(card));
+          // Await the production Markdown worker, then a completed paint.
+          // A hidden page is still UI work; each job yields before capture.
+          do {
+            await Future.any<void>([
+              SchedulerBinding.instance.endOfFrame,
+              cancel.future,
+            ]);
+            if (!current()) return;
+          } while (_markdownPending(_previewBoundary.currentContext));
+          final boundary = _previewBoundary.currentContext?.findRenderObject();
+          if (boundary is! RenderRepaintBoundary || !boundary.attached) {
+            _failures[key] = revision;
+            _completeCard(key);
+            continue;
+          }
+          final ratio = _captureRatio();
+          final bytes = _captureBytes(ratio);
+          _snapshots.reserve(bytes);
+          ui.Image? image;
+          try {
+            image = await boundary.toImage(pixelRatio: ratio);
+          } catch (_) {
+            // This card is terminal for the batch; other ready cards continue.
+          } finally {
+            _snapshots.release(bytes);
+          }
+          if (!current() || revision != widget.session.previewRevision(key)) {
+            image?.dispose();
+            return;
+          }
+          if (image != null) {
+            _snapshots.record(key, image, live: false, revision: revision);
+          }
+          if (image == null || _snapshots.imageFor(key) == null) {
+            _failures[key] = revision;
+          } else {
+            _failures.remove(key);
+          }
+          _completeCard(key);
+          // Only the arriving image changes the stack, never its geometry.
+          setState(() => _stagingView = null);
+          await Future.any<void>([
+            SchedulerBinding.instance.endOfFrame,
+            cancel.future,
+          ]);
+        } finally {
+          deadline.cancel();
         }
-        if (!current()) {
-          image.dispose();
-          return;
-        }
-        _snapshots.record(key, image, live: false);
-        _previewVersions[key] = card;
       }
     } finally {
       _preparing = false;
+      if (identical(_preparationCancel, cancel)) _preparationCancel = null;
       if (mounted) {
-        setState(() => _stagingCard = null);
-        if (_preparationRequested) {
+        setState(() => _stagingView = null);
+        if (!_batchPending) _batchTimer?.cancel();
+        if (_preparationRequested && _stack) {
           _preparationRequested = false;
           _queueIdleWork();
         }
@@ -274,47 +407,96 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     }
   }
 
-  Future<void> _capture() async {
-    final key = widget.chatKey, generation = _captureGeneration;
-    if (_active || _moving) return;
+  bool _markdownPending(BuildContext? subtree) {
+    var pending = false;
+    void visit(Element element) {
+      if (pending) return;
+      if (element is StatefulElement &&
+          element.state is BackgroundMarkdownContentState &&
+          (element.state as BackgroundMarkdownContentState).pending) {
+        pending = true;
+      } else {
+        element.visitChildren(visit);
+      }
+    }
+
+    if (subtree is Element) subtree.visitChildren(visit);
+    return pending;
+  }
+
+  double _captureRatio() {
+    final slots = RecentConversationSession.preparationLimit + 1;
+    var ratio = math.min(
+      math.min(
+        MediaQuery.devicePixelRatioOf(context),
+        1280 / _size.longestSide,
+      ),
+      // Ten retained images plus one readback fit even in a square viewport.
+      math.sqrt(
+        _snapshots.byteLimit / (slots * _size.width * _size.height * 4),
+      ),
+    );
+    // Readback rounds both dimensions upward to whole pixels.
+    while (_captureBytes(ratio) > _snapshots.byteLimit ~/ slots) {
+      ratio *= .999;
+    }
+    return ratio;
+  }
+
+  int _captureBytes(double ratio) =>
+      (_size.width * ratio).ceil() * (_size.height * ratio).ceil() * 4;
+
+  void _captureLive() {
+    if (_liveCapture != null || !_liveDirty || _active || _size.isEmpty) return;
     final boundary = _liveBoundary.currentContext?.findRenderObject();
-    if (boundary is! RenderRepaintBoundary) return;
-    await SchedulerBinding.instance.endOfFrame;
-    if (!mounted ||
-        generation != _captureGeneration ||
-        widget.chatKey != key ||
-        !boundary.attached ||
-        _active ||
-        _moving) {
-      return;
-    }
-    ui.Image image;
-    try {
-      image = await boundary.toImage(
-        pixelRatio: math.min(
-          MediaQuery.devicePixelRatioOf(context),
-          math.min(1.5, 1280 / _size.longestSide),
-        ),
-      );
-    } catch (_) {
-      return;
-    }
-    if (!mounted || generation != _captureGeneration || _active || _moving) {
-      image.dispose();
-      return;
-    }
-    _snapshots.record(key, image, live: true);
-    _liveDirty = false;
-    setState(() {});
+    if (boundary is! RenderRepaintBoundary || !boundary.attached) return;
+    final key = widget.chatKey;
+    final session = widget.session;
+    final environment = _renderEnvironment;
+    final size = _size;
+    final revision = session.previewRevision(key);
+    final ratio = _captureRatio();
+    final bytes = _captureBytes(ratio);
+    _snapshots.reserve(bytes);
+    // Called at gesture/menu admission, while the last completed real paint is
+    // still available. Do not wait for a frame that would hide it Offstage.
+    final readback = boundary.toImage(pixelRatio: ratio);
+    _liveCapture =
+        () async {
+          ui.Image? image;
+          try {
+            image = await readback;
+          } catch (_) {
+            // Missing pixels leave a title card; passive preparation can fill it.
+          } finally {
+            _snapshots.release(bytes);
+          }
+          if (!mounted ||
+              widget.session != session ||
+              !session.active ||
+              environment != _renderEnvironment ||
+              size != _size ||
+              revision != session.previewRevision(key)) {
+            image?.dispose();
+            return;
+          }
+          if (image != null) {
+            _snapshots.record(key, image, live: true, revision: revision);
+            if (widget.chatKey == key) _liveDirty = false;
+            setState(() {});
+          }
+        }().whenComplete(() {
+          _liveCapture = null;
+          _queueIdleWork();
+        });
   }
 
   void _clearCaptures() {
     ++_captureGeneration;
-    _idleTimer?.cancel();
+    _endBatch();
     _snapshots.clear();
-    _previewVersions.clear();
+    _failures.clear();
     _liveDirty = true;
-    _previews.clear();
     _placeholders.clear();
   }
 
@@ -327,6 +509,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     if (!_canGesture) return;
     _idleTimer?.cancel();
     ++_captureGeneration;
+    _captureLive();
     final origin = _active
         ? _focusedIndex
         : math.max(0, widget.session.selectedIndex);
@@ -340,7 +523,6 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     _pinchPosition = _motion.position;
     _pinchLift = _motion.lift.clamp(0.0, 1.0);
     setState(() => _active = true);
-    _preparedIndex = -1;
     if (sample.kind != ConversationGestureKind.pinch) {
       _motion.spring(lift: 1, zoom: 0, reducedMotion: _reduced);
     }
@@ -425,6 +607,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       return;
     }
     if (!_active) {
+      _captureLive();
       _base = math.max(0, widget.session.selectedIndex);
       _motion.jump(position: 0, lift: 0, zoom: 0);
     }
@@ -432,7 +615,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       _active = _stack = true;
       _gesture = null;
     });
-    _preparedIndex = -1;
+    _beginBatch();
     _notifyPresentation();
     _settleStack(_motion.position.roundToDouble());
   }
@@ -459,6 +642,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
 
   void _returnToChat({int? cardIndex}) {
     if (!mounted) return;
+    _endBatch();
     _gesture = null;
     final selected = math.max(0, widget.session.selectedIndex);
     final count = widget.session.entries.length;
@@ -484,7 +668,6 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     setState(() {
       _active = _stack = _selecting = false;
       _base = math.max(0, widget.session.selectedIndex);
-      _preparedIndex = -1;
     });
     _motion.jump(position: 0, lift: 0, zoom: 0);
     _notifyPresentation();
@@ -502,7 +685,8 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       return Future.value();
     }
     final fromStack = _stack;
-    _idleTimer?.cancel();
+    _captureLive();
+    _endBatch();
     ++_captureGeneration;
     final completion = _selectionCompletion = Completer<void>();
     final expansion = _expansionCompletion = Completer<void>();
@@ -573,6 +757,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
           _stack = fromStack;
         });
         if (fromStack) {
+          _beginBatch();
           _settleStack(_motion.position.roundToDouble());
         } else {
           if (widget.session.error case final error?) {
@@ -632,6 +817,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   double _browsePosition = 0;
   void _browseDown(DragDownDetails details) {
     if (_selecting) return;
+    _pausePreparation();
     _motion.stop();
     _browseStart = details.localPosition;
     _browsePosition = _lastPosition = _motion.position;
@@ -799,8 +985,6 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
         filterQuality: FilterQuality.low,
       );
     }
-    final prepared = _previews[key];
-    if (prepared != null) return prepared.view;
     return _placeholder(index);
   }
 
@@ -812,21 +996,11 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     return _placeholders.putIfAbsent(
       key,
       () => RepaintBoundary(
-        child: ConversationPreview(
-          card: RecentConversationCard(entry: widget.session.entryAt(index)),
-          connectionLabel: '',
+        child: ConversationCardPlaceholder(
+          entry: widget.session.entryAt(index),
         ),
       ),
     );
-  }
-
-  Widget _previewFor(RecentConversationCard card) {
-    final key = card.entry.key;
-    final cached = _previews[key];
-    if (cached != null && identical(cached.card, card)) return cached.view;
-    final view = RepaintBoundary(child: widget.previewBuilder(card));
-    _previews[key] = (card: card, view: view);
-    return view;
   }
 
   Widget _nudge() {
@@ -875,6 +1049,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       if (_size != constraints.biggest) {
         _size = constraints.biggest;
         _clearCaptures();
+        if (_stack) _beginBatch();
         _queueIdleWork();
       }
       return RawGestureDetector(
@@ -898,13 +1073,18 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
         },
         child: Stack(
           children: [
-            if (_stagingCard case final card?)
+            if (_stagingView case final view?)
               Positioned.fill(
                 child: ExcludeSemantics(
                   child: IgnorePointer(
-                    child: RepaintBoundary(
-                      key: _previewBoundary,
-                      child: _previewFor(card),
+                    child: ExcludeFocus(
+                      child: TickerMode(
+                        enabled: false,
+                        child: RepaintBoundary(
+                          key: _previewBoundary,
+                          child: view,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -993,6 +1173,25 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                                 tooltip: 'Return to conversation',
                                 onPressed: _selecting ? null : _returnToChat,
                                 icon: const Icon(Icons.close),
+                              ),
+                            ),
+                          if (_stack && _batchPending)
+                            Positioned(
+                              top: MediaQuery.paddingOf(context).top + 24,
+                              right: 24,
+                              child: Semantics(
+                                label: 'Preparing conversation images',
+                                liveRegion: true,
+                                child: SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    key: const ValueKey(
+                                      'recent-snapshot-progress',
+                                    ),
+                                    strokeWidth: 2,
+                                    value: _reduced ? .5 : null,
+                                  ),
+                                ),
                               ),
                             ),
                           if (_stack)

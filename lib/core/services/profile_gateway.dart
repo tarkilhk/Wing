@@ -993,6 +993,7 @@ class ProfileGateway {
     String id, {
     int offset = 0,
     int limit = historyPageSize,
+    bool inlineImages = true,
     String? runtimeId,
   }) async {
     if (id.isEmpty || offset < 0 || limit < 1 || limit > 500) {
@@ -1005,6 +1006,7 @@ class ProfileGateway {
         'offset': '$offset',
         'order': 'latest',
         'include_compacted': 'true',
+        'inline_images': '$inlineImages',
       });
     } on DashboardHttpException catch (error) {
       if (error.statusCode != 404 ||

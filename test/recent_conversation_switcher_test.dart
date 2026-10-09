@@ -20,6 +20,10 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/services/recent_conversation_session.dart';
+import 'package:wing/core/services/markdown_parse_worker.dart';
+import 'package:wing/core/widgets/background_markdown_content.dart';
+import 'package:wing/core/widgets/markdown_message_content.dart';
+import 'package:wing/core/widgets/chat_inline_image.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
@@ -39,14 +43,14 @@ class _ReviewBinding extends AutomatedTestWidgetsFlutterBinding {
 }
 
 class _UiSource extends ChangeNotifier implements RecentConversationSource {
-  _UiSource() {
+  _UiSource({int count = 3}) {
     final scope = WorkspaceScope(
       connectionId: 'host',
       connectionIdentity: 'owner',
       profileName: 'personal',
     );
     entries = List.generate(
-      3,
+      count,
       (i) => RecentConversationEntry(
         key: ProfileSessionKey(scope, '$i'),
         title: 'Chat $i',
@@ -65,11 +69,16 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   bool rejectOpen = false;
   Completer<void>? waitingOpen;
   int previewReads = 0;
+  final previewOrder = <ProfileSessionKey>[];
   @override
   bool admits(ProfileSessionKey key) => current;
   @override
+  Object previewRevision(ProfileSessionKey key) => revisions[key] ?? 0;
+  final revisions = <ProfileSessionKey, int>{};
+  @override
   RecentConversationPreview? cachedPreview(RecentConversationEntry entry) {
     previewReads++;
+    previewOrder.add(entry.key);
     return waitingPreviews.containsKey(entry.key) ? null : _readyPreview(entry);
   }
 
@@ -188,13 +197,14 @@ class _ScreenFixture extends ProfileBrowserFixture {
 }
 
 Future<void> _finishFrames(WidgetTester tester) async {
-  for (var pass = 0; pass < 4; pass++) {
-    await tester.pump(const Duration(milliseconds: 120));
+  // A pending-image spinner intentionally keeps scheduling frames. Advance a
+  // bounded interval instead of settling it through the read/batch deadlines.
+  for (var pass = 0; pass < 16; pass++) {
+    await tester.pump(const Duration(milliseconds: 80));
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 10)),
     );
   }
-  await tester.pumpAndSettle();
 }
 
 Future<void> _twoContacts(
@@ -348,44 +358,47 @@ void main() {
           ),
           home: ListenableBuilder(
             listenable: source,
-            builder: (context, _) => RecentConversationSwitcher(
-              key: switcher,
-              session: session,
-              chatKey: source.selected,
-              gesturesEnabled: true,
-              nudgesEnabled: true,
-              onPresentationChanged: (_, _) {},
-              previewBuilder:
-                  buildPreview ??
-                  (card) => Scaffold(
-                    body: Center(
-                      child: Text(
-                        card.preview?.scopeLabel ?? 'Preview pending',
+            builder: (context, _) => Theme(
+              data: wingTheme(brightness),
+              child: RecentConversationSwitcher(
+                key: switcher,
+                session: session,
+                chatKey: source.selected,
+                gesturesEnabled: true,
+                nudgesEnabled: true,
+                onPresentationChanged: (_, _) {},
+                previewBuilder:
+                    buildPreview ??
+                    (card) => Scaffold(
+                      body: Center(
+                        child: Text(
+                          card.preview?.scopeLabel ?? 'Preview pending',
+                        ),
                       ),
                     ),
-                  ),
-              child: Scaffold(
-                body: ConversationGestureBoundary(
-                  child: ColoredBox(
-                    color: Theme.of(context).colorScheme.surface,
-                    child: Column(
-                      children: [
-                        Text(
-                          'Mounted conversation ${source.selected.sessionId}',
-                        ),
-                        const ConversationGestureBoundary(
-                          blocked: true,
-                          child: SizedBox(
-                            height: 150,
-                            child: Center(child: Text('Selectable message')),
+                child: Scaffold(
+                  body: ConversationGestureBoundary(
+                    child: ColoredBox(
+                      color: Theme.of(context).colorScheme.surface,
+                      child: Column(
+                        children: [
+                          Text(
+                            'Mounted conversation ${source.selected.sessionId}',
                           ),
-                        ),
-                        Expanded(
-                          child: ListView(
-                            children: const [SizedBox(height: 1800)],
+                          const ConversationGestureBoundary(
+                            blocked: true,
+                            child: SizedBox(
+                              height: 150,
+                              child: Center(child: Text('Selectable message')),
+                            ),
                           ),
-                        ),
-                      ],
+                          Expanded(
+                            child: ListView(
+                              children: const [SizedBox(height: 1800)],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -396,6 +409,297 @@ void main() {
       );
       await _finishFrames(tester);
     }
+
+    testWidgets(
+      'ten-card batch publishes outward and reuses captures on reopening',
+      (tester) async {
+        session.dispose();
+        source.dispose();
+        source = _UiSource(count: 100);
+        session = RecentConversationSession(
+          entries: source.entries,
+          source: source,
+          activity: activity,
+        );
+        final built = <ProfileSessionKey>[];
+        await mount(
+          tester,
+          buildPreview: (card) {
+            built.add(card.entry.key);
+            return const ColoredBox(color: Colors.green);
+          },
+        );
+        // mount supplies normal phone geometry; override it after mounting to
+        // exercise rounding and the readback slot in a high-density square.
+        tester.view.physicalSize = const Size(2100, 2100);
+        tester.view.devicePixelRatio = 3;
+        await tester.pump();
+        expect(
+          source.previewReads,
+          0,
+          reason: 'Normal chat does not prewarm on a timer.',
+        );
+        switcher.currentState!.openStack();
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('recent-snapshot-progress')),
+          findsOneWidget,
+        );
+        expect(built, isEmpty);
+        await _finishFrames(tester);
+        await _finishFrames(tester);
+        final expected = [
+          99,
+          1,
+          98,
+          2,
+          97,
+          3,
+          96,
+          4,
+          95,
+        ].map((i) => source.entries[i].key).toList();
+        expect(built, expected);
+        expect(source.previewOrder, expected);
+        expect(
+          find.byKey(const ValueKey('recent-snapshot-progress')),
+          findsNothing,
+        );
+        expect(source.opens, isEmpty);
+        switcher.currentState!.dismissStack();
+        await _finishFrames(tester);
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        expect(
+          built,
+          expected,
+          reason: 'Valid pixels survive successive stack openings.',
+        );
+        expect(source.previewOrder, expected);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('menu switching retains the departing genuine viewport', (
+      tester,
+    ) async {
+      final built = <ProfileSessionKey>[];
+      await mount(
+        tester,
+        buildPreview: (card) {
+          built.add(card.entry.key);
+          return const ColoredBox(color: Colors.green);
+        },
+      );
+      final origin = source.selected;
+      final selection = switcher.currentState!.selectAdjacent(1);
+      await tester.pump();
+      await _finishFrames(tester);
+      await selection;
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      expect(find.byKey(ValueKey((origin, 'snapshot'))), findsOneWidget);
+      expect(
+        built,
+        isNot(contains(origin)),
+        reason: 'Changing selection must not discard the departing readback.',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('equivalent workspace themes preserve prepared images', (
+      tester,
+    ) async {
+      final built = <ProfileSessionKey>[];
+      await mount(
+        tester,
+        buildPreview: (card) {
+          built.add(card.entry.key);
+          return const ColoredBox(color: Colors.green);
+        },
+      );
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      final key = source.selected;
+      final image = tester
+          .widget<RawImage>(find.byKey(ValueKey((key, 'snapshot'))))
+          .image;
+      final before = List.of(built);
+      for (var rebuild = 0; rebuild < 3; rebuild++) {
+        source.notifyListeners();
+        await tester.pump();
+      }
+      await _finishFrames(tester);
+      expect(
+        tester.widget<RawImage>(find.byKey(ValueKey((key, 'snapshot')))).image,
+        same(image),
+      );
+      expect(built, before);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('resizing the stack restarts its image batch', (tester) async {
+      await mount(tester);
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      expect(
+        find.byKey(const ValueKey('recent-snapshot-progress')),
+        findsNothing,
+      );
+      tester.view.physicalSize = const Size(700, 700);
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('recent-snapshot-progress')),
+        findsOneWidget,
+      );
+      await _finishFrames(tester);
+      expect(
+        find.byKey(const ValueKey('recent-snapshot-progress')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(ValueKey((source.entries[1].key, 'snapshot'))),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a changed conversation revision replaces only its image', (
+      tester,
+    ) async {
+      final built = <ProfileSessionKey>[];
+      await mount(
+        tester,
+        buildPreview: (card) {
+          built.add(card.entry.key);
+          return ColoredBox(
+            color: source.revisions[card.entry.key] == 1
+                ? Colors.blue
+                : Colors.green,
+          );
+        },
+      );
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      final key = source.entries[1].key;
+      final old = tester
+          .widget<RawImage>(find.byKey(ValueKey((key, 'snapshot'))))
+          .image!;
+      built.clear();
+      source.revisions[key] = 1;
+      source.notifyListeners();
+      await _finishFrames(tester);
+      final image = tester
+          .widget<RawImage>(find.byKey(ValueKey((key, 'snapshot'))))
+          .image!;
+      expect(image, isNot(same(old)));
+      expect(old.debugDisposed, isTrue);
+      expect(built, [key]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'pending Markdown never publishes a blank snapshot and exit fences it',
+      (tester) async {
+        final parsed = Completer<MarkdownParseResult>();
+        await mount(
+          tester,
+          buildPreview: (_) => BackgroundMarkdownContent(
+            data: '**Prepared message**',
+            deliverables: false,
+            parse: (_) => parsed.future,
+            builder: (_, _) => const ColoredBox(color: Colors.green),
+          ),
+        );
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        expect(
+          find.byKey(ValueKey((source.entries[1].key, 'snapshot'))),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('recent-snapshot-progress')),
+          findsOneWidget,
+        );
+        switcher.currentState!.dismissStack();
+        await _finishFrames(tester);
+        parsed.complete(const MarkdownParseResult([], 0, 0, 0));
+        await _finishFrames(tester);
+        expect(find.byType(RawImage), findsNothing);
+        expect(find.byType(BackgroundMarkdownContent), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'failed and timed-out reads settle the spinner without opening chats',
+      (tester) async {
+        final failed = Completer<RecentConversationPreview>();
+        final held = Completer<RecentConversationPreview>();
+        source.waitingPreviews[source.entries[1].key] = failed;
+        source.waitingPreviews[source.entries[2].key] = held;
+        await mount(tester);
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        failed.completeError(StateError('Fixture history unavailable'));
+        await tester.pump(const Duration(seconds: 6));
+        await _finishFrames(tester);
+        expect(
+          find.byKey(const ValueKey('recent-snapshot-progress')),
+          findsNothing,
+        );
+        expect(source.opens, isEmpty);
+        held.complete(source._readyPreview(source.entries[2]));
+        await _finishFrames(tester);
+        expect(
+          find.byKey(ValueKey((source.entries[2].key, 'snapshot'))),
+          findsNothing,
+          reason: 'Timed-out history cannot publish a late image.',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'batch deadline stops loading even when physical reads remain held',
+      (tester) async {
+        session.dispose();
+        source.dispose();
+        source = _UiSource(count: 100);
+        session = RecentConversationSession(
+          entries: source.entries,
+          source: source,
+          activity: activity,
+        );
+        for (final entry in source.entries.skip(1)) {
+          source.waitingPreviews[entry.key] =
+              Completer<RecentConversationPreview>();
+        }
+        await mount(tester);
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        expect(
+          find.byKey(const ValueKey('recent-snapshot-progress')),
+          findsOneWidget,
+        );
+        await tester.pump(const Duration(seconds: 16));
+        await _finishFrames(tester);
+        expect(
+          find.byKey(const ValueKey('recent-snapshot-progress')),
+          findsNothing,
+        );
+        expect(source.opens, isEmpty);
+        expect(
+          source.previewOrder.toSet(),
+          hasLength(9),
+          reason:
+              'Initial admission stops at ten cards, including the real capture.',
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
 
     testWidgets('accessibility service leaves expert gestures available', (
       tester,
@@ -725,18 +1029,40 @@ void main() {
         addTearDown(cache.clear);
         final images = [for (var i = 0; i < 3; i++) await pixels(20)];
         for (var i = 0; i < 3; i++) {
-          cache.record(source.entries[i].key, images[i], live: i == 0);
+          cache.record(
+            source.entries[i].key,
+            images[i],
+            live: i == 0,
+            revision: 0,
+          );
         }
         expect(cache.imageFor(source.entries[0].key), isNull);
         expect(images[0].debugDisposed, isTrue);
         expect(cache.imageFor(source.entries[1].key), isNotNull);
         final oversized = await pixels(40);
-        cache.record(source.entries[0].key, oversized, live: true);
+        cache.record(source.entries[0].key, oversized, live: true, revision: 0);
         expect(oversized.debugDisposed, isTrue);
         expect(cache.imageFor(source.entries[1].key), isNotNull);
         cache.retain({source.entries[1].key});
-        expect(images[2].debugDisposed, isTrue);
-        cache.record(source.entries[0].key, await pixels(20), live: true);
+        expect(
+          images[2].debugDisposed,
+          isFalse,
+          reason: 'Prepared images survive neighborhood changes.',
+        );
+        cache.reserve(1600);
+        expect(
+          images[2].debugDisposed,
+          isTrue,
+          reason: 'Readback in flight counts against the pixel budget.',
+        );
+        expect(images[1].debugDisposed, isFalse);
+        cache.release(1600);
+        cache.record(
+          source.entries[0].key,
+          await pixels(20),
+          live: true,
+          revision: 0,
+        );
         final visited = cache.imageFor(source.entries[0].key)!;
         cache.retain({source.entries[1].key});
         expect(cache.isLive(source.entries[0].key), isTrue);
@@ -1186,6 +1512,99 @@ void main() {
       });
     }
   });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'passive rich card in ${brightness.name} at $scale avoids resource loads',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final source = _UiSource();
+          addTearDown(source.dispose);
+          final entry = source.entries[1];
+          final card = RecentConversationCard(
+            entry: entry,
+            preview: RecentConversationPreview(
+              entry: entry,
+              reading: TranscriptReadingSnapshot(
+                messages: const [
+                  {
+                    'id': 1,
+                    'role': 'user',
+                    'timestamp': 1791586680,
+                    'content': 'Is this an upstream issue?',
+                  },
+                  {
+                    'id': 2,
+                    'role': 'assistant',
+                    'timestamp': 1791586740,
+                    'content':
+                        'Yes—and **it is already reported upstream with the same symptoms**.\n\n'
+                        '- [Issue #134240](https://github.com/NousResearch/hermes-agent/issues/134240): plugin skills load in chat but are missing from the list.\n'
+                        '- [Fix PR #117836](https://github.com/NousResearch/hermes-agent/pull/117836): exposes skills across the listing surfaces.\n\n'
+                        '| State | Result |\n| --- | --- |\n| Report | Open |\n| Fix | Pending |\n\n'
+                        '```dart\nfinal snapshot = await boundary.toImage();\n```\n\n'
+                        '![Reference image](https://example.invalid/image.png)',
+                  },
+                ],
+                historySessionId: entry.key.sessionId,
+              ),
+              draft: '',
+              scopeLabel: 'Unassigned',
+              modelLabel: '6.1 Sol',
+            ),
+          );
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: frame,
+                child: ConversationPreview(card: card, connectionLabel: 'Claw'),
+              ),
+            ),
+          );
+          await _finishFrames(tester);
+          final prose = [
+            ...tester
+                .widgetList<RichText>(find.byType(RichText))
+                .map((widget) => widget.text.toPlainText()),
+            ...tester
+                .widgetList<SelectableText>(find.byType(SelectableText))
+                .map(
+                  (widget) =>
+                      widget.data ?? widget.textSpan?.toPlainText() ?? '',
+                ),
+          ].join('\n');
+          expect(prose, contains('Issue #134240'));
+          expect(prose, isNot(contains('https://github.com/NousResearch')));
+          expect(prose, isNot(contains('**it is already')));
+          expect(find.byType(MarkdownMessageContent), findsWidgets);
+          expect(
+            find.byType(ChatInlineImage),
+            findsNothing,
+            reason:
+                'Offscreen Markdown images must not initiate network/decode work.',
+          );
+          expect(tester.takeException(), isNull);
+          await _capture(
+            tester,
+            frame,
+            'passive-card-${brightness.name}-$scale',
+          );
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {

@@ -466,6 +466,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         previewBuilder: (card) => ConversationPreview(
           card: card,
           connectionLabel: controller.connection.label,
+          connectionIcon: controller.connection.icon,
+          connectionStatus: controller.connectionStatus,
         ),
         gesturesEnabled:
             _hasWorkspaceFocus &&

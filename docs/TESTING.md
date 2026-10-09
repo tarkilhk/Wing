@@ -100,9 +100,15 @@ touch-to-catch and exact moving-card selection, overlapping expansion/resume and
 retained mounted-view identity during expansion, post-expansion opaque-cover
 first/deferred-paint ordering and disposal releasing pending paint waits,
 removed double-tap switching and
-completed asynchronous preview publication,
+completed asynchronous preview publication, ten-card center-outward priority,
+cache reuse across regenerated workspace themes and revision replacement, Markdown readiness, read/render deadlines,
+resize invalidation and a terminal bounded-batch spinner,
 theme paint and the production Recents route with draft/cursor/Back
-restoration at normal and enlarged text in both themes. Its held-resume case
+restoration at normal and enlarged text in both themes. The passive-card cases
+render shared message/Markdown chrome with bullets, links, a table and code,
+without initiating external-image loads. `profile_saved_history_test.dart` and
+`large_chat_outputs_test.dart` retain the explicit stock inline-image contract.
+Its held-resume case
 requires the restored chat to be revealed with the top loading bar while the
 server response is still pending. `profile_resume_freshness_test.dart` covers
 retained-reading admission before resume, continued progress through a held
@@ -121,11 +127,13 @@ assets under ignored `build/` and exports normal/stack captures to
 `build/recents-review/`. Host tests do not certify physical-device gesture feel,
 keyboard transitions or frame pacing; inspect those on Android before release.
 
-Recents raster capture runs during idle and waits for the completed paint frame
-in every build mode. Physical performance acceptance measures first movement and
+Recents passive page preparation runs after motion settles and waits for completed
+Markdown and paint in every build mode. Genuine capture starts at gesture/menu
+admission from the already-painted chat before it is hidden; it does not prewarm
+on a timer. Physical performance acceptance measures first movement and
 frame pacing for swipe, pinch and card browsing on representative rich history.
-The controlled repaint case queues a chat rebuild before opening the stack and
-checks the captured pixels, so an old frame cannot count as success.
+The controlled repaint case completes a queued chat repaint before opening the
+stack and checks its captured pixels, so an older paint cannot count as success.
 `recent_capture_release_safe_guard_test.dart` also rejects runtime reads of the
 actual Flutter debug paint getter, which throws when assertions are disabled.
 For a capture change, validate Choose recent conversation and previous/next

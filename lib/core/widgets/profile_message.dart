@@ -16,6 +16,9 @@ import 'user_message_attachment.dart';
 class ProfileMessage extends StatelessWidget {
   final TranscriptMessage message;
   final bool streaming;
+
+  /// Passive snapshots render resource labels without acquiring image bytes.
+  final bool loadImages;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
   final Future<void> Function(ChatOutput output)? onShareRemoteFile;
   final Future<bool> Function(ChatOutput output)? onDownloadRemoteFile;
@@ -29,6 +32,7 @@ class ProfileMessage extends StatelessWidget {
     super.key,
     required this.message,
     this.streaming = false,
+    this.loadImages = true,
     this.onOpenRemoteFile,
     this.onShareRemoteFile,
     this.onDownloadRemoteFile,
@@ -207,6 +211,7 @@ class ProfileMessage extends StatelessWidget {
                         )
                       : MarkdownMessageContent(
                           data: result,
+                          loadImages: loadImages,
                           onOpenRemoteFile: onOpenRemoteFile,
                           onDownloadRemoteFile: onDownloadRemoteFile,
                           loadImage: loadAttachmentImage,
@@ -373,6 +378,7 @@ class ProfileMessage extends StatelessWidget {
             else
               MarkdownMessageContent(
                 data: content,
+                loadImages: loadImages,
                 streaming: streaming,
                 onOpenRemoteFile: onOpenRemoteFile,
                 onDownloadRemoteFile: onDownloadRemoteFile,
@@ -395,6 +401,7 @@ class ProfileMessage extends StatelessWidget {
               child: UserMessageAttachmentTile(
                 key: ValueKey(attachment.target),
                 attachment: attachment,
+                loadImages: loadImages,
                 loadImage: loadAttachmentImage,
               ),
             ),

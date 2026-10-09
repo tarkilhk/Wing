@@ -41,6 +41,9 @@ class _Source extends ChangeNotifier implements RecentConversationSource {
   @override
   bool admits(ProfileSessionKey key) => current && !denied.contains(key);
   @override
+  Object previewRevision(ProfileSessionKey key) => revisions[key] ?? 0;
+  final revisions = <ProfileSessionKey, int>{};
+  @override
   RecentConversationPreview? cachedPreview(RecentConversationEntry entry) =>
       cached ? _preview(entry) : null;
   @override
@@ -117,10 +120,10 @@ void main() {
   test(
     'bounds physical preview reads during rapid circular browsing',
     () async {
-      session.prepareAround(0);
+      session.prepare(session.keysAround(0, limit: 3));
       expect(source.reads, hasLength(3));
-      session.prepareAround(4);
-      session.prepareAround(5);
+      session.prepare(session.keysAround(4, limit: 3));
+      session.prepare(session.keysAround(5, limit: 3));
       expect(source.reads, hasLength(3));
       expect(source.opens, isEmpty);
       final old = source.reads.keys.toList();
@@ -142,18 +145,106 @@ void main() {
     },
   );
 
+  test('center-outward preparation is unique and capped for a large ring', () {
+    session.dispose();
+    session = RecentConversationSession(
+      entries: List.generate(100, _entry),
+      source: source,
+      activity: activity,
+    );
+    expect(session.keysAround(0).map((key) => key.sessionId), [
+      '0',
+      '99',
+      '1',
+      '98',
+      '2',
+      '97',
+      '3',
+      '96',
+      '4',
+      '95',
+    ]);
+    session.prepare(session.keysAround(0));
+    expect(source.reads.keys.map((key) => key.sessionId), ['0', '99', '1']);
+    expect(
+      () => session.prepare(List.generate(11, (i) => _entry(i).key)),
+      throwsArgumentError,
+    );
+    expect(source.opens, isEmpty);
+  });
+
+  testWidgets(
+    'timeout and pause retain physical read slots until I/O settles',
+    (tester) async {
+      session.prepare(session.keysAround(0));
+      final first = source.reads.keys.toList();
+      await tester.pump(const Duration(seconds: 6));
+      expect(session.cardAt(0).error, isNotNull);
+      expect(source.reads, hasLength(3));
+      session.pausePreparation();
+      for (final key in first) {
+        source.reads[key]!.complete(_preview(_entry(int.parse(key.sessionId))));
+      }
+      await tester.pump();
+      expect(
+        source.reads,
+        hasLength(3),
+        reason: 'No new reads start during motion.',
+      );
+      expect(session.cardAt(0).preview, isNull);
+      session.prepare(session.keysAround(4, limit: 3));
+      expect(source.reads, hasLength(6));
+      expect(source.opens, isEmpty);
+      session.dispose();
+    },
+  );
+
+  test(
+    'source revision invalidates cached facts and rejects an old read',
+    () async {
+      source.cached = true;
+      session.prepare(session.keysAround(0, limit: 3));
+      source.revisions[_entry(0).key] = 1;
+      source.notifyListeners();
+      expect(session.cardAt(0).preview, isNull);
+      session.prepare(session.keysAround(0, limit: 3));
+      expect(session.cardAt(0).preview, isNotNull);
+      source.cached = false;
+      session.prepare([_entry(3).key]);
+      source.revisions[_entry(3).key] = 1;
+      session.pausePreparation();
+      source.reads[_entry(3).key]!.complete(_preview(_entry(3)));
+      await Future<void>.delayed(Duration.zero);
+      expect(session.cardAt(3).preview, isNull);
+    },
+  );
+
+  test('an obsolete read failure cannot poison a newer revision', () async {
+    final key = _entry(0).key;
+    session.prepare([key]);
+    final old = source.reads[key]!;
+    source.revisions[key] = 1;
+    source.cached = true;
+    source.notifyListeners();
+    session.prepare([key]);
+    old.completeError(StateError('Old request failed'));
+    await Future<void>.delayed(Duration.zero);
+    expect(session.cardAt(0).error, isNull);
+    expect(session.cardAt(0).preview, isNotNull);
+  });
+
   test('cached previews publish without I/O or a motion tick', () {
     source.cached = true;
     RecentConversationPreview? observed;
     session.addListener(() => observed = session.cardAt(0).preview);
-    session.prepareAround(0);
+    session.prepare(session.keysAround(0, limit: 3));
     expect(observed?.entry.key, _entry(0).key);
     expect(source.reads, isEmpty);
     expect(source.opens, isEmpty);
   });
 
   test('late preview cannot publish after disposal', () async {
-    session.prepareAround(0);
+    session.prepare(session.keysAround(0, limit: 3));
     var changes = 0;
     session.addListener(() => changes++);
     session.dispose();

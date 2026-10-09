@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -10,6 +11,7 @@ abstract interface class RecentConversationSource implements Listenable {
   bool get current;
   ProfileSessionKey? get selected;
   bool admits(ProfileSessionKey key);
+  Object previewRevision(ProfileSessionKey key);
   RecentConversationPreview? cachedPreview(RecentConversationEntry entry);
   Future<RecentConversationPreview> loadPreview(RecentConversationEntry entry);
   Future<void> open(ProfileSessionKey key, bool Function() isCurrent);
@@ -37,12 +39,16 @@ final class RecentConversationSession extends ChangeNotifier {
     _activity.addListener(_activityChanged);
   }
 
+  static const preparationLimit = 10;
+
   final List<RecentConversationEntry> entries;
   final RecentConversationSource _source;
   final ValueListenable<ChatNoticeActivity?> _activity;
   final _cards = <ProfileSessionKey, RecentConversationCard>{};
   final _reads = <ProfileSessionKey, int>{};
   final _wanted = <ProfileSessionKey>[];
+  final _revisions = <ProfileSessionKey, Object>{};
+  final _readTimers = <ProfileSessionKey, Timer>{};
   final _nudge = ValueNotifier<ConversationNudge?>(null);
   ValueListenable<ConversationNudge?> get nudges => _nudge;
   ProfileSessionKey? _selected;
@@ -69,6 +75,28 @@ final class RecentConversationSession extends ChangeNotifier {
   RecentConversationCard cardAt(int index) {
     final entry = entryAt(index);
     return _cards[entry.key] ?? RecentConversationCard(entry: entry);
+  }
+
+  Object previewRevision(ProfileSessionKey key) => _source.previewRevision(key);
+
+  /// Unique center-outward priority, bounded independently of ring size.
+  List<ProfileSessionKey> keysAround(
+    int index, {
+    int limit = preparationLimit,
+  }) {
+    if (limit < 0) throw ArgumentError.value(limit, 'limit');
+    final result = <ProfileSessionKey>{};
+    for (
+      var distance = 0;
+      result.length < math.min(limit, entries.length);
+      distance++
+    ) {
+      for (final offset in distance == 0 ? [0] : [-distance, distance]) {
+        result.add(entryAt(index + offset).key);
+        if (result.length == math.min(limit, entries.length)) break;
+      }
+    }
+    return result.toList();
   }
 
   Future<bool> select(ProfileSessionKey key) async {
@@ -106,25 +134,27 @@ final class RecentConversationSession extends ChangeNotifier {
     }
   }
 
-  /// Keep only the visible neighborhood and the committed chat. No whole-ring
-  /// resume/read fan-out, and no late publication into an evicted card.
-  void prepareAround(int index) {
+  /// Admit a bounded priority list. Reads retain no execution authority.
+  void prepare(Iterable<ProfileSessionKey> priorities) {
     if (!active || entries.isEmpty) return;
-    final wanted = <ProfileSessionKey>{
-      for (final offset in [-1, 0, 1]) entryAt(index + offset).key,
-      ?_selected,
-    };
+    final wanted = priorities.toSet();
+    if (wanted.length > preparationLimit ||
+        wanted.any((key) => !entries.any((entry) => entry.key == key))) {
+      throw ArgumentError('Preparation requires at most ten ring members');
+    }
     _wanted
       ..clear()
-      ..addAll([
-        entryAt(index).key,
-        ...wanted.where((key) => key != entryAt(index).key),
-      ]);
+      ..addAll(wanted);
     final evicted = _cards.keys.any((key) => !wanted.contains(key));
     _cards.removeWhere((key, _) => !wanted.contains(key));
+    _revisions.removeWhere((key, _) => !wanted.contains(key));
     final changed = _pumpPreviews();
     if (evicted || changed) _emit();
   }
+
+  /// Stops new admission during motion/exit without pretending physical I/O
+  /// has been canceled. Its slot remains occupied until the source settles.
+  void pausePreparation() => _wanted.clear();
 
   bool _pumpPreviews() {
     var changed = false;
@@ -140,6 +170,7 @@ final class RecentConversationSession extends ChangeNotifier {
       final cached = _source.cachedPreview(entry);
       if (cached != null) {
         _cards[key] = RecentConversationCard(entry: entry, preview: cached);
+        _revisions[key] = previewRevision(key);
         changed = true;
       } else if (_reads.length < 3) {
         unawaited(_load(entry));
@@ -154,15 +185,32 @@ final class RecentConversationSession extends ChangeNotifier {
   Future<void> _load(RecentConversationEntry entry) async {
     if (!active || _reads.containsKey(entry.key)) return;
     final generation = ++_readGeneration;
+    final revision = previewRevision(entry.key);
+    var timedOut = false;
     _reads[entry.key] = generation;
+    _revisions[entry.key] = revision;
     _cards[entry.key] = RecentConversationCard(entry: entry, loading: true);
     _emit();
     if (!active) return;
+    _readTimers[entry.key] = Timer(const Duration(seconds: 5), () {
+      timedOut = true;
+      if (active &&
+          _reads[entry.key] == generation &&
+          _wanted.contains(entry.key)) {
+        _cards[entry.key] = RecentConversationCard(
+          entry: entry,
+          error: 'Preview unavailable',
+        );
+        _emit();
+      }
+    });
     try {
       final preview = await _source.loadPreview(entry);
       if (!active ||
+          timedOut ||
           _reads[entry.key] != generation ||
-          !_wanted.contains(entry.key)) {
+          !_wanted.contains(entry.key) ||
+          revision != previewRevision(entry.key)) {
         return;
       }
       if (preview.entry.key != entry.key) {
@@ -172,18 +220,23 @@ final class RecentConversationSession extends ChangeNotifier {
         entry: entry,
         preview: preview,
       );
+      _revisions[entry.key] = revision;
     } catch (_) {
       if (active &&
+          !timedOut &&
           _reads[entry.key] == generation &&
-          _wanted.contains(entry.key)) {
+          _wanted.contains(entry.key) &&
+          revision == previewRevision(entry.key)) {
         _cards[entry.key] = RecentConversationCard(
           entry: entry,
           error: 'Preview unavailable',
         );
       }
     } finally {
+      _readTimers.remove(entry.key)?.cancel();
       if (active && _reads[entry.key] == generation) {
         _reads.remove(entry.key);
+        if (_cards[entry.key]?.loading == true) _cards.remove(entry.key);
         _pumpPreviews();
         _emit();
       }
@@ -203,6 +256,12 @@ final class RecentConversationSession extends ChangeNotifier {
       _retired = true;
       ++_selectionGeneration;
       _discardCue();
+    }
+    for (final key in _revisions.keys.toList()) {
+      if (_revisions[key] != previewRevision(key)) {
+        _revisions.remove(key);
+        _cards.remove(key);
+      }
     }
     _emit();
   }
@@ -290,6 +349,11 @@ final class RecentConversationSession extends ChangeNotifier {
     _activity.removeListener(_activityChanged);
     _discardCue();
     _reads.clear();
+    for (final timer in _readTimers.values) {
+      timer.cancel();
+    }
+    _readTimers.clear();
+    _revisions.clear();
     _cards.clear();
     if (_notificationDepth == 0) _disposeNotifier();
   }

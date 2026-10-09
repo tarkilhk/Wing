@@ -28,6 +28,7 @@ typedef MarkdownHeadingAnchor = ({String label, int level, GlobalKey key});
 class MarkdownMessageContent extends StatefulWidget {
   final String data;
   final bool streaming;
+  final bool loadImages;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
   final Future<bool> Function(ChatOutput output)? onDownloadRemoteFile;
   final Future<Uint8List> Function(String path)? loadImage;
@@ -40,6 +41,7 @@ class MarkdownMessageContent extends StatefulWidget {
     super.key,
     required this.data,
     this.streaming = false,
+    this.loadImages = true,
     this.onOpenRemoteFile,
     this.onDownloadRemoteFile,
     this.loadImage,
@@ -117,6 +119,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   void didUpdateWidget(covariant MarkdownMessageContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.data != oldWidget.data ||
+        widget.loadImages != oldWidget.loadImages ||
         widget.streaming != oldWidget.streaming ||
         widget.deliverables != oldWidget.deliverables ||
         widget.documentPath != oldWidget.documentPath ||
@@ -139,6 +142,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
       }
     }
     if (widget.deliverables != oldWidget.deliverables ||
+        widget.loadImages != oldWidget.loadImages ||
         (widget.loadImage == null) != (oldWidget.loadImage == null) ||
         widget.documentPath != oldWidget.documentPath ||
         (widget.onOpenRemoteFile == null) !=
@@ -215,6 +219,9 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   }
 
   Widget _buildImage(MarkdownImageConfig config) {
+    if (!widget.loadImages) {
+      return Text(config.alt?.isNotEmpty == true ? config.alt! : 'Image');
+    }
     final href = config.uri.toString();
     final remote = widget.documentPath == null
         ? explicitRemoteFileOutput(href)
@@ -314,6 +321,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
               ? null
               : (output) => widget.onDownloadRemoteFile!(output),
           maxWidth: MediaQuery.sizeOf(context).width,
+          loadImages: widget.loadImages,
           loadImage: widget.loadImage == null
               ? null
               : (path) => widget.loadImage!(path),
@@ -473,12 +481,14 @@ class _DeliverableBuilder extends MarkdownElementBuilder {
     this.onOpen,
     this.onDownload, {
     required this.maxWidth,
+    required this.loadImages,
     this.loadImage,
   });
 
   final Future<void> Function(ChatOutput)? onOpen;
   final Future<bool> Function(ChatOutput)? onDownload;
   final double maxWidth;
+  final bool loadImages;
   final Future<Uint8List> Function(String path)? loadImage;
 
   @override
@@ -489,6 +499,9 @@ class _DeliverableBuilder extends MarkdownElementBuilder {
     TextStyle? parentStyle,
   ) {
     final path = element.attributes['path']!;
+    if (!loadImages && element.attributes['kind'] == 'image') {
+      return Text(element.attributes['name']!);
+    }
     // Keep this an inline node: Markdown tables and emphasized links cannot
     // contain block nodes. Bound table cells, which scroll horizontally, too.
     return ConstrainedBox(

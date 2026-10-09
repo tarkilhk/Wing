@@ -12,11 +12,13 @@ typedef UserAttachmentImageLoader = Future<Uint8List> Function(String path);
 class UserMessageAttachmentTile extends StatefulWidget {
   final UserMessageAttachment attachment;
   final UserAttachmentImageLoader? loadImage;
+  final bool loadImages;
 
   const UserMessageAttachmentTile({
     super.key,
     required this.attachment,
     this.loadImage,
+    this.loadImages = true,
   });
 
   @override
@@ -28,7 +30,7 @@ class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile> {
   late Future<ImageProvider>? _image = _load();
 
   Future<ImageProvider>? _load() =>
-      widget.attachment.isImage ? _imageProvider() : null;
+      widget.loadImages && widget.attachment.isImage ? _imageProvider() : null;
 
   Future<ImageProvider> _imageProvider() async {
     final resource = await acquireUserAttachmentImage(
@@ -44,6 +46,7 @@ class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile> {
   void didUpdateWidget(covariant UserMessageAttachmentTile oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.attachment.target != widget.attachment.target ||
+        oldWidget.loadImages != widget.loadImages ||
         oldWidget.attachment.isImage != widget.attachment.isImage) {
       _image = _load();
     }
@@ -117,7 +120,7 @@ class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.attachment.isImage) return _fileCard();
+    if (!widget.loadImages || !widget.attachment.isImage) return _fileCard();
     return FutureBuilder<ImageProvider>(
       future: _image,
       builder: (context, snapshot) {

@@ -6,6 +6,7 @@ final class _WorkspaceRecentConversationSource
     implements RecentConversationSource {
   _WorkspaceRecentConversationSource(this.controller);
   final ProfileWorkspaceController controller;
+  final _readingRevisions = Expando<Object>();
 
   @override
   bool get current => !controller._closed;
@@ -17,6 +18,28 @@ final class _WorkspaceRecentConversationSource
       controller.owns(key) &&
       !(controller._resources[key.workspace]?.blocksSession(key.sessionId) ??
           false);
+  @override
+  Object previewRevision(ProfileSessionKey key) {
+    final chat = controller._resources[key.workspace]?._chats[key.sessionId];
+    final saved = controller._savedRecents
+        .where((item) => item.key == key)
+        .firstOrNull;
+    // Canonical immutable row identity makes this cheap even for large chats.
+    return (
+      chat?.title ?? saved?.title,
+      chat == null
+          ? null
+          : (_readingRevisions[chat.reading.messages] ??= Object()),
+      chat?.reading.streaming,
+      chat?.composer.observation.displayedText,
+      chat?.model,
+      chat == null ? null : controller.chatProjectLabel(chat),
+      saved?.lastActive,
+      controller.connectionStatus.phase,
+      admits(key),
+    );
+  }
+
   @override
   void addListener(VoidCallback listener) => controller.addListener(listener);
   @override
@@ -78,6 +101,7 @@ final class _WorkspaceRecentConversationSource
     final page = await resource.gateway.history(
       entry.key.sessionId,
       limit: _recentPreviewMessageLimit,
+      inlineImages: false,
     );
     if (!admits(entry.key) || page.sessionId != entry.key.sessionId) {
       throw StateError('Conversation preview changed');

@@ -135,20 +135,41 @@ retains stack and Recents navigation.
   already hidden with Android Back stays hidden. The obscured chat cannot receive
   focus, including when a menu restores its previous focus target.
 
-Moving cards use cached viewport images. The normal chat stays mounted but is
-offstage with its tickers paused while covered. Capture and passive preview reads
-run only after motion settles; they never start from pointer movement. Neighbor
-renditions use the existing chat frame with at most two clipped plain-text messages,
-without Markdown, decoded attachments or activity trees. Missing images show a
-static chat frame until idle preparation completes. Genuine visited snapshots keep
-their reading position. The cache is limited to 12 MiB. Passive previews retain
-only the visible neighborhood plus the committed chat; genuine visited viewports survive
-neighborhood changes until budget eviction. Discarded images are disposed. Side
-previews use lower resolution. Selection starts server work alongside a 240 ms
+Moving cards use cached viewport images or static title/profile placeholders.
+At zoom-out admission, capture the actual chat's completed paint before hiding
+it offstage with its tickers and focus paused. Keep its latest image and reuse
+valid images on later stack openings; there is no recurring capture timer.
+Show one spinner while the initial batch settles. After motion stops, prepare
+up to ten unique cards in center, left neighbor, right neighbor, then outward
+order. Each ready image replaces only its own placeholder. New visible demand
+gets priority after browsing; other ring members remain available on demand.
+
+Use one rendering/readback lane and at most three physical history reads.
+Pausing admission during motion does not pretend an outstanding readback or
+network request has been canceled. Passive pages use the normal ProfileMessage
+and background Markdown renderer, shared header chrome and composer framing.
+They render saved dialogue without external image loading, live activity trees,
+resume or read acknowledgement. Await completed Markdown and paint before
+capture. The loading spinner cannot starve preparation through Priority.idle.
+
+The decoded-pixel cache is bounded to 32 MiB, including reserved readback pixels.
+Capture resolution is capped at a 1280-pixel long edge and adapts to the pixel
+budget for ten retained cards plus a readback. Genuine and prepared images
+survive neighborhood changes within that budget. Replace invalid versions and
+dispose evicted or late pixels. Conversation identity, observed reading/draft
+revision, theme appearance values, text scale and viewport determine validity; captured metadata
+holds an opaque reading token rather than retaining a transcript copy. Recreated
+workspace theme objects with equal appearance preserve valid images. Cache
+hits publish immediately; image display does not wait for PNG encoding.
+
+History and render jobs have five-second preparation deadlines. Initial-batch
+progress settles after success, failure or a fifteen-second batch deadline, even
+if physical I/O remains held. Browsing and selection stay available. Exit,
+retirement, superseding work and layout changes fence late results. Selection starts server work alongside a 240 ms
 expansion. Retain the original mounted view throughout that motion; admitting
 cached reading must not build or lay out the selected transcript on animation
-frames. After expansion, the selected chat and its deferred
-reading-layout corrections paint beneath the opaque cover before a 100 ms
+frames. After expansion, two completed paint frames let the selected chat and its deferred
+reading-layout corrections finish beneath the opaque cover before a 100 ms
 reveal. Cancellation releases the retained view and any paint wait. For a
 previously loaded conversation, reveal the canonical retained
 transcript, draft and reading position without waiting for session resume or
@@ -157,7 +178,7 @@ discovery, chat lists or projects. Keep the thin loading bar at the top while
 the selected conversation refreshes; fresh server messages publish through the
 existing transcript reader. Runtime-dependent actions wait for the refresh.
 Genuine snapshots keep their exact viewport throughout; an uncaptured
-excerpt fades into an opening frame rather than becoming a false full-screen
+prepared page fades into an opening frame rather than becoming a false full-screen
 transcript. Reduced motion reveals directly after the completed paint frame.
 Cards keep stable physical identities as paint order changes. They round and gain shadows only during
 motion; scale is about .86 during a switch
@@ -192,9 +213,9 @@ Browsing never resumes, marks read or dispatches a chat. Keep at most three
 physical preview reads in flight; evicted or retired previews cannot publish.
 Selection uses the existing captured workspace command and its lifetime fences.
 Drafts, attachments and scroll anchors keep their existing owners. Raster captures
-are bounded to the visible neighborhood plus the committed chat and disposed
-when evicted or the route leaves. Failed preview reads show a passive unavailable
-state. Selection and refresh have separate completion boundaries; an older
+retain outward-prepared and visited cards within the decoded byte budget and are disposed
+when evicted or the route leaves. Failed preview reads leave the title placeholder
+and settle that card's initial-batch progress. Selection and refresh have separate completion boundaries; an older
 refresh cannot clear a newer refresh's progress or change the selected chat.
 
 Client-only integration inspected upstream Hermes main
@@ -208,6 +229,13 @@ Retained-reading refresh inspected upstream main
 `hermes_cli/web_routers/sessions.py` provides paginated saved messages through
 `GET /api/sessions/{session_id}/messages`. This change uses those stock operations
 and adds no server contract.
+
+Snapshot preparation inspected stock Hermes main
+`26610b09a5c4aead8d8dfb276ea33decf0d7fa46` (10 October 2026): the saved-message
+endpoint supports bounded latest-page reads and `inline_images=false`. Passive
+Recents requests retain the existing six-row limit and omit inline image
+payloads. This remains a client-only change. The chosen scheduling and cache
+patterns follow [the snapshot research](../plans/recents-snapshot-research-2026-10-10.md).
 
 ## Bots, 9 October 2026
 
