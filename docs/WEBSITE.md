@@ -88,7 +88,8 @@ implementation commentary and captions that repeat the surrounding text.
 These are editorial constraints, not visitor-facing labels. A section earns its
 place by explaining a specific action or outcome and demonstrating the detail
 that makes it easier. Put the relevant screenshot after that explanation, with
-further-reading links last. Avoid disconnected screenshots in guide headers.
+further-reading links last when they earn a place. Avoid disconnected screenshots
+in guide headers.
 A screenshot may establish context for several controls on the same screen;
 do not repeat it merely to illustrate another sentence.
 
@@ -115,7 +116,14 @@ do not repeat it merely to illustrate another sentence.
 | Analytics | See activity and model usage, with cost estimates clearly identified | Production analytics screen; link to the usage guide last |
 | Download and connection | Install Wing with the prerequisites understood | Signed download, requirements and questions; connection links last |
 
-For each edit, check that the heading, explanation, screenshot and final link
+Further reading is optional. A body link must provide additional detail or a
+concrete next action. Do not link to the immediately following section, add a
+link merely to fill the bottom of a layout, or repeat the same destination in
+adjacent sections. Header navigation and a guide's table of contents serve
+orientation and skipping; they do not justify duplicate body calls to action.
+Labels must describe the destination: a connection guide is not a guide index.
+
+For each edit, check that the heading, explanation, screenshot and any final link
 answer the same question. A feature name alone is insufficient: the explanation
 must say what the visitor can do, while the image demonstrates the controls or
 readability that support that outcome. Preserve actual capability limits.
