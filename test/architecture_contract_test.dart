@@ -237,6 +237,8 @@ void main() {
             'role': 'view',
             'source': 'class CompactActivityRow {}',
           },
+          'lib/core/widgets/recent_conversations/recent_conversation_switcher.dart':
+              {'role': 'view', 'source': 'class RecentConversationSwitcher {}'},
           'lib/core/widgets/profile_tool_call.dart': {
             'role': 'view',
             'source':
