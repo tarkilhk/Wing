@@ -1,3 +1,5 @@
+import 'package:wing/core/models/recent_conversation.dart';
+import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:wing/core/services/shared_draft_session.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/services/backup_session.dart';
@@ -65,6 +67,7 @@ void main() {
   late ProfileBrowserFixture fixture;
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
+  late ValueNotifier<ChatNoticeActivity?> activity;
 
   setUp(() async {
     PackageInfo.setMockInitialValues(
@@ -77,6 +80,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
     fixture = _ShellFixture();
+    activity = ValueNotifier(null);
     final preferences = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
@@ -99,6 +103,7 @@ void main() {
   });
   tearDown(() {
     controller.dispose();
+    activity.dispose();
     appPreferences.dispose();
   });
 
@@ -121,7 +126,7 @@ void main() {
             data: MediaQuery.of(
               context,
             ).copyWith(textScaler: TextScaler.linear(scale)),
-            child: child!,
+            child: ChatNoticeActivityScope(activity: activity, child: child!),
           ),
         ),
         home:

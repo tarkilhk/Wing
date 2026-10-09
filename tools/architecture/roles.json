@@ -376,6 +376,11 @@
       "feature": "conversation",
       "library": "lib/core/models/reading_snapshot_message.dart"
     },
+    "lib/core/models/recent_conversation.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/recent_conversation.dart"
+    },
     "lib/core/models/retained_memory.dart": {
       "role": "domain",
       "feature": "administration-memory",
@@ -1331,6 +1336,11 @@
       "feature": "conversation",
       "library": "lib/core/services/profile_workspace_controller.dart"
     },
+    "lib/core/services/profile_workspace_recents.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/profile_workspace_controller.dart"
+    },
     "lib/core/services/profile_workspace_registry.dart": {
       "role": "application",
       "feature": "conversation",
@@ -1370,6 +1380,11 @@
       "role": "application",
       "feature": "administration-providers",
       "library": "lib/core/services/provider_recovery.dart"
+    },
+    "lib/core/services/recent_conversation_session.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/recent_conversation_session.dart"
     },
     "lib/core/services/remote_file_saver.dart": {
       "role": "platform",
@@ -1641,6 +1656,11 @@
       "feature": "model-selection",
       "library": "lib/core/widgets/chat_model_controls.dart"
     },
+    "lib/core/widgets/chat_notice_activity_scope.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/chat_notice_activity_scope.dart"
+    },
     "lib/core/widgets/chat_profile_bar.dart": {
       "role": "view",
       "feature": "profiles",
@@ -1905,6 +1925,26 @@
       "role": "view",
       "feature": "ui-foundations",
       "library": "lib/core/widgets/read_recovery.dart"
+    },
+    "lib/core/widgets/recent_conversations/conversation_card_motion.dart": {
+      "role": "presentation",
+      "feature": "conversation",
+      "library": "lib/core/widgets/recent_conversations/conversation_card_motion.dart"
+    },
+    "lib/core/widgets/recent_conversations/conversation_gestures.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/recent_conversations/conversation_gestures.dart"
+    },
+    "lib/core/widgets/recent_conversations/conversation_preview.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/recent_conversations/conversation_preview.dart"
+    },
+    "lib/core/widgets/recent_conversations/recent_conversation_switcher.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/recent_conversations/recent_conversation_switcher.dart"
     },
     "lib/core/widgets/resource_filename.dart": {
       "role": "view",

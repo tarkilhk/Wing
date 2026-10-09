@@ -42,7 +42,7 @@ class WorkspaceActivityContent extends StatefulWidget {
   final ProfileWorkspaceController controller;
   final WorkspaceActivityFilter filter;
   final ValueChanged<WorkspaceActivityFilter>? onFilterChanged;
-  final ValueChanged<ProfileRecentChat> onOpen;
+  final void Function(ProfileRecentChat, List<ProfileRecentChat>) onOpen;
 
   @override
   State<WorkspaceActivityContent> createState() =>
@@ -76,6 +76,10 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
     final filtered = _filter != WorkspaceActivityFilter.all;
     final ongoing = activity.where((item) => item.activity != null).toList();
     final history = activity.where((item) => item.activity == null).toList();
+    final displayed = List<ProfileRecentChat>.unmodifiable([
+      ...ongoing,
+      ...history,
+    ]);
     final tokens = WingTokens.of(context);
     final now = DateTime.now();
     return ListView(
@@ -167,7 +171,7 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
               children: [
                 for (var i = 0; i < ongoing.length; i++) ...[
                   if (i > 0) Divider(height: 1, color: tokens.border),
-                  _chatRow(ongoing[i], now, ongoing: true),
+                  _chatRow(ongoing[i], now, displayed, ongoing: true),
                 ],
               ],
             ),
@@ -177,7 +181,7 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
           _sectionHeading('Last 24 hours', history.length),
           for (var i = 0; i < history.length; i++) ...[
             if (i > 0) Divider(height: 1, color: tokens.border),
-            _chatRow(history[i], now, ongoing: false),
+            _chatRow(history[i], now, displayed, ongoing: false),
           ],
         ],
         if (activity.isNotEmpty)
@@ -210,7 +214,8 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
 
   Widget _chatRow(
     ProfileRecentChat item,
-    DateTime now, {
+    DateTime now,
+    List<ProfileRecentChat> displayed, {
     required bool ongoing,
   }) => _RecentChatRow(
     key: ValueKey(
@@ -224,7 +229,9 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
             ?.named(item.key.workspace.profileName)
             ?.isDefault ==
         true,
-    onTap: widget.controller.switching ? null : () => widget.onOpen(item),
+    onTap: widget.controller.switching
+        ? null
+        : () => widget.onOpen(item, displayed),
   );
 
   FilterChip _filterChip(

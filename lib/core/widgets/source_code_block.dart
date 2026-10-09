@@ -1,3 +1,4 @@
+import 'recent_conversations/conversation_gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -181,6 +182,6 @@ class _SourceCodeBlockState extends State<SourceCodeBlock> {
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.finish('markdown.code.build', start);
     }
-    return result;
+    return ConversationGestureBoundary(blocked: true, child: result);
   }
 }

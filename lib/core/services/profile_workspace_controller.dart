@@ -1,3 +1,5 @@
+import '../models/recent_conversation.dart';
+import 'recent_conversation_session.dart';
 import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_choice.dart';
@@ -66,6 +68,7 @@ import '../models/notification_focus.dart';
 import '../models/notification_input.dart';
 
 part 'profile_workspace_notifications.dart';
+part 'profile_workspace_recents.dart';
 part 'profile_workspace_deleted_drafts.dart';
 
 class ProfileChat {
@@ -982,6 +985,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
         ),
     ]..sort((a, b) => b.lastActive.compareTo(a.lastActive));
   }
+
+  RecentConversationSession recentConversationSession({
+    required Iterable<RecentConversationEntry> entries,
+    required ValueListenable<ChatNoticeActivity?> activity,
+  }) => RecentConversationSession(
+    entries: entries,
+    source: _WorkspaceRecentConversationSource(this),
+    activity: activity,
+  );
 
   Future<void> refreshRecents() async {
     final generation = ++_recentsGeneration;

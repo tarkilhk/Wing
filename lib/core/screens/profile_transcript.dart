@@ -1,3 +1,4 @@
+import '../widgets/recent_conversations/conversation_gestures.dart';
 import '../models/chat_output.dart';
 import '../services/server_connection_status.dart';
 import '../models/notification_focus.dart';
@@ -450,7 +451,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     );
     final tailContent = [
       if (hasCurrentActivity && !joinCurrentActivity) currentActivity(),
-      ...widget.tail,
+      ...widget.tail.map(
+        (child) => ConversationGestureBoundary(blocked: true, child: child),
+      ),
     ];
     final tail = [
       if (tailContent.isNotEmpty)

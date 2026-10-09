@@ -1,3 +1,4 @@
+import 'recent_conversations/conversation_gestures.dart';
 import '../models/chat_output.dart';
 import 'dart:typed_data';
 
@@ -29,27 +30,30 @@ class ProfileActivitySection extends StatelessWidget {
   final List<ProfileActivityTab> tabs;
 
   @override
-  Widget build(BuildContext context) => ProfileTranscriptDisclosure(
-    label: 'Activity',
-    icon: Icons.bolt_rounded,
-    summary: subtitle,
-    initiallyExpanded: initiallyExpanded,
-    children: [
-      ProfileActivityTabs(
-        tabs: [
-          if (children.isNotEmpty)
-            ProfileActivityTab(
-              id: 'timeline',
-              label: 'Timeline',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: children,
+  Widget build(BuildContext context) => ConversationGestureBoundary(
+    blocked: true,
+    child: ProfileTranscriptDisclosure(
+      label: 'Activity',
+      icon: Icons.bolt_rounded,
+      summary: subtitle,
+      initiallyExpanded: initiallyExpanded,
+      children: [
+        ProfileActivityTabs(
+          tabs: [
+            if (children.isNotEmpty)
+              ProfileActivityTab(
+                id: 'timeline',
+                label: 'Timeline',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: children,
+                ),
               ),
-            ),
-          ...tabs,
-        ],
-      ),
-    ],
+            ...tabs,
+          ],
+        ),
+      ],
+    ),
   );
 }
 

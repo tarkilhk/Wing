@@ -1,3 +1,9 @@
+import '../models/recent_conversation.dart';
+import '../services/recent_conversation_session.dart';
+import '../widgets/chat_notice_activity_scope.dart';
+import '../widgets/recent_conversations/recent_conversation_switcher.dart';
+import '../widgets/recent_conversations/conversation_preview.dart';
+import '../widgets/recent_conversations/conversation_gestures.dart';
 import '../widgets/wing_app_bar.dart';
 import '../widgets/activity/skill_document_viewer.dart';
 import '../models/chat_intelligence.dart';
@@ -348,11 +354,122 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   WorkspaceActivityFilter _recentFilter = WorkspaceActivityFilter.all;
   bool _routeIsCurrent = true;
   bool _appIsActive = true;
+  RecentConversationSession? _recentVisit, _pendingRecentVisit;
+  final _recentSwitcher = GlobalKey<RecentConversationSwitcherState>();
+  ProfileChat? _recentRenderedChat;
+  bool _conversationObscured = false;
+  bool _restoreComposerFocus = false;
+  final _composerSelections = <ProfileSessionKey, TextSelection>{};
+
+  final _composerEditing = ValueNotifier<bool>(false);
+  void _composerFocusChanged() =>
+      _composerEditing.value = _composerFocus.hasFocus;
+
+  void _disposeRecentVisit() {
+    _pendingRecentVisit?.dispose();
+    _pendingRecentVisit = null;
+    _recentVisit?.dispose();
+    _recentVisit = null;
+    _recentRenderedChat = null;
+    _conversationObscured = false;
+    _restoreComposerFocus = false;
+    _composerSelections.clear();
+  }
+
+  Future<void> _openRecentConversation(
+    ProfileRecentChat item,
+    List<ProfileRecentChat> displayed,
+  ) async {
+    _pendingRecentVisit?.dispose();
+    final visit = controller.recentConversationSession(
+      entries: displayed.map(
+        (chat) => RecentConversationEntry(key: chat.key, title: chat.title),
+      ),
+      activity: ChatNoticeActivityScope.of(context),
+    );
+    _pendingRecentVisit = visit;
+    final opened = await visit.select(item.key);
+    if (!mounted || _pendingRecentVisit != visit) {
+      visit.dispose();
+      return;
+    }
+    _pendingRecentVisit = null;
+    if (!opened || _destination != AppDestination.activity) {
+      if (visit.error case final error?) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: StudioError(error)));
+      }
+      visit.dispose();
+      return;
+    }
+    _selectDestination(AppDestination.chats);
+    setState(() {
+      _recentVisit = visit;
+      _chatOrigin = AppDestination.activity;
+      _recentRenderedChat = controller.current?.chat;
+    });
+  }
+
+  Widget _withRecentSwitcher(ProfileChat chat, Widget child) {
+    final visit = _recentVisit;
+    if (visit == null || !visit.active) return child;
+    return ValueListenableBuilder<bool>(
+      valueListenable: _composerEditing,
+      child: child,
+      builder: (context, editing, conversation) => RecentConversationSwitcher(
+        key: _recentSwitcher,
+        session: visit,
+        chatKey: chat.key,
+        previewBuilder: (card) => ConversationPreview(
+          card: card,
+          connectionLabel: controller.connection.label,
+        ),
+        gesturesEnabled:
+            _hasWorkspaceFocus &&
+            !_voiceInput.active &&
+            _voiceOutput.owner == null &&
+            chat.composer.observation.editingEntry == null,
+        nudgesEnabled:
+            _hasWorkspaceFocus &&
+            !editing &&
+            !_voiceInput.active &&
+            _voiceOutput.owner == null,
+        onPresentationChanged: (obscured, stack) {
+          final wasObscured = _conversationObscured;
+          _conversationObscured = obscured;
+          if (stack && _composerFocus.hasFocus) {
+            // A focused Android field can retain focus after Back hides its
+            // keyboard. Preserve the visible editing state when leaving cards.
+            _restoreComposerFocus = MediaQuery.viewInsetsOf(context).bottom > 0;
+            _composerFocus.unfocus();
+          }
+          controller.setRouteVisibility(this, _hasChatFocus);
+          if (wasObscured && !obscured) {
+            // Recheck actual answer visibility once the normal transcript is
+            // revealed. Captures and passive cards never acknowledge a read.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _hasChatFocus) setState(() {});
+            });
+          }
+          if (!obscured && _restoreComposerFocus) {
+            _restoreComposerFocus = false;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _hasChatFocus) _composerFocus.requestFocus();
+            });
+          }
+        },
+        child: conversation!,
+      ),
+    );
+  }
 
   bool get _hasWorkspaceFocus => _routeIsCurrent && _appIsActive;
 
   bool get _hasChatFocus =>
-      _hasWorkspaceFocus && _destination == AppDestination.chats;
+      _hasWorkspaceFocus &&
+      _destination == AppDestination.chats &&
+      !_conversationObscured;
 
   @override
   void didChangeDependencies() {
@@ -366,6 +483,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   void initState() {
     super.initState();
     _destination = widget.initialDestination;
+    _composerFocus.addListener(_composerFocusChanged);
     _appIsActive =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
@@ -447,6 +565,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   @override
   void dispose() {
+    _disposeRecentVisit();
+    _composerFocus.removeListener(_composerFocusChanged);
+    _composerEditing.dispose();
     if (_renderedReadingFocus case final rendered?) {
       rendered.$1.releaseReadingFocus(rendered.$2);
     }
@@ -579,13 +700,22 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   void _syncComposer(ProfileChat? chat) {
     if (_composerKey != chat?.key ||
         _composer.text != (chat?.composer.observation.displayedText ?? '')) {
+      final changedChat = _composerKey != chat?.key;
+      if (changedChat && _recentVisit?.active == true && _composerKey != null) {
+        _composerSelections[_composerKey!] = _composer.selection;
+      }
       _composerKey = chat?.key;
       _composer.setScope(chat?.key);
+      final text = chat?.composer.observation.displayedText ?? '';
+      final selection = changedChat ? _composerSelections[chat?.key] : null;
       _composer.value = TextEditingValue(
         text: chat?.composer.observation.displayedText ?? '',
-        selection: TextSelection.collapsed(
-          offset: chat?.composer.observation.displayedText.length ?? 0,
-        ),
+        selection:
+            selection != null &&
+                selection.isValid &&
+                selection.end <= text.length
+            ? selection
+            : TextSelection.collapsed(offset: text.length),
       );
     }
   }
@@ -594,10 +724,23 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   ProfileWorkspaceBrowser? _browser;
 
   Widget _buildWorkspace(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([controller, _voiceInput, _voiceOutput]),
+    listenable: Listenable.merge([
+      controller,
+      _voiceInput,
+      _voiceOutput,
+      ?_recentVisit,
+    ]),
     builder: (context, _) {
       final current = controller.current;
-      final chat = controller.notificationChat ?? current?.chat;
+      final selectedChat = controller.notificationChat ?? current?.chat;
+      final chat = _recentVisit?.selecting == true
+          ? _recentRenderedChat ?? selectedChat
+          : selectedChat;
+      if (chat != null &&
+          _recentVisit?.active == true &&
+          _recentVisit?.selecting != true) {
+        _recentRenderedChat = chat;
+      }
       _syncComposer(chat);
       if (_destination != AppDestination.chats) {
         _browser = null;
@@ -651,12 +794,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           }
         }),
       );
-      return PopScope(
+      final conversation = PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop) {
             if (_scaffoldKey.currentState?.isDrawerOpen == true) {
-              unawaited(SystemNavigator.pop());
+              _scaffoldKey.currentState?.closeDrawer();
+            } else if (_recentSwitcher.currentState?.dismissStack() == true) {
+              return;
             } else if (chat.composer.observation.editingEntry != null) {
               unawaited(_run(() => controller.cancelQueuedPromptEdit(chat)));
             } else {
@@ -784,7 +929,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 tooltip: 'Chat actions',
                 icon: const Icon(Icons.more_vert),
                 onSelected: (action) {
-                  if (action == 'refresh') {
+                  if (action == 'recent-previous') {
+                    unawaited(_recentSwitcher.currentState?.selectAdjacent(-1));
+                  } else if (action == 'recent-next') {
+                    unawaited(_recentSwitcher.currentState?.selectAdjacent(1));
+                  } else if (action == 'recent-stack') {
+                    _recentSwitcher.currentState?.openStack();
+                  } else if (action == 'refresh') {
                     unawaited(_run(controller.refresh));
                   } else if (action == 'find') {
                     unawaited(_openFind(chat));
@@ -822,6 +973,22 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   }
                 },
                 itemBuilder: (_) => [
+                  if (_recentVisit?.active == true &&
+                      _recentVisit!.entries.length > 1) ...[
+                    const PopupMenuItem(
+                      value: 'recent-previous',
+                      child: Text('Previous recent conversation'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'recent-next',
+                      child: Text('Next recent conversation'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'recent-stack',
+                      child: Text('Choose recent conversation'),
+                    ),
+                    const PopupMenuDivider(),
+                  ],
                   if (parentSessionId != null)
                     const PopupMenuItem(
                       value: 'parent',
@@ -885,6 +1052,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           ),
         ),
       );
+      return _withRecentSwitcher(chat, conversation);
     },
   );
 
@@ -1365,205 +1533,207 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         builder: (context, constraints) => Column(
           children: [
             Expanded(
-              child: ProfileTranscript(
-                key: ValueKey((
-                  chat.key,
-                  _readingFocus(chat)?.offset,
-                  _readingFocus(chat)?.rowId,
-                )),
-                chat: chat,
-                controller: controller,
-                onLoadOlder: () => controller.loadOlderMessages(chat),
-                timeline: timeline,
-                messageBuilder: (entry) => _answer(
-                  chat,
-                  entry,
-                  capturedRows: capturedRows,
-                  allowSavedActions: nearby == null,
-                ),
-                focusedMessageId: focus?.rowId,
-                notificationAnchors: _chatNotificationAnchors(chat),
-                onBackToLatest: _readingFocus(chat) == null
-                    ? null
-                    : () => controller.backToLatest(chat),
-                liveToolCount: liveToolCount,
-                loadImage: (path) => _loadAttachmentImage(chat, path),
-                onOpenResource: (output) => _openAnswerOutput(chat, output),
-                onShareResource: (output) => _shareToolResource(chat, output),
-                currentActivity: [
-                  if (chat.runtime.tool != null &&
-                      !chat.runtime.toolActivities.any(
-                        (activity) => !activity.isTerminal,
-                      ))
-                    ProfileTranscriptDisclosure(
-                      icon: Icons.terminal_rounded,
-                      label: 'Preparing ${chat.runtime.tool!}',
-                      children: const [
-                        Text('Hermes is preparing the tool call'),
-                      ],
-                    ),
-                  if (visibleActivity.isNotEmpty)
-                    ProfileExecutionActivity(
-                      entries: visibleActivity,
-                      loadImage: (path) => _loadAttachmentImage(chat, path),
-                      onOpenResource: (output) =>
-                          _openAnswerOutput(chat, output),
-                      onShareResource: (output) =>
-                          _shareToolResource(chat, output),
-                    ),
-                ],
-                activityTabs: [
-                  if (chat.todos.isNotEmpty)
-                    ProfileActivityTab(
-                      id: 'tasks',
-                      label:
-                          'Tasks ${chat.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${chat.todos.length}',
-                      child: ProfileTodoPanel(
-                        todos: chat.todos,
-                        embedded: true,
-                      ),
-                    ),
-                  if (chat.subagents.isNotEmpty)
-                    ProfileActivityTab(
-                      id: 'agents',
-                      label:
-                          'Agents ${chat.subagents.where((agent) => !agent.isTerminal).length}/${chat.subagents.length}',
-                      onSelected: () =>
-                          unawaited(_supervisionFor(chat).refreshSubagents()),
-                      child: ProfileSubagentPanel(
-                        key: ValueKey(('subagents', chat.key)),
-                        session: _supervisionFor(chat),
-                        embedded: true,
-                      ),
-                    ),
-                  if (chat.sessionControl?.goal != null ||
-                      chat.sessionControl?.loop != null ||
-                      chat.sessionControl?.heartbeat != null ||
-                      chat.processes.isNotEmpty)
-                    ProfileActivityTab(
-                      id: 'work',
-                      label: 'Work',
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (chat.sessionControl?.goal != null)
-                            ProfileGoalPanel(
-                              key: ValueKey(('goal', chat.key)),
-                              session: _supervisionFor(chat),
-                            ),
-                          if (chat.sessionControl?.loop != null ||
-                              chat.sessionControl?.heartbeat != null ||
-                              chat.processes.isNotEmpty)
-                            ProfileBackgroundWorkPanel(
-                              key: ValueKey(('background', chat.key)),
-                              session: _supervisionFor(chat),
-                            ),
+              child: ConversationGestureBoundary(
+                child: ProfileTranscript(
+                  key: ValueKey((
+                    chat.key,
+                    _readingFocus(chat)?.offset,
+                    _readingFocus(chat)?.rowId,
+                  )),
+                  chat: chat,
+                  controller: controller,
+                  onLoadOlder: () => controller.loadOlderMessages(chat),
+                  timeline: timeline,
+                  messageBuilder: (entry) => _answer(
+                    chat,
+                    entry,
+                    capturedRows: capturedRows,
+                    allowSavedActions: nearby == null,
+                  ),
+                  focusedMessageId: focus?.rowId,
+                  notificationAnchors: _chatNotificationAnchors(chat),
+                  onBackToLatest: _readingFocus(chat) == null
+                      ? null
+                      : () => controller.backToLatest(chat),
+                  liveToolCount: liveToolCount,
+                  loadImage: (path) => _loadAttachmentImage(chat, path),
+                  onOpenResource: (output) => _openAnswerOutput(chat, output),
+                  onShareResource: (output) => _shareToolResource(chat, output),
+                  currentActivity: [
+                    if (chat.runtime.tool != null &&
+                        !chat.runtime.toolActivities.any(
+                          (activity) => !activity.isTerminal,
+                        ))
+                      ProfileTranscriptDisclosure(
+                        icon: Icons.terminal_rounded,
+                        label: 'Preparing ${chat.runtime.tool!}',
+                        children: const [
+                          Text('Hermes is preparing the tool call'),
                         ],
                       ),
-                    ),
-                ],
-                tail: [
-                  if (chat.composer.observation.error case final error?
-                      when error != chat.runtime.error)
-                    StudioError(error),
-                  if (chat.runtime.error != null)
-                    chat.reading.notificationReadTarget?.kind == 'status'
-                        ? _notificationAnchor(
-                            chat,
-                            'status',
-                            chat.reading.notificationReadTarget!.id,
-                            StudioError(chat.runtime.error!),
-                          )
-                        : StudioError(chat.runtime.error!),
-                  if (chat.runtime.approval != null)
-                    Builder(
-                      builder: (context) {
-                        final request = chat.runtime.approval!;
-                        return _notificationAnchor(
-                          chat,
-                          'approval',
-                          request.requestId,
-                          GatewayApprovalPanel(
-                            key: ValueKey((chat.key, request.requestId)),
-                            request: request.request,
-                            position: chat.runtime.approvalPosition,
-                            total: chat.runtime.approvalTotal,
-                            enabled:
-                                !chat.runtime.approvalResponding &&
-                                !chat.runtime.reconnecting,
-                            onRespond: (choice) => _run(
-                              () => controller.approve(
-                                chat,
-                                choice.wireValue,
-                                requestId: request.requestId,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  if (chat.runtime.secureInput != null)
-                    Builder(
-                      builder: (context) {
-                        final request = chat.runtime.secureInput!;
-                        return _notificationAnchor(
-                          chat,
-                          'secure',
-                          request.requestId,
-                          GatewaySensitivePromptPanel(
-                            key: ValueKey((
-                              chat.key,
-                              request.kind,
-                              request.requestId,
-                            )),
-                            request: request,
-                            enabled:
-                                !chat.runtime.secureResponding &&
-                                !chat.runtime.reconnecting,
-                            onRespond: (value) =>
-                                controller.respondSensitivePrompt(
-                                  chat,
-                                  value,
-                                  expectedRequest: request,
-                                ),
-                          ),
-                        );
-                      },
-                    ),
-                  if (chat.markReadFailed)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: SelectionArea(
-                        child: StudioError(
-                          ProfileWorkspaceController.markReadFailureNotice,
+                    if (visibleActivity.isNotEmpty)
+                      ProfileExecutionActivity(
+                        entries: visibleActivity,
+                        loadImage: (path) => _loadAttachmentImage(chat, path),
+                        onOpenResource: (output) =>
+                            _openAnswerOutput(chat, output),
+                        onShareResource: (output) =>
+                            _shareToolResource(chat, output),
+                      ),
+                  ],
+                  activityTabs: [
+                    if (chat.todos.isNotEmpty)
+                      ProfileActivityTab(
+                        id: 'tasks',
+                        label:
+                            'Tasks ${chat.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${chat.todos.length}',
+                        child: ProfileTodoPanel(
+                          todos: chat.todos,
+                          embedded: true,
                         ),
                       ),
-                    ),
-                  for (final delivery in chat.sideQuestionDeliveries)
-                    _notificationAnchor(
-                      chat,
-                      delivery.kind == SideQuestionDeliveryKind.backgroundTask
-                          ? 'background'
-                          : 'side',
-                      delivery.taskId ?? '',
-                      SideQuestionDeliveryCard(
-                        key: ValueKey((
-                          chat.key,
-                          delivery.kind,
-                          delivery.taskId,
-                          delivery.state,
-                        )),
-                        delivery: delivery,
+                    if (chat.subagents.isNotEmpty)
+                      ProfileActivityTab(
+                        id: 'agents',
+                        label:
+                            'Agents ${chat.subagents.where((agent) => !agent.isTerminal).length}/${chat.subagents.length}',
+                        onSelected: () =>
+                            unawaited(_supervisionFor(chat).refreshSubagents()),
+                        child: ProfileSubagentPanel(
+                          key: ValueKey(('subagents', chat.key)),
+                          session: _supervisionFor(chat),
+                          embedded: true,
+                        ),
                       ),
-                    ),
-                  if (chat.runtime.pendingQuestion != null)
-                    _notificationAnchor(
-                      chat,
-                      'question',
-                      chat.runtime.pendingQuestion!.requestId,
-                      _questionPanel(chat),
-                    ),
-                ],
+                    if (chat.sessionControl?.goal != null ||
+                        chat.sessionControl?.loop != null ||
+                        chat.sessionControl?.heartbeat != null ||
+                        chat.processes.isNotEmpty)
+                      ProfileActivityTab(
+                        id: 'work',
+                        label: 'Work',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (chat.sessionControl?.goal != null)
+                              ProfileGoalPanel(
+                                key: ValueKey(('goal', chat.key)),
+                                session: _supervisionFor(chat),
+                              ),
+                            if (chat.sessionControl?.loop != null ||
+                                chat.sessionControl?.heartbeat != null ||
+                                chat.processes.isNotEmpty)
+                              ProfileBackgroundWorkPanel(
+                                key: ValueKey(('background', chat.key)),
+                                session: _supervisionFor(chat),
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
+                  tail: [
+                    if (chat.composer.observation.error case final error?
+                        when error != chat.runtime.error)
+                      StudioError(error),
+                    if (chat.runtime.error != null)
+                      chat.reading.notificationReadTarget?.kind == 'status'
+                          ? _notificationAnchor(
+                              chat,
+                              'status',
+                              chat.reading.notificationReadTarget!.id,
+                              StudioError(chat.runtime.error!),
+                            )
+                          : StudioError(chat.runtime.error!),
+                    if (chat.runtime.approval != null)
+                      Builder(
+                        builder: (context) {
+                          final request = chat.runtime.approval!;
+                          return _notificationAnchor(
+                            chat,
+                            'approval',
+                            request.requestId,
+                            GatewayApprovalPanel(
+                              key: ValueKey((chat.key, request.requestId)),
+                              request: request.request,
+                              position: chat.runtime.approvalPosition,
+                              total: chat.runtime.approvalTotal,
+                              enabled:
+                                  !chat.runtime.approvalResponding &&
+                                  !chat.runtime.reconnecting,
+                              onRespond: (choice) => _run(
+                                () => controller.approve(
+                                  chat,
+                                  choice.wireValue,
+                                  requestId: request.requestId,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    if (chat.runtime.secureInput != null)
+                      Builder(
+                        builder: (context) {
+                          final request = chat.runtime.secureInput!;
+                          return _notificationAnchor(
+                            chat,
+                            'secure',
+                            request.requestId,
+                            GatewaySensitivePromptPanel(
+                              key: ValueKey((
+                                chat.key,
+                                request.kind,
+                                request.requestId,
+                              )),
+                              request: request,
+                              enabled:
+                                  !chat.runtime.secureResponding &&
+                                  !chat.runtime.reconnecting,
+                              onRespond: (value) =>
+                                  controller.respondSensitivePrompt(
+                                    chat,
+                                    value,
+                                    expectedRequest: request,
+                                  ),
+                            ),
+                          );
+                        },
+                      ),
+                    if (chat.markReadFailed)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: SelectionArea(
+                          child: StudioError(
+                            ProfileWorkspaceController.markReadFailureNotice,
+                          ),
+                        ),
+                      ),
+                    for (final delivery in chat.sideQuestionDeliveries)
+                      _notificationAnchor(
+                        chat,
+                        delivery.kind == SideQuestionDeliveryKind.backgroundTask
+                            ? 'background'
+                            : 'side',
+                        delivery.taskId ?? '',
+                        SideQuestionDeliveryCard(
+                          key: ValueKey((
+                            chat.key,
+                            delivery.kind,
+                            delivery.taskId,
+                            delivery.state,
+                          )),
+                          delivery: delivery,
+                        ),
+                      ),
+                    if (chat.runtime.pendingQuestion != null)
+                      _notificationAnchor(
+                        chat,
+                        'question',
+                        chat.runtime.pendingQuestion!.requestId,
+                        _questionPanel(chat),
+                      ),
+                  ],
+                ),
               ),
             ),
             _composerPanel(chat, constraints),
@@ -2520,12 +2690,15 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   );
 
   void _leaveChat() {
+    if (_recentSwitcher.currentState?.dismissStack() == true) return;
     final origin = _chatOrigin;
+    _disposeRecentVisit();
     controller.showList();
     if (origin != null) _selectDestination(origin);
   }
 
   void _selectDestination(AppDestination destination) {
+    _disposeRecentVisit();
     _chatOrigin = null;
     _cancelVoice();
     FocusManager.instance.primaryFocus?.unfocus();
@@ -2546,9 +2719,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   /// Bring a reused workspace route back to its chat after a notification tap.
   void showNotificationChat() {
+    _disposeRecentVisit();
+    setState(() {});
     if (_destination != AppDestination.chats) {
       _selectDestination(AppDestination.chats);
     }
+    controller.setRouteVisibility(this, _hasChatFocus);
   }
 
   Widget _secondaryDestination(BuildContext context) => PopScope(
@@ -2650,15 +2826,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 controller: controller,
                 filter: _recentFilter,
                 onFilterChanged: (filter) => _recentFilter = filter,
-                onOpen: (item) => _run(() async {
-                  final opened = await controller.openSession(item.key);
-                  if (mounted &&
-                      opened != null &&
-                      _destination == AppDestination.activity) {
-                    _selectDestination(AppDestination.chats);
-                    _chatOrigin = AppDestination.activity;
-                  }
-                }),
+                onOpen: (item, displayed) => unawaited(
+                  _run(() => _openRecentConversation(item, displayed)),
+                ),
               ),
               AppDestination.health => HermesHealthContent(
                 onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),

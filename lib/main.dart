@@ -1,3 +1,4 @@
+import 'core/widgets/chat_notice_activity_scope.dart';
 import 'core/widgets/health_alerts/health_alert_dialog.dart';
 import 'core/screens/health_alert_health_screen.dart';
 import 'core/models/health_alert.dart';
@@ -437,48 +438,51 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       builder: (context, child) {
         final systemMediaQuery = MediaQuery.of(context);
         final preference = preferences.values.textSize;
-        return HealthAlertsScope(
-          alerts: _healthAlerts,
-          openHealth: _openAlertHealth,
-          child: MediaQuery(
-            data: systemMediaQuery.copyWith(
-              textScaler: preference == null
-                  ? systemMediaQuery.textScaler
-                  : preference.applyTo(systemMediaQuery.textScaler),
-            ),
-            child: HealthAlertNotice(
-              onOpenAlerts: _openHealthAlerts,
-              navigatorKey: _navigatorKey,
-              child: Column(
-                children: [
-                  if (preferences.needsAppearanceRepair)
-                    Material(
-                      child: SafeArea(
-                        bottom: false,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          child: Row(
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'Saved appearance settings need repair. Temporary appearance is shown.',
+        return ChatNoticeActivityScope(
+          activity: _chatNotices.activity,
+          child: HealthAlertsScope(
+            alerts: _healthAlerts,
+            openHealth: _openAlertHealth,
+            child: MediaQuery(
+              data: systemMediaQuery.copyWith(
+                textScaler: preference == null
+                    ? systemMediaQuery.textScaler
+                    : preference.applyTo(systemMediaQuery.textScaler),
+              ),
+              child: HealthAlertNotice(
+                onOpenAlerts: _openHealthAlerts,
+                navigatorKey: _navigatorKey,
+                child: Column(
+                  children: [
+                    if (preferences.needsAppearanceRepair)
+                      Material(
+                        child: SafeArea(
+                          bottom: false,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    'Saved appearance settings need repair. Temporary appearance is shown.',
+                                  ),
                                 ),
-                              ),
-                              TextButton(
-                                key: const ValueKey('app-preference-repair'),
-                                onPressed: _openPreferenceRepair,
-                                child: const Text('Repair'),
-                              ),
-                            ],
+                                TextButton(
+                                  key: const ValueKey('app-preference-repair'),
+                                  onPressed: _openPreferenceRepair,
+                                  child: const Text('Repair'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  Expanded(child: child!),
-                ],
+                    Expanded(child: child!),
+                  ],
+                ),
               ),
             ),
           ),

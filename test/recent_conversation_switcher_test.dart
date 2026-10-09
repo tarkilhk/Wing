@@ -1,0 +1,925 @@
+import 'package:wing/core/models/notification_focus.dart';
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/models/recent_conversation.dart';
+import 'package:wing/core/models/transcript_reading.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/widgets/source_code_block.dart';
+import 'package:wing/core/services/recent_conversation_session.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
+import 'package:wing/core/widgets/recent_conversations/conversation_card_motion.dart';
+import 'package:wing/core/widgets/recent_conversations/conversation_gestures.dart';
+import 'package:wing/core/widgets/recent_conversations/recent_conversation_switcher.dart';
+
+import 'support/profile_browser_fixture.dart';
+
+const _export = bool.fromEnvironment('STUDIO_REVIEW');
+
+class _ReviewBinding extends AutomatedTestWidgetsFlutterBinding {
+  @override
+  bool get disableShadows => false;
+}
+
+class _UiSource extends ChangeNotifier implements RecentConversationSource {
+  _UiSource() {
+    final scope = WorkspaceScope(
+      connectionId: 'host',
+      connectionIdentity: 'owner',
+      profileName: 'personal',
+    );
+    entries = List.generate(
+      3,
+      (i) => RecentConversationEntry(
+        key: ProfileSessionKey(scope, '$i'),
+        title: 'Chat $i',
+      ),
+    );
+    selected = entries.first.key;
+  }
+  late final List<RecentConversationEntry> entries;
+  @override
+  bool current = true;
+  @override
+  late ProfileSessionKey selected;
+  final opens = <ProfileSessionKey>[];
+  bool rejectOpen = false;
+  @override
+  bool admits(ProfileSessionKey key) => current;
+  @override
+  RecentConversationPreview cachedPreview(RecentConversationEntry entry) =>
+      RecentConversationPreview(
+        entry: entry,
+        reading: TranscriptReadingSnapshot(
+          messages: const [],
+          historySessionId: entry.key.sessionId,
+        ),
+        draft: '',
+        scopeLabel: 'personal',
+      );
+  @override
+  Future<RecentConversationPreview> loadPreview(
+    RecentConversationEntry entry,
+  ) async => cachedPreview(entry);
+  @override
+  Future<void> open(ProfileSessionKey key, bool Function() isCurrent) async {
+    if (!isCurrent()) return;
+    if (rejectOpen) throw StateError('Owned fixture resume rejection');
+    opens.add(key);
+    selected = key;
+    notifyListeners();
+  }
+}
+
+class _ScreenFixture extends ProfileBrowserFixture {
+  ProfileSessionKey? failedResume;
+  @override
+  ProfileGateway gateway(WorkspaceScope scope) {
+    final base = super.gateway(scope);
+    return ProfileGateway(
+      scope: scope,
+      discover: base.discover,
+      get: base.read,
+      rpc: (method, params) {
+        if (method == 'session.resume' &&
+            scope == failedResume?.workspace &&
+            params['session_id'] == failedResume?.sessionId) {
+          throw StateError('Resume rejected');
+        }
+        return base.call(method, params);
+      },
+    );
+  }
+
+  @override
+  List<Map<String, dynamic>> sessions(String profile) => [
+    for (var i = 0; i < 3; i++)
+      {
+        'id': 'chat-$i',
+        'title': [
+          'Review the Android gestures',
+          'Plan a quieter workspace',
+          'Finish the release notes',
+        ][i],
+        'profile': profile,
+        'last_active': now - (i + 1) * 60,
+        'unread': false,
+      },
+  ];
+  @override
+  List<Map<String, dynamic>> projects(String profile) => [
+    {
+      'id': 'home',
+      'label': 'Home',
+      'isNoProject': true,
+      'lastActive': now,
+      'sessionIds': ['chat-0', 'chat-1', 'chat-2'],
+    },
+  ];
+  @override
+  List<Map<String, dynamic>> historyRows(String profile, String id) => [
+    {
+      'id': 1,
+      'role': 'user',
+      'content': 'Keep the conversation familiar while I move between tasks.',
+    },
+    {
+      'id': 2,
+      'role': 'tool',
+      'tool_name': 'Read project',
+      'content': 'Inspect the existing conversation controls.',
+    },
+    {
+      'id': 3,
+      'timestamp': now - int.parse(id.split('-').last) * 60,
+      'role': 'assistant',
+      'content':
+          '## A quieter workspace\n\nThe conversation stays in place. Switch when you need to check another task.\n\nYour draft stays with this conversation.',
+    },
+  ];
+}
+
+Future<void> _finishFrames(WidgetTester tester) async {
+  await tester.pumpAndSettle();
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 30)),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _twoContacts(
+  WidgetTester tester,
+  Offset a,
+  Offset b,
+  Offset endA,
+  Offset endB,
+) async {
+  final first = await tester.startGesture(a, pointer: 1);
+  final second = await tester.startGesture(b, pointer: 2);
+  await tester.pump();
+  for (var i = 1; i <= 8; i++) {
+    await first.moveTo(Offset.lerp(a, endA, i / 8)!);
+    await second.moveTo(Offset.lerp(b, endB, i / 8)!);
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  await first.up();
+  await second.up();
+  await _finishFrames(tester);
+}
+
+Future<void> _capture(WidgetTester tester, GlobalKey key, String name) async {
+  if (!_export) return;
+  await _finishFrames(tester);
+  await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    final directory = Directory('build/recents-review')
+      ..createSync(recursive: true);
+    await File(
+      '${directory.path}/$name.png',
+    ).writeAsBytes(data!.buffer.asUint8List());
+    image.dispose();
+  });
+}
+
+void main() {
+  if (_export) _ReviewBinding();
+  setUpAll(() async {
+    if (!_export) return;
+    for (final entry in {
+      'Roboto': 'build/studio-roboto.ttf',
+      'MaterialIcons': 'build/studio-icons.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
+      'monospace': 'build/studio-mono.ttf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            File(entry.value).readAsBytes().then(ByteData.sublistView),
+          ))
+          .load();
+    }
+  });
+
+  group('gesture and motion contract', () {
+    late _UiSource source;
+    late ValueNotifier<ChatNoticeActivity?> activity;
+    late RecentConversationSession session;
+    final switcher = GlobalKey<RecentConversationSwitcherState>();
+    setUp(() {
+      source = _UiSource();
+      activity = ValueNotifier(null);
+      session = RecentConversationSession(
+        entries: source.entries,
+        source: source,
+        activity: activity,
+      );
+    });
+    tearDown(() {
+      session.dispose();
+      activity.dispose();
+      source.dispose();
+    });
+    Future<void> mount(
+      WidgetTester tester, {
+      Brightness brightness = Brightness.dark,
+      bool accessible = false,
+      bool reduced = false,
+    }) async {
+      await session.select(source.selected);
+      source.opens.clear();
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(brightness),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              accessibleNavigation: accessible,
+              disableAnimations: reduced,
+            ),
+            child: child!,
+          ),
+          home: ListenableBuilder(
+            listenable: source,
+            builder: (context, _) => RecentConversationSwitcher(
+              key: switcher,
+              session: session,
+              chatKey: source.selected,
+              gesturesEnabled: true,
+              nudgesEnabled: true,
+              onPresentationChanged: (_, _) {},
+              previewBuilder: (card) => Scaffold(
+                body: Center(
+                  child: Text(card.preview?.scopeLabel ?? 'Preview pending'),
+                ),
+              ),
+              child: Scaffold(
+                body: ConversationGestureBoundary(
+                  child: ColoredBox(
+                    color: Theme.of(context).colorScheme.surface,
+                    child: Column(
+                      children: [
+                        const ConversationGestureBoundary(
+                          blocked: true,
+                          child: SizedBox(
+                            height: 150,
+                            child: Center(child: Text('Selectable message')),
+                          ),
+                        ),
+                        Expanded(
+                          child: ListView(
+                            children: const [SizedBox(height: 1800)],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('two-finger horizontal movement switches once and wraps', (
+      tester,
+    ) async {
+      await mount(tester);
+      await _twoContacts(
+        tester,
+        const Offset(220, 400),
+        const Offset(300, 400),
+        const Offset(50, 400),
+        const Offset(130, 400),
+      );
+      expect(source.opens, [source.entries[1].key]);
+      expect(find.text('Swipe to browse · tap to open'), findsNothing);
+      await _twoContacts(
+        tester,
+        const Offset(80, 400),
+        const Offset(160, 400),
+        const Offset(250, 400),
+        const Offset(330, 400),
+      );
+      expect(source.selected, source.entries[0].key);
+      await _twoContacts(
+        tester,
+        const Offset(80, 400),
+        const Offset(160, 400),
+        const Offset(250, 400),
+        const Offset(330, 400),
+      );
+      expect(source.selected, source.entries[2].key);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'pinch stays open after lift; browsing does not select; tap commits',
+      (tester) async {
+        await mount(tester);
+        await _twoContacts(
+          tester,
+          const Offset(80, 400),
+          const Offset(280, 400),
+          const Offset(145, 400),
+          const Offset(215, 400),
+        );
+        expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+        expect(source.opens, isEmpty);
+        await tester.dragFrom(const Offset(260, 400), const Offset(-210, 0));
+        await _finishFrames(tester);
+        expect(source.opens, isEmpty);
+        await tester.tapAt(const Offset(180, 400));
+        await _finishFrames(tester);
+        expect(source.opens, [source.entries[1].key]);
+        expect(find.text('Swipe to browse · tap to open'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'return expands the current card after multiple circular laps',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          await mount(tester);
+          switcher.currentState!.openStack();
+          await _finishFrames(tester);
+          for (var i = 0; i < 6; i++) {
+            await tester.dragFrom(
+              const Offset(260, 400),
+              const Offset(-210, 0),
+            );
+            await _finishFrames(tester);
+          }
+          expect(source.opens, isEmpty);
+          expect(
+            find.bySemanticsLabel(RegExp('Chat 0, conversation 1 of 3')),
+            findsOneWidget,
+          );
+          await tester.tapAt(const Offset(180, 400));
+          await tester.pump(const Duration(milliseconds: 100));
+          expect(
+            find.bySemanticsLabel(RegExp('Chat 0, conversation 1 of 3')),
+            findsOneWidget,
+          );
+          await _finishFrames(tester);
+          expect(source.opens, isEmpty);
+          await _twoContacts(
+            tester,
+            const Offset(80, 400),
+            const Offset(160, 400),
+            const Offset(250, 400),
+            const Offset(330, 400),
+          );
+          expect(source.selected, source.entries[2].key);
+        } finally {
+          semantics.dispose();
+        }
+      },
+    );
+
+    testWidgets('a new gesture can interrupt a card returning to the chat', (
+      tester,
+    ) async {
+      await mount(tester);
+      final first = await tester.startGesture(
+        const Offset(220, 400),
+        pointer: 1,
+      );
+      final second = await tester.startGesture(
+        const Offset(300, 400),
+        pointer: 2,
+      );
+      await first.moveBy(
+        const Offset(-24, 0),
+        timeStamp: const Duration(milliseconds: 16),
+      );
+      await second.moveBy(
+        const Offset(-24, 0),
+        timeStamp: const Duration(milliseconds: 16),
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      await first.up();
+      await second.up();
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(source.opens, isEmpty);
+      await _twoContacts(
+        tester,
+        const Offset(220, 400),
+        const Offset(300, 400),
+        const Offset(50, 400),
+        const Offset(130, 400),
+      );
+      expect(source.opens, [source.entries[1].key]);
+      expect(find.text('Swipe to browse · tap to open'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('pointer timing distinguishes a short fling from a slow drag', (
+      tester,
+    ) async {
+      await mount(tester);
+      Future<void> drag(Duration lastMove) async {
+        final first = await tester.startGesture(
+          const Offset(220, 400),
+          pointer: 1,
+        );
+        final second = await tester.startGesture(
+          const Offset(300, 400),
+          pointer: 2,
+        );
+        await first.moveBy(
+          const Offset(-19, 0),
+          timeStamp: const Duration(milliseconds: 16),
+        );
+        await second.moveBy(
+          const Offset(-19, 0),
+          timeStamp: const Duration(milliseconds: 16),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        await first.moveBy(const Offset(-31, 0), timeStamp: lastMove);
+        await second.moveBy(const Offset(-31, 0), timeStamp: lastMove);
+        await tester.pump(lastMove - const Duration(milliseconds: 16));
+        await first.up();
+        await second.up();
+        await _finishFrames(tester);
+      }
+
+      await drag(const Duration(milliseconds: 300));
+      expect(source.opens, isEmpty);
+      await drag(const Duration(milliseconds: 48));
+      expect(source.opens, [source.entries[1].key]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('double tap hold scrub commits and upward movement cancels', (
+      tester,
+    ) async {
+      await mount(tester);
+      await tester.tapAt(const Offset(220, 400));
+      await tester.pump(const Duration(milliseconds: 80));
+      final scrub = await tester.startGesture(const Offset(220, 400));
+      await scrub.moveBy(const Offset(-130, 0));
+      await tester.pump(const Duration(milliseconds: 50));
+      await scrub.up();
+      await _finishFrames(tester);
+      expect(source.opens, [source.entries[1].key]);
+      await tester.tapAt(const Offset(220, 400));
+      await tester.pump(const Duration(milliseconds: 80));
+      final cancelled = await tester.startGesture(const Offset(220, 400));
+      await cancelled.moveBy(const Offset(-100, -100));
+      await tester.pump();
+      await cancelled.up();
+      await _finishFrames(tester);
+      expect(source.opens, hasLength(1));
+    });
+
+    testWidgets(
+      'messages, OS edge and accessibility do not admit expert gestures',
+      (tester) async {
+        await mount(tester);
+        await _twoContacts(
+          tester,
+          const Offset(80, 70),
+          const Offset(260, 70),
+          const Offset(145, 70),
+          const Offset(195, 70),
+        );
+        expect(source.opens, isEmpty);
+        expect(find.text('Swipe to browse · tap to open'), findsNothing);
+        expect(
+          admitsConversationGesture(
+            const PointerDownEvent(position: Offset(180, 70)),
+          ),
+          isFalse,
+        );
+        final semantics = tester.ensureSemantics();
+        try {
+          await mount(tester, accessible: true);
+          await _twoContacts(
+            tester,
+            const Offset(80, 400),
+            const Offset(280, 400),
+            const Offset(145, 400),
+            const Offset(215, 400),
+          );
+          expect(find.text('Swipe to browse · tap to open'), findsNothing);
+          switcher.currentState!.openStack();
+          await tester.pumpAndSettle();
+          expect(find.byTooltip('Next conversation'), findsOneWidget);
+          expect(
+            find.bySemanticsLabel(RegExp('Chat 0, conversation 1 of 3')),
+            findsOneWidget,
+          );
+          final tree = tester
+              .binding
+              .renderViews
+              .single
+              .owner!
+              .semanticsOwner!
+              .rootSemanticsNode!
+              .toStringDeep();
+          expect(tree, isNot(contains('Selectable message')));
+          await tester.tap(find.byTooltip('Next conversation'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Open conversation'));
+          await _finishFrames(tester);
+          expect(source.opens, [source.entries[1].key]);
+        } finally {
+          semantics.dispose();
+        }
+      },
+    );
+
+    testWidgets(
+      'unselected prose admits two fingers while code and buttons keep their gestures',
+      (tester) async {
+        await mount(tester);
+        final key = GlobalKey();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ConversationGestureBoundary(
+                child: Column(
+                  children: [
+                    const SizedBox(
+                      height: 100,
+                      child: Center(child: Text('Prose message')),
+                    ),
+                    SizedBox(
+                      key: key,
+                      height: 100,
+                      child: const SelectableText('Selectable prose'),
+                    ),
+                    const SourceCodeBlock(
+                      code: 'horizontal source code',
+                      language: 'dart',
+                      headerAction: null,
+                    ),
+                    IconButton(
+                      tooltip: 'Copy answer',
+                      onPressed: () {},
+                      icon: const Icon(Icons.copy),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          admitsConversationGesture(
+            PointerDownEvent(
+              position: tester.getCenter(find.text('Prose message')),
+            ),
+          ),
+          isTrue,
+        );
+        expect(
+          admitsConversationGesture(
+            PointerDownEvent(
+              position: tester.getCenter(find.text('Prose message')),
+            ),
+            textAllowed: false,
+          ),
+          isFalse,
+        );
+        expect(
+          admitsConversationGesture(
+            PointerDownEvent(
+              position: tester.getCenter(find.text('Selectable prose')),
+            ),
+          ),
+          isTrue,
+        );
+        expect(
+          admitsConversationGesture(
+            PointerDownEvent(
+              position: tester.getCenter(find.byType(SourceCodeBlock)),
+            ),
+          ),
+          isFalse,
+        );
+        expect(
+          admitsConversationGesture(
+            PointerDownEvent(
+              position: tester.getCenter(find.byTooltip('Copy answer')),
+            ),
+          ),
+          isFalse,
+        );
+      },
+    );
+
+    testWidgets('reduced motion publishes cached cards and returns directly', (
+      tester,
+    ) async {
+      await mount(tester, reduced: true);
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      expect(find.text('personal'), findsWidgets);
+      expect(source.opens, isEmpty);
+      expect(switcher.currentState!.dismissStack(), isTrue);
+      await _finishFrames(tester);
+      expect(find.text('Swipe to browse · tap to open'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'spring interruption retains position and velocity; reduced motion settles immediately',
+      (tester) async {
+        final motion = ConversationCardMotion(tester);
+        addTearDown(motion.dispose);
+        motion.spring(position: 1, lift: 1, zoom: 1);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 90));
+        final position = motion.position, velocity = motion.positionVelocity;
+        expect(position, greaterThan(0));
+        expect(velocity, greaterThan(0));
+        motion.spring(position: 0, lift: 0, zoom: 0);
+        expect(motion.position, position);
+        expect(motion.positionVelocity, velocity);
+        await tester.pumpAndSettle();
+        expect(motion.position.abs(), lessThan(.001));
+        var done = false;
+        motion.spring(
+          position: 1,
+          lift: 1,
+          zoom: 1,
+          reducedMotion: true,
+          settled: () => done = true,
+        );
+        expect(done, isTrue);
+        expect(motion.animating, isFalse);
+        expect(motion.position, 1);
+      },
+    );
+
+    for (final brightness in Brightness.values) {
+      testWidgets(
+        'stack selection recovery reports once in ${brightness.name}',
+        (tester) async {
+          await mount(tester, brightness: brightness, accessible: true);
+          switcher.currentState!.openStack();
+          await _finishFrames(tester);
+          await tester.tap(find.byTooltip('Next conversation'));
+          await _finishFrames(tester);
+          source.rejectOpen = true;
+          await tester.tap(find.byTooltip('Open conversation'));
+          await _finishFrames(tester);
+          expect(source.selected, source.entries.first.key);
+          expect(
+            find.text('Could not open this conversation. Try again.'),
+            findsOneWidget,
+          );
+          expect(find.byType(SnackBar), findsNothing);
+          source.rejectOpen = false;
+          await tester.tap(find.byTooltip('Open conversation'));
+          await _finishFrames(tester);
+          expect(source.selected, source.entries[1].key);
+          expect(
+            find.text('Could not open this conversation. Try again.'),
+            findsNothing,
+          );
+        },
+      );
+
+      testWidgets('neutral and amber cue paint in ${brightness.name}', (
+        tester,
+      ) async {
+        await mount(tester, brightness: brightness);
+        for (final kind in ConversationActivityKind.values) {
+          activity.value = ChatNoticeActivity(
+            key: source.entries[1].key,
+            kind: kind,
+            identity: kind.name,
+            sequence: kind.index + 1,
+          );
+          await tester.pump(const Duration(milliseconds: 200));
+          await tester.pump(const Duration(milliseconds: 100));
+          final filtered = find.byType(ImageFiltered);
+          expect(filtered, findsOneWidget);
+          final box = tester.widget<DecoratedBox>(
+            find.descendant(of: filtered, matching: find.byType(DecoratedBox)),
+          );
+          expect(
+            (box.decoration as BoxDecoration).color,
+            kind == ConversationActivityKind.inputNeeded
+                ? const Color(0xffefaa5b)
+                : brightness == Brightness.light
+                ? const Color(0xff3b3b3b)
+                : const Color(0xffe9efef),
+          );
+          await tester.pump(const Duration(milliseconds: 700));
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+  });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'real Recents chat stack, drafts and Back in ${brightness.name} at $scale',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          final preferences = await SharedPreferences.getInstance();
+          final appPreferences = AppPreferences(preferences);
+          addTearDown(appPreferences.dispose);
+          final fixture = _ScreenFixture();
+          final reads = <String>[];
+          final controller = ProfileWorkspaceController(
+            access: ConnectionAccess(
+              connection: SavedConnection(
+                id: 'host',
+                label: 'Home server',
+                host: 'localhost',
+                port: 1,
+                apiKey: '',
+              ),
+              dashboardOAuth: null,
+            ),
+            connectionIdentity: 'recents-ui',
+            preferences: preferences,
+            appPreferences: appPreferences,
+            gatewayFactory: fixture.gateway,
+            onNotificationRead: (_, identity) async {
+              reads.add(identity);
+            },
+          );
+          addTearDown(controller.dispose);
+          await controller.initialize();
+          await controller.refreshRecents();
+          final activity = ValueNotifier<ChatNoticeActivity?>(null);
+          addTearDown(activity.dispose);
+          final frame = GlobalKey();
+          tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: ChatNoticeActivityScope(
+                  activity: activity,
+                  child: RepaintBoundary(key: frame, child: child!),
+                ),
+              ),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                initialDestination: AppDestination.activity,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Review the Android gestures').first);
+          await _finishFrames(tester);
+          final first = controller.current!.chat!;
+          await controller.updateDraft(first, 'Return to this draft');
+          await tester.pumpAndSettle();
+          final field = find.widgetWithText(TextField, 'Return to this draft');
+          final editing = tester.widget<TextField>(field).controller!;
+          editing.selection = const TextSelection.collapsed(offset: 6);
+          if (brightness == Brightness.dark && scale == 1) {
+            final visit = tester
+                .widget<RecentConversationSwitcher>(
+                  find.byType(RecentConversationSwitcher),
+                )
+                .session;
+            final other = visit.entries.firstWhere(
+              (entry) => entry.key.workspace != first.key.workspace,
+            );
+            fixture.failedResume = other.key;
+            expect(await visit.select(other.key), isFalse);
+            await _finishFrames(tester);
+            expect(controller.current!.chat!.key, first.key);
+            expect(
+              controller.current!.chat!.composer.observation.displayedText,
+              'Return to this draft',
+            );
+            fixture.failedResume = null;
+          }
+          final resumes = fixture.calls
+              .where((call) => call.$2 == 'session.resume')
+              .length;
+          await _capture(tester, frame, 'normal-${brightness.name}-$scale');
+          await tester.tap(find.byTooltip('Chat actions'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Choose recent conversation'));
+          await _finishFrames(tester);
+          expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+          final composerFocus = tester.widget<TextField>(field).focusNode!;
+          composerFocus.requestFocus();
+          await tester.pump();
+          expect(
+            composerFocus.hasFocus,
+            isFalse,
+            reason: 'Menu focus restoration cannot focus the hidden chat',
+          );
+          expect(
+            fixture.calls.where((call) => call.$2 == 'session.resume'),
+            hasLength(resumes),
+          );
+          await _capture(tester, frame, 'stack-${brightness.name}-$scale');
+          expect(controller.visible, isFalse);
+          if (brightness == Brightness.dark && scale == 1) {
+            first.reading.recordNotificationResult(
+              const NotificationFocus('answer', '3'),
+            );
+            await controller.refreshHistory(first);
+            await _finishFrames(tester);
+            expect(
+              reads,
+              isEmpty,
+              reason:
+                  'A card or hidden normal transcript cannot acknowledge a read',
+            );
+          }
+          await tester.dragFrom(
+            Offset(tester.view.physicalSize.width * .75, 400),
+            Offset(-tester.view.physicalSize.width * .6, 0),
+          );
+          await _finishFrames(tester);
+          expect(controller.current!.chat!.key, first.key);
+          expect(
+            fixture.calls.where((call) => call.$2 == 'session.resume'),
+            hasLength(resumes),
+          );
+          await tester.tapAt(Offset(tester.view.physicalSize.width / 2, 400));
+          await _finishFrames(tester);
+          expect(controller.current!.chat!.key, isNot(first.key));
+          expect(find.text('Swipe to browse · tap to open'), findsNothing);
+          await tester.tap(find.byTooltip('Chat actions'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Previous recent conversation'));
+          await _finishFrames(tester);
+          expect(controller.current!.chat!.key, first.key);
+          final restored = tester
+              .widget<TextField>(
+                find.widgetWithText(TextField, 'Return to this draft'),
+              )
+              .controller!;
+          expect(restored.selection.baseOffset, 6);
+          expect(controller.visible, isTrue);
+          if (brightness == Brightness.dark && scale == 1) {
+            expect(reads, ['answer:3']);
+          }
+          await tester.tap(find.byTooltip('Chat actions'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Choose recent conversation'));
+          await _finishFrames(tester);
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          expect(find.text('Swipe to browse · tap to open'), findsNothing);
+          expect(controller.current!.chat!.key, first.key);
+          if (brightness == Brightness.dark && scale == 1) {
+            await tester.tap(find.byTooltip('Chat actions'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Choose recent conversation'));
+            await _finishFrames(tester);
+            expect(controller.visible, isFalse);
+            tester
+                .state<ProfileWorkspaceScreenState>(
+                  find.byType(ProfileWorkspaceScreen),
+                )
+                .showNotificationChat();
+            await _finishFrames(tester);
+            expect(find.text('Swipe to browse · tap to open'), findsNothing);
+            expect(controller.visible, isTrue);
+          }
+          await tester.tap(find.byTooltip('Back to Recents'));
+          await _finishFrames(tester);
+          expect(find.text('Recents'), findsOneWidget);
+          expect(controller.current!.chat, isNull);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+        },
+      );
+    }
+  }
+}

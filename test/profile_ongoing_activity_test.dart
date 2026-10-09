@@ -74,7 +74,7 @@ void main() {
         home: Scaffold(
           body: WorkspaceActivityContent(
             controller: controller,
-            onOpen: (_) {},
+            onOpen: (_, displayed) {},
           ),
         ),
       ),
@@ -120,7 +120,7 @@ void main() {
                   Expanded(
                     child: WorkspaceActivityContent(
                       controller: controller,
-                      onOpen: (_) {},
+                      onOpen: (_, displayed) {},
                     ),
                   ),
                 ],

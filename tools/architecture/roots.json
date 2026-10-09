@@ -6084,6 +6084,51 @@
       "purpose": "Local browser acceptance of website layouts, interactions, accessibility and assets",
       "source": "docs/WEBSITE.md",
       "status": "supported"
+    },
+    {
+      "id": "device-or-live-test-integration_test/recent_conversation_native_test.dart",
+      "kind": "device-or-live-test",
+      "path": "integration_test/recent_conversation_native_test.dart",
+      "purpose": "Production Recents chat on API 36 with native two-finger, pinch, scrub, stack, keyboard, recovery and passive cue checks; synthetic transport only",
+      "source": "docs/TESTING.md; scripts/test_native_recents.py",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/recent_conversation_session_test.dart",
+      "kind": "host-test",
+      "path": "test/recent_conversation_session_test.dart",
+      "purpose": "Recents visit ownership, multitouch switching, motion, cue and production route regressions; STUDIO_REVIEW optionally renders authored fixture captures",
+      "source": "docs/TESTING.md; test/recent_conversation_session_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/recent_conversation_switcher_test.dart",
+      "kind": "host-test",
+      "path": "test/recent_conversation_switcher_test.dart",
+      "purpose": "Recents visit ownership, multitouch switching, motion, cue and production route regressions; STUDIO_REVIEW optionally renders authored fixture captures",
+      "source": "docs/TESTING.md; test/recent_conversation_switcher_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "qa-native-recents",
+      "kind": "qa-fixture",
+      "path": "scripts/test_native_recents.py",
+      "purpose": "Disposable emulator driver, isolated build, native input and bounded screenshot receipts with viewport/settings restoration",
+      "source": "docs/TESTING.md",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "qa-native-recents-touch",
+      "kind": "qa-fixture",
+      "path": "integration_test/fixtures/recents_touch/NativeRecentsTouch.java",
+      "purpose": "API 36 shell input helper compiled to a disposable dex by the native Recents driver; never packaged in Wing",
+      "source": "scripts/test_native_recents.py",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -6848,6 +6893,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "docs/WEBSITE.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
       "path": "docs/design/2026-09-14-administration-handoff.md",
       "area": "docs",
       "provenance": "tracked"
@@ -7068,6 +7118,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "integration_test/fixtures/recents_touch/NativeRecentsTouch.java",
+      "area": "integration_test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "integration_test/fixtures/vault/index.html",
       "area": "integration_test",
       "provenance": "tracked"
@@ -7186,6 +7241,11 @@
       "path": "integration_test/reading_native_preview.dart",
       "area": "integration_test",
       "provenance": "tracked"
+    },
+    {
+      "path": "integration_test/recent_conversation_native_test.dart",
+      "area": "integration_test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "integration_test/remaining_product_live_test.dart",
@@ -7819,6 +7879,11 @@
     },
     {
       "path": "lib/core/models/reading_snapshot_message.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/models/recent_conversation.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
     },
@@ -8788,6 +8853,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/services/profile_workspace_recents.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/profile_workspace_registry.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -8826,6 +8896,11 @@
       "path": "lib/core/services/provider_recovery.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/services/recent_conversation_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/services/remote_file_saver.dart",
@@ -9098,6 +9173,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/widgets/chat_notice_activity_scope.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/chat_profile_bar.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -9361,6 +9441,26 @@
       "path": "lib/core/widgets/read_recovery.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/recent_conversations/conversation_card_motion.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/recent_conversations/conversation_gestures.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/recent_conversations/conversation_preview.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/recent_conversations/recent_conversation_switcher.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/resource_filename.dart",
@@ -9801,6 +9901,11 @@
       "path": "scripts/test_native_notification_restore.py",
       "area": "scripts",
       "provenance": "tracked"
+    },
+    {
+      "path": "scripts/test_native_recents.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "scripts/test_native_voice.py",
@@ -11724,6 +11829,16 @@
     },
     {
       "path": "test/reading_view_input_guard_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/recent_conversation_session_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/recent_conversation_switcher_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },
@@ -14093,6 +14208,151 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "tools/website/capture_app_test.dart",
+      "area": "tools",
+      "provenance": "tracked"
+    },
+    {
+      "path": "tools/website/review.cjs",
+      "area": "tools",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/.nojekyll",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/administration.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/fonts/MANROPE-OFL.txt",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/fonts/SOURCE-SANS-3-OFL.txt",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/fonts/manrope.woff2",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/fonts/source-sans-3.woff2",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/activity-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/activity-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/administration-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/administration-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/agents-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/agents-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/analytics-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/chats-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/chats-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/code-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/code-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/conversation-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/conversation-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/files-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/files-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/health-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/health-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/health-profile-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/health-profile-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/message-actions-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/message-actions-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
       "path": "website/assets/screenshots/navigator-dark.png",
       "area": "website",
       "provenance": "tracked"
@@ -14123,87 +14383,22 @@
       "provenance": "tracked"
     },
     {
-      "path": "website/assets/screenshots/workspace-view-dark.png",
+      "path": "website/assets/screenshots/recents-dark.png",
       "area": "website",
       "provenance": "tracked"
     },
     {
-      "path": "website/assets/screenshots/workspace-view-light.png",
+      "path": "website/assets/screenshots/recents-light.png",
       "area": "website",
       "provenance": "tracked"
     },
     {
-      "path": "docs/WEBSITE.md",
-      "area": "docs",
-      "provenance": "tracked"
-    },
-    {
-      "path": "tools/website/capture_app_test.dart",
-      "area": "tools",
-      "provenance": "tracked"
-    },
-    {
-      "path": "tools/website/review.cjs",
-      "area": "tools",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/.nojekyll",
+      "path": "website/assets/screenshots/results-dark.png",
       "area": "website",
       "provenance": "tracked"
     },
     {
-      "path": "website/assets/fonts/MANROPE-OFL.txt",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/fonts/SOURCE-SANS-3-OFL.txt",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/fonts/manrope.woff2",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/fonts/source-sans-3.woff2",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/agents-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/agents-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/analytics-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/chats-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/chats-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/conversation-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/conversation-light.png",
+      "path": "website/assets/screenshots/results-light.png",
       "area": "website",
       "provenance": "tracked"
     },
@@ -14228,87 +14423,27 @@
       "provenance": "tracked"
     },
     {
+      "path": "website/assets/screenshots/welcome-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/workspace-view-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/workspace-view-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
       "path": "website/assets/wing.png",
       "area": "website",
       "provenance": "tracked"
     },
     {
       "path": "website/assets/wordmark.svg",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/index.html",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/script.js",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/styles.css",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/administration.html",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/administration-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/administration-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/health-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/health-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/health-profile-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/health-profile-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/recents-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/recents-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/results-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/results-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/welcome-light.png",
       "area": "website",
       "provenance": "tracked"
     },
@@ -14323,17 +14458,12 @@
       "provenance": "tracked"
     },
     {
+      "path": "website/index.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
       "path": "website/live-work.html",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/results.html",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/workspaces.html",
       "area": "website",
       "provenance": "tracked"
     },
@@ -14343,7 +14473,22 @@
       "provenance": "tracked"
     },
     {
+      "path": "website/results.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
       "path": "website/scheduled-tasks.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/script.js",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/styles.css",
       "area": "website",
       "provenance": "tracked"
     },
@@ -14353,42 +14498,7 @@
       "provenance": "tracked"
     },
     {
-      "path": "website/assets/screenshots/activity-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/activity-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/code-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/code-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/message-actions-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/message-actions-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/files-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/files-light.png",
+      "path": "website/workspaces.html",
       "area": "website",
       "provenance": "tracked"
     }
@@ -14430,6 +14540,7 @@
         "integration_test/queued_message_edit_test.dart",
         "integration_test/queued_message_native_preview.dart",
         "integration_test/reading_native_preview.dart",
+        "integration_test/recent_conversation_native_test.dart",
         "integration_test/remaining_product_live_test.dart",
         "integration_test/roadmap_emulator_test.dart",
         "integration_test/roadmap_native_preview.dart",
@@ -14558,6 +14669,7 @@
         "lib/core/services/provider_device_sign_in_session.dart",
         "lib/core/services/provider_inventory_session.dart",
         "lib/core/services/provider_recovery.dart",
+        "lib/core/services/recent_conversation_session.dart",
         "lib/core/services/retained_memory_session.dart",
         "lib/core/services/scheduled_task_detail_session.dart",
         "lib/core/services/scheduled_task_edit_session.dart",
@@ -14593,6 +14705,7 @@
         "lib/core/widgets/chat_intelligence_picker.dart",
         "lib/core/widgets/chat_list_menu.dart",
         "lib/core/widgets/chat_model_confirmation.dart",
+        "lib/core/widgets/chat_notice_activity_scope.dart",
         "lib/core/widgets/chat_profile_bar.dart",
         "lib/core/widgets/chat_status_dot.dart",
         "lib/core/widgets/chat_working_border.dart",
@@ -14642,6 +14755,10 @@
         "lib/core/widgets/profile_transcript_disclosure.dart",
         "lib/core/widgets/project_folder_picker.dart",
         "lib/core/widgets/read_recovery.dart",
+        "lib/core/widgets/recent_conversations/conversation_card_motion.dart",
+        "lib/core/widgets/recent_conversations/conversation_gestures.dart",
+        "lib/core/widgets/recent_conversations/conversation_preview.dart",
+        "lib/core/widgets/recent_conversations/recent_conversation_switcher.dart",
         "lib/core/widgets/retained_markdown_paragraph.dart",
         "lib/core/widgets/server_connection_label.dart",
         "lib/core/widgets/side_question_delivery_card.dart",
@@ -14834,6 +14951,8 @@
         "test/provider_credential_lifetime_test.dart",
         "test/provider_recovery_screen_test.dart",
         "test/read_recovery_test.dart",
+        "test/recent_conversation_session_test.dart",
+        "test/recent_conversation_switcher_test.dart",
         "test/remote_file_saver_lifetime_test.dart",
         "test/remote_file_saver_test.dart",
         "test/restored_notification_read_test.dart",
@@ -15008,6 +15127,7 @@
         "integration_test/profile_workspace_test.dart",
         "integration_test/queued_message_edit_test.dart",
         "integration_test/queued_message_native_preview.dart",
+        "integration_test/recent_conversation_native_test.dart",
         "integration_test/remaining_product_live_test.dart",
         "integration_test/roadmap_emulator_test.dart",
         "integration_test/roadmap_native_preview.dart",
@@ -15182,6 +15302,7 @@
         "test/project_folder_picker_test.dart",
         "test/project_membership_index_test.dart",
         "test/project_picker_design_test.dart",
+        "test/recent_conversation_switcher_test.dart",
         "test/restored_notification_read_test.dart",
         "test/saved_message_actions_test.dart",
         "test/scheduled_tasks_controller_test.dart",
@@ -15468,6 +15589,7 @@
         "integration_test/profile_sensitive_live_test.dart",
         "integration_test/profile_workspace_test.dart",
         "integration_test/queued_message_edit_test.dart",
+        "integration_test/recent_conversation_native_test.dart",
         "integration_test/remaining_product_live_test.dart",
         "integration_test/roadmap_emulator_test.dart",
         "integration_test/scheduled_tasks_native_test.dart",
@@ -15508,6 +15630,7 @@
         "integration_test/profile_sensitive_live_test.dart",
         "integration_test/profile_workspace_test.dart",
         "integration_test/queued_message_edit_test.dart",
+        "integration_test/recent_conversation_native_test.dart",
         "integration_test/remaining_product_live_test.dart",
         "integration_test/roadmap_emulator_test.dart",
         "integration_test/scheduled_tasks_native_test.dart",
@@ -15874,6 +15997,8 @@
         "test/read_recovery_test.dart",
         "test/reading_snapshot_message_test.dart",
         "test/reading_view_input_guard_test.dart",
+        "test/recent_conversation_session_test.dart",
+        "test/recent_conversation_switcher_test.dart",
         "test/release_identity_test.dart",
         "test/remote_file_saver_lifetime_test.dart",
         "test/remote_file_saver_test.dart",

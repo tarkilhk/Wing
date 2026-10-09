@@ -1,3 +1,5 @@
+import 'package:wing/core/models/recent_conversation.dart';
+import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:flutter/widgets.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 
@@ -15,11 +17,14 @@ class ProfileFixtureRoot extends StatefulWidget {
 }
 
 class _ProfileFixtureRootState extends State<ProfileFixtureRoot> {
+  final _activity = ValueNotifier<ChatNoticeActivity?>(null);
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) =>
+      ChatNoticeActivityScope(activity: _activity, child: widget.child);
 
   @override
   void dispose() {
+    _activity.dispose();
     widget.controller.dispose();
     widget.controller.appPreferences.dispose();
     super.dispose();

@@ -1,3 +1,4 @@
+import '../models/recent_conversation.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -47,6 +48,33 @@ typedef _NotificationPolicy = ({bool completed, bool attention, bool previews});
 /// One durable state per scoped chat. Rendering and writes are serialized so a
 /// delayed permission check or stale read callback cannot replace a newer state.
 class ChatNotificationCoordinator {
+  final _activity = ValueNotifier<ChatNoticeActivity?>(null);
+  ValueListenable<ChatNoticeActivity?> get activity => _activity;
+  int _activitySequence = 0;
+  bool _activityClosed = false;
+
+  void _publishActivity(
+    String chat,
+    NotificationFocus focus,
+    ConversationActivityKind kind,
+  ) {
+    if (_activityClosed) return;
+    final ProfileSessionKey key;
+    try {
+      key = ProfileSessionKey.fromJson(
+        Map<String, dynamic>.from(jsonDecode(chat) as Map),
+      );
+    } on FormatException {
+      return;
+    }
+    _activity.value = ChatNoticeActivity(
+      key: key,
+      kind: kind,
+      identity: focus.identity,
+      sequence: ++_activitySequence,
+    );
+  }
+
   static const storageKey = 'chat_notification_state';
   final SharedPreferences preferences;
   final AppPreferences appPreferences;
@@ -198,7 +226,14 @@ class ChatNotificationCoordinator {
   Future<void> enableNotifications() => _activeApplication.enable();
   Future<void> applicationResumed() => _activeApplication.resumed();
   Future<void> syncMonitoring() => _activeApplication.syncMonitoring();
-  void closeApplication() => _activeApplication.close();
+  void closeApplication() {
+    _activeApplication.close();
+    if (!_activityClosed) {
+      _activityClosed = true;
+      _activity.dispose();
+    }
+  }
+
   NotificationFocus? focusFor(ProfileSessionKey key) =>
       resultFor(jsonEncode(key.toJson()));
   Future<void> readTarget(ProfileSessionKey key, String identity) =>
@@ -226,6 +261,11 @@ class ChatNotificationCoordinator {
       'focus': focus.toJson(),
       'content': content.toJson(),
     };
+    if (alert &&
+        focus.kind == 'answer' &&
+        content.category == ChatNotificationCategory.update) {
+      _publishActivity(chat, focus, ConversationActivityKind.reply);
+    }
     await _render(chat, state, alert: alert);
     await _write();
   });
@@ -243,6 +283,9 @@ class ChatNotificationCoordinator {
       state.title = title;
       state.scope = scope;
       // Preserve first-seen order across request kinds, refreshes and restarts.
+      final previousIdentities = state.inputs
+          .map((input) => input.focus.identity)
+          .toSet();
       final remaining = {
         for (final input in captured) input.focus.identity: input,
       };
@@ -253,6 +296,16 @@ class ChatNotificationCoordinator {
       }
       ordered.addAll(remaining.values);
       state.inputs = ordered;
+      final newlyObserved = ordered
+          .where((input) => !previousIdentities.contains(input.focus.identity))
+          .firstOrNull;
+      if (alert && newlyObserved != null) {
+        _publishActivity(
+          chat,
+          newlyObserved.focus,
+          ConversationActivityKind.inputNeeded,
+        );
+      }
       await _render(chat, state, alert: alert);
       await _write();
     });

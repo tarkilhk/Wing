@@ -1,3 +1,4 @@
+import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/models/notification_input.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'dart:convert';
@@ -54,6 +55,29 @@ void main() {
     );
   });
   tearDown(() => appPreferences.dispose());
+  test(
+    'read-only activity projects fresh journal facts without native permission',
+    () async {
+      sink.permissionResult = false;
+      final events = <ChatNoticeActivity>[];
+      notices.activity.addListener(() {
+        if (notices.activity.value case final event?) events.add(event);
+      });
+      await reply('quiet', alert: false);
+      await inputs([approval('baseline')], alert: false);
+      expect(events, isEmpty);
+      await reply('fresh');
+      await reply('fresh');
+      expect(events.single.kind, ConversationActivityKind.reply);
+      expect(events.single.key.workspace.connectionIdentity, 'owner');
+      await inputs([approval('baseline'), approval('new')]);
+      await inputs([approval('baseline'), approval('new', submitting: true)]);
+      expect(events, hasLength(2));
+      expect(events.last.kind, ConversationActivityKind.inputNeeded);
+      expect(events.last.identity, 'approval:new');
+    },
+  );
+
   test(
     'input observations detach retained choices before queued delivery',
     () async {

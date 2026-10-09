@@ -115,6 +115,61 @@ Idle history needs no repeated Recent label or chevron.
 At enlarged text, wrap titles and metadata and move ages below titles. Continue
 showing background-task details, partial-profile failures and loading feedback.
 
+### Switching recent conversations
+
+A chat opened from Recents retains the exact displayed filter, membership and
+ongoing-before-history order for that visit. Last and first link circularly.
+The normal chat, Activity, message actions and composer remain the resting screen.
+No permanent carousel controls or status strip are added.
+
+- Two fingers swiping horizontally on the transcript pull the chat into
+  a card and commit the adjacent conversation on release. A short drag returns.
+- Double tap blank transcript space, hold the second touch and scrub sideways to
+  browse several cards; release commits the nearest. Moving upward cancels.
+- Pinch inward with two fingers to zoom into a persistent card stack. Lifting
+  fingers leaves it open. One-finger swipes browse; tapping the center or a visible
+  neighboring card commits and expands that conversation. Back returns to the
+  committed conversation before a second Back returns to the preserved Recents
+  filter. Returning from cards restores an originally visible keyboard; a keyboard
+  already hidden with Android Back stays hidden. The obscured chat cannot receive
+  focus, including when a menu restores its previous focus target.
+
+Cards use the existing chat capture or passive saved-history renderers. They
+round and gain shadows only during motion; scale is about .86 during a switch
+and .72 in the stack. Independent numerical springs retain current positions and
+velocities when interrupted; reduced motion settles directly. Input uses native
+pointer timestamps for velocity. A new gesture can interrupt a returning card
+once selection and its capture have settled. Two-finger gestures admit unselected
+transcript prose; double tap/scrub requires
+blank transcript space. Both exclude Android's 24 dp edge zones. Active text
+selection, code, message actions, Activity controls, pending-input panels, composer,
+voice and queued-prompt editing keep their input. The existing Chat actions menu
+provides Previous / Next / Choose recent conversation; accessible navigation
+uses explicit icon-only stack controls with labels and tooltips. A failed stack
+selection keeps the committed chat and reports one error beside the stack
+controls, leaving the cards available for retry or Back.
+
+Passive edge cues point along the shortest circular path, with an equal-distance
+tie pointing right. Neutral reply cues are white in dark mode and charcoal in
+light mode; confirmed pending input uses amber. A coalesced cue fades over 650 ms
+and grants no selection or read authority. Suppress cues during manipulation,
+settling, text editing, voice, obscured/inactive routes and reduced motion. In a
+settled stack, direction follows the focused card. Do not infer pending input
+from ordinary prose questions.
+
+Browsing never resumes, marks read or dispatches a chat. Keep at most three
+physical preview reads in flight; evicted or retired previews cannot publish.
+Selection uses the existing captured workspace command and its lifetime fences.
+Drafts, attachments and scroll anchors keep their existing owners. Raster captures
+are bounded to the visible neighborhood plus the committed chat and disposed
+when evicted or the route leaves. Failed preview reads show a passive unavailable
+state; a failed selection keeps the current conversation and reports recovery.
+
+Client-only integration inspected upstream Hermes main
+`14ec243c1797412d93e6b52c41f29f41e75b0cef` (9 October 2026): stock saved-message
+history, session selection and correlated input/completion observations. No new
+server endpoint or backend modification is required.
+
 ## App and notification identity
 
 The official app name and wordmark are **Wing**, with a capital **W** and

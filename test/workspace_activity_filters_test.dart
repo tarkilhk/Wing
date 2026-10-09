@@ -215,7 +215,7 @@ void main() {
               appBar: AppBar(title: const Text('Recents')),
               body: WorkspaceActivityContent(
                 controller: controller,
-                onOpen: (_) {},
+                onOpen: (_, displayed) {},
               ),
             ),
           ),
@@ -271,6 +271,7 @@ void main() {
     tester,
   ) async {
     ProfileRecentChat? opened;
+    List<ProfileRecentChat>? displayedAtOpen;
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(textScaler: TextScaler.linear(2)),
@@ -280,7 +281,10 @@ void main() {
             child: Scaffold(
               body: WorkspaceActivityContent(
                 controller: controller,
-                onOpen: (item) => opened = item,
+                onOpen: (item, displayed) {
+                  opened = item;
+                  displayedAtOpen = displayed;
+                },
               ),
             ),
           ),
@@ -300,6 +304,8 @@ void main() {
     expect(find.text('Question'), findsOneWidget);
     await tester.tap(find.text('Question'));
     expect(opened?.key.sessionId, 'needs-input');
+    expect(displayedAtOpen!.map((chat) => chat.key.sessionId), ['needs-input']);
+    expect(() => displayedAtOpen!.clear(), throwsUnsupportedError);
 
     await tester.tap(find.widgetWithText(FilterChip, 'Running'));
     await tester.pump();
@@ -320,7 +326,7 @@ void main() {
         home: Scaffold(
           body: WorkspaceActivityContent(
             controller: controller,
-            onOpen: (_) {},
+            onOpen: (_, displayed) {},
           ),
         ),
       ),

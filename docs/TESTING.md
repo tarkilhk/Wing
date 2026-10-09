@@ -51,6 +51,68 @@ full command is not a passing full run; a focused recovery does not waive a gate
 that explicitly requires one. Ordinary local delivery can use the completed
 checks and their stated limits without manufacturing another release campaign.
 
+## Recents conversation switching
+
+Prerequisite: at least two chats in the selected Recents filter. Open one from
+Recents. Exercise the two-finger horizontal swipe, double tap/hold/scrub and
+inward pinch on blank transcript space. Lift both fingers: the stack must remain.
+Browse past either end without selecting or resuming a chat, then tap a center or
+peek card. The selected normal chat expands, retaining that chat's draft,
+attachments and reading position. Back from the stack returns to the entry chat;
+Back from the normal chat restores the selected Recents filter. Text selection, code,
+Activity controls, pending-input forms, composer and system Back edges must retain
+ordinary gestures. Use Chat actions with accessibility enabled. Verify an
+adjacent fresh reply cue in both themes, confirmed input amber, suppression while
+editing/manipulating and direct settling with reduced motion.
+
+`recent_conversation_session_test.dart` covers frozen scoped identity, circular
+policy, bounded physical reads, eviction, cancellation, external selection and
+cue admission/coalescing. `recent_conversation_switcher_test.dart` covers real
+multitouch, pinch persistence, circular laps, browse/commit, interrupted springs,
+pointer-time fling decisions, accessible
+controls, theme paint and the production Recents route with draft/cursor/Back
+restoration at normal and enlarged text in both themes.
+`chat_notification_coordinator_test.dart` protects fresh journal projections,
+quiet baselines and native-permission independence. Run these plus
+`workspace_activity_filters_test.dart` and `profile_ongoing_activity_test.dart`
+after changing the entry seam. The standalone application-shell and native preview roots explicitly supply a
+read-only activity scope. `streaming_work_budget_test.dart` ensures composer focus
+does not rebuild saved messages. For authored fixture render review, run the
+switcher suite with `--dart-define=STUDIO_REVIEW=true`; it uses the Studio font
+assets under ignored `build/` and exports normal/stack captures to
+`build/recents-review/`. Host tests do not certify physical-device gesture feel,
+keyboard transitions or frame pacing; inspect those on Android before release.
+
+For native acceptance, run the isolated API 36 emulator driver:
+
+```sh
+python3 scripts/test_native_recents.py --device <emulator-id> --output build/emulator-acceptance/recents
+```
+
+It builds `integration_test/recent_conversation_native_test.dart` and compiles a
+shell-only Java touch helper. Android dispatches real one/two-finger MotionEvents,
+including pinch, double tap/hold/scrub and interrupted returns; Flutter does not
+synthesize these gestures. The matrix uses native normal/200% font settings in
+both themes. It covers passive browsing and circular laps, center/peek selection,
+keyboard/Back (including hidden-keyboard preservation and menu focus restoration
+while the chat is obscured), draft and staged
+attachment retention, cross-profile commit/recovery and saved reading offsets,
+failed resume recovery,
+hidden-card read suppression, neutral/amber cues,
+accessible controls and reduced
+motion. Screenshots and a gesture video come from the installed Android window.
+The driver rejects physical devices and restores its viewport, density and font
+settings. Gateways and incoming journal projections are authored observations;
+this establishes Android interaction behavior, not live Hermes delivery,
+TalkBack usability or physical-device frame pacing. Use `--source-directory` for
+an immutable copy when the workspace is changing; keep the tested source hashes
+with the private captures. `--name` limits a recovery to the failing case.
+Use `--code-only` for independent code-copy/exclusion probes at normal text and
+system-edge/drawer Back probes in all four theme/text configurations. Opening
+the drawer from a chat and pressing Android Back must close the drawer, retaining
+the chat; the next Back restores Recents. These short probes do not replay the
+gesture journey or depend on its retained transcript scroll position.
+
 ## Continuous checks
 
 After activating the Flutter toolchain, run `python3 scripts/test.py` for routine
