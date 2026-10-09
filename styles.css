@@ -320,8 +320,7 @@ summary:active { color: var(--teal); }
 .detail-shot .app-frame { border-radius: .8rem; }
 .section-more { display: flex; flex-wrap: wrap; gap: .5rem 2rem; margin-block-start: 2rem; }
 .section-more .text-link { color: var(--teal); }
-.craft-section .section-more .text-link, .opening .section-more .text-link { color: var(--mint); }
-.hero-more { grid-column: 1 / -1; margin-block-start: 0; }
+.craft-section .section-more .text-link { color: var(--mint); }
 .panel-image { inline-size: min(100%, 20rem); margin-inline: auto; }
 .work-panel > .text-link { color: var(--teal); justify-self: start; }
 .control-features > article > .text-link { color: var(--teal); }
