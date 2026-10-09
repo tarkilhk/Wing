@@ -1,4 +1,17 @@
 import '../models/host_thresholds.dart';
+import '../models/health_alert.dart';
+
+String? healthAlertTriggerSummary(HealthAlert alert) {
+  final trigger = alert.trigger;
+  if (trigger == null) return null;
+  final value = trigger.usedPercent;
+  final usage = value == null
+      ? 'Usage unavailable'
+      : '${healthAlertPercentage(value)}% used';
+  return trigger.criticalPressure
+      ? '$usage · critical pressure reported'
+      : '$usage · above ${healthAlertPercentage(trigger.warningAbovePercent)}% for ${trigger.alertMinutes} min';
+}
 
 String healthAlertMetricLabel(HostMetric metric) => switch (metric) {
   HostMetric.memoryUsedPercent => 'Memory usage',

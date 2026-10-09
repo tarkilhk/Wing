@@ -587,7 +587,20 @@ always-on server monitor. Thresholds and qualified notices do not predict OOM.
 
 A bell occupies the title row on every screen and appears only with current
 issues. It rings once for a new issue/escalation and respects reduced motion.
-A brief notice is optional; alerts never auto-open a modal. Tap the bell for one
+A brief notice is optional; alerts never auto-open a modal. Notices float below
+the toolbar with generous clearance, 24 dp side gutters and a 360 dp width cap.
+The neutral raised surface uses a small warning/critical icon, a readable title,
+the triggering usage and rule, and a subordinate connection name. For example,
+“93.4% used · above 90% for 2 min” shows the reading that admitted the occurrence.
+Later readings update the issue's detail without replacing these trigger values;
+escalation or recurrence captures new values. Critical alerts instead show
+“critical pressure reported” with the supplied percentage, or “Usage unavailable”
+when absent, because critical pressure bypasses the percentage/duration rule.
+Non-resource notices have no numeric trigger line. The details dialog labels
+the same retained values “At alert”. Text wraps at enlarged sizes; the icon-only
+dismiss target remains 48 dp. Tap the notice to open alerts, or dismiss it while
+retaining the issue in the bell. It expires after 5.5 seconds and respects reduced
+motion. Tap the bell for one
 issue at a time, ordered by severity, with browsing arrows when needed. Acknowledge
 quiets that occurrence; snooze pauses reminders for 30 minutes. Both retain the
 issue and count. Recovery removes it; recurrence/escalation starts a new occurrence.

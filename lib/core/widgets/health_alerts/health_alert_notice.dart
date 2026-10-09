@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../../models/health_alert.dart';
+import '../../presentation/health_alert_presentation.dart';
 import '../../theme/wing_theme.dart';
 import 'health_alerts_scope.dart';
 
@@ -101,56 +102,147 @@ class _HealthAlertNoticeState extends State<HealthAlertNotice> {
   Widget _renderNotice(BuildContext context) {
     final tokens = WingTokens.of(context), notice = _notice;
     if (notice == null) return const SizedBox.shrink();
-    return Positioned(
-      top: MediaQuery.paddingOf(context).top + 48,
-      left: 16,
-      right: 16,
-      child: Material(
-        color: tokens.raised,
-        shape: RoundedRectangleBorder(
-          borderRadius: WingRadius.card,
-          side: BorderSide(
-            color: notice.severity == HealthAlertSeverity.critical
-                ? tokens.danger
-                : tokens.warning,
-          ),
+    final media = MediaQuery.of(context);
+    final severityColor = notice.severity == HealthAlertSeverity.critical
+        ? tokens.danger
+        : tokens.warning;
+    final largeText = media.textScaler.scale(16) >= 24;
+    final statusIcon = Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: severityColor.withValues(alpha: 0.12),
+        borderRadius: WingRadius.control,
+      ),
+      child: Icon(
+        notice.severity == HealthAlertSeverity.critical
+            ? Icons.error_outline
+            : Icons.warning_amber_rounded,
+        color: severityColor,
+        size: 20,
+      ),
+    );
+    final labels = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          notice.title,
+          style: tokens.typography.section.copyWith(color: tokens.onSurface),
         ),
-        child: Semantics(
-          liveRegion: true,
-          child: Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: () {
-                    _expiry?.cancel();
-                    _hide();
-                    widget.onOpenAlerts();
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(notice.title),
-                        Text(
-                          notice.connectionLabel,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
+        if (healthAlertTriggerSummary(notice) case final summary?) ...[
+          const SizedBox(height: WingSpacing.xs),
+          Text(
+            summary,
+            style: tokens.typography.label.copyWith(
+              fontSize: 13,
+              color: tokens.onSurface,
+            ),
+          ),
+        ],
+        const SizedBox(height: WingSpacing.xs),
+        Text(
+          notice.connectionLabel,
+          style: tokens.typography.label.copyWith(color: tokens.muted),
+        ),
+      ],
+    );
+    final openArea = Tooltip(
+      message: 'Open health alerts',
+      child: InkWell(
+        onTap: () {
+          _expiry?.cancel();
+          _hide();
+          widget.onOpenAlerts();
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(WingSpacing.md),
+          child: largeText
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    statusIcon,
+                    const SizedBox(height: WingSpacing.sm),
+                    labels,
+                  ],
+                )
+              : Row(
+                  children: [
+                    statusIcon,
+                    const SizedBox(width: WingSpacing.md),
+                    Expanded(child: labels),
+                  ],
                 ),
+        ),
+      ),
+    );
+    final dismiss = IconButton(
+      tooltip: 'Dismiss health notice',
+      color: tokens.muted,
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      onPressed: () {
+        _expiry?.cancel();
+        _hide();
+      },
+      icon: const Icon(Icons.close, size: 20),
+    );
+    return Positioned(
+      // Leave a generous gap below the compact toolbar, growing with text.
+      // Keep the notice clear of the composer and keyboard.
+      top: media.padding.top + media.textScaler.scale(48) + WingSpacing.xl * 2,
+      left: media.padding.left + WingSpacing.xl,
+      right: media.padding.right + WingSpacing.xl,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: TweenAnimationBuilder<double>(
+            key: ValueKey((notice.id, notice.occurrence)),
+            tween: Tween(begin: 0, end: 1),
+            duration: media.disableAnimations || media.accessibleNavigation
+                ? Duration.zero
+                : WingMotion.standard,
+            curve: WingMotion.curve,
+            builder: (context, value, child) => Opacity(
+              opacity: value,
+              child: Transform.translate(
+                offset: Offset(0, -WingSpacing.sm * (1 - value)),
+                child: child,
               ),
-              IconButton(
-                tooltip: 'Dismiss health notice',
-                onPressed: () {
-                  _expiry?.cancel();
-                  _hide();
-                },
-                icon: const Icon(Icons.close),
+            ),
+            child: Material(
+              key: const ValueKey('health-alert-notice-card'),
+              color: tokens.raised,
+              elevation: 6,
+              shadowColor: Colors.black.withValues(alpha: 0.24),
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: WingRadius.card,
+                side: BorderSide(color: tokens.border),
               ),
-            ],
+              child: Semantics(
+                liveRegion: true,
+                child: largeText
+                    ? Stack(
+                        children: [
+                          SizedBox(width: double.infinity, child: openArea),
+                          PositionedDirectional(
+                            top: 0,
+                            end: WingSpacing.xs,
+                            child: dismiss,
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(child: openArea),
+                          dismiss,
+                          const SizedBox(width: WingSpacing.xs),
+                        ],
+                      ),
+              ),
+            ),
           ),
         ),
       ),

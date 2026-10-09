@@ -6,6 +6,7 @@ import 'package:wing/core/models/health_alert.dart';
 import 'package:wing/core/models/administration_operation.dart';
 import 'package:wing/core/models/health_alert_evaluator.dart';
 import 'package:wing/core/models/host_thresholds.dart';
+import 'package:wing/core/presentation/health_alert_presentation.dart';
 import 'package:wing/core/services/administration_health.dart';
 import 'package:wing/core/services/health_alert_settings_session.dart';
 import 'package:wing/core/services/health_alert_settings_store.dart';
@@ -86,6 +87,34 @@ void main() {
     expect(() => rule.copyWith(alertMinutes: 0), throwsArgumentError);
     expect(() => rule.copyWith(clearMinutes: 31), throwsArgumentError);
   });
+
+  for (final metric in hostAlertMetrics) {
+    test('${metric.name} retains the values that triggered the occurrence', () {
+      final policy = rule.copyWith(warnAbove: 90.25);
+      void reading(int seconds, double value) => evaluator.host(
+        metric: metric,
+        rule: policy,
+        now: start.add(Duration(seconds: seconds)),
+        sampledAt: start.add(Duration(seconds: seconds)),
+        value: value,
+      );
+      reading(0, 91);
+      reading(120, 93.4);
+      final alert = evaluator.alerts.single;
+      expect(
+        healthAlertTriggerSummary(alert),
+        '93.4% used · above 90.25% for 2 min',
+      );
+      reading(135, 96.1);
+      expect(evaluator.alerts.single.trigger, same(alert.trigger));
+      expect(evaluator.alerts.single.detail, contains('96% used'));
+      evaluator.acknowledge(alert.id);
+      evaluator.snooze(alert.id, start.add(const Duration(minutes: 30)));
+      evaluator.unknown(alert.id);
+      expect(evaluator.alerts.single.trigger, same(alert.trigger));
+      expect(evaluator.alerts.single.lastKnown, isTrue);
+    });
+  }
 
   for (final minutes in [1, 2, 30]) {
     test('warning retains a gap of exactly 3 times $minutes minutes', () {
@@ -257,6 +286,10 @@ void main() {
     () {
       sample(0, null, critical: true);
       expect(evaluator.alerts.single.severity, HealthAlertSeverity.critical);
+      expect(
+        healthAlertTriggerSummary(evaluator.alerts.single),
+        'Usage unavailable · critical pressure reported',
+      );
       final id = evaluator.alerts.single.id;
       evaluator.acknowledge(id);
       expect(evaluator.alerts.single.acknowledged, isTrue);
@@ -266,6 +299,10 @@ void main() {
       expect(evaluator.alerts, isEmpty);
       sample(165, 99, critical: true);
       expect(evaluator.alerts.single.acknowledged, isFalse);
+      expect(
+        healthAlertTriggerSummary(evaluator.alerts.single),
+        '99% used · critical pressure reported',
+      );
     },
   );
   test(
@@ -278,6 +315,9 @@ void main() {
       final escalated = evaluator.alerts.single;
       expect(escalated.occurrence, greaterThan(initial.occurrence));
       expect(escalated.acknowledged, isFalse);
+      expect(initial.trigger!.usedPercent, 93);
+      expect(escalated.trigger!.usedPercent, 99);
+      expect(escalated.trigger!.criticalPressure, isTrue);
       evaluator.snooze(escalated.id, start.add(const Duration(minutes: 30)));
       expect(evaluator.alerts, hasLength(1));
       expect(evaluator.alerts.single.remindsAt(start), isFalse);

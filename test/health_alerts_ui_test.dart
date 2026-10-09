@@ -63,17 +63,37 @@ void main() {
   });
   Future<void> shot(WidgetTester tester, String name) async {
     if (!capture) return;
-    final boundary = tester.renderObject<RenderRepaintBoundary>(
-      find.byKey(const ValueKey('capture-alerts')),
-    );
-    await tester.runAsync(() async {
-      final img = await boundary.toImage(pixelRatio: 1);
-      final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-      const output = String.fromEnvironment('CAPTURE_ALERT_DIR');
-      await Directory(output).create(recursive: true);
-      await File('$output/$name.png').writeAsBytes(bytes!.buffer.asUint8List());
-      img.dispose();
-    });
+    final previousShadows = debugDisableShadows;
+    void repaintShadows() {
+      for (final object in tester.allRenderObjects) {
+        if (object is RenderPhysicalModel || object is RenderPhysicalShape) {
+          object.markNeedsPaint();
+        }
+      }
+    }
+
+    debugDisableShadows = false;
+    repaintShadows();
+    await tester.pump();
+    try {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(const ValueKey('capture-alerts')),
+      );
+      await tester.runAsync(() async {
+        final img = await boundary.toImage(pixelRatio: 1);
+        final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+        const output = String.fromEnvironment('CAPTURE_ALERT_DIR');
+        await Directory(output).create(recursive: true);
+        await File(
+          '$output/$name.png',
+        ).writeAsBytes(bytes!.buffer.asUint8List());
+        img.dispose();
+      });
+    } finally {
+      debugDisableShadows = previousShadows;
+      repaintShadows();
+      await tester.pump();
+    }
   }
 
   testWidgets(
@@ -397,6 +417,142 @@ void main() {
   );
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'floating notice respects safe areas, text and intent ${brightness.name}/$scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 393 : 320, 852);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+          SharedPreferences.setMockInitialValues({});
+          final fixture = HealthAlertsFixture(
+            await SharedPreferences.getInstance(),
+          );
+          await fixture.owner.hostResources().refresh();
+          final navigatorKey = GlobalKey<NavigatorState>();
+          var opens = 0;
+          await tester.pumpWidget(
+            MaterialApp(
+              navigatorKey: navigatorKey,
+              theme: wingTheme(brightness),
+              builder: (context, child) => HealthAlertsScope(
+                alerts: fixture.coordinator,
+                openHealth: (_) async {},
+                child: MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    padding: const EdgeInsets.only(top: 24, bottom: 24),
+                    textScaler: TextScaler.linear(scale),
+                    disableAnimations: scale == 2,
+                  ),
+                  child: HealthAlertNotice(
+                    navigatorKey: navigatorKey,
+                    onOpenAlerts: () => opens++,
+                    child: RepaintBoundary(
+                      key: const ValueKey('capture-alerts'),
+                      child: child!,
+                    ),
+                  ),
+                ),
+              ),
+              home: Builder(
+                builder: (context) => Scaffold(
+                  appBar: WingAppBar(
+                    context: context,
+                    title: const Text('Explain /mattpocock…', maxLines: 1),
+                    leading: IconButton(
+                      tooltip: 'Menu',
+                      onPressed: () {},
+                      icon: const Icon(Icons.menu),
+                    ),
+                  ),
+                  body: Padding(
+                    padding: const EdgeInsets.all(WingSpacing.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Expanded(
+                          child: SingleChildScrollView(
+                            child: Text(
+                              'Keep each instruction concrete and easy to act on.\n\n'
+                              'For finished work, report what changed, what is '
+                              'verified, and what remains. During longer work, '
+                              'surface meaningful results, blockers, and decisions.',
+                            ),
+                          ),
+                        ),
+                        const TextField(
+                          decoration: InputDecoration(
+                            hintText: 'Message Hermes or type /',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.byType(TextField));
+          await tester.enterText(find.byType(TextField), 'Keep this draft');
+          final connection = fixture.owner.connectionStatus;
+          connection.accessAvailable();
+          connection.liveChanged('chat', true);
+          connection.liveChanged('chat', false);
+          connection.failRecovery('chat', 'Connection attempts exhausted');
+          await tester.pump();
+          await tester.pump(WingMotion.standard);
+          final card = find.byKey(const ValueKey('health-alert-notice-card'));
+          final rect = tester.getRect(card);
+          final toolbar = tester.getRect(find.byType(AppBar));
+          expect(rect.top - toolbar.bottom, greaterThanOrEqualTo(24));
+          expect(rect.left, greaterThanOrEqualTo(24));
+          expect(
+            rect.right,
+            lessThanOrEqualTo(tester.view.physicalSize.width - 24),
+          );
+          expect(
+            rect.bottom,
+            lessThan(tester.getTopLeft(find.byType(TextField)).dy),
+          );
+          expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+          expect(
+            tester
+                .getSize(find.byTooltip('Dismiss health notice'))
+                .shortestSide,
+            greaterThanOrEqualTo(48),
+          );
+          expect(tester.testTextInput.isVisible, isTrue);
+          expect(opens, 0);
+          expect(tester.takeException(), isNull);
+          await shot(tester, 'notice-warning-${brightness.name}-$scale');
+          await tester.tap(find.byTooltip('Dismiss health notice'));
+          await tester.pump();
+          expect(card, findsNothing);
+          expect(find.text('Keep this draft'), findsOneWidget);
+          expect(tester.testTextInput.isVisible, isTrue);
+          expect(fixture.coordinator.alerts, hasLength(1));
+          expect(opens, 0);
+
+          await fixture.critical();
+          await tester.pump();
+          await tester.pump(WingMotion.standard);
+          expect(find.byIcon(Icons.error_outline), findsOneWidget);
+          expect(
+            find.text('38.1% used · critical pressure reported'),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          await shot(tester, 'notice-critical-${brightness.name}-$scale');
+          await tester.pump(const Duration(seconds: 6));
+          expect(card, findsNothing);
+          expect(opens, 0);
+          await tester.pumpWidget(const SizedBox());
+          fixture.dispose();
+        },
+      );
       testWidgets(
         'headers, bell, Health entry and compact editor ${brightness.name}/$scale',
         (tester) async {

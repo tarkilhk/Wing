@@ -229,6 +229,7 @@ class HealthAlertsSession extends ChangeNotifier {
             a.observedAt,
             a.occurrence,
             a.profileName,
+            a.trigger,
             a.lastKnown,
             a.acknowledged,
             a.snoozedUntil,

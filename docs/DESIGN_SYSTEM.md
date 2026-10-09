@@ -377,7 +377,15 @@ sentence rows, “Alert after [minutes] if above [percent]” and
 fragments wrap at enlarged text while keeping each input beside its unit. Use
 an icon-only Close action in the header. Alert settings autosave toggles and valid
 threshold edits; use no Save/Undo footer or discard confirmation. Persistence
-errors appear inline with an icon-only retry. See [Health alerts](ADMINISTRATION.md#health-alerts).
+errors appear inline with an icon-only retry. Transient health notices float
+below the toolbar with generous clearance, growing with text size, 24 dp side
+gutters and a 360 dp width cap. Use the opaque raised surface, shared card corners,
+a neutral thin border and soft elevation. Confine warning/critical color to the
+small status icon and its tint; keep the title readable, the triggering usage and
+threshold/duration immediately below it, and the connection name secondary
+and dismissal icon-only in a 48 dp target. At enlarged text, place the icon above
+full-width labels and dismissal in the upper trailing corner. Use the shared 200 ms entrance and
+settle immediately with reduced motion. See [Health alerts](ADMINISTRATION.md#health-alerts).
 
 Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/composer corners, 24-28 sp page titles, 16 sp body text and 12-13 sp metadata. Primary action paint can be about 40 dp high inside a minimum 48 dp touch area. Text scaling must allow rows and controls to grow. Keep established compact activity density; improve touch areas without adding visible card padding.
 

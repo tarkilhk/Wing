@@ -53,6 +53,12 @@ class HealthAlertEvaluator {
       return;
     }
     final existing = _alerts[key];
+    final trigger = HealthAlertTrigger(
+      usedPercent: value,
+      warningAbovePercent: rule.warnAbove,
+      alertMinutes: rule.alertMinutes,
+      criticalPressure: critical,
+    );
     final label = switch (metric) {
       HostMetric.memoryUsedPercent => 'Memory usage',
       HostMetric.diskUsedPercent => 'Disk usage',
@@ -76,6 +82,7 @@ class HealthAlertEvaluator {
         HealthAlertScope.host,
         HealthAlertSeverity.critical,
         sampledAt,
+        trigger: trigger,
       );
       return;
     }
@@ -111,6 +118,7 @@ class HealthAlertEvaluator {
             HealthAlertScope.host,
             HealthAlertSeverity.warning,
             sampledAt,
+            trigger: trigger,
           );
           _periods.remove(key);
         }
@@ -127,6 +135,7 @@ class HealthAlertEvaluator {
         severity: alert.severity,
         observedAt: sampledAt,
         occurrence: alert.occurrence,
+        trigger: alert.trigger,
         acknowledged: alert.acknowledged,
         snoozedUntil: alert.snoozedUntil,
         lastKnown:
@@ -171,6 +180,7 @@ class HealthAlertEvaluator {
     HealthAlertSeverity severity,
     DateTime at, {
     String? profileName,
+    HealthAlertTrigger? trigger,
   }) {
     final old = _alerts[key];
     final escalated = old == null || severity.index > old.severity.index;
@@ -184,6 +194,7 @@ class HealthAlertEvaluator {
       severity: severity,
       observedAt: at,
       profileName: profileName,
+      trigger: escalated ? trigger : old.trigger,
       occurrence: escalated ? ++_occurrence : old.occurrence,
       acknowledged: !escalated && old.acknowledged,
       snoozedUntil: escalated ? null : old.snoozedUntil,

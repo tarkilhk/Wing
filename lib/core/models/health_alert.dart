@@ -4,6 +4,21 @@ enum HealthAlertSeverity { warning, critical }
 
 enum HealthAlertScope { host, server, profile }
 
+/// The host reading and policy that admitted an occurrence, retained as later
+/// readings update its detail or qualify it as last known.
+class HealthAlertTrigger {
+  const HealthAlertTrigger({
+    required this.usedPercent,
+    required this.warningAbovePercent,
+    required this.alertMinutes,
+    required this.criticalPressure,
+  });
+  final double? usedPercent;
+  final double warningAbovePercent;
+  final int alertMinutes;
+  final bool criticalPressure;
+}
+
 class HealthAlert {
   const HealthAlert({
     required this.id,
@@ -16,12 +31,14 @@ class HealthAlert {
     required this.observedAt,
     required this.occurrence,
     this.profileName,
+    this.trigger,
     this.lastKnown = false,
     this.acknowledged = false,
     this.snoozedUntil,
   });
   final String id, connectionIdentity, connectionLabel, title, detail;
   final String? profileName;
+  final HealthAlertTrigger? trigger;
   final HealthAlertScope scope;
   final HealthAlertSeverity severity;
   final DateTime observedAt;
@@ -45,6 +62,7 @@ class HealthAlert {
     observedAt: observedAt,
     occurrence: occurrence,
     profileName: profileName,
+    trigger: trigger,
     lastKnown: lastKnown ?? this.lastKnown,
     acknowledged: acknowledged ?? this.acknowledged,
     snoozedUntil: snoozedUntil ?? this.snoozedUntil,

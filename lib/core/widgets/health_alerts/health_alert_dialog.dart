@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/health_alert.dart';
+import '../../presentation/health_alert_presentation.dart';
 import '../../theme/wing_theme.dart';
 import 'health_alerts_scope.dart';
 
@@ -117,6 +118,11 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                             const SizedBox(height: 12),
+                            if (healthAlertTriggerSummary(alert)
+                                case final summary?) ...[
+                              Text('At alert: $summary'),
+                              const SizedBox(height: 12),
+                            ],
                             Text(alert.detail),
                             const SizedBox(height: 12),
                             Text(
