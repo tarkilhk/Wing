@@ -6066,6 +6066,15 @@
       "source": "docs/TOOL_ACTIVITY.md; test/activity_family_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "device-or-live-test-integration_test/health_alerts_native_test.dart",
+      "kind": "device-or-live-test",
+      "path": "integration_test/health_alerts_native_test.dart",
+      "purpose": "Production Wing alert routes on a disposable emulator with synthetic transport; native viewport, font scaling and keyboard acceptance. Optional host screenshot checkpoints are bounded.",
+      "source": "docs/TESTING.md; integration_test/health_alerts_native_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -7060,6 +7069,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "integration_test/health_alerts_native_test.dart",
+      "area": "integration_test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "integration_test/large_html_native_preview.dart",
       "area": "integration_test",
       "provenance": "tracked"
@@ -7635,6 +7649,16 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/models/health_alert.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/models/health_alert_evaluator.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/models/health_finding.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -7925,6 +7949,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/presentation/health_alert_presentation.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/presentation/resource_identity.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -8198,6 +8227,16 @@
       "path": "lib/core/screens/connection_setup_screen.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/screens/health_alert_health_screen.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/screens/health_alert_settings_screen.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/screens/html_preview_screen.dart",
@@ -8513,6 +8552,26 @@
       "path": "lib/core/services/gateway_endpoint.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/services/health_alert_settings_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/health_alert_settings_store.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/health_alerts_coordinator.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/health_alerts_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/services/health_snapshot.dart",
@@ -9135,6 +9194,31 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/widgets/health_alerts/health_alert_bell.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/health_alerts/health_alert_dialog.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/health_alerts/health_alert_notice.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/health_alerts/health_alert_settings_entry.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/health_alerts/health_alerts_scope.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/image_paste_menu.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -9363,6 +9447,11 @@
       "path": "lib/core/widgets/web_output_preview.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/wing_app_bar.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/wing_welcome.dart",
@@ -10663,6 +10752,16 @@
       "path": "test/growing_markdown_text_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/health_alerts_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/health_alerts_ui_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/health_details_design_test.dart",
@@ -12003,6 +12102,11 @@
       "path": "test/support/gateway_application_requests.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/support/health_alerts_fixture.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/support/host_resources_fixture.dart",
@@ -14002,6 +14106,7 @@
         "integration_test/deliverables_native_preview.dart",
         "integration_test/existing_server_chat_probe_test.dart",
         "integration_test/file_transfer_native_test.dart",
+        "integration_test/health_alerts_native_test.dart",
         "integration_test/large_html_native_preview.dart",
         "integration_test/notification_cold_input_device.dart",
         "integration_test/notification_revamp_device.dart",
@@ -14083,6 +14188,8 @@
         "lib/core/screens/chat_outputs_screen.dart",
         "lib/core/screens/connection_guide_screen.dart",
         "lib/core/screens/connection_setup_screen.dart",
+        "lib/core/screens/health_alert_health_screen.dart",
+        "lib/core/screens/health_alert_settings_screen.dart",
         "lib/core/screens/html_preview_screen.dart",
         "lib/core/screens/pdf_preview_screen.dart",
         "lib/core/screens/privacy_policy_screen.dart",
@@ -14115,6 +14222,9 @@
         "lib/core/services/connection_setup_probe.dart",
         "lib/core/services/connection_setup_session.dart",
         "lib/core/services/doctor_finding_draft_session.dart",
+        "lib/core/services/health_alert_settings_session.dart",
+        "lib/core/services/health_alerts_coordinator.dart",
+        "lib/core/services/health_alerts_session.dart",
         "lib/core/services/hermes_cloud.dart",
         "lib/core/services/image_clipboard.dart",
         "lib/core/services/mcp_oauth.dart",
@@ -14198,6 +14308,11 @@
         "lib/core/widgets/gateway_clarify_dialog.dart",
         "lib/core/widgets/gateway_headers_editor.dart",
         "lib/core/widgets/gateway_sensitive_prompt_panel.dart",
+        "lib/core/widgets/health_alerts/health_alert_bell.dart",
+        "lib/core/widgets/health_alerts/health_alert_dialog.dart",
+        "lib/core/widgets/health_alerts/health_alert_notice.dart",
+        "lib/core/widgets/health_alerts/health_alert_settings_entry.dart",
+        "lib/core/widgets/health_alerts/health_alerts_scope.dart",
         "lib/core/widgets/image_paste_menu.dart",
         "lib/core/widgets/installed_app_version_card.dart",
         "lib/core/widgets/markdown_code_block.dart",
@@ -14239,6 +14354,7 @@
         "lib/core/widgets/user_message_attachment.dart",
         "lib/core/widgets/voice_preferences_card.dart",
         "lib/core/widgets/web_output_preview.dart",
+        "lib/core/widgets/wing_app_bar.dart",
         "lib/core/widgets/wing_welcome.dart",
         "lib/core/widgets/wing_wordmark.dart",
         "lib/core/widgets/workspace_action_menu.dart",
@@ -14325,6 +14441,7 @@
         "test/gateway_headers_editor_test.dart",
         "test/gateway_sensitive_prompt_panel_test.dart",
         "test/growing_markdown_text_test.dart",
+        "test/health_alerts_ui_test.dart",
         "test/health_details_design_test.dart",
         "test/helpers/pump_markdown_widget.dart",
         "test/home_config_restore_test.dart",
@@ -14436,6 +14553,7 @@
         "test/studio_layout_test.dart",
         "test/studio_selection_test.dart",
         "test/support/chat_browser_interactions.dart",
+        "test/support/health_alerts_fixture.dart",
         "test/support_wing_section_test.dart",
         "test/task_snapshot_visibility_test.dart",
         "test/text_size_preference_test.dart",
@@ -14565,6 +14683,7 @@
         "integration_test/clipboard_device_test.dart",
         "integration_test/config_backup_native_test.dart",
         "integration_test/existing_server_chat_probe_test.dart",
+        "integration_test/health_alerts_native_test.dart",
         "integration_test/notification_cold_input_device.dart",
         "integration_test/notification_revamp_device.dart",
         "integration_test/profile_admin_live_test.dart",
@@ -14597,6 +14716,7 @@
         "lib/core/services/connection_manager.dart",
         "lib/core/services/deleted_draft_cleanup_store.dart",
         "lib/core/services/device_preference.dart",
+        "lib/core/services/health_alert_settings_store.dart",
         "lib/core/services/microphone_permission.dart",
         "lib/core/services/notification_delivery_ledger.dart",
         "lib/core/services/profile_overview_session.dart",
@@ -14671,6 +14791,8 @@
         "test/doctor_chat_test.dart",
         "test/doctor_diagnostic_page_test.dart",
         "test/gateway_approval_panel_test.dart",
+        "test/health_alerts_test.dart",
+        "test/health_alerts_ui_test.dart",
         "test/home_config_restore_test.dart",
         "test/home_group_navigation_test.dart",
         "test/home_share_review_test.dart",
@@ -14770,6 +14892,7 @@
         "test/streaming_work_budget_test.dart",
         "test/studio_layout_test.dart",
         "test/support/composer_fixture.dart",
+        "test/support/health_alerts_fixture.dart",
         "test/text_size_preference_test.dart",
         "test/voice_preferences_lifetime_test.dart",
         "test/voice_preferences_session_test.dart",
@@ -15026,6 +15149,7 @@
         "integration_test/dependency_plugins_native_test.dart",
         "integration_test/existing_server_chat_probe_test.dart",
         "integration_test/file_transfer_native_test.dart",
+        "integration_test/health_alerts_native_test.dart",
         "integration_test/profile_admin_live_test.dart",
         "integration_test/profile_cross_client_live_test.dart",
         "integration_test/profile_expansion_scroll_test.dart",
@@ -15065,6 +15189,7 @@
         "integration_test/dependency_plugins_native_test.dart",
         "integration_test/existing_server_chat_probe_test.dart",
         "integration_test/file_transfer_native_test.dart",
+        "integration_test/health_alerts_native_test.dart",
         "integration_test/profile_admin_live_test.dart",
         "integration_test/profile_cross_client_live_test.dart",
         "integration_test/profile_expansion_scroll_test.dart",
@@ -15257,6 +15382,8 @@
         "test/gateway_sensitive_prompt_panel_test.dart",
         "test/gateway_sensitive_prompt_test.dart",
         "test/growing_markdown_text_test.dart",
+        "test/health_alerts_test.dart",
+        "test/health_alerts_ui_test.dart",
         "test/health_details_design_test.dart",
         "test/helpers/pump_markdown_widget.dart",
         "test/hermes_cloud_test.dart",

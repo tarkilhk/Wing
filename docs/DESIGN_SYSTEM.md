@@ -221,6 +221,17 @@ menu and applies to the list; preserve existing scope, persistence and paging.
 
 On 15 September 2026, the owner replaced the full-width New chat shelf with a 56 dp floating button at the bottom right. Use the outlined pen-on-a-square icon (`WingIcons.newChat`, Lucide `square-pen`), with a New chat tooltip and accessibility label. The owner's 18 September selection supersedes the earlier plus and standalone pencil: every New chat action, including project menus and the Android New Quick Chat shortcut, uses this same icon. Use the shared action corners and accent colors, subtle elevation and 16 dp edge spacing above the system gesture area. Extend the chat list through the space released by the shelf, with enough trailing scroll padding to move the final row above the button. Respect keyboard and system insets. The same browser control retains its New project action and plus icon in All projects.
 
+All screens use WingAppBar's compact 48 dp title/action row at ordinary text.
+Use the Chats 24 sp title treatment, with connection/profile context below the
+row, rather than centering a title/context column in a taller toolbar. The bell
+slot stays on the title row and shows an icon only for current issues; configuration
+belongs in Hermes health's compact Alert settings row above Host, using an
+outlined bell. Titles respect the selected text scale and grow; secondary actions
+move below at enlarged text. Viewer headers delegate to the same geometry while
+retaining their exact resource identity disclosure. No settings shortcut belongs
+beside the bell. Keep alert rule editors unpadded, with four aligned rows and
+icon-only Apply/Close in the header. See [Health alerts](ADMINISTRATION.md#health-alerts).
+
 Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/composer corners, 24-28 sp page titles, 16 sp body text and 12-13 sp metadata. Primary action paint can be about 40 dp high inside a minimum 48 dp touch area. Text scaling must allow rows and controls to grow. Keep established compact activity density; improve touch areas without adding visible card padding.
 
 The owner's 7 October density refinement makes compact spacing a requirement

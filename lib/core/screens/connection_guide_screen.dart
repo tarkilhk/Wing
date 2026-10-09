@@ -1,3 +1,4 @@
+import '../widgets/wing_app_bar.dart';
 import 'package:flutter/material.dart';
 
 import '../services/web_preview.dart';
@@ -14,7 +15,10 @@ class ConnectionGuideScreen extends StatelessWidget {
     final tokens = WingTokens.of(context);
     final textTheme = Theme.of(context).textTheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Connection guide')),
+      appBar: WingAppBar(
+        context: context,
+        title: const Text('Connection guide'),
+      ),
       body: SafeArea(
         top: false,
         child: SingleChildScrollView(

@@ -1,3 +1,4 @@
+import '../../widgets/wing_app_bar.dart';
 import '../../services/administration_logs_session.dart';
 import 'admin_plugins_page.dart';
 import '../../services/profile_plugins_session.dart';
@@ -774,27 +775,15 @@ class _HermesAdministrationContentState
       );
     }
     final profile = _profile;
-    final large =
-        MediaQuery.textScalerOf(context).scale(16) >= 24 ||
-        adminToolbarHeight(context, 'Administration', actions: 1) >
-            kToolbarHeight;
-    final title = large
-        ? const Padding(
-            padding: EdgeInsets.only(bottom: 12),
-            child: Text(
-              'Administration',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-            ),
-          )
-        : null;
     return Scaffold(
-      appBar: AppBar(
+      appBar: WingAppBar(
+        context: context,
         leading: IconButton(
           tooltip: 'Open navigation menu',
           icon: const Icon(Icons.menu),
           onPressed: widget.onOpenMenu,
         ),
-        title: large ? null : const Text('Administration'),
+        title: const Text('Administration'),
         actions: [
           IconButton(
             tooltip: 'Refresh administration',
@@ -842,7 +831,6 @@ class _HermesAdministrationContentState
                 ? ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      ?title,
                       _selector(manage: true),
                       const SizedBox(height: 12),
                       _searchField(),
@@ -860,7 +848,6 @@ class _HermesAdministrationContentState
                     selector: _selector(manage: true),
                     search: _searchField(),
                     searchResults: _searchResults(profile),
-                    titleBeforeSelector: title,
                     destinations: {
                       for (final d in _destinations(profile))
                         ?d.overviewDestination: d.open,

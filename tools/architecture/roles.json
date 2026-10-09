@@ -206,6 +206,16 @@
       "feature": "chat-activity",
       "library": "lib/core/models/gateway_todo.dart"
     },
+    "lib/core/models/health_alert.dart": {
+      "role": "domain",
+      "feature": "administration-health",
+      "library": "lib/core/models/health_alert.dart"
+    },
+    "lib/core/models/health_alert_evaluator.dart": {
+      "role": "domain",
+      "feature": "administration-health",
+      "library": "lib/core/models/health_alert_evaluator.dart"
+    },
     "lib/core/models/health_finding.dart": {
       "role": "domain",
       "feature": "administration-health",
@@ -496,6 +506,11 @@
       "feature": "chat-activity",
       "library": "lib/core/presentation/desktop_tool_labels.dart"
     },
+    "lib/core/presentation/health_alert_presentation.dart": {
+      "role": "presentation",
+      "feature": "administration-health",
+      "library": "lib/core/presentation/health_alert_presentation.dart"
+    },
     "lib/core/presentation/resource_identity.dart": {
       "role": "presentation",
       "feature": "outputs-and-viewers",
@@ -770,6 +785,16 @@
       "role": "view",
       "feature": "connections",
       "library": "lib/core/screens/connection_setup_screen.dart"
+    },
+    "lib/core/screens/health_alert_health_screen.dart": {
+      "role": "view",
+      "feature": "administration-health",
+      "library": "lib/core/screens/health_alert_health_screen.dart"
+    },
+    "lib/core/screens/health_alert_settings_screen.dart": {
+      "role": "view",
+      "feature": "administration-health",
+      "library": "lib/core/screens/health_alert_settings_screen.dart"
     },
     "lib/core/screens/html_preview_screen.dart": {
       "role": "view",
@@ -1080,6 +1105,26 @@
       "role": "domain",
       "feature": "connections",
       "library": "lib/core/services/gateway_endpoint.dart"
+    },
+    "lib/core/services/health_alert_settings_session.dart": {
+      "role": "application",
+      "feature": "administration-health",
+      "library": "lib/core/services/health_alert_settings_session.dart"
+    },
+    "lib/core/services/health_alert_settings_store.dart": {
+      "role": "data",
+      "feature": "administration-health",
+      "library": "lib/core/services/health_alert_settings_store.dart"
+    },
+    "lib/core/services/health_alerts_coordinator.dart": {
+      "role": "application",
+      "feature": "administration-health",
+      "library": "lib/core/services/health_alerts_coordinator.dart"
+    },
+    "lib/core/services/health_alerts_session.dart": {
+      "role": "application",
+      "feature": "administration-health",
+      "library": "lib/core/services/health_alerts_session.dart"
     },
     "lib/core/services/health_snapshot.dart": {
       "role": "domain",
@@ -1696,6 +1741,31 @@
       "feature": "chat-inputs",
       "library": "lib/core/widgets/gateway_sensitive_prompt_panel.dart"
     },
+    "lib/core/widgets/health_alerts/health_alert_bell.dart": {
+      "role": "view",
+      "feature": "administration-health",
+      "library": "lib/core/widgets/health_alerts/health_alert_bell.dart"
+    },
+    "lib/core/widgets/health_alerts/health_alert_dialog.dart": {
+      "role": "view",
+      "feature": "administration-health",
+      "library": "lib/core/widgets/health_alerts/health_alert_dialog.dart"
+    },
+    "lib/core/widgets/health_alerts/health_alert_notice.dart": {
+      "role": "view",
+      "feature": "administration-health",
+      "library": "lib/core/widgets/health_alerts/health_alert_notice.dart"
+    },
+    "lib/core/widgets/health_alerts/health_alert_settings_entry.dart": {
+      "role": "view",
+      "feature": "administration-health",
+      "library": "lib/core/widgets/health_alerts/health_alert_settings_entry.dart"
+    },
+    "lib/core/widgets/health_alerts/health_alerts_scope.dart": {
+      "role": "view",
+      "feature": "administration-health",
+      "library": "lib/core/widgets/health_alerts/health_alerts_scope.dart"
+    },
     "lib/core/widgets/image_paste_menu.dart": {
       "role": "view",
       "feature": "attachments-and-sharing",
@@ -1925,6 +1995,11 @@
       "role": "view",
       "feature": "outputs-and-viewers",
       "library": "lib/core/widgets/web_output_preview.dart"
+    },
+    "lib/core/widgets/wing_app_bar.dart": {
+      "role": "view",
+      "feature": "app-shell",
+      "library": "lib/core/widgets/wing_app_bar.dart"
     },
     "lib/core/widgets/wing_welcome.dart": {
       "role": "view",

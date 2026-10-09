@@ -1,3 +1,4 @@
+import '../widgets/wing_app_bar.dart';
 import '../widgets/studio_task_marker.dart';
 import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
@@ -24,7 +25,7 @@ class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Privacy policy')),
+    appBar: WingAppBar(context: context, title: const Text('Privacy policy')),
     body: FutureBuilder<String>(
       future: _policy,
       builder: (context, snapshot) {

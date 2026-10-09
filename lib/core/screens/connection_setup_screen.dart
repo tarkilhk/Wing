@@ -1,3 +1,4 @@
+import '../widgets/wing_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -180,7 +181,8 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         if (!didPop) _back();
       },
       child: Scaffold(
-        appBar: AppBar(
+        appBar: WingAppBar(
+          context: context,
           leading: BackButton(onPressed: _saving ? null : _back),
           title: Text(_editing ? 'Edit instance' : 'Add instance'),
           actions: [
@@ -1008,7 +1010,7 @@ class _CustomSetupScreenState extends State<_CustomSetupScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Custom setup')),
+    appBar: WingAppBar(context: context, title: const Text('Custom setup')),
     body: SafeArea(
       child: Center(
         child: ConstrainedBox(

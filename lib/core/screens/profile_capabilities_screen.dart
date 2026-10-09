@@ -1,5 +1,5 @@
+import '../widgets/wing_app_bar.dart';
 import '../widgets/activity/skill_document_viewer.dart';
-import 'administration/admin_widgets.dart';
 import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 
@@ -119,12 +119,9 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
     );
     final rows = _state.rows.where((row) => row.matches(_query)).toList();
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: adminToolbarHeight(
-          context,
-          'Skills and tools',
-          actions: 2,
-        ),
+      appBar: WingAppBar(
+        context: context,
+
         title: const Text('Skills and tools', maxLines: 6, softWrap: true),
         actions: [
           PopupMenuButton<String>(

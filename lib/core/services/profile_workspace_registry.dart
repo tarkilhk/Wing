@@ -46,7 +46,7 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     if (_closed) return;
     _scheduleRetirement();
     final active = _controllers.values.any((owner) => owner.hasActiveChats);
-    final fingerprint = '$active:$monitoringSummary';
+    final fingerprint = '$active:$monitoringSummary:${_controllers.values.map((owner) => '${owner.connectionIdentity}:${owner.initialized}:${owner.hasMountedRoutes}').join('|')}';
     if (_monitoringFingerprint == fingerprint) return;
     _monitoringFingerprint = fingerprint;
     _hasActiveChats = active;

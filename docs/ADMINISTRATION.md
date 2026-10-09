@@ -308,7 +308,7 @@ the captured connection adapter; retirement prevents late publication and new
 dispatch. Consumers close their watches and remove their listeners. The workspace
 retires the host owner before its shared administration adapter.
 
-Future alerts reuse this observation through pure `HostThresholdPolicy`, without
+Alerts reuse this observation through pure `HostThresholdPolicy`, without
 UI imports, extra endpoint reads or embedded notification behavior. Callers choose
 thresholds and the maximum age (30 seconds by default), then evaluate the stats
 reading with an explicit clock. For example:
@@ -330,7 +330,7 @@ Only a value strictly above the limit is above; equality stays within. Missing
 CPU count makes normalized load unknown. Missing, expired, failed or future
 readings cannot clear an alert as healthy. Alert delivery, persistence and
 incident deduplication remain the consuming workflow's responsibility; this
-feature does not enable background notifications or save alert settings.
+host-data feature does not itself deliver notifications or save alert settings; the alert workflow below owns those decisions.
 
 `test/host_resources_session_test.dart` covers shared demand, independent endpoint
 outcomes, immutability, captured identity and retirement. `test/host_thresholds_test.dart`
@@ -516,3 +516,66 @@ Memory edit/delete needs stable IDs and safe concurrent writes. Per-tool MCP mut
 Recorded native acceptance against Hermes 0.21.2 includes real profile lifecycle, settings readback, temporary credential-source changes and MCP operations using disposable data. Provider account approval, real inference for every route, SDK installation and backend self-update are not established by that run. See [Testing](TESTING.md) and [upstream bugs](UPSTREAM_HERMES_BUGS.md), including the Windows MCP profile-deletion failure.
 
 Backend update checks also supply the read-only **Changes in this update** screen. It shows the returned commit summaries in server order, dates when available, optional authors and commit IDs, and a partial-history count when fewer commits are returned than the backend is behind. The stock API returns at most 20 summaries. Missing details do not block updates; opening the captured changelog makes no extra request.
+
+## Health alerts
+
+Open Menu → Hermes health → Alert settings (the outlined bell row above Host).
+Settings apply on this device across active connections. RAM and disk warn
+strictly above 90% for two minutes and clear strictly below 85% for two minutes.
+CPU is off initially; its editable defaults are 95%, 80% and three minutes.
+Rules preserve decimal percentages and accept 1–30 minutes. Reported critical memory/disk pressure alerts
+immediately when that rule is enabled, even if its percentage is unavailable.
+The compact editor applies to a draft; the footer check saves it. Leaving a
+changed draft asks to discard it. Failed or competing saves retain the confirmed
+policy and offer retry/reset. Damaged local settings disable collection until
+reviewed and saved. None of these settings modifies a Hermes profile.
+
+Wing watches while foregrounded with a mounted workspace, or while the existing
+background task monitor is active for that connection's ongoing work. It neither
+starts a new Android service nor keeps monitoring alive on its own. The shared
+host owner coalesces 15-second reads; the evaluator reacts to observations rather
+than polling another cache. Gaps/unknown readings break pending durations and
+retain existing issues as last known. Profile checks and server diagnostic results
+come from their existing owners; the watcher never launches Doctor/security audit.
+Older recorded findings remain qualified as last known. Open Health to investigate
+or request a fresh check. This is a warning about current Hermes usage, not an
+always-on server monitor. Thresholds and qualified notices do not predict OOM.
+
+A bell occupies the title row on every screen and appears only with current
+issues. It rings once for a new issue/escalation and respects reduced motion.
+A brief notice is optional; alerts never auto-open a modal. Tap the bell for one
+issue at a time, ordered by severity, with browsing arrows when needed. Acknowledge
+quiets that occurrence; snooze pauses reminders for 30 minutes. Both retain the
+issue and count. Recovery removes it; recurrence/escalation starts a new occurrence.
+The modal links to Hermes health, and configuration stays on Health's settings
+row. No notification permission is requested for these in-app alerts.
+
+The stock endpoints and pressure semantics were reverified on 9 October 2026
+against upstream `1744a19e0df568c647e4f3ff9c37f2a284a282fb`, including
+`hermes_cli/web_routers/status.py`, `gateway/memory_status.py` and
+`gateway/disk_status.py`. No backend change or alternative endpoint is used.
+
+Ownership is mapped in [ARCHITECTURE.md](ARCHITECTURE.md). The regressions in
+`test/health_alerts_test.dart` cover duration, hysteresis, unknown data, escalation,
+snooze, save ordering/failure/conflict and inactive late reads.
+`test/health_alerts_ui_test.dart` covers activity admission, shared title alignment,
+conditional bell, Health navigation, focused details and editor/save behavior in
+both themes at normal and 320 dp/200% text. Layout depends on rendered metrics,
+not a source pattern; these behavioral checks guard title geometry. Run with
+`CAPTURE_ALERTS=true`, `CAPTURE_FONT_DIR=<font directory>` and
+`CAPTURE_ALERT_DIR=<private output directory>` to inspect Flutter captures.
+
+`integration_test/health_alerts_native_test.dart` exercises the actual Wing app
+and routes on a disposable Android emulator with synthetic health observations.
+It checks the one-shot bell motion, notice, focused modal, snooze, Health/settings
+navigation, persistence and native-keyboard action reachability in both themes.
+Run once at the ordinary Android viewport/font size, then at 320 dp with Android
+font scale 2 and `--dart-define=ALERT_EXPECT_LARGE=true`. Do not override the
+Flutter test viewport: this journey verifies the Android-provided constraints.
+
+| Before | After | Why |
+| --- | --- | --- |
+| Chats and conversation vertically center title and scope in different-height toolbars | Shared 48 dp title row, optional scope row below | Bell and titles share one compact geometry |
+| Administration moves its enlarged title into the content | Title remains in the shared header and grows | Consistent title position and reachable actions |
+| Each viewer/header measures its own toolbar | WingAppBar owns geometry; viewers delegate | One reusable layout owner |
+| Alert settings has a generic tune icon | Outlined bell on Health's navigation row | Matches the feature's attention cue |

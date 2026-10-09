@@ -1,0 +1,171 @@
+import 'host_thresholds.dart';
+
+enum HealthAlertSeverity { warning, critical }
+
+enum HealthAlertScope { host, server, profile }
+
+class HealthAlert {
+  const HealthAlert({
+    required this.id,
+    required this.connectionIdentity,
+    required this.connectionLabel,
+    required this.scope,
+    required this.title,
+    required this.detail,
+    required this.severity,
+    required this.observedAt,
+    required this.occurrence,
+    this.profileName,
+    this.lastKnown = false,
+    this.acknowledged = false,
+    this.snoozedUntil,
+  });
+  final String id, connectionIdentity, connectionLabel, title, detail;
+  final String? profileName;
+  final HealthAlertScope scope;
+  final HealthAlertSeverity severity;
+  final DateTime observedAt;
+  final int occurrence;
+  final bool lastKnown, acknowledged;
+  final DateTime? snoozedUntil;
+  bool remindsAt(DateTime now) =>
+      !acknowledged && (snoozedUntil == null || !now.isBefore(snoozedUntil!));
+  HealthAlert copyWith({
+    bool? lastKnown,
+    bool? acknowledged,
+    DateTime? snoozedUntil,
+  }) => HealthAlert(
+    id: id,
+    connectionIdentity: connectionIdentity,
+    connectionLabel: connectionLabel,
+    scope: scope,
+    title: title,
+    detail: detail,
+    severity: severity,
+    observedAt: observedAt,
+    occurrence: occurrence,
+    profileName: profileName,
+    lastKnown: lastKnown ?? this.lastKnown,
+    acknowledged: acknowledged ?? this.acknowledged,
+    snoozedUntil: snoozedUntil ?? this.snoozedUntil,
+  );
+}
+
+class HealthAlertRule {
+  HealthAlertRule({
+    required this.enabled,
+    required this.warnAbove,
+    required this.clearBelow,
+    required this.minutes,
+  }) {
+    if (!warnAbove.isFinite ||
+        !clearBelow.isFinite ||
+        warnAbove > 100 ||
+        warnAbove <= 0 ||
+        clearBelow < 0 ||
+        clearBelow >= warnAbove ||
+        minutes < 1 ||
+        minutes > 30) {
+      throw ArgumentError(
+        'Use 0–100%, a recovery limit below the warning, and 1–30 minutes.',
+      );
+    }
+  }
+  final bool enabled;
+  final double warnAbove, clearBelow;
+  final int minutes;
+  Map<String, Object> encode() => {
+    'enabled': enabled,
+    'warnAbove': warnAbove,
+    'clearBelow': clearBelow,
+    'minutes': minutes,
+  };
+  factory HealthAlertRule.decode(Map value) => HealthAlertRule(
+    enabled: value['enabled'] as bool,
+    warnAbove: (value['warnAbove'] as num).toDouble(),
+    clearBelow: (value['clearBelow'] as num).toDouble(),
+    minutes: value['minutes'] as int,
+  );
+}
+
+class HealthAlertSettings {
+  HealthAlertSettings({
+    this.enabled = true,
+    this.server = true,
+    this.profile = true,
+    this.animateBell = true,
+    this.showNotice = true,
+    Map<HostMetric, HealthAlertRule>? rules,
+  }) : rules = Map.unmodifiable(
+         rules ??
+             {
+               HostMetric.memoryUsedPercent: HealthAlertRule(
+                 enabled: true,
+                 warnAbove: 90,
+                 clearBelow: 85,
+                 minutes: 2,
+               ),
+               HostMetric.diskUsedPercent: HealthAlertRule(
+                 enabled: true,
+                 warnAbove: 90,
+                 clearBelow: 85,
+                 minutes: 2,
+               ),
+               HostMetric.cpuPercent: HealthAlertRule(
+                 enabled: false,
+                 warnAbove: 95,
+                 clearBelow: 80,
+                 minutes: 3,
+               ),
+             },
+       ) {
+    if (this.rules.length != 3 ||
+        !hostAlertMetrics.every(this.rules.containsKey)) {
+      throw ArgumentError('RAM, disk and CPU rules are required.');
+    }
+  }
+  final bool enabled, server, profile, animateBell, showNotice;
+  final Map<HostMetric, HealthAlertRule> rules;
+  HealthAlertSettings copyWith({
+    bool? enabled,
+    bool? server,
+    bool? profile,
+    bool? animateBell,
+    bool? showNotice,
+    Map<HostMetric, HealthAlertRule>? rules,
+  }) => HealthAlertSettings(
+    enabled: enabled ?? this.enabled,
+    server: server ?? this.server,
+    profile: profile ?? this.profile,
+    animateBell: animateBell ?? this.animateBell,
+    showNotice: showNotice ?? this.showNotice,
+    rules: rules ?? this.rules,
+  );
+  Map<String, Object> encode() => {
+    'enabled': enabled,
+    'server': server,
+    'profile': profile,
+    'animateBell': animateBell,
+    'showNotice': showNotice,
+    'rules': {for (final e in rules.entries) e.key.name: e.value.encode()},
+  };
+  factory HealthAlertSettings.decode(Map value) => HealthAlertSettings(
+    enabled: value['enabled'] as bool,
+    server: value['server'] as bool,
+    profile: value['profile'] as bool,
+    animateBell: value['animateBell'] as bool,
+    showNotice: value['showNotice'] as bool,
+    rules: {
+      for (final metric in hostAlertMetrics)
+        metric: HealthAlertRule.decode(
+          (value['rules'] as Map)[metric.name] as Map,
+        ),
+    },
+  );
+}
+
+const hostAlertMetrics = [
+  HostMetric.memoryUsedPercent,
+  HostMetric.diskUsedPercent,
+  HostMetric.cpuPercent,
+];

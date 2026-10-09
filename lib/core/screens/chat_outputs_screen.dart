@@ -1,3 +1,4 @@
+import '../widgets/wing_app_bar.dart';
 import '../widgets/studio_error.dart';
 import 'dart:async';
 
@@ -523,7 +524,8 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
     }
     final outputs = _observation.outputs;
     return Scaffold(
-      appBar: AppBar(
+      appBar: WingAppBar(
+        context: context,
         title: Text(
           'Outputs · ${widget.chatTitle}',
           maxLines: 1,

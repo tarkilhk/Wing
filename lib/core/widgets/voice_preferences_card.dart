@@ -1,3 +1,4 @@
+import 'wing_app_bar.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_preferences.dart';
@@ -11,7 +12,7 @@ class VoicePreferencesPage extends StatelessWidget {
   final VoicePreferencesSession Function() createSession;
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Voice')),
+    appBar: WingAppBar(context: context, title: const Text('Voice')),
     body: SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

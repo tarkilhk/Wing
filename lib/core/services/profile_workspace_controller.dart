@@ -467,6 +467,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   final Set<Object> _visibleRoutes = {};
   final Map<Object, ProfileSessionKey?> _mountedRoutes = {};
   bool get visible => _visibleRoutes.isNotEmpty;
+  bool get hasMountedRoutes => _mountedRoutes.isNotEmpty;
 
   /// Visibility controls read acknowledgements; mounted routes own state even
   /// while covered by another route or while the activity is backgrounded.

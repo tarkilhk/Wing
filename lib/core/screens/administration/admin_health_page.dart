@@ -1,3 +1,4 @@
+import '../../widgets/health_alerts/health_alert_settings_entry.dart';
 import '../../models/profile_session_key.dart';
 import '../../models/health_finding.dart';
 import 'package:flutter/material.dart';
@@ -75,6 +76,7 @@ class AdminHealthContent extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
           if (persistenceError case final message?) AdminNotice.error(message),
+          const HealthAlertSettingsEntry(),
           AdminHostHealth(resources: hostResources),
           const SizedBox(height: 16),
           AdminRuntimeHealth(
@@ -143,10 +145,10 @@ class AdminHealthContent extends StatelessWidget {
             ),
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton.icon(
+              child: IconButton(
+                tooltip: 'What’s checked?',
                 onPressed: () => showHealthCheckExplanation(context),
                 icon: const Icon(Icons.info_outline, size: 18),
-                label: const Text('What’s checked?'),
               ),
             ),
           ],

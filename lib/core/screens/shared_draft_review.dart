@@ -1,3 +1,4 @@
+import '../widgets/wing_app_bar.dart';
 import '../services/shared_draft_session.dart';
 import '../widgets/studio_selection_tile.dart';
 import '../widgets/studio_select.dart';
@@ -52,7 +53,8 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
     return PopScope(
       canPop: !state.working,
       child: Scaffold(
-        appBar: AppBar(
+        appBar: WingAppBar(
+          context: context,
           title: const Text(
             'Add shared content',
             maxLines: 1,

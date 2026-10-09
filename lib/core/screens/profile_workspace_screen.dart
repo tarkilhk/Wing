@@ -1,3 +1,4 @@
+import '../widgets/wing_app_bar.dart';
 import '../widgets/activity/skill_document_viewer.dart';
 import '../models/chat_intelligence.dart';
 import '../models/chat_runtime.dart';
@@ -72,7 +73,6 @@ import 'chat_outputs_screen.dart';
 import '../widgets/app_drawer.dart';
 import 'app_settings_content.dart';
 import 'analytics_content.dart';
-import 'administration/admin_widgets.dart' show adminToolbarHeight;
 import 'workspace_overview_content.dart';
 import '../controllers/voice_input_controller.dart';
 import '../models/voice_processing_settings.dart';
@@ -666,11 +666,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         child: Scaffold(
           key: _scaffoldKey,
           drawer: _drawer(),
-          appBar: AppBar(
-            toolbarHeight:
-                72 +
-                (MediaQuery.textScalerOf(context).scale(24) - 24) +
-                (stackChatScope ? 48 : 0),
+          appBar: WingAppBar(
+            context: context,
+
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
               tooltip: _chatOrigin == AppDestination.activity
@@ -685,105 +683,93 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               child: InkWell(
                 borderRadius: WingRadius.card,
                 onTap: canMoveProject ? openProjectPicker : null,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      chat.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final scopeStyle = Theme.of(context)
-                            .textTheme
-                            .labelMedium
-                            ?.copyWith(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w400,
-                            );
-                        final projectLabel =
-                            chat.runtime.opening || chat.runtime.offline
-                            ? chat.key.workspace.profileName
-                            : controller.chatProjectLabel(chat);
-                        final server = ServerConnectionLabel(
-                          alignment: Alignment.centerLeft,
-                          label: controller.connection.label,
-                          icon: controller.connection.icon,
-                          status: controller.connectionStatus,
-                          style: scopeStyle,
-                        );
-                        final project = Tooltip(
-                          message: 'Move to project: $projectLabel',
-                          child: Semantics(
-                            button: true,
-                            enabled: canMoveProject,
-                            focusable: canMoveProject,
-                            onTap: canMoveProject ? openProjectPicker : null,
-                            label: '$projectLabel. Move to project',
-                            excludeSemantics: true,
-                            child: InkWell(
-                              key: const ValueKey('chat-project-picker'),
-                              borderRadius: WingRadius.control,
-                              onTap: canMoveProject ? openProjectPicker : null,
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  minHeight: 48,
-                                  minWidth: 48,
-                                ),
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  widthFactor: 1,
-                                  heightFactor: 1,
-                                  child: Text(
-                                    projectLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: scopeStyle,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                        if (stackChatScope) {
-                          return Column(
-                            key: const ValueKey('chat-scope-stacked'),
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [server, project],
-                          );
-                        }
-                        return Row(
-                          key: const ValueKey('chat-scope-inline'),
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: constraints.maxWidth * .5,
-                              ),
-                              child: server,
-                            ),
-                            ExcludeSemantics(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                ),
-                                child: Text('·', style: scopeStyle),
-                              ),
-                            ),
-                            Expanded(child: project),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
+                child: Text(
+                  chat.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+            ),
+            contextHeight: stackChatScope ? 96 : 48,
+            contextRow: LayoutBuilder(
+              builder: (context, constraints) {
+                final scopeStyle = Theme.of(context).textTheme.labelMedium
+                    ?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w400,
+                    );
+                final projectLabel =
+                    chat.runtime.opening || chat.runtime.offline
+                    ? chat.key.workspace.profileName
+                    : controller.chatProjectLabel(chat);
+                final server = ServerConnectionLabel(
+                  alignment: Alignment.centerLeft,
+                  label: controller.connection.label,
+                  icon: controller.connection.icon,
+                  status: controller.connectionStatus,
+                  style: scopeStyle,
+                );
+                final project = Tooltip(
+                  message: 'Move to project: $projectLabel',
+                  child: Semantics(
+                    button: true,
+                    enabled: canMoveProject,
+                    focusable: canMoveProject,
+                    onTap: canMoveProject ? openProjectPicker : null,
+                    label: '$projectLabel. Move to project',
+                    excludeSemantics: true,
+                    child: InkWell(
+                      key: const ValueKey('chat-project-picker'),
+                      borderRadius: WingRadius.control,
+                      onTap: canMoveProject ? openProjectPicker : null,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: 48,
+                          minWidth: 48,
+                        ),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: 1,
+                          heightFactor: 1,
+                          child: Text(
+                            projectLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: scopeStyle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+                if (stackChatScope) {
+                  return Column(
+                    key: const ValueKey('chat-scope-stacked'),
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [server, project],
+                  );
+                }
+                return Row(
+                  key: const ValueKey('chat-scope-inline'),
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: constraints.maxWidth * .5,
+                      ),
+                      child: server,
+                    ),
+                    ExcludeSemantics(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Text('·', style: scopeStyle),
+                      ),
+                    ),
+                    Expanded(child: project),
+                  ],
+                );
+              },
             ),
             actions: [
               Builder(
@@ -2574,18 +2560,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       drawer: _drawer(),
       appBar: _destination == AppDestination.administration
           ? null
-          : AppBar(
-              toolbarHeight: adminToolbarHeight(
-                context,
-                _destination.label,
-                actions:
-                    _destination == AppDestination.settings &&
-                        widget.configurationActions != null
-                    ? 2
-                    : _destination == AppDestination.activity
-                    ? 1
-                    : 0,
-              ),
+          : WingAppBar(
+              context: context,
+
               title: Text(_destination.label, maxLines: 6, softWrap: true),
               actions: [
                 if (_destination == AppDestination.settings &&

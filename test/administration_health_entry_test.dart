@@ -933,12 +933,12 @@ void main({
             }
             if (status == 'green') {
               await tester.scrollUntilVisible(
-                find.text('What’s checked?'),
+                find.byTooltip('What’s checked?'),
                 200,
                 scrollable: vertical,
               );
-              await tester.ensureVisible(find.text('What’s checked?'));
-              await tester.tap(find.text('What’s checked?'));
+              await tester.ensureVisible(find.byTooltip('What’s checked?'));
+              await tester.tap(find.byTooltip('What’s checked?'));
               await tester.pumpAndSettle();
               expect(find.byType(AlertDialog), findsOneWidget);
               await snapshot(tester, '$name-explanation');

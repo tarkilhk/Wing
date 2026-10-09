@@ -1,3 +1,4 @@
+import 'wing_app_bar.dart';
 import 'package:flutter/material.dart';
 
 import '../presentation/resource_identity.dart';
@@ -112,70 +113,34 @@ class ResourceViewerAction extends StatelessWidget {
 /// One header geometry for document, image, HTML, SVG and PDF file viewers.
 class ResourceViewerAppBar extends StatelessWidget
     implements PreferredSizeWidget {
-  final String title;
-  final String? target;
-  final String? resourceLabel;
-  final List<Widget> actions;
-  final bool stacked;
-
   ResourceViewerAppBar({
     super.key,
     required BuildContext context,
-    required this.title,
-    this.target,
-    this.resourceLabel,
-    this.actions = const [],
+    required String title,
+    String? target,
+    String? resourceLabel,
+    List<Widget> actions = const [],
     bool inlineActions = false,
-  }) : stacked =
-           !inlineActions && MediaQuery.textScalerOf(context).scale(14) > 21;
-
+  }) : _header = WingAppBar(
+         context: context,
+         inlineActions: inlineActions,
+         title: target == null
+             ? Text(title, maxLines: 1, overflow: TextOverflow.ellipsis)
+             : ResourceFilename(
+                 target: target,
+                 label: resourceLabel,
+                 style: WingAppBar.titleStyle(context),
+               ),
+         backgroundColor: WingTokens.of(context).raised,
+         surfaceTintColor: Colors.transparent,
+         shape: Border(
+           bottom: BorderSide(color: WingTokens.of(context).border),
+         ),
+         actions: actions,
+       );
+  final WingAppBar _header;
   @override
-  Size get preferredSize => Size.fromHeight(
-    kToolbarHeight + (stacked && actions.isNotEmpty ? 40 : 0),
-  );
-
+  Size get preferredSize => _header.preferredSize;
   @override
-  Widget build(BuildContext context) {
-    final tokens = WingTokens.of(context);
-    return AppBar(
-      titleSpacing: WingSpacing.sm,
-      backgroundColor: tokens.raised,
-      surfaceTintColor: Colors.transparent,
-      shape: Border(bottom: BorderSide(color: tokens.border)),
-      title: target == null
-          ? Text(
-              title,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.ellipsis,
-              style: tokens.typography.section,
-            )
-          : ResourceFilename(
-              target: target!,
-              label: resourceLabel,
-              style: tokens.typography.section,
-            ),
-      actions: stacked
-          ? null
-          : [
-              ...actions,
-              if (actions.isNotEmpty) const SizedBox(width: WingSpacing.sm),
-            ],
-      bottom: stacked && actions.isNotEmpty
-          ? PreferredSize(
-              preferredSize: const Size.fromHeight(40),
-              child: Padding(
-                padding: const EdgeInsets.only(
-                  right: WingSpacing.sm,
-                  bottom: WingSpacing.sm,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: actions,
-                ),
-              ),
-            )
-          : null,
-    );
-  }
+  Widget build(BuildContext context) => _header;
 }

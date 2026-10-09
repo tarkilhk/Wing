@@ -16,7 +16,6 @@ class AdminProfileOverview extends StatefulWidget {
     required this.selector,
     required this.search,
     this.searchResults,
-    this.titleBeforeSelector,
     required this.destinations,
   });
   final HermesProfile? metadata;
@@ -24,7 +23,6 @@ class AdminProfileOverview extends StatefulWidget {
   final Widget selector;
   final Widget search;
   final Widget? searchResults;
-  final Widget? titleBeforeSelector;
   final Map<ProfileOverviewDestination, FutureOr<void> Function()?>
   destinations;
 
@@ -177,7 +175,6 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            ?widget.titleBeforeSelector,
             widget.selector,
             if (widget.metadata?.description?.trim() case final description?
                 when description.isNotEmpty)

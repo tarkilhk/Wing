@@ -1,8 +1,16 @@
+import 'core/widgets/health_alerts/health_alert_dialog.dart';
+import 'core/screens/health_alert_health_screen.dart';
+import 'core/models/health_alert.dart';
+import 'core/services/health_alert_settings_store.dart';
+import 'core/services/health_alert_settings_session.dart';
+import 'core/services/health_alerts_coordinator.dart';
+import 'core/widgets/health_alerts/health_alerts_scope.dart';
+import 'core/widgets/health_alerts/health_alert_notice.dart';
+import 'core/widgets/wing_app_bar.dart';
 import 'core/services/shared_draft_session.dart';
 import 'core/services/android_voice.dart';
 import 'core/services/voice_preferences_session.dart';
 import 'core/widgets/notification_approval_review.dart';
-import 'core/screens/administration/admin_widgets.dart' show adminToolbarHeight;
 import 'core/widgets/server_connection_label.dart';
 import 'core/widgets/connection_icon_picker.dart';
 import 'core/services/network_availability.dart';
@@ -105,6 +113,8 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   late final ChatNotificationCoordinator _chatNotices;
   late final Future<void> _notificationsReady;
   late final BackgroundMonitoringService _backgroundMonitoring;
+  late final HealthAlertSettingsSession _healthAlertSettings;
+  late final HealthAlertsCoordinator _healthAlerts;
   String? _deferredShareId;
   bool _disposed = false;
   final _networkAvailability = NetworkAvailability();
@@ -132,6 +142,30 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     _homeKey.currentState?.deferPendingShareAutoOpen(pendingShareId);
   }
 
+  ProfileWorkspaceScreen _workspaceScreen(
+    ProfileWorkspaceController controller, {
+    GlobalKey<ProfileWorkspaceScreenState>? key,
+    required AppDestination destination,
+  }) => ProfileWorkspaceScreen(
+    key: key,
+    controller: controller,
+    initialDestination: destination,
+    enableNotifications: enableProfileNotifications,
+    backgroundMonitoringState: _backgroundMonitoring.state,
+    openMonitoringBatterySettings: _backgroundMonitoring.openBatterySettings,
+    onConnections: openConnections,
+    configurationActions: (context, onRestored) =>
+        _homeKey.currentState!.buildConfigurationActions(context, onRestored),
+    savedConnections: widget.connManager.getConnections,
+    onSelectConnection: (connection, destination) async {
+      await _homeKey.currentState?.selectWorkspaceConnection(
+        connection,
+        destination,
+      );
+    },
+    onPreferencesChanged: refreshPreferences,
+  );
+
   Future<void> _showNotificationChat(NotificationChatRoute request) async {
     if (!mounted || !request.current) return;
     final controller = request.controller;
@@ -155,24 +189,10 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     // unsaved changes remain. Open the chat above it instead of removing it.
     final screenKey = GlobalKey<ProfileWorkspaceScreenState>();
     final route = MaterialPageRoute<void>(
-      builder: (_) => ProfileWorkspaceScreen(
+      builder: (_) => _workspaceScreen(
+        controller,
         key: screenKey,
-        controller: controller,
-        enableNotifications: enableProfileNotifications,
-        backgroundMonitoringState: _backgroundMonitoring.state,
-        openMonitoringBatterySettings:
-            _backgroundMonitoring.openBatterySettings,
-        onConnections: openConnections,
-        configurationActions: (context, onRestored) => _homeKey.currentState!
-            .buildConfigurationActions(context, onRestored),
-        savedConnections: widget.connManager.getConnections,
-        onSelectConnection: (connection, destination) async {
-          await _homeKey.currentState?.selectWorkspaceConnection(
-            connection,
-            destination,
-          );
-        },
-        onPreferencesChanged: refreshPreferences,
+        destination: AppDestination.chats,
       ),
     );
     _notificationRoutes[controller] = (route: route, screenKey: screenKey);
@@ -268,6 +288,18 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
             onNotificationRead: _chatNotices.readTarget,
           ),
         );
+    _healthAlertSettings = HealthAlertSettingsSession(
+      HealthAlertSettingsStore(widget.connManager.prefs),
+    );
+    _healthAlerts = HealthAlertsCoordinator(
+      registry: _profileControllers,
+      settings: _healthAlertSettings,
+      monitoring: _backgroundMonitoring.state,
+    );
+    _healthAlerts.setForeground(
+      WidgetsBinding.instance.lifecycleState == null ||
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
+    );
     _chatNotices.bindApplication(
       manager: widget.connManager,
       registry: _profileControllers,
@@ -298,8 +330,60 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _healthAlerts.setForeground(state == AppLifecycleState.resumed);
     if (state == AppLifecycleState.resumed) {
       unawaited(_chatNotices.applicationResumed());
+    }
+  }
+
+  void _openHealthAlerts() {
+    final context = _navigatorKey.currentContext;
+    if (context == null) return;
+    final scope = HealthAlertsScope.maybeOf(context);
+    if (scope != null) unawaited(showHealthAlerts(context, scope));
+  }
+
+  Future<void> _openAlertHealth(HealthAlert alert) async {
+    final controller = _healthAlerts.ownerFor(alert);
+    if (controller == null || !mounted) return;
+    try {
+      if (alert.profileName != null &&
+          controller.current?.scope.profileName != alert.profileName) {
+        if (!await controller.switchProfile(alert.profileName!)) return;
+      }
+      if (!mounted) return;
+      await _navigatorKey.currentState?.push<void>(
+        MaterialPageRoute(
+          builder: (_) => HealthAlertHealthScreen(
+            controller: controller,
+            onConnections: openConnections,
+            onOpenSession: (key) async {
+              await controller.openSession(key, propagateHistoryFailure: true);
+              if (mounted) {
+                await _navigatorKey.currentState?.push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => _workspaceScreen(
+                      controller,
+                      destination: AppDestination.chats,
+                    ),
+                  ),
+                );
+              }
+            },
+          ),
+        ),
+      );
+    } catch (_) {
+      final context = _navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not open this issue’s Health screen. Retry from the bell.',
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -312,7 +396,10 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     _navigatorKey.currentState?.push<void>(
       MaterialPageRoute(
         builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('App settings')),
+          appBar: WingAppBar(
+            context: context,
+            title: const Text('App settings'),
+          ),
           body: AppSettingsContent(
             preferences: _appPreferences,
             createVoiceSession: () => VoicePreferencesSession(
@@ -350,42 +437,50 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       builder: (context, child) {
         final systemMediaQuery = MediaQuery.of(context);
         final preference = preferences.values.textSize;
-        return MediaQuery(
-          data: systemMediaQuery.copyWith(
-            textScaler: preference == null
-                ? systemMediaQuery.textScaler
-                : preference.applyTo(systemMediaQuery.textScaler),
-          ),
-          child: Column(
-            children: [
-              if (preferences.needsAppearanceRepair)
-                Material(
-                  child: SafeArea(
-                    bottom: false,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Saved appearance settings need repair. Temporary appearance is shown.',
-                            ),
+        return HealthAlertsScope(
+          alerts: _healthAlerts,
+          openHealth: _openAlertHealth,
+          child: MediaQuery(
+            data: systemMediaQuery.copyWith(
+              textScaler: preference == null
+                  ? systemMediaQuery.textScaler
+                  : preference.applyTo(systemMediaQuery.textScaler),
+            ),
+            child: HealthAlertNotice(
+              onOpenAlerts: _openHealthAlerts,
+              navigatorKey: _navigatorKey,
+              child: Column(
+                children: [
+                  if (preferences.needsAppearanceRepair)
+                    Material(
+                      child: SafeArea(
+                        bottom: false,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
                           ),
-                          TextButton(
-                            key: const ValueKey('app-preference-repair'),
-                            onPressed: _openPreferenceRepair,
-                            child: const Text('Repair'),
+                          child: Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Saved appearance settings need repair. Temporary appearance is shown.',
+                                ),
+                              ),
+                              TextButton(
+                                key: const ValueKey('app-preference-repair'),
+                                onPressed: _openPreferenceRepair,
+                                child: const Text('Repair'),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              Expanded(child: child!),
-            ],
+                  Expanded(child: child!),
+                ],
+              ),
+            ),
           ),
         );
       },
@@ -438,6 +533,8 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _networkAvailability.dispose();
     _chatNotices.closeApplication();
+    _healthAlerts.dispose();
+    _healthAlertSettings.dispose();
     _backgroundMonitoring.dispose();
     _profileControllers.dispose();
     _appPreferences.state.removeListener(_preferencesChanged);
@@ -1052,14 +1149,9 @@ class HomeScreenState extends State<HomeScreen> {
             onSelected: _selectDestination,
           ),
         ),
-        appBar: AppBar(
-          toolbarHeight: adminToolbarHeight(
-            context,
-            _connections.isEmpty && _destination == AppDestination.connections
-                ? ''
-                : _destination.label,
-            actions: _destination == AppDestination.settings ? 2 : 0,
-          ),
+        appBar: WingAppBar(
+          context: context,
+
           title:
               _connections.isEmpty && _destination == AppDestination.connections
               ? null

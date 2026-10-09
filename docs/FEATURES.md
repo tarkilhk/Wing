@@ -47,6 +47,12 @@
 
 Switch between connections and profiles. Manage supported model settings, provider access, MCP connectors and server-run scheduled tasks. Health and diagnostics help you find setup problems; analytics shows activity, tokens and model breakdowns. Supported controls depend on your Hermes server and profile.
 
+The title-row bell warns about issues affecting Hermes while Wing is open or
+already monitoring work. Tap it for one issue at a time. Configure device-local
+thresholds under **Hermes health → Alert settings**; RAM and disk warnings start
+above 90% for two minutes. [Health alerts](ADMINISTRATION.md#health-alerts)
+explains recovery, acknowledgement and snooze.
+
 ## Make it yours
 
 Choose a light or dark theme, accent color and text size with a live preview. Back up your connections and app preferences, with an optional passphrase. Quick Chat, Recents and Search chats are also available from Wing's Android launcher shortcut menu.

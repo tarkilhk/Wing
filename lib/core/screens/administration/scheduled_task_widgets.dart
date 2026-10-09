@@ -1,3 +1,4 @@
+import '../../widgets/wing_app_bar.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
 
@@ -38,26 +39,11 @@ class TaskPage extends StatelessWidget {
   final Widget? bottom;
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final titleStyle =
-        theme.appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge!;
-    final available =
-        MediaQuery.sizeOf(context).width -
-        32 -
-        (Navigator.of(context).canPop() ? 56 : 0) -
-        actions.length * 48;
-    final painter = TextPainter(
-      text: TextSpan(text: title, style: titleStyle),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 3,
-    )..layout(maxWidth: available.clamp(80, double.infinity));
-    final toolbarHeight = (painter.height + 16).clamp(56.0, double.infinity);
-    painter.dispose();
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: toolbarHeight,
-        title: Text(title, style: titleStyle, maxLines: 3),
+      appBar: WingAppBar(
+        context: context,
+
+        title: Text(title, maxLines: 6),
         actions: actions,
       ),
       bottomNavigationBar: bottom == null

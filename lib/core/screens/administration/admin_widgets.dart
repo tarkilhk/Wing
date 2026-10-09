@@ -1,3 +1,4 @@
+import '../../widgets/wing_app_bar.dart';
 import 'dart:async';
 export 'admin_navigation.dart';
 import '../../theme/wing_theme.dart';
@@ -32,12 +33,9 @@ class AdminPage extends StatelessWidget {
     data: administrationTheme(Theme.of(context)),
     child: Builder(
       builder: (context) => Scaffold(
-        appBar: AppBar(
-          toolbarHeight: adminToolbarHeight(
-            context,
-            title,
-            actions: actions.length,
-          ),
+        appBar: WingAppBar(
+          context: context,
+
           title: Text(title, maxLines: 6, softWrap: true),
           actions: actions,
         ),
@@ -70,33 +68,6 @@ class AdminPage extends StatelessWidget {
       ),
     ),
   );
-}
-
-/// Let long page titles grow at large text sizes instead of silently truncating.
-double adminToolbarHeight(
-  BuildContext context,
-  String title, {
-  int actions = 0,
-}) {
-  final theme = Theme.of(context);
-  final painter =
-      TextPainter(
-        text: TextSpan(
-          text: title,
-          style: theme.appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
-        ),
-        textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context),
-        maxLines: 6,
-      )..layout(
-        maxWidth: (MediaQuery.sizeOf(context).width - 88 - actions * 48).clamp(
-          80,
-          double.infinity,
-        ),
-      );
-  final height = (painter.height + 16).clamp(kToolbarHeight, double.infinity);
-  painter.dispose();
-  return height;
 }
 
 class AdminGroup extends StatelessWidget {

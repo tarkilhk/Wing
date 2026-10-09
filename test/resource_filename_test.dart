@@ -132,10 +132,6 @@ void main() {
             .size,
         16,
       );
-      final header = tester.widget<ResourceViewerAppBar>(
-        find.byType(ResourceViewerAppBar),
-      );
-      expect(header.stacked, scale == 2);
       if (scale == 2) {
         expect(
           tester.getRect(find.text('report.md')).bottom,

@@ -1,3 +1,4 @@
+import '../widgets/wing_app_bar.dart';
 import '../models/profile_session_key.dart';
 import 'package:wing/core/models/chat_list_status.dart';
 import 'dart:async';
@@ -1136,10 +1137,11 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
         key: _scaffoldKey,
         drawer: widget.drawer,
         backgroundColor: tokens.surface,
-        appBar: AppBar(
+        appBar: WingAppBar(
+          context: context,
           backgroundColor: tokens.surface,
           surfaceTintColor: Colors.transparent,
-          toolbarHeight: 88 + (MediaQuery.textScalerOf(context).scale(24) - 24),
+
           centerTitle: false,
           leading: _archivedOnly
               ? IconButton(
@@ -1150,39 +1152,28 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
                   },
                 )
               : null,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          title: Text(_archivedOnly ? 'Archived chats' : 'Chats'),
+          contextRow: Row(
             children: [
-              Text(
-                _archivedOnly ? 'Archived chats' : 'Chats',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
+              SizedBox(
+                width: 104,
+                child: ServerConnectionLabel(
+                  label: widget.connectionLabel,
+                  icon: widget.connectionIcon,
+                  status: widget.connectionStatus,
+                  style: TextStyle(fontSize: 12, color: tokens.muted),
                 ),
               ),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 104,
-                    child: ServerConnectionLabel(
-                      label: widget.connectionLabel,
-                      icon: widget.connectionIcon,
-                      status: widget.connectionStatus,
-                      style: TextStyle(fontSize: 12, color: tokens.muted),
-                    ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ChatProfileBar(
+                  profiles: workspace.profiles,
+                  createColors: widget.createColors,
+                  selectedProfiles: _profiles,
+                  onSelected: (name) => _chooseView(
+                    BrowserPreferenceIntent.exclusiveProfile(name),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ChatProfileBar(
-                      profiles: workspace.profiles,
-                      createColors: widget.createColors,
-                      selectedProfiles: _profiles,
-                      onSelected: (name) => _chooseView(
-                        BrowserPreferenceIntent.exclusiveProfile(name),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ],
           ),

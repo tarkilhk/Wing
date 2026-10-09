@@ -1,3 +1,4 @@
+import '../widgets/wing_app_bar.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -36,10 +37,9 @@ class _VersionsUpdatesScreenState extends State<VersionsUpdatesScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      toolbarHeight: MediaQuery.textScalerOf(context).scale(22) > 30
-          ? MediaQuery.textScalerOf(context).scale(22) * 2 + 16
-          : kToolbarHeight,
+    appBar: WingAppBar(
+      context: context,
+
       title: const Text('Versions & updates', maxLines: 2),
     ),
     body: ListenableBuilder(
