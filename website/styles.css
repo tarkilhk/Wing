@@ -295,6 +295,10 @@ summary:active { color: var(--teal); }
 /* Text explains the feature; its screenshot follows; further reading comes last. */
 .feature-stories, .result-stories { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem), 1fr)); gap: 4rem; }
 .feature-story { display: flex; flex-direction: column; align-items: start; gap: 1.5rem; }
+/* Shared rows align paired screenshots without fixed text heights. */
+.feature-stories > .feature-story { display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 1.5rem; }
+.feature-copy { display: grid; gap: 1.5rem; }
+.control-features > article { grid-row: span 3; grid-template-rows: subgrid; align-items: start; }
 .feature-story h3 { font-size: 1.5rem; }
 .feature-story p { color: var(--muted); max-inline-size: 38rem; }
 .feature-story .guide-shot { margin-block: .5rem 0; }

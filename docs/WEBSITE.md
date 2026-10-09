@@ -92,6 +92,10 @@ place by explaining a specific action or outcome and demonstrating the detail
 that makes it easier. Put the relevant screenshot after that explanation, with
 further-reading links last when they earn a place. Avoid disconnected screenshots
 in guide headers.
+Paired homepage stories share content, screenshot and link rows so their images
+line up when displayed side by side. The rows size to the actual text; do not
+set fixed heights or add filler to equalize copy. Single-column layouts retain
+each story's text, screenshot and link order.
 A screenshot may establish context for several controls on the same screen;
 do not repeat it merely to illustrate another sentence.
 
@@ -100,7 +104,7 @@ do not repeat it merely to illustrate another sentence.
 | Home | Can Wing help me run several pieces of work from my phone? | Cross-profile/project navigation, Recents, inspectable activity, reusable results, settings and analytics | Focused guides and download |
 | Profiles and projects | How do I switch agents and projects, move between screens, and keep the chat view I prefer? | One-tap profile choices, combined profile/project filters, remembered Group by/Sort by/Show details, screen navigator and retained drafts | Recents; profile settings |
 | Recents | Which chats are running or waiting for me, and how do I return to them? | Running/Needs input filters; opening a chat selects its profile; back returns to Recents | Live controls; Chats organization |
-| Live work | What is the agent doing, and how can I respond or change direction? | Timeline/Tasks/Agents tabs; requests and results; steering/queueing; editable input | Recents; using results |
+| Live work | What is the agent doing, and how can I respond or change direction? | Timeline/Tasks/Agents tabs; requests and results; steering/queueing; forking at a saved answer; editable input | Recents; using results |
 | Results | How do I read, reuse or export what the agent produced? | Markdown layout; separate code and message actions; file previews and Android sharing | Tool details; sending attachments |
 | Health | Where is my setup having trouble, and what can I check? | Host/Server/Profile scopes, timestamps, diagnostic findings and targeted repair links | Profile settings; connection recovery |
 | Administration | How do I change the intended agent's configuration without losing my edits? | Selected profile identity; setting search; model/skill/access controls; confirmed saves | Schedules; usage; Health |
