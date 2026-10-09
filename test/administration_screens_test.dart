@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/activity/skill_document_viewer.dart';
 import 'package:wing/core/services/profile_tool_setup_session.dart';
 import 'package:wing/core/screens/administration/admin_provider_credentials.dart';
 import 'package:wing/core/models/settings_edit.dart';
@@ -9,7 +10,6 @@ import 'package:wing/core/screens/administration/admin_memory_page.dart';
 import 'package:wing/core/screens/administration/admin_tool_setup_page.dart';
 import 'package:wing/core/screens/administration/admin_skills_page.dart';
 import 'package:wing/core/services/profile_skills_session.dart';
-import 'package:wing/core/widgets/tool_activity_details.dart';
 import 'package:wing/core/widgets/resource_filename.dart';
 import 'package:flutter/services.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -66,6 +66,8 @@ void main() {
     await tester.settleMarkdown();
     expect(find.byType(SkillDocumentViewer), findsOneWidget);
     expect(find.text('Review'), findsOneWidget);
+    await tester.tap(find.byTooltip('Skill actions'));
+    await tester.pumpAndSettle();
     expect(find.byTooltip('Install skill'), findsOneWidget);
     expect(find.byTooltip('Edit instructions'), findsNothing);
     expect(fixture.requests.every((request) => request.$1 == 'GET'), isTrue);
@@ -139,10 +141,9 @@ void main() {
           expect(find.text('Research'), findsOneWidget);
           expect(find.text('Review the evidence.'), findsOneWidget);
           expect(find.text('Version'), findsOneWidget);
-          expect(find.text('MIT'), findsOneWidget);
+          expect(find.text('MIT'), findsNothing);
           expect(find.text('evidence'), findsOneWidget);
-          expect(find.byTooltip('Edit instructions'), findsOneWidget);
-          expect(find.byTooltip('Archive skill'), findsOneWidget);
+          expect(find.byTooltip('Skill actions'), findsOneWidget);
           expect(find.text('Edit instructions'), findsNothing);
           await tester.tap(
             find.descendant(
@@ -157,12 +158,19 @@ void main() {
           );
           await tester.tapAt(const Offset(5, 400));
           await tester.pumpAndSettle();
-          await tester.tap(find.byTooltip('Copy skill instructions'));
+          await tester.tap(find.byTooltip('Copy skill name'));
           await tester.pump();
-          expect(copied, raw);
+          expect(copied, 'research');
+          await tester.ensureVisible(find.byTooltip('Show raw content'));
           await tester.tap(find.byTooltip('Show raw content'));
           await tester.pumpAndSettle();
           expect(find.text(raw), findsOneWidget);
+          await tester.ensureVisible(find.byTooltip('Copy content'));
+          await tester.tap(find.byTooltip('Copy content'));
+          await tester.pump();
+          expect(copied, raw);
+          await tester.tap(find.byTooltip('Skill actions'));
+          await tester.pumpAndSettle();
           await tester.tap(find.byTooltip('Edit instructions'));
           await tester.pumpAndSettle();
           expect(find.byType(AdminSkillEditor), findsOneWidget);

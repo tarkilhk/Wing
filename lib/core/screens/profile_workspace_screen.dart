@@ -1,3 +1,4 @@
+import '../widgets/activity/skill_document_viewer.dart';
 import '../models/chat_intelligence.dart';
 import '../models/chat_runtime.dart';
 import '../services/profile_supervision_session.dart';
@@ -1368,207 +1369,219 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         .toList(growable: false);
     final liveToolCount = visibleActivity.whereType<ChatToolEntry>().length;
     final focus = _readingFocus(chat);
-    return LayoutBuilder(
-      builder: (context, constraints) => Column(
-        children: [
-          Expanded(
-            child: ProfileTranscript(
-              key: ValueKey((
-                chat.key,
-                _readingFocus(chat)?.offset,
-                _readingFocus(chat)?.rowId,
-              )),
-              chat: chat,
-              controller: controller,
-              onLoadOlder: () => controller.loadOlderMessages(chat),
-              timeline: timeline,
-              messageBuilder: (entry) => _answer(
-                chat,
-                entry,
-                capturedRows: capturedRows,
-                allowSavedActions: nearby == null,
-              ),
-              focusedMessageId: focus?.rowId,
-              notificationAnchors: _chatNotificationAnchors(chat),
-              onBackToLatest: _readingFocus(chat) == null
-                  ? null
-                  : () => controller.backToLatest(chat),
-              liveToolCount: liveToolCount,
-              loadImage: (path) => _loadAttachmentImage(chat, path),
-              onOpenResource: (output) => _openAnswerOutput(chat, output),
-              onShareResource: (output) => _shareToolResource(chat, output),
-              currentActivity: [
-                if (chat.runtime.tool != null &&
-                    !chat.runtime.toolActivities.any(
-                      (activity) => !activity.isTerminal,
-                    ))
-                  ProfileTranscriptDisclosure(
-                    icon: Icons.terminal_rounded,
-                    label: 'Preparing ${chat.runtime.tool!}',
-                    children: const [Text('Hermes is preparing the tool call')],
-                  ),
-                if (visibleActivity.isNotEmpty)
-                  ProfileExecutionActivity(
-                    entries: visibleActivity,
-                    loadImage: (path) => _loadAttachmentImage(chat, path),
-                    onOpenResource: (output) => _openAnswerOutput(chat, output),
-                    onShareResource: (output) =>
-                        _shareToolResource(chat, output),
-                  ),
-              ],
-              activityTabs: [
-                if (chat.todos.isNotEmpty)
-                  ProfileActivityTab(
-                    id: 'tasks',
-                    label:
-                        'Tasks ${chat.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${chat.todos.length}',
-                    child: ProfileTodoPanel(todos: chat.todos, embedded: true),
-                  ),
-                if (chat.subagents.isNotEmpty)
-                  ProfileActivityTab(
-                    id: 'agents',
-                    label:
-                        'Agents ${chat.subagents.where((agent) => !agent.isTerminal).length}/${chat.subagents.length}',
-                    onSelected: () =>
-                        unawaited(_supervisionFor(chat).refreshSubagents()),
-                    child: ProfileSubagentPanel(
-                      key: ValueKey(('subagents', chat.key)),
-                      session: _supervisionFor(chat),
-                      embedded: true,
-                    ),
-                  ),
-                if (chat.sessionControl?.goal != null ||
-                    chat.sessionControl?.loop != null ||
-                    chat.sessionControl?.heartbeat != null ||
-                    chat.processes.isNotEmpty)
-                  ProfileActivityTab(
-                    id: 'work',
-                    label: 'Work',
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (chat.sessionControl?.goal != null)
-                          ProfileGoalPanel(
-                            key: ValueKey(('goal', chat.key)),
-                            session: _supervisionFor(chat),
-                          ),
-                        if (chat.sessionControl?.loop != null ||
-                            chat.sessionControl?.heartbeat != null ||
-                            chat.processes.isNotEmpty)
-                          ProfileBackgroundWorkPanel(
-                            key: ValueKey(('background', chat.key)),
-                            session: _supervisionFor(chat),
-                          ),
+    return SkillReaderScope(
+      createReader: (document) => controller.skillReader(
+        document.readerTarget,
+        chat.key.workspace.profileName,
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Column(
+          children: [
+            Expanded(
+              child: ProfileTranscript(
+                key: ValueKey((
+                  chat.key,
+                  _readingFocus(chat)?.offset,
+                  _readingFocus(chat)?.rowId,
+                )),
+                chat: chat,
+                controller: controller,
+                onLoadOlder: () => controller.loadOlderMessages(chat),
+                timeline: timeline,
+                messageBuilder: (entry) => _answer(
+                  chat,
+                  entry,
+                  capturedRows: capturedRows,
+                  allowSavedActions: nearby == null,
+                ),
+                focusedMessageId: focus?.rowId,
+                notificationAnchors: _chatNotificationAnchors(chat),
+                onBackToLatest: _readingFocus(chat) == null
+                    ? null
+                    : () => controller.backToLatest(chat),
+                liveToolCount: liveToolCount,
+                loadImage: (path) => _loadAttachmentImage(chat, path),
+                onOpenResource: (output) => _openAnswerOutput(chat, output),
+                onShareResource: (output) => _shareToolResource(chat, output),
+                currentActivity: [
+                  if (chat.runtime.tool != null &&
+                      !chat.runtime.toolActivities.any(
+                        (activity) => !activity.isTerminal,
+                      ))
+                    ProfileTranscriptDisclosure(
+                      icon: Icons.terminal_rounded,
+                      label: 'Preparing ${chat.runtime.tool!}',
+                      children: const [
+                        Text('Hermes is preparing the tool call'),
                       ],
                     ),
-                  ),
-              ],
-              tail: [
-                if (chat.composer.observation.error case final error?
-                    when error != chat.runtime.error)
-                  StudioError(error),
-                if (chat.runtime.error != null)
-                  chat.reading.notificationReadTarget?.kind == 'status'
-                      ? _notificationAnchor(
-                          chat,
-                          'status',
-                          chat.reading.notificationReadTarget!.id,
-                          StudioError(chat.runtime.error!),
-                        )
-                      : StudioError(chat.runtime.error!),
-                if (chat.runtime.approval != null)
-                  Builder(
-                    builder: (context) {
-                      final request = chat.runtime.approval!;
-                      return _notificationAnchor(
-                        chat,
-                        'approval',
-                        request.requestId,
-                        GatewayApprovalPanel(
-                          key: ValueKey((chat.key, request.requestId)),
-                          request: request.request,
-                          position: chat.runtime.approvalPosition,
-                          total: chat.runtime.approvalTotal,
-                          enabled:
-                              !chat.runtime.approvalResponding &&
-                              !chat.runtime.reconnecting,
-                          onRespond: (choice) => _run(
-                            () => controller.approve(
-                              chat,
-                              choice.wireValue,
-                              requestId: request.requestId,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                if (chat.runtime.secureInput != null)
-                  Builder(
-                    builder: (context) {
-                      final request = chat.runtime.secureInput!;
-                      return _notificationAnchor(
-                        chat,
-                        'secure',
-                        request.requestId,
-                        GatewaySensitivePromptPanel(
-                          key: ValueKey((
-                            chat.key,
-                            request.kind,
-                            request.requestId,
-                          )),
-                          request: request,
-                          enabled:
-                              !chat.runtime.secureResponding &&
-                              !chat.runtime.reconnecting,
-                          onRespond: (value) =>
-                              controller.respondSensitivePrompt(
-                                chat,
-                                value,
-                                expectedRequest: request,
-                              ),
-                        ),
-                      );
-                    },
-                  ),
-                if (chat.markReadFailed)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: SelectionArea(
-                      child: StudioError(
-                        ProfileWorkspaceController.markReadFailureNotice,
+                  if (visibleActivity.isNotEmpty)
+                    ProfileExecutionActivity(
+                      entries: visibleActivity,
+                      loadImage: (path) => _loadAttachmentImage(chat, path),
+                      onOpenResource: (output) =>
+                          _openAnswerOutput(chat, output),
+                      onShareResource: (output) =>
+                          _shareToolResource(chat, output),
+                    ),
+                ],
+                activityTabs: [
+                  if (chat.todos.isNotEmpty)
+                    ProfileActivityTab(
+                      id: 'tasks',
+                      label:
+                          'Tasks ${chat.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${chat.todos.length}',
+                      child: ProfileTodoPanel(
+                        todos: chat.todos,
+                        embedded: true,
                       ),
                     ),
-                  ),
-                for (final delivery in chat.sideQuestionDeliveries)
-                  _notificationAnchor(
-                    chat,
-                    delivery.kind == SideQuestionDeliveryKind.backgroundTask
-                        ? 'background'
-                        : 'side',
-                    delivery.taskId ?? '',
-                    SideQuestionDeliveryCard(
-                      key: ValueKey((
-                        chat.key,
-                        delivery.kind,
-                        delivery.taskId,
-                        delivery.state,
-                      )),
-                      delivery: delivery,
+                  if (chat.subagents.isNotEmpty)
+                    ProfileActivityTab(
+                      id: 'agents',
+                      label:
+                          'Agents ${chat.subagents.where((agent) => !agent.isTerminal).length}/${chat.subagents.length}',
+                      onSelected: () =>
+                          unawaited(_supervisionFor(chat).refreshSubagents()),
+                      child: ProfileSubagentPanel(
+                        key: ValueKey(('subagents', chat.key)),
+                        session: _supervisionFor(chat),
+                        embedded: true,
+                      ),
                     ),
-                  ),
-                if (chat.runtime.pendingQuestion != null)
-                  _notificationAnchor(
-                    chat,
-                    'question',
-                    chat.runtime.pendingQuestion!.requestId,
-                    _questionPanel(chat),
-                  ),
-              ],
+                  if (chat.sessionControl?.goal != null ||
+                      chat.sessionControl?.loop != null ||
+                      chat.sessionControl?.heartbeat != null ||
+                      chat.processes.isNotEmpty)
+                    ProfileActivityTab(
+                      id: 'work',
+                      label: 'Work',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (chat.sessionControl?.goal != null)
+                            ProfileGoalPanel(
+                              key: ValueKey(('goal', chat.key)),
+                              session: _supervisionFor(chat),
+                            ),
+                          if (chat.sessionControl?.loop != null ||
+                              chat.sessionControl?.heartbeat != null ||
+                              chat.processes.isNotEmpty)
+                            ProfileBackgroundWorkPanel(
+                              key: ValueKey(('background', chat.key)),
+                              session: _supervisionFor(chat),
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
+                tail: [
+                  if (chat.composer.observation.error case final error?
+                      when error != chat.runtime.error)
+                    StudioError(error),
+                  if (chat.runtime.error != null)
+                    chat.reading.notificationReadTarget?.kind == 'status'
+                        ? _notificationAnchor(
+                            chat,
+                            'status',
+                            chat.reading.notificationReadTarget!.id,
+                            StudioError(chat.runtime.error!),
+                          )
+                        : StudioError(chat.runtime.error!),
+                  if (chat.runtime.approval != null)
+                    Builder(
+                      builder: (context) {
+                        final request = chat.runtime.approval!;
+                        return _notificationAnchor(
+                          chat,
+                          'approval',
+                          request.requestId,
+                          GatewayApprovalPanel(
+                            key: ValueKey((chat.key, request.requestId)),
+                            request: request.request,
+                            position: chat.runtime.approvalPosition,
+                            total: chat.runtime.approvalTotal,
+                            enabled:
+                                !chat.runtime.approvalResponding &&
+                                !chat.runtime.reconnecting,
+                            onRespond: (choice) => _run(
+                              () => controller.approve(
+                                chat,
+                                choice.wireValue,
+                                requestId: request.requestId,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  if (chat.runtime.secureInput != null)
+                    Builder(
+                      builder: (context) {
+                        final request = chat.runtime.secureInput!;
+                        return _notificationAnchor(
+                          chat,
+                          'secure',
+                          request.requestId,
+                          GatewaySensitivePromptPanel(
+                            key: ValueKey((
+                              chat.key,
+                              request.kind,
+                              request.requestId,
+                            )),
+                            request: request,
+                            enabled:
+                                !chat.runtime.secureResponding &&
+                                !chat.runtime.reconnecting,
+                            onRespond: (value) =>
+                                controller.respondSensitivePrompt(
+                                  chat,
+                                  value,
+                                  expectedRequest: request,
+                                ),
+                          ),
+                        );
+                      },
+                    ),
+                  if (chat.markReadFailed)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: SelectionArea(
+                        child: StudioError(
+                          ProfileWorkspaceController.markReadFailureNotice,
+                        ),
+                      ),
+                    ),
+                  for (final delivery in chat.sideQuestionDeliveries)
+                    _notificationAnchor(
+                      chat,
+                      delivery.kind == SideQuestionDeliveryKind.backgroundTask
+                          ? 'background'
+                          : 'side',
+                      delivery.taskId ?? '',
+                      SideQuestionDeliveryCard(
+                        key: ValueKey((
+                          chat.key,
+                          delivery.kind,
+                          delivery.taskId,
+                          delivery.state,
+                        )),
+                        delivery: delivery,
+                      ),
+                    ),
+                  if (chat.runtime.pendingQuestion != null)
+                    _notificationAnchor(
+                      chat,
+                      'question',
+                      chat.runtime.pendingQuestion!.requestId,
+                      _questionPanel(chat),
+                    ),
+                ],
+              ),
             ),
-          ),
-          _composerPanel(chat, constraints),
-        ],
+            _composerPanel(chat, constraints),
+          ],
+        ),
       ),
     );
   }

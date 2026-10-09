@@ -1,4 +1,6 @@
 import 'profile_model_catalog.dart';
+import 'skill_reader_session.dart';
+import '../models/skill_reader.dart';
 import 'connection_access.dart';
 // Named transport seams keep request functions injectable.
 // ignore_for_file: prefer_initializing_formals
@@ -124,6 +126,13 @@ class ProfileGatewayConnection {
 /// The stock modern Hermes contract. All profile-owned traffic passes through
 /// this immutable scope. There is no unscoped or experimental-recovery fallback.
 class ProfileGateway {
+  late final _skillReader = SkillReaderRepository(_get);
+  SkillReaderSession skillReader(SkillReaderTarget document) =>
+      SkillReaderSession(
+        repository: _skillReader,
+        document: document,
+        profile: scope.profileName,
+      );
   final WorkspaceScope scope;
   late final modelCatalog = ProfileModelCatalog(
     scope: scope,

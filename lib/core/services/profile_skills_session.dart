@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/profile_skills.dart';
+import '../models/skill_reader.dart';
+import 'skill_reader_session.dart';
 import 'administration_repository.dart';
 import 'administration_operation_session.dart';
 import 'connection_manager.dart' show DashboardHttpException;
@@ -7,6 +9,8 @@ import 'workspace_connection_failure.dart';
 
 /// Captured library or Hub route. Children borrow observations and issued authority.
 class ProfileSkillsSession extends ChangeNotifier {
+  SkillReaderSession reader(SkillReaderTarget document) =>
+      _profile.server.skillReader(document, profileName);
   ProfileSkillsSession.library(this._profile) : _hub = false {
     _profile.server.retain();
   }

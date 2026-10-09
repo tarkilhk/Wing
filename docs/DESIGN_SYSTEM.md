@@ -584,8 +584,10 @@ Required loading/recovery flows retain their existing error handling. Publish a
 populated design preview only after its API samples have been captured.
 
 Stock source inspection establishes API contracts; actual product observations
-come through those APIs. SSH, server filesystem/database reads and internal
-Python calls do not qualify as data-acquisition paths for Wing or its prototypes.
+come through those APIs. Supported stock file-list/read APIs qualify when the
+resource path comes from API discovery and the returned content supplies the
+observation. SSH, direct server filesystem/database reads and internal Python
+calls do not qualify as data-acquisition paths for Wing or its prototypes.
 Finding a real server value does not establish that Wing can obtain it. A warning
 label does not authorize displaying unsupported fields. Keep designs within
 verified stock API capabilities unless the owner explicitly changes that scope.
@@ -671,11 +673,96 @@ card. The name stays on one line with end ellipsis; tapping it reveals the actua
 source path when supplied. One header owns eye, eligible share and exact-content
 copy. The eye opens received instructions, not an invented file or a new read.
 Keep full instructions in that Markdown viewer, with raw/formatted switching
-inside it. Supplied tags, author, version and license are quiet viewer context;
-omit missing fields and technical readiness bookkeeping. If no description was
+inside it. Supplied tags, author, version and directory category are quiet viewer
+context. Obtain category from the stock skills catalog, matched to the same skill
+and profile; keep license in the exact original source. A reference section uses
+actual backend file listings beneath the API-supplied skill directory. Show
+one-line filenames, supplied sizes and eligible eye actions; use the same document
+viewer for reference content, raw/formatted switching and exact copy/share.
+Omit the entire reference section when no files are returned. Omit missing fields
+and technical readiness bookkeeping. If no description was
 supplied, use a bounded excerpt of the actual instructions. Setup problems and
 unchanged/binary receipts retain their explicit states. Historical reads do not
 gain editing controls or an invented active state.
+
+In the full skill viewer, put name-only copy on the same row as the skill name.
+The document card owns raw/formatted switching, share and content copy. Scope
+those actions to the displayed mode: exact Markdown in raw mode, rendered text
+in formatted mode, with rich clipboard markup when available. Keep purpose,
+metadata, activity and viewer controls out of copied/shared document content.
+Use the same selection owner for skill instructions and reference documents.
+Copy buttons write directly to the clipboard and give brief confirmation. A copy
+action does not open a selection or export screen; report clipboard failure
+briefly in place. Right-align the last-change date in the compact Activity card.
+
+Section rails allocate equal travel to each section and move continuously through
+its reading progress. Show ticks directly over the document, with a transparent
+track and no track shadow. During dragging, the grip follows the finger directly;
+preview the destination and jump on release. Hand off from the released position
+without resetting the grip to the previous section. When paired with a reader
+dock, the dock owns tap and keyboard access to contents; the grip only scrubs.
+Give the grip an enlarged touch target inset from the phone edge without enlarging
+its painted surface. Small finger drift must not cancel a pending hold. Keep
+normal page scrolling available and prevent a competing page scrollbar from
+overlapping the grip target.
+
+The accepted skill reader combines a bottom dock with a six-dot grip. Place the
+dock above the device's bottom safe area; it shows the current heading and
+section ordinal, previous/next arrows and a tap target for independently
+scrolling Contents. The prototype's design switcher does not ship. Use a 64 × 60
+dp grip target, 4 dp from the right edge, around a 44 × 44 dp painted button.
+Start its rail 64 dp lower than the original 20%-of-screen placement and keep
+the resting button below the trigger text, including at enlarged text sizes.
+Activate on a 250 ms hold or deliberate 12 dp vertical drag; tolerate small
+finger drift. Fade ticks in over 140 ms only while scrubbing, and prefix the
+destination preview with its section number. Cancellation, leaving the app and
+disposal must cancel pending activation. Reduced motion suppresses animation.
+
+Skill activity metrics retain their distinct API meanings. Use the directly
+returned `use_count` and `patch_count` for the main metrics. The stock learning
+graph's `useCount` describes the same recorded loads/references but its filtered
+graph cannot establish zero for missing nodes. Analytics read requests belong in
+secondary details labeled **Read requests · [period]**, with request semantics
+and profile coverage. A successful agent skill load increments both use and view
+counters; their catalog sum with patches does not count distinct actions. Omit
+Events and the redundant Views metric from ordinary skill UI. Never combine
+unlike counters or label them lifetime successful uses.
+Show numbers and profile labels alongside any chart; color alone cannot carry
+the breakdown. Omit selectors for absent or unhelpful metrics.
+
+Skill activity groups use and change observations behind one disclosure. Give
+the reader a compact summary of recorded use, patches/edits and the latest valid
+change date; keep per-profile charts, exact dates and scope explanations inside
+it. A separate Audit card must earn its place with a distinct user task and
+useful information beyond this summary. Comparative charts share a stable
+profile-colour mapping; each chart retains its own metric total. Display each
+count once within the disclosure: when donuts show counts, the shared legend
+identifies profiles, without a repeated count table. Secondary read requests use
+one stacked horizontal bar with counts inside segments and the same profile
+colours. Place valid per-profile last-change dates after Read requests, under a
+separator. Keep exact small-slice values accessible through chart descriptions or
+inspection. Put charts beside each other when labels and counts fit, and stack
+them at narrow widths or enlarged text. Represent confirmed zero totals without
+inventing a proportional ring; missing records remain unknown.
+
+Use directly returned skill change counters for the change summary. Stock
+`/api/profiles` and `/api/fs/list` can discover the profile's skills telemetry
+file; `/api/fs/read-text` supplies its per-skill `use_count`, `patch_count` and
+`last_patched_at`. Match the exact skill name, validate counter values and retain
+profile coverage. Hermes increments this counter for patches and full edits, so
+label it patches/edits and its timestamp last change. Sum only returned records;
+missing records are unknown, not zero. No time window is supplied. Never infer
+patches by subtracting read/view counters from combined events. A telemetry
+`created_at` can be seeded or reset and does not establish skill creation.
+
+Keep declared author/version in their existing metadata owner. Returned learning
+state and pinning can explain per-profile maintenance; a lone file modification
+date belongs in quiet metadata rather than an otherwise redundant disclosure.
+Label file `mtime` as file modification. The learning graph's generic timestamp
+does not identify whether it came from use, view, patch, creation or file time;
+it cannot establish a creation date, update date or last use. A curator-management
+marker does not prove authorship. Build no unsupported creation/edit history.
+
 Activity and Hermes administration skill reads use the same document viewer
 component and declaration selection. Administration retains its captured profile,
 read recovery and eligible edit/archive/uninstall actions; those controls do not

@@ -1,3 +1,4 @@
+import 'activity/activity_detail_actions.dart';
 import '../models/chat_output.dart';
 import 'dart:async';
 
@@ -6,7 +7,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../presentation/tool_activity_details.dart';
-import '../presentation/skill_document.dart';
 import '../presentation/tool_call_presentation.dart';
 import '../services/web_preview.dart';
 import '../services/file_open_error_message.dart';
@@ -16,20 +16,13 @@ import 'markdown_message_content.dart';
 import 'resource_filename.dart';
 import 'studio_error.dart';
 
-part 'activity/skill_document_viewer.dart';
+import 'activity/skill_document_viewer.dart';
 
 // Read options is the owner's reference for every activity section's frame.
 const _toolInsets = EdgeInsets.all(WingSpacing.sm);
 // The final button supplies the trailing inset around its icon.
 const _toolHorizontalInsets = EdgeInsets.only(left: WingSpacing.sm);
 const _toolVerticalInsets = EdgeInsets.symmetric(vertical: WingSpacing.sm);
-const _toolActionStyle = ButtonStyle(
-  minimumSize: WidgetStatePropertyAll(Size.square(32)),
-  maximumSize: WidgetStatePropertyAll(Size.square(32)),
-  padding: WidgetStatePropertyAll(_toolInsets),
-  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-  visualDensity: VisualDensity.standard,
-);
 
 /// The accepted activity surface. Content renderers never add another frame.
 class ActivityDetailsCard extends StatelessWidget {
@@ -53,34 +46,6 @@ class ActivityDetailsCard extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Icon-only captured commands, with the same geometry as content actions.
-class ActivityDetailAction extends StatelessWidget {
-  const ActivityDetailAction({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.busy = false,
-  });
-  final String label;
-  final IconData icon;
-  final VoidCallback? onPressed;
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-    style: _toolActionStyle,
-    tooltip: label,
-    onPressed: busy ? null : onPressed,
-    icon: busy
-        ? const SizedBox.square(
-            dimension: 16,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          )
-        : Icon(icon, size: 16),
-  );
 }
 
 /// Quiet supplied context, separated from source/prose and interactive controls.
@@ -419,7 +384,7 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
         if (widget.onViewReceipt != null ||
             (output != null && widget.onOpen != null))
           IconButton(
-            style: _toolActionStyle,
+            style: activityActionStyle,
             tooltip:
                 widget.viewLabel ??
                 (image
@@ -440,7 +405,7 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
           ),
         if (output?.path != null && widget.onShare != null)
           IconButton(
-            style: _toolActionStyle,
+            style: activityActionStyle,
             tooltip: image ? 'Share image' : 'Share file',
             onPressed: busy ? null : () => _run(share: true),
             icon: _sharing
@@ -551,17 +516,23 @@ class _SkillActivityContent extends StatelessWidget {
         label: skill.document.name,
         leadingIcon: Icons.menu_book_outlined,
         viewLabel: 'Open skill instructions',
-        onViewReceipt: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => SkillDocumentViewer(
-              document: skill.document,
-              output: output,
-              loadImage: loadImage,
-              onOpenRemoteFile: onOpen,
-              onShare: onShare,
+        onViewReceipt: () {
+          final createReader = SkillReaderScope.maybeOf(context);
+          unawaited(
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => SkillDocumentViewer(
+                  document: skill.document,
+                  createReader: createReader == null
+                      ? null
+                      : () => createReader(skill.document),
+                  loadImage: loadImage,
+                  onOpenRemoteFile: onOpen,
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
         onShare: onShare,
         copyText: skill.content.copyText,
         copyLabel: 'Copy skill instructions',
@@ -1019,45 +990,6 @@ TextSpan _lineSpan(
   );
 }
 
-/// Exact observed text, copied independently of wrapping, clipping or markup.
-class ToolDetailCopyButton extends StatefulWidget {
-  const ToolDetailCopyButton({
-    super.key,
-    required this.label,
-    required this.text,
-  });
-  final String label;
-  final String text;
-  @override
-  State<ToolDetailCopyButton> createState() => _ToolDetailCopyButtonState();
-}
-
-class _ToolDetailCopyButtonState extends State<ToolDetailCopyButton> {
-  bool _copied = false;
-  Timer? _reset;
-  @override
-  void dispose() {
-    _reset?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-    style: _toolActionStyle,
-    tooltip: _copied ? '${widget.label}: copied' : widget.label,
-    icon: Icon(_copied ? Icons.check : Icons.copy_outlined, size: 16),
-    onPressed: () async {
-      await Clipboard.setData(ClipboardData(text: widget.text));
-      if (!mounted) return;
-      _reset?.cancel();
-      setState(() => _copied = true);
-      _reset = Timer(const Duration(seconds: 2), () {
-        if (mounted) setState(() => _copied = false);
-      });
-    },
-  );
-}
-
 class _ActivityTextViewer extends StatefulWidget {
   const _ActivityTextViewer({
     required this.block,
@@ -1065,76 +997,37 @@ class _ActivityTextViewer extends StatefulWidget {
     this.documentPath,
     this.onOpenRemoteFile,
     required this.copyable,
-    this.title,
-    this.copyLabel,
-    this.formattedHeader,
-    this.output,
-    this.onShare,
-    this.actions = const [],
-    this.bodyBuilder,
   });
   final ToolDetailBlock block;
   final Future<Uint8List> Function(String)? loadImage;
   final String? documentPath;
   final Future<void> Function(ChatOutput)? onOpenRemoteFile;
   final bool copyable;
-  final List<Widget> actions;
-  final Widget Function(BuildContext, Widget)? bodyBuilder;
-  final String? title, copyLabel;
-  final Widget? formattedHeader;
-  final ChatOutput? output;
-  final Future<void> Function(ChatOutput)? onShare;
   @override
   State<_ActivityTextViewer> createState() => _ActivityTextViewerState();
 }
 
 class _ActivityTextViewerState extends State<_ActivityTextViewer> {
   bool _raw = false;
-  bool _sharing = false;
-
-  Future<void> _share() async {
-    if (_sharing) return;
-    setState(() => _sharing = true);
-    try {
-      await widget.onShare!(widget.output!);
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: StudioError(fileOpenErrorMessage(error))),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _sharing = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final block = widget.block;
     return Scaffold(
       appBar: ResourceViewerAppBar(
         context: context,
-        title: widget.title ?? block.label,
+        title: block.label,
         target: widget.documentPath,
-        resourceLabel: widget.title,
+        resourceLabel: block.label,
         actions: [
-          ...widget.actions,
           if (block.markdown)
             ActivityDetailAction(
               label: _raw ? 'Show formatted content' : 'Show raw content',
               icon: _raw ? Icons.article_outlined : Icons.code_rounded,
               onPressed: () => setState(() => _raw = !_raw),
             ),
-          if (widget.output?.path != null && widget.onShare != null)
-            ActivityDetailAction(
-              label: 'Share file',
-              icon: Icons.share_outlined,
-              busy: _sharing,
-              onPressed: _share,
-            ),
           if (widget.copyable && block.copyable && block.copyText.isNotEmpty)
             ToolDetailCopyButton(
-              label: widget.copyLabel ?? 'Copy ${block.label}',
+              label: 'Copy ${block.label}',
               text: block.copyText,
             ),
         ],
@@ -1145,8 +1038,6 @@ class _ActivityTextViewerState extends State<_ActivityTextViewer> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (!_raw && widget.formattedHeader != null)
-                  widget.formattedHeader!,
                 ActivityDetailsCard(
                   children: [
                     ActivityDetailSection(
@@ -1169,7 +1060,7 @@ class _ActivityTextViewerState extends State<_ActivityTextViewer> {
               ],
             ),
           );
-          return widget.bodyBuilder?.call(context, body) ?? body;
+          return body;
         },
       ),
     );

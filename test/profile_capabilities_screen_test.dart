@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/activity/skill_document_viewer.dart';
 import 'package:wing/core/services/profile_capabilities_session.dart';
 import 'dart:async';
 
@@ -7,7 +8,6 @@ import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/profile_capabilities_screen.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profiles_repository.dart';
-import 'package:wing/core/widgets/tool_activity_details.dart';
 import 'helpers/pump_markdown_widget.dart';
 
 final _scope = WorkspaceScope(connectionId: 'server-a', profileName: 'work');

@@ -1,4 +1,6 @@
 import 'profile_model_catalog.dart';
+import 'skill_reader_session.dart';
+import '../models/skill_reader.dart';
 import 'connection_access.dart';
 import 'dart:async';
 import 'dart:io';
@@ -45,6 +47,17 @@ typedef AdministrationMutation =
 /// One connection, independent of the currently selected workspace.
 /// Profile views capture an explicit canonical scope.
 class AdministrationRepository {
+  late final _skillReader = SkillReaderRepository(
+    (endpoint, query) => read(endpoint, query),
+  );
+  SkillReaderSession skillReader(SkillReaderTarget document, String profile) =>
+      SkillReaderSession(
+        repository: _skillReader,
+        document: document,
+        profile: profile,
+        retain: retain,
+        release: release,
+      );
   final _modelCatalogs = <String, ProfileModelCatalog>{};
   ProfileModelCatalog _modelCatalog(String name) {
     if (_closed) {

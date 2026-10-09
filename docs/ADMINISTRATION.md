@@ -55,11 +55,26 @@ separate enablement/setup/platform facts with the owning setup route. Skill libr
 Discover skills and Agent plugins remain distinct secondary destinations in the
 Browse and manage skills menu.
 Installed skill details reuse the same `SkillDocumentViewer` and received-document
-selection as Activity skill reads: formatted instructions, quiet declaration
-metadata, exact raw mode and exact-content copy. The administration session
-retains profile scope, refresh/recovery and eligible icon-only edit, archive or
-uninstall actions. Viewing does not issue edits. A content-only receipt does not
-invent a source path or file-sharing capability.
+selection as Activity skill reads. The name's copy button copies only the name;
+raw/formatted, share and content-copy controls belong to the instructions card.
+The bottom reader dock opens Contents or steps between sections. Hold or drag
+the six-dot grip to browse numbered sections, then release to jump.
+Quiet metadata shows supplied version, author, directory category and tags.
+API-discovered reference files precede Activity and open the same reader.
+Activity summarizes recorded uses and patches/edits across observed profiles;
+its centered disclosure shows separate profile charts, secondary 90-day read
+requests and valid last-change dates. Missing records remain unknown and missing
+sections are omitted. The administration session retains profile scope,
+refresh/recovery and eligible edit, archive or uninstall actions in the
+icon-only skill-actions menu. Viewing does not issue edits. A content-only
+receipt does not invent a source path or file-sharing capability.
+
+Integration inspected unmodified upstream Hermes commit
+[`1744a19e0df568c647e4f3ff9c37f2a284a282fb`](https://github.com/NousResearch/hermes-agent/tree/1744a19e0df568c647e4f3ff9c37f2a284a282fb)
+on 9 October 2026: stock skills catalog/content, profile discovery, filesystem
+listing/text APIs and analytics usage. Wing reads returned `.usage.json` content
+through the filesystem API for exact counters; it uses no SSH or custom backend
+endpoints. Analytics read requests remain distinct from use/change counters.
 Provider inventories use compact status/source/expiry rows and an explicit Add
 service key catalog. Account details offer renewal, sign-in, status checks and
 removal according to the observed credential source. Memory leads with retained entries and a

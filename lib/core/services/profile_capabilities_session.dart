@@ -2,10 +2,14 @@ import 'package:flutter/foundation.dart';
 
 import '../models/profile_capabilities.dart';
 import 'profile_gateway.dart';
+import 'skill_reader_session.dart';
+import '../models/skill_reader.dart';
 
 /// Captured-profile commands and detached observations for one capabilities route.
 /// Borrows its gateway; retiring the route revokes dispatch, not the connection.
 class ProfileCapabilitiesSession extends ChangeNotifier {
+  SkillReaderSession reader(SkillReaderTarget document) =>
+      _gateway.skillReader(document);
   ProfileCapabilitiesSession(ProfileGateway gateway) : _gateway = gateway;
   final ProfileGateway _gateway;
   String get profileName => _gateway.scope.profileName;
