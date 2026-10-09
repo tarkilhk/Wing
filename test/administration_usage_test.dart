@@ -64,8 +64,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const capture = bool.fromEnvironment('CAPTURE_USAGE');
   setUpAll(() async {
-    // Exercise the production bundled asset, including pubspec registration.
-    await rootBundle.loadString('assets/pricing/openai.json');
     if (!capture) return;
     const root = String.fromEnvironment('CAPTURE_FONT_DIR');
     for (final font in {
@@ -89,11 +87,16 @@ void main() {
     addTearDown(fixture.server.close);
     rows = [_sol(), _astra()];
     offline = false;
-    fixture.override = (method, path, query, body) async {
+    fixture.override = withSubscriptionPrices((
+      method,
+      path,
+      query,
+      body,
+    ) async {
       if (offline) throw StateError('Offline');
       if (path == 'analytics/usage') return dailyData();
       return {'models': rows, 'period_days': int.parse(query['days']!)};
-    };
+    });
   });
 
   Future<void> show(
@@ -119,9 +122,6 @@ void main() {
         ),
         home: AnalyticsPage(profile: fixture.server.profile('personal')),
       ),
-    );
-    await tester.runAsync(
-      () => rootBundle.loadString('assets/pricing/openai.json'),
     );
     await tester.pumpAndSettle(const Duration(milliseconds: 250));
   }
@@ -186,7 +186,7 @@ void main() {
     await reveal(tester, find.byType(UsageAreaChart));
     expect(find.text('Trend per token type'), findsOneWidget);
     expect(find.byType(UsageAreaChart), findsOneWidget);
-    expect(fixture.requests.length, 3);
+    expect(fixture.requests.length, 4);
     expect(find.text('Cached input'), findsWidgets);
     final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
     await tap(tester, find.byKey(ValueKey('usage-day-$today')));
@@ -211,9 +211,34 @@ void main() {
     await tap(tester, find.text('Show token trend'));
     await reveal(tester, find.byType(UsageAreaChart));
     expect(find.byType(UsageAreaChart), findsOneWidget);
-    expect(fixture.requests.length, 3);
+    expect(fixture.requests.length, 4);
     await tap(tester, find.text('Selected period'));
     expect(find.text('300K'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('stock subscription catalogs without prices show unavailable', (
+    tester,
+  ) async {
+    fixture.override = (_, path, query, _) async => path == 'model/options'
+        ? {
+            'providers': [
+              {
+                'slug': 'openai-codex',
+                'name': 'Subscription',
+                'models': ['gpt-6-astra', 'gpt-5.6-sol'],
+              },
+            ],
+          }
+        : path == 'analytics/usage'
+        ? dailyData()
+        : {'models': rows};
+    await show(tester);
+    expect(find.text('API-equivalent cost'), findsOneWidget);
+    expect(find.text('Unavailable'), findsWidgets);
+    expect(find.text('USD 0.00'), findsNothing);
+    expect(find.text('USD 5.44'), findsNothing);
+    expect(find.text('1.4M'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -226,10 +251,13 @@ void main() {
     }
     expect(find.text('ALL'), findsNothing);
     await tap(tester, find.text('365D'));
-    expect(fixture.requests.length, 4);
-    expect(fixture.requests.last.$3['days'], '365');
+    expect(fixture.requests.length, 6);
+    expect(
+      fixture.requests.where((r) => r.$2 == 'analytics/models').last.$3['days'],
+      '365',
+    );
     await tap(tester, find.text('7D'));
-    expect(fixture.requests.length, 4);
+    expect(fixture.requests.length, 6);
     await tap(tester, find.text('365D'));
     await tester.drag(
       find.byKey(const ValueKey('usage-year-band')),
@@ -237,7 +265,7 @@ void main() {
     );
     await tester.pumpAndSettle(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('usage-year-band')), findsOneWidget);
-    expect(fixture.requests.length, 4);
+    expect(fixture.requests.length, 6);
     expect(tester.takeException(), isNull);
   });
 
@@ -363,13 +391,13 @@ void main() {
     tester,
   ) async {
     final pending = Completer<Map<String, dynamic>>();
-    fixture.override = (_, path, query, _) async {
+    fixture.override = withSubscriptionPrices((_, path, query, _) async {
       if (path == 'analytics/usage') return dailyData();
       if (query['days'] == '30') return pending.future;
       return {
         'models': [_paid()..['estimated_cost'] = 7],
       };
-    };
+    });
     await show(tester);
     await tester.tap(find.text('30D'));
     await tester.pump();
@@ -392,7 +420,7 @@ void main() {
     (tester) async {
       final date = DateTime.now().toUtc().subtract(const Duration(days: 100));
       final id = date.toIso8601String().substring(0, 10);
-      fixture.override = (_, path, query, _) async {
+      fixture.override = withSubscriptionPrices((_, path, query, _) async {
         if (path == 'analytics/models') {
           return {
             'models': [_astra()],
@@ -409,7 +437,7 @@ void main() {
               },
           ],
         };
-      };
+      });
       await show(tester);
       await tap(tester, find.byKey(ValueKey('usage-day-$id')));
       await tap(tester, find.text('Show daily tokens'));
@@ -417,7 +445,7 @@ void main() {
       expect(find.text('456'), findsOneWidget);
       expect(find.text('789'), findsOneWidget);
       expect(find.text('Selected period'), findsOneWidget);
-      expect(fixture.requests.length, 3);
+      expect(fixture.requests.length, 4);
       await tap(tester, find.text('Selected period'));
       expect(find.text('Last 7 days · all models'), findsOneWidget);
     },
@@ -454,7 +482,7 @@ void main() {
       testWidgets(
         'server date rollover ${brightness.name} at $scale text retains independent year data',
         (tester) async {
-          fixture.override = (_, path, query, _) async {
+          fixture.override = withSubscriptionPrices((_, path, query, _) async {
             if (path == 'analytics/models') {
               return {
                 'models': [_astra()],
@@ -470,7 +498,7 @@ void main() {
                 },
               ],
             };
-          };
+          });
           await show(tester, brightness: brightness, scale: scale);
           await tap(tester, find.byKey(const ValueKey('usage-day-2027-01-01')));
           expect(
@@ -482,7 +510,7 @@ void main() {
           await tap(tester, find.byKey(const ValueKey('usage-day-2026-12-31')));
           await tap(tester, find.text('Show daily tokens'));
           expect(find.text('123'), findsOneWidget);
-          expect(fixture.requests.length, 3);
+          expect(fixture.requests.length, 4);
           await tap(tester, find.text('Selected period'));
           await reveal(tester, find.byType(UsageAreaChart));
           expect(find.text('150 tokens / day'), findsOneWidget);
@@ -494,7 +522,7 @@ void main() {
         tester,
       ) async {
         final today = DateTime.now().toUtc();
-        fixture.override = (_, path, query, _) async {
+        fixture.override = withSubscriptionPrices((_, path, query, _) async {
           if (path == 'analytics/usage') {
             final days = int.parse(query['days']!);
             return {
@@ -514,7 +542,7 @@ void main() {
             };
           }
           return {'models': rows, 'period_days': int.parse(query['days']!)};
-        };
+        });
         await show(tester, brightness: brightness, scale: scale);
         await snapshot(tester, '${brightness.name}-$scale-summary');
         await reveal(tester, find.byType(UsageAreaChart));

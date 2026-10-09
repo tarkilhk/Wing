@@ -59,7 +59,7 @@ class UsageAnalyticsSession extends ChangeNotifier {
   Future<void> load() => Future.wait([_loadYear(), _loadPeriod()]);
 
   Future<void> refresh() =>
-      Future.wait([_loadYear(refresh: true), _loadPeriod()]);
+      Future.wait([_loadYear(refresh: true), _loadPeriod(refresh: true)]);
 
   Future<void> selectPeriod(int days) async {
     if (_closed) return;
@@ -105,7 +105,10 @@ class UsageAnalyticsSession extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadPeriod({bool failedOnly = false}) async {
+  Future<void> _loadPeriod({
+    bool failedOnly = false,
+    bool refresh = false,
+  }) async {
     final days = _days;
     if (_closed || _pending.contains(days)) return;
     _pending.add(days);
@@ -114,6 +117,8 @@ class UsageAnalyticsSession extends ChangeNotifier {
     final result = await _reader.load(
       days,
       retry: failedOnly ? _periods[days] : null,
+      refresh: refresh,
+      canRead: () => !_closed,
     );
     if (_closed) return;
     final old = _periods[days];

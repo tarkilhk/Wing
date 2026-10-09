@@ -1,8 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/usage_analytics.dart';
-import 'package:wing/core/models/usage_cost.dart';
+import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/services/usage_analytics.dart';
 import 'support/administration_fixture.dart';
 
@@ -17,9 +16,172 @@ void main() {
     'reasoning_tokens': 20000,
     'estimated_cost': 0,
   };
-  final prices = OpenAiPricingCatalog.fromJson(
-    File('assets/pricing/openai.json').readAsStringSync(),
+  final prices = ModelCatalog.fromOptions(subscriptionModelOptions());
+  test('subscription valuation uses the picker backend rates', () async {
+    final fixture = AdministrationFixture();
+    addTearDown(fixture.server.close);
+    fixture.override = (_, path, _, _) async {
+      if (path == 'model/options') {
+        return {
+          'providers': [
+            {
+              'slug': 'openai-codex',
+              'name': 'Subscription',
+              'models': ['gpt-6-astra'],
+              'pricing': {
+                'gpt-6-astra': {
+                  'input': r'$20.00',
+                  'cache': r'$2.00',
+                  'output': r'$100.00',
+                  'free': false,
+                },
+              },
+            },
+          ],
+        };
+      }
+      if (path == 'analytics/usage') return {'daily': []};
+      return {
+        'models': [row],
+      };
+    };
+    final profile = fixture.server.profile('personal');
+    final picker = await profile.modelCatalog.load();
+    expect(
+      picker.choice('openai-codex', 'gpt-6-astra')!.prices!.input,
+      r'$20.00',
+    );
+    final result = await UsageAnalyticsReader(profile).load(7);
+    expect(result.models!.costs.total, 10);
+  });
+  test(
+    'missing backend subscription prices preserve tokens and reported costs',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      fixture.override = (_, path, _, _) async {
+        if (path == 'model/options') {
+          return {
+            'providers': [
+              {
+                'slug': 'openai-codex',
+                'name': 'Subscription',
+                'models': ['gpt-6-astra'],
+              },
+            ],
+          };
+        }
+        if (path == 'analytics/usage') return {'daily': []};
+        return {
+          'models': [
+            row,
+            {...row, 'provider': 'openai', 'estimated_cost': 7},
+          ],
+        };
+      };
+      final result = await UsageAnalyticsReader(
+        fixture.server.profile('personal'),
+      ).load(7);
+      expect(result.models!.tokens.total, 2560000);
+      expect(result.models!.costs.apiEquivalent, isNull);
+      expect(result.models!.costs.reported, 7);
+      expect(result.models!.costs.isPartial, isTrue);
+      expect(result.modelsError, isNull);
+    },
   );
+
+  test(
+    'pricing failure retains usage and retries the captured catalog',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      var offline = true;
+      final priced = withSubscriptionPrices(
+        (_, path, _, _) async => path == 'analytics/usage'
+            ? {'daily': []}
+            : {
+                'models': [row],
+              },
+      );
+      fixture.override = (method, path, query, body) async {
+        if (path == 'model/options' && offline) {
+          throw TimeoutException('Offline');
+        }
+        return priced(method, path, query, body);
+      };
+      final reader = UsageAnalyticsReader(
+        fixture.server.profile('client-work'),
+      );
+      final partial = await reader.load(7);
+      expect(partial.models!.tokens.total, 1280000);
+      expect(partial.models!.costs.total, isNull);
+      expect(partial.modelsError, contains('prices'));
+      expect(partial.modelsRetryable, isTrue);
+      offline = false;
+      fixture.requests.clear();
+      final complete = await reader.load(7, retry: partial);
+      expect(complete.models!.costs.total, 5);
+      expect(complete.modelsError, isNull);
+      expect(complete.daily, same(partial.daily));
+      expect(fixture.requests.map((r) => r.$2), [
+        'analytics/models',
+        'model/options',
+      ]);
+      expect(
+        fixture.requests.every((r) => r.$3['profile'] == 'client-work'),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'analytics and picker share an in-flight catalog and refresh backend prices',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      final held = Completer<Map<String, dynamic>>();
+      fixture.override = (method, path, query, body) => path == 'model/options'
+          ? held.future
+          : Future.value(
+              path == 'analytics/usage'
+                  ? {'daily': []}
+                  : {
+                      'models': [row],
+                    },
+            );
+      final profile = fixture.server.profile('personal');
+      final picker = profile.modelCatalog.load();
+      final reader = UsageAnalyticsReader(profile);
+      final pending = reader.load(7);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        fixture.requests.where((r) => r.$2 == 'model/options'),
+        hasLength(1),
+      );
+      held.complete(subscriptionModelOptions());
+      await picker;
+      expect((await pending).models!.costs.total, 5);
+      final updated = subscriptionModelOptions();
+      updated['providers'][0]['pricing']['gpt-6-astra']['input'] = r'$20.00';
+      fixture.override = (_, path, _, _) async => path == 'model/options'
+          ? updated
+          : path == 'analytics/usage'
+          ? {'daily': []}
+          : {
+              'models': [row],
+            };
+      final refreshed = await reader.load(7, refresh: true);
+      expect(refreshed.models!.costs.total, 7.5);
+      expect(
+        fixture.requests
+            .where((r) => r.$2 == 'model/options')
+            .last
+            .$3['refresh'],
+        '1',
+      );
+    },
+  );
+
   test(
     'failed yearly cache is evicted and only failed aggregate is retried',
     () async {
@@ -183,13 +345,13 @@ void main() {
       addTearDown(fixture.server.close);
       final models = Completer<Map<String, dynamic>>();
       final daily = Completer<Map<String, dynamic>>();
-      fixture.override = (_, path, _, _) =>
-          path == 'analytics/models' ? models.future : daily.future;
+      fixture.override = withSubscriptionPrices(
+        (_, path, _, _) =>
+            path == 'analytics/models' ? models.future : daily.future,
+      );
       final reader = UsageAnalyticsReader(
         fixture.server.profile('client-work'),
         now: () => now,
-        loadPrices: () async =>
-            File('assets/pricing/openai.json').readAsStringSync(),
       );
       final result = reader.load(365);
       expect(fixture.requests.map((r) => r.$2).toSet(), {

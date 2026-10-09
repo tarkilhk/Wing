@@ -93,3 +93,20 @@ commit locks and cancellation. `intelligence_sheet_layout_test.dart` renders bot
 themes at normal, enlarged and landscape sizes. Its density guard measures actual rendered row spacing, search, tabs and shortcut heights, and requires all 14 unpriced Codex choices to fit on a 412dp phone with Apply reachable. This catches inherited Material minimums and tap-target padding; source linting cannot establish the resolved layout. Existing domain/view dependency
 and intelligence read-admission guards protect the structural boundaries;
 behavioral tests establish ordering and uncertainty that import linting cannot.
+
+## Shared pricing observations
+
+`ModelPrices` owns decoding stock USD-per-million price labels into optional
+numeric rates as well as preserving the picker display strings. Analytics borrows
+`ProfileAdministration.modelCatalog`, with the same `ModelCatalog` decoder as chat
+and administration pickers. `ModelUsageCost` performs arithmetic on these typed
+observations using exact provider plus model identity; it owns no pricing I/O or
+independent rate table. Reader/session retirement prevents deferred usage from
+starting a new pricing read, and the session fences late publications.
+
+Stock upstream `8bff64d6ed3414a66976bfa8ab72c14b6bca2a6f`, inspected 9 October
+2026, formats prices in `hermes_cli/inventory.py` using
+`hermes_cli/models_pricing.py`. Only supported API routes supply prices;
+`openai-codex` does not. Missing rates remain unavailable in Analytics. See
+[Analytics pricing behavior](ADMINISTRATION.md) and the focused
+`usage_cost_test.dart` / `usage_analytics_test.dart` regressions.

@@ -61,5 +61,4 @@ flutter:
         - asset: assets/fonts/wing-icons.ttf
   assets:
     - PRIVACY.md
-    - assets/pricing/openai.json
     - assets/icon/icon.png

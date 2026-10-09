@@ -1,63 +1,4 @@
-import 'dart:convert';
-
-/// Published standard API rates, applied only to the openai-codex route.
-/// Exact IDs avoid pricing a newly discovered model as a different model.
-class OpenAiPricingCatalog {
-  final Map<String, OpenAiModelPrice> _models;
-
-  OpenAiPricingCatalog._(this._models);
-
-  factory OpenAiPricingCatalog.fromJson(String source) {
-    final json = jsonDecode(source);
-    if (json is! Map || json['version'] != 1 || json['currency'] != 'USD') {
-      throw const FormatException('Invalid OpenAI price catalogue');
-    }
-    final models = json['models'];
-    if (models is! Map || models.isEmpty) {
-      throw const FormatException('Missing OpenAI prices');
-    }
-    final prices = <String, OpenAiModelPrice>{};
-    for (final entry in models.entries) {
-      if (entry.key is! String || (entry.key as String).isEmpty) {
-        throw const FormatException('Invalid model ID');
-      }
-      prices[entry.key as String] = OpenAiModelPrice._fromJson(entry.value);
-    }
-    return OpenAiPricingCatalog._(Map.unmodifiable(prices));
-  }
-
-  OpenAiModelPrice? priceFor(String model) => _models[model];
-}
-
-class OpenAiModelPrice {
-  final double input;
-  final double cachedInput;
-  final double output;
-
-  const OpenAiModelPrice._(this.input, this.cachedInput, this.output);
-
-  factory OpenAiModelPrice._fromJson(Object? value) {
-    if (value is! Map || value['usd_per_million'] is! Map) {
-      throw const FormatException('Invalid model price');
-    }
-    final rates = value['usd_per_million'] as Map;
-    final input = usageAmount(rates['input']);
-    final cachedInput = usageAmount(rates['cached_input']);
-    final output = usageAmount(rates['output']);
-    final verifiedOn = DateTime.tryParse('${value['verified_on']}');
-    final source = Uri.tryParse('${value['source']}');
-    if (input == null ||
-        cachedInput == null ||
-        output == null ||
-        verifiedOn == null ||
-        source == null ||
-        source.scheme != 'https' ||
-        source.host != 'developers.openai.com') {
-      throw const FormatException('Incomplete model price');
-    }
-    return OpenAiModelPrice._(input, cachedInput, output);
-  }
-}
+import 'model_catalog.dart';
 
 double? usageAmount(Object? value) =>
     value is num && value.isFinite && value >= 0 ? value.toDouble() : null;
@@ -76,6 +17,9 @@ enum UsageCostUnavailable { price, tokens, reportedCost }
 /// Hermes analytics input is already uncached; output already includes reasoning.
 /// These estimates intentionally exclude cache writes and request-level surcharges.
 class ModelUsageCost {
+  static bool isSubscriptionUsage(Map<dynamic, dynamic> usage) =>
+      usage['provider'] == 'openai-codex';
+
   final String model;
   final bool isApiEquivalent;
   final List<int?> tokenCounts;
@@ -95,7 +39,7 @@ class ModelUsageCost {
   ) : model = usage['model'] is String
           ? usage['model'] as String
           : 'Unknown model',
-      isApiEquivalent = usage['provider'] == 'openai-codex',
+      isApiEquivalent = isSubscriptionUsage(usage),
       tokenCounts = List.unmodifiable([
         usageTokenCount(usage['input_tokens']),
         usageTokenCount(usage['cache_read_tokens']),
@@ -104,9 +48,9 @@ class ModelUsageCost {
 
   factory ModelUsageCost.fromUsage(
     Map<String, dynamic> usage,
-    OpenAiPricingCatalog? catalog,
+    ModelCatalog? catalog,
   ) {
-    if (usage['provider'] != 'openai-codex') {
+    if (!isSubscriptionUsage(usage)) {
       final amount = usageAmount(usage['estimated_cost']);
       return ModelUsageCost._(
         usage,
@@ -117,8 +61,13 @@ class ModelUsageCost {
         amount == null ? UsageCostUnavailable.reportedCost : null,
       );
     }
-    final price = catalog?.priceFor('${usage['model']}');
-    if (price == null) {
+    final price = catalog
+        ?.choice('${usage['provider']}', '${usage['model']}')
+        ?.prices;
+    final inputRate = price?.inputUsdPerMillion;
+    final cachedRate = price?.cacheUsdPerMillion;
+    final outputRate = price?.outputUsdPerMillion;
+    if (inputRate == null || cachedRate == null || outputRate == null) {
       return ModelUsageCost._(
         usage,
         null,
@@ -141,9 +90,9 @@ class ModelUsageCost {
         UsageCostUnavailable.tokens,
       );
     }
-    final inputCost = input / 1000000 * price.input;
-    final cachedCost = cached / 1000000 * price.cachedInput;
-    final outputCost = output / 1000000 * price.output;
+    final inputCost = input / 1000000 * inputRate;
+    final cachedCost = cached / 1000000 * cachedRate;
+    final outputCost = output / 1000000 * outputRate;
     final amount = usageAmount(inputCost + cachedCost + outputCost);
     return ModelUsageCost._(
       usage,

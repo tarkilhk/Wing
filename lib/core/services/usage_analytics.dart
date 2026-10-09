@@ -1,5 +1,5 @@
-import 'package:flutter/services.dart';
 import '../models/usage_analytics.dart';
+import '../models/model_catalog.dart';
 import '../models/usage_cost.dart';
 import 'administration_repository.dart';
 import 'workspace_connection_failure.dart';
@@ -28,17 +28,9 @@ class UsageAnalyticsResult {
 
 class UsageAnalyticsReader {
   final ProfileAdministration profile;
-  final Future<String> Function() loadPrices;
   final DateTime Function() now;
-  OpenAiPricingCatalog? _prices;
-  UsageAnalyticsReader(
-    this.profile, {
-    Future<String> Function()? loadPrices,
-    DateTime Function()? now,
-  }) : loadPrices =
-           loadPrices ??
-           (() => rootBundle.loadString('assets/pricing/openai.json')),
-       now = now ?? DateTime.now;
+  UsageAnalyticsReader(this.profile, {DateTime Function()? now})
+    : now = now ?? DateTime.now;
 
   Future<UsageDaily>? _year;
 
@@ -69,6 +61,8 @@ class UsageAnalyticsReader {
   Future<UsageAnalyticsResult> load(
     int days, {
     UsageAnalyticsResult? retry,
+    bool refresh = false,
+    bool Function()? canRead,
   }) async {
     if (!usagePeriods.contains(days)) throw ArgumentError.value(days, 'days');
     final loadedAt = now().toUtc();
@@ -85,16 +79,23 @@ class UsageAnalyticsReader {
             final data = await profile.read('analytics/models', {
               'days': '$days',
             });
-            if (_prices == null &&
-                data['models'] is List &&
-                (data['models'] as List).any(
-                  (r) => r is Map && r['provider'] == 'openai-codex',
-                )) {
-              _prices = OpenAiPricingCatalog.fromJson(await loadPrices());
-            }
-            models = UsageModels.fromJson(data, _prices);
+            if (canRead?.call() == false) return;
+            ModelCatalog? catalog;
             modelsError = null;
             modelsRetryable = false;
+            if (data['models'] is List &&
+                (data['models'] as List).any(
+                  (r) => r is Map && ModelUsageCost.isSubscriptionUsage(r),
+                )) {
+              try {
+                catalog = await profile.modelCatalog.load(refresh: refresh);
+              } catch (error) {
+                modelsRetryable = isTemporaryWorkspaceFailure(error);
+                modelsError =
+                    'Could not load model prices. Subscription estimates are unavailable.';
+              }
+            }
+            models = UsageModels.fromJson(data, catalog);
           } catch (error) {
             modelsRetryable = isTemporaryWorkspaceFailure(error);
             modelsError = 'Could not load model totals.';

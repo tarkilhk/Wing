@@ -1,22 +1,26 @@
-import 'dart:convert';
-import 'dart:io';
+import 'package:wing/core/models/model_catalog.dart';
+import 'package:wing/core/models/model_catalog_details.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/usage_cost.dart';
 
 void main() {
-  final catalogueJson = {
-    'version': 1,
-    'currency': 'USD',
-    'models': {
-      'example': {
-        'usd_per_million': {'input': 2, 'cached_input': 0.25, 'output': 10},
-        'verified_on': '2026-09-18',
-        'source': 'https://developers.openai.com/api/docs/pricing',
+  ModelCatalog catalog(Map<String, dynamic> rates) => ModelCatalog.fromOptions({
+    'providers': [
+      {
+        'slug': 'openai-codex',
+        'name': 'Subscription',
+        'models': ['example'],
+        'pricing': {'example': rates},
       },
-    },
-  };
-  final prices = OpenAiPricingCatalog.fromJson(jsonEncode(catalogueJson));
+    ],
+  });
+  final prices = catalog({
+    'input': r'$2.00',
+    'cache': r'$0.25',
+    'output': r'$10.00',
+    'free': false,
+  });
   Map<String, dynamic> usage() => {
     'model': 'example',
     'provider': 'openai-codex',
@@ -144,46 +148,80 @@ void main() {
   });
 
   test(
-    'bundled catalogue supplies documented rates for current supported models',
+    'stock price labels decode strictly without inventing missing rates',
     () {
-      final json = File('assets/pricing/openai.json').readAsStringSync();
-      final catalogue = OpenAiPricingCatalog.fromJson(json);
-      for (final id in (jsonDecode(json)['models'] as Map).keys) {
-        final price = catalogue.priceFor(id)!;
-        expect(price.input, greaterThan(0));
-        expect(price.cachedInput, lessThan(price.input));
-        expect(price.output, greaterThan(0));
-        final metadata = (jsonDecode(json)['models'] as Map)[id] as Map;
-        expect(Uri.parse(metadata['source'] as String).path, endsWith('/$id'));
-        expect(DateTime.tryParse(metadata['verified_on'] as String), isNotNull);
+      for (final (label, expected) in [
+        (r'$2.50', 2.5),
+        (r'$0.00', 0.0),
+        (r'$0.00025', 0.00025),
+        ('free', 0.0),
+        ('?', null),
+        ('', null),
+        (null, null),
+        ('2.5', null),
+        (r'$-1.00', null),
+        (r'$NaN', null),
+        (r'$Infinity', null),
+        (r'$1,000', null),
+      ]) {
+        final observation = ModelPrices.fromJson({
+          'input': label,
+          'free': false,
+        });
+        expect(observation.inputUsdPerMillion, expected, reason: '$label');
       }
-      expect(catalogue.priceFor('gpt-6-astra'), isNotNull);
-      expect(catalogue.priceFor('gpt-5.6-sol'), isNotNull);
-      expect(catalogue.priceFor('gpt-5.3-codex-spark'), isNull);
+      final missingCache = catalog({
+        'input': 'free',
+        'output': 'free',
+        'free': true,
+      });
+      expect(
+        ModelUsageCost.fromUsage(usage(), missingCache).unavailable,
+        UsageCostUnavailable.price,
+      );
+      final free = catalog({
+        'input': 'free',
+        'output': 'free',
+        'cache': 'free',
+        'free': true,
+      });
+      expect(ModelUsageCost.fromUsage(usage(), free).amount, 0);
     },
   );
 
-  test(
-    'rejects unsupported catalogue metadata and incomplete price entries',
-    () {
+  test('provider routes and exact model IDs cannot borrow another price', () {
+    final otherProvider = ModelCatalog.fromOptions({
+      'providers': [
+        {
+          'slug': 'openrouter',
+          'name': 'API',
+          'models': ['example'],
+          'pricing': {
+            'example': {
+              'input': r'$2.00',
+              'cache': r'$0.25',
+              'output': r'$10.00',
+              'free': false,
+            },
+          },
+        },
+      ],
+    });
+    expect(
+      ModelUsageCost.fromUsage(usage(), otherProvider).unavailable,
+      UsageCostUnavailable.price,
+    );
+    for (final field in ['input', 'cache', 'output']) {
+      final incomplete = {
+        'input': r'$2.00',
+        'cache': r'$0.25',
+        'output': r'$10.00',
+        'free': false,
+      }..remove(field);
       expect(
-        () => OpenAiPricingCatalog.fromJson(
-          jsonEncode({...catalogueJson, 'version': 2}),
-        ),
-        throwsFormatException,
+        ModelUsageCost.fromUsage(usage(), catalog(incomplete)).unavailable,
+        UsageCostUnavailable.price,
       );
-      expect(
-        () => OpenAiPricingCatalog.fromJson(
-          jsonEncode({...catalogueJson, 'currency': 'EUR'}),
-        ),
-        throwsFormatException,
-      );
-      final broken = jsonDecode(jsonEncode(catalogueJson));
-      broken['models']['example']['usd_per_million'].remove('cached_input');
-      expect(
-        () => OpenAiPricingCatalog.fromJson(jsonEncode(broken)),
-        throwsFormatException,
-      );
-    },
-  );
+    }
+  });
 }

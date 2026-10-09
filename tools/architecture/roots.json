@@ -304,14 +304,6 @@
       "status": "supported"
     },
     {
-      "id": "asset-assets/pricing/openai.json",
-      "kind": "asset-or-source",
-      "path": "assets/pricing/openai.json",
-      "purpose": "Bundled pricing catalogue",
-      "source": "lib/core/services/usage_analytics.dart:40",
-      "status": "supported"
-    },
-    {
       "id": "authored-census-cli",
       "kind": "python-cli",
       "path": "tools/architecture/rules/authored_census.py",
@@ -6622,11 +6614,6 @@
     },
     {
       "path": "assets/icon/wing.svg",
-      "area": "assets",
-      "provenance": "tracked"
-    },
-    {
-      "path": "assets/pricing/openai.json",
       "area": "assets",
       "provenance": "tracked"
     },

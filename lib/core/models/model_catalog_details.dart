@@ -5,6 +5,31 @@ class ModelPrices {
   final String? output;
   final String? cache;
   final bool free;
+
+  /// Stock model/options prices are USD per million tokens, formatted as
+  /// "$2.50" or "free". Unknown/missing prices are never guessed.
+  double? get inputUsdPerMillion => _usdPerMillion(input);
+  double? get outputUsdPerMillion => _usdPerMillion(output);
+  double? get cacheUsdPerMillion => _usdPerMillion(cache);
+
+  static ModelPrices fromJson(Map<dynamic, dynamic> price) => ModelPrices(
+    input: _text(price['input']),
+    output: _text(price['output']),
+    cache: _text(price['cache']),
+    free: price['free'] == true,
+  );
+
+  static String? _text(Object? value) =>
+      value is String && value.trim().isNotEmpty ? value.trim() : null;
+
+  static double? _usdPerMillion(String? value) {
+    if (value == 'free') return 0;
+    if (value == null || !RegExp(r'^\$\d+(?:\.\d+)?$').hasMatch(value)) {
+      return null;
+    }
+    final amount = double.tryParse(value.substring(1));
+    return amount != null && amount.isFinite && amount >= 0 ? amount : null;
+  }
 }
 
 /// Picker control availability, not inferred model capabilities.

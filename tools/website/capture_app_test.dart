@@ -422,9 +422,6 @@ void main() {
         ),
       ),
     );
-    await tester.runAsync(
-      () => rootBundle.loadString('assets/pricing/openai.json'),
-    );
     await tester.pumpAndSettle(const Duration(milliseconds: 250));
     await tester.tap(find.text('30D'));
     await tester.pumpAndSettle(const Duration(milliseconds: 250));

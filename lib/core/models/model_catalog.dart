@@ -104,14 +104,7 @@ class ModelCatalog {
             model: model,
             providerLabel: provider.name,
             providerInfo: provider,
-            prices: price is Map
-                ? ModelPrices(
-                    input: _text(price['input']),
-                    output: _text(price['output']),
-                    cache: _text(price['cache']),
-                    free: price['free'] == true,
-                  )
-                : null,
+            prices: price is Map ? ModelPrices.fromJson(price) : null,
             controls: control is Map
                 ? ModelControls(
                     reasoning: control['reasoning'] == true,

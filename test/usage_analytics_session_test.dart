@@ -195,6 +195,70 @@ void main() {
   );
 
   test(
+    'Refresh forwards catalog refresh and publishes changed backend rates',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      final catalog = subscriptionModelOptions();
+      fixture.override = (_, path, _, _) async => path == 'model/options'
+          ? catalog
+          : path == 'analytics/usage'
+          ? {'daily': []}
+          : {
+              'models': [
+                {
+                  'provider': 'openai-codex',
+                  'model': 'gpt-6-astra',
+                  'input_tokens': 1000000,
+                  'cache_read_tokens': 0,
+                  'output_tokens': 0,
+                },
+              ],
+            };
+      final owner = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.profile('personal')),
+      );
+      addTearDown(owner.dispose);
+      await owner.load();
+      expect(owner.state.data!.models!.costs.total, 10);
+      catalog['providers'][0]['pricing']['gpt-6-astra']['input'] = r'$20.00';
+      await owner.refresh();
+      expect(owner.state.data!.models!.costs.total, 20);
+      expect(
+        fixture.requests
+            .where((r) => r.$2 == 'model/options')
+            .last
+            .$3['refresh'],
+        '1',
+      );
+    },
+  );
+
+  test(
+    'retirement cannot start a catalog read after held usage settles',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      final held = Completer<Map<String, dynamic>>();
+      fixture.override = (_, path, _, _) => path == 'analytics/models'
+          ? held.future
+          : Future.value({'daily': []});
+      final owner = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.profile('personal')),
+      );
+      final pending = owner.load();
+      owner.dispose();
+      held.complete({
+        'models': [
+          {'provider': 'openai-codex', 'model': 'gpt-6-astra'},
+        ],
+      });
+      await pending;
+      expect(fixture.requests.where((r) => r.$2 == 'model/options'), isEmpty);
+    },
+  );
+
+  test(
     'issued usage facts detach producer data and reject consumer mutation',
     () {
       final raw = <String, dynamic>{

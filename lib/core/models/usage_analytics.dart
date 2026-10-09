@@ -1,4 +1,5 @@
 import 'usage_cost.dart';
+import 'model_catalog.dart';
 
 const usagePeriods = [1, 7, 30, 90, 365];
 const usageTokenKeys = ['input_tokens', 'cache_read_tokens', 'output_tokens'];
@@ -127,7 +128,7 @@ class UsageModels {
       groups = List.unmodifiable(groups);
   factory UsageModels.fromJson(
     Map<String, dynamic> data,
-    OpenAiPricingCatalog? prices,
+    ModelCatalog? prices,
   ) {
     if (data['models'] is! List) {
       throw const FormatException('Model usage is unavailable.');

@@ -212,3 +212,34 @@ class AdministrationFixture {
     }
   }
 }
+
+/// Authored stock-shaped prices exercise valuation when the backend supplies
+/// rates. Current stock Codex catalogs omit them; absence has separate coverage.
+Map<String, dynamic> subscriptionModelOptions() => {
+  'providers': [
+    {
+      'slug': 'openai-codex',
+      'name': 'Subscription',
+      'models': ['gpt-6-astra', 'gpt-5.6-sol'],
+      'pricing': {
+        'gpt-6-astra': {
+          'input': r'$10.00',
+          'cache': r'$1.00',
+          'output': r'$50.00',
+          'free': false,
+        },
+        'gpt-5.6-sol': {
+          'input': r'$4.00',
+          'cache': r'$0.40',
+          'output': r'$20.00',
+          'free': false,
+        },
+      },
+    },
+  ],
+};
+
+AdministrationRequest withSubscriptionPrices(AdministrationRequest request) =>
+    (method, path, query, body) => path == 'model/options'
+    ? Future.value(subscriptionModelOptions())
+    : request(method, path, query, body);
