@@ -3,6 +3,7 @@
 
 import '../models/hermes_profile.dart';
 import '../models/model_catalog.dart';
+import 'models_dev_pricing.dart';
 
 typedef ModelCatalogRead =
     Future<Map<String, dynamic>> Function({
@@ -15,8 +16,13 @@ typedef ModelCatalogRead =
 /// telemetry; refresh supersedes older work. Closing fences pending completions.
 class ProfileModelCatalog {
   // Named transport seam keeps decoder and lifetime independently testable.
-  ProfileModelCatalog({required this.scope, required ModelCatalogRead read})
-    : _read = read;
+  ProfileModelCatalog({
+    required this.scope,
+    required ModelCatalogRead read,
+    ApiPricingRead? apiPricing,
+  }) : _read = read,
+       _apiPricing = apiPricing;
+  final ApiPricingRead? _apiPricing;
   final WorkspaceScope scope;
   final ModelCatalogRead _read;
   final _snapshots = <bool, ModelCatalog>{};
@@ -54,7 +60,11 @@ class ProfileModelCatalog {
       if (_closed || generation != _generations[explicitOnly]) {
         throw StateError('Model catalog read superseded');
       }
-      final catalog = ModelCatalog.fromOptions(response);
+      final prices = await _apiPricing?.call(refresh: refresh);
+      if (_closed || generation != _generations[explicitOnly]) {
+        throw StateError('Model catalog read superseded');
+      }
+      final catalog = ModelCatalog.fromOptions(response, apiPrices: prices);
       _snapshots[explicitOnly] = catalog;
       return catalog;
     } finally {

@@ -305,7 +305,7 @@ void main() {
   );
 
   test(
-    'Refresh forwards catalog refresh and publishes changed backend rates',
+    'Refresh forwards catalog refresh and publishes changed API rates',
     () async {
       final fixture = AdministrationFixture();
       addTearDown(fixture.server.close);
@@ -331,7 +331,7 @@ void main() {
       addTearDown(owner.dispose);
       await owner.load();
       expect(owner.state.data!.models!.costs.total, 10);
-      catalog['providers'][0]['pricing']['gpt-6-astra']['input'] = r'$20.00';
+      fixture.apiPrices = subscriptionApiPrices(input: 20);
       await owner.refresh();
       expect(owner.state.data!.models!.costs.total, 20);
       expect(

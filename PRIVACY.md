@@ -1,6 +1,6 @@
 # Wing privacy policy
 
-Effective date: 24 September 2026.
+Effective date: 10 October 2026.
 
 This policy covers Wing (`com.tarkilhk.wing`), maintained by [tarkilhk and the Wing contributors](https://github.com/tarkilhk/Wing). It is an independent Android client for a Hermes server you choose. The app does not require an account with Wing's maintainer. Hermes Cloud sign-in uses Nous Portal if you choose that route. Your Hermes host, model providers, and services used by your agent have their own data practices.
 
@@ -19,6 +19,9 @@ This policy covers Wing (`com.tarkilhk.wing`), maintained by [tarkilhk and the W
 The maintainer does not operate a relay for these conversations. The app has no advertising or app analytics service configured in its standard build, and the maintainer does not receive your conversations through the app. If you send information to the maintainer through a support channel, that channel receives what you choose to send. The app does not sell your data.
 
 ## Notifications and other services
+
+Wing downloads the public model catalog from `models.dev` to show OpenAI API-equivalent prices for subscription usage and model choices. That service receives the network request and your IP address. The request contains no Hermes credentials, conversation content, usage history or selected model IDs. Wing caches only the OpenAI pricing fields privately on your device.
+
 
 Wing creates notifications locally from connected Hermes sessions. Alerts include the chat name and connection/profile. Message previews are on by default and can be disabled in App settings; disabling previews leaves the chat name and short status. Previews use reply/question text or the command awaiting approval. Approval controls require unlocking; disabling previews leaves only a Review action. Wing stores the latest notification excerpt, scoped target, pending request metadata, and dismissal state locally so replacement and dismissal survive restart. Secure-input values are never part of this state. Secure-input requests and failures use fixed text, without secret values or raw errors. Notifications use private lock-screen visibility; Android controls whether private content is shown or replaced with generic system text.
 

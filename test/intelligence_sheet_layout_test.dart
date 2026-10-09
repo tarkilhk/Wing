@@ -6,59 +6,68 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_catalog.dart';
+import 'package:wing/core/models/models_dev_prices.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_INTELLIGENCE');
   const frame = Key('intelligence-preview');
-  final choices = ModelCatalog.fromOptions({
-    'providers': [
-      {
-        'slug': 'openai-codex',
-        'name': 'ChatGPT or Codex subscription',
-        'models': [
-          'gpt-6.1-sol',
-          'gpt-6-astra',
-          'gpt-6-sol',
-          'gpt-6-luna',
-          'gpt-5.6-sol',
-        ],
-        'capabilities': {
-          for (final id in [
+  final choices = ModelCatalog.fromOptions(
+    {
+      'providers': [
+        {
+          'slug': 'openai-codex',
+          'name': 'ChatGPT or Codex subscription',
+          'models': [
             'gpt-6.1-sol',
             'gpt-6-astra',
             'gpt-6-sol',
             'gpt-6-luna',
             'gpt-5.6-sol',
-          ])
-            id: {'reasoning': true, 'fast': true},
-        },
-        'pricing': {
-          for (final id in [
-            'gpt-6.1-sol',
-            'gpt-6-astra',
-            'gpt-6-sol',
-            'gpt-6-luna',
-            'gpt-5.6-sol',
-          ])
-            id: {'input': r'$5.00', 'output': r'$25.00', 'free': false},
-        },
-      },
-      {
-        'slug': 'openrouter',
-        'name': 'OpenRouter',
-        'models': ['anthropic/claude-sonnet-4.6', 'google/gemini-3-pro'],
-        'pricing': {
-          'anthropic/claude-sonnet-4.6': {
-            'input': r'$3.00',
-            'output': r'$15.00',
-            'free': false,
+          ],
+          'capabilities': {
+            for (final id in [
+              'gpt-6.1-sol',
+              'gpt-6-astra',
+              'gpt-6-sol',
+              'gpt-6-luna',
+              'gpt-5.6-sol',
+            ])
+              id: {'reasoning': true, 'fast': true},
           },
         },
+        {
+          'slug': 'openrouter',
+          'name': 'OpenRouter',
+          'models': ['anthropic/claude-sonnet-4.6', 'google/gemini-3-pro'],
+          'pricing': {
+            'anthropic/claude-sonnet-4.6': {
+              'input': r'$3.00',
+              'output': r'$15.00',
+              'free': false,
+            },
+          },
+        },
+      ],
+    },
+    apiPrices: ModelsDevPrices.fromJson({
+      'openai': {
+        'models': {
+          for (final id in [
+            'gpt-6.1-sol',
+            'gpt-6-astra',
+            'gpt-6-sol',
+            'gpt-6-luna',
+            'gpt-5.6-sol',
+          ])
+            id: {
+              'cost': {'input': 5, 'output': 25, 'cache_read': 0.5},
+            },
+        },
       },
-    ],
-  }).choices;
+    }),
+  ).choices;
   setUpAll(() async {
     if (!capture) return;
     for (final entry in {
@@ -216,107 +225,137 @@ void main() {
     }
   }
   for (final brightness in Brightness.values) {
-    testWidgets('full Codex list fits without padded rows $brightness', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(412, 832);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final catalog = ModelCatalog.fromOptions({
-        'providers': [
-          {
-            'slug': 'openrouter',
-            'name': 'OpenRouter',
-            'models': ['anthropic/claude-sonnet-4.6'],
-          },
-          {
-            'slug': 'openai-codex',
-            'name': 'ChatGPT or Codex Subscription',
-            'models': [
-              'gpt-6.1-sol',
-              'gpt-6.1-sol-900k',
-              'gpt-6-astra',
-              'gpt-6-astra-900k',
-              'gpt-6-sol',
-              'gpt-6-sol-900k',
-              'gpt-6-luna',
-              'gpt-6-luna-900k',
-              'gpt-5.6-sol',
-              'gpt-5.6-sol-900k',
-              'gpt-5.6-terra',
-              'gpt-5.6-terra-900k',
-              'gpt-5.6-luna',
-              'gpt-5.6-luna-900k',
-            ],
-            'capabilities': {
-              'gpt-6.1-sol': {'reasoning': true, 'fast': true},
+    for (final priced in [false, true]) {
+      testWidgets(
+        'full Codex list fits without padded rows $brightness priced $priced',
+        (tester) async {
+          tester.view.physicalSize = const Size(412, 832);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final catalog = ModelCatalog.fromOptions(
+            {
+              'providers': [
+                {
+                  'slug': 'openrouter',
+                  'name': 'OpenRouter',
+                  'models': ['anthropic/claude-sonnet-4.6'],
+                },
+                {
+                  'slug': 'openai-codex',
+                  'name': 'ChatGPT or Codex Subscription',
+                  'models': [
+                    'gpt-6.1-sol',
+                    'gpt-6.1-sol-900k',
+                    'gpt-6-astra',
+                    'gpt-6-astra-900k',
+                    'gpt-6-sol',
+                    'gpt-6-sol-900k',
+                    'gpt-6-luna',
+                    'gpt-6-luna-900k',
+                    'gpt-5.6-sol',
+                    'gpt-5.6-sol-900k',
+                    'gpt-5.6-terra',
+                    'gpt-5.6-terra-900k',
+                    'gpt-5.6-luna',
+                    'gpt-5.6-luna-900k',
+                  ],
+                  'capabilities': {
+                    'gpt-6.1-sol': {'reasoning': true, 'fast': true},
+                  },
+                },
+              ],
             },
-          },
-        ],
-      }).choices;
-      final active = catalog.firstWhere((c) => c.model == 'gpt-6.1-sol');
-      await tester.pumpWidget(
-        RepaintBoundary(
-          key: frame,
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: wingTheme(brightness),
-            home: Scaffold(
-              body: Builder(
-                builder: (context) => TextButton(
-                  onPressed: () => showChatIntelligencePicker(
-                    context: context,
-                    choices: catalog,
-                    initialChoice: active,
-                    initialReasoningEffort: 'high',
-                    initialFastMode: ChatFastMode.normal,
-                    defaultModel: active.model,
-                    profileName: 'Claw',
-                    refreshModels: () async => catalog,
-                    reviewProviderAccess: () async {},
-                    onCommit: (_) async => true,
+            apiPrices: !priced
+                ? null
+                : ModelsDevPrices.fromJson({
+                    'openai': {
+                      'models': {
+                        for (final id in [
+                          'gpt-6.1-sol',
+                          'gpt-6-astra',
+                          'gpt-6-sol',
+                          'gpt-6-luna',
+                          'gpt-5.6-sol',
+                        ])
+                          id: {
+                            'cost': {
+                              'input': 5,
+                              'output': 25,
+                              'cache_read': 0.5,
+                            },
+                          },
+                      },
+                    },
+                  }),
+          ).choices;
+          final active = catalog.firstWhere((c) => c.model == 'gpt-6.1-sol');
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: frame,
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                home: Scaffold(
+                  body: Builder(
+                    builder: (context) => TextButton(
+                      onPressed: () => showChatIntelligencePicker(
+                        context: context,
+                        choices: catalog,
+                        initialChoice: active,
+                        initialReasoningEffort: 'high',
+                        initialFastMode: ChatFastMode.normal,
+                        defaultModel: active.model,
+                        profileName: 'Claw',
+                        refreshModels: () async => catalog,
+                        reviewProviderAccess: () async {},
+                        onCommit: (_) async => true,
+                      ),
+                      child: const Text('Open models'),
+                    ),
                   ),
-                  child: const Text('Open models'),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+          await tester.tap(find.text('Open models'));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          final first = find.byKey(const Key('model-openai-codex-gpt-6.1-sol'));
+          final last = find.byKey(
+            const Key('model-openai-codex-gpt-5.6-luna-900k'),
+          );
+          expect(first.hitTestable(), findsOneWidget);
+          expect(
+            last.hitTestable(),
+            findsOneWidget,
+            reason: 'All 14 Codex models must fit on a normal phone',
+          );
+          expect(
+            tester.getRect(first).top -
+                tester.getRect(find.byType(BottomSheet)).top,
+            lessThanOrEqualTo(priced ? 132 : 108),
+            reason:
+                'Header, search and tabs stay compact; priced catalogs add one units row',
+          );
+          expect(find.text('Apply').hitTestable(), findsOneWidget);
+          if (capture) {
+            await tester.runAsync(() async {
+              final image = await tester
+                  .renderObject<RenderRepaintBoundary>(find.byKey(frame))
+                  .toImage();
+              final bytes = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              await File(
+                'build/model-picker-${brightness.name}-412-full-list-${priced ? 'priced' : 'unpriced'}.png',
+              ).writeAsBytes(bytes!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
+          await tester.tap(find.byTooltip('Close'));
+          await tester.pumpAndSettle();
+        },
       );
-      await tester.tap(find.text('Open models'));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      final first = find.byKey(const Key('model-openai-codex-gpt-6.1-sol'));
-      final last = find.byKey(
-        const Key('model-openai-codex-gpt-5.6-luna-900k'),
-      );
-      expect(first.hitTestable(), findsOneWidget);
-      expect(
-        last.hitTestable(),
-        findsOneWidget,
-        reason: 'All 14 Codex models must fit on a normal phone',
-      );
-      expect(
-        tester.getRect(first).top -
-            tester.getRect(find.byType(BottomSheet)).top,
-        lessThanOrEqualTo(108),
-        reason: 'Header, search and tabs must fit in 108dp',
-      );
-      expect(find.text('Apply').hitTestable(), findsOneWidget);
-      if (capture) {
-        await tester.runAsync(() async {
-          final image = await tester
-              .renderObject<RenderRepaintBoundary>(find.byKey(frame))
-              .toImage();
-          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-          await File(
-            'build/model-picker-${brightness.name}-412-full-list.png',
-          ).writeAsBytes(bytes!.buffer.asUint8List());
-          image.dispose();
-        });
-      }
-      await tester.tap(find.byTooltip('Close'));
-      await tester.pumpAndSettle();
-    });
+    }
   }
 }

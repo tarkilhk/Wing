@@ -40,8 +40,11 @@ it as fresh. There is no client polling or fabricated telemetry TTL.
 
 ## Supplied facts and uncertainty
 
-Prices are optional formatted input, output and cache prices from the backend.
-Missing values remain absent; only an explicit `free` flag means free. The picker
+Backend route prices are optional formatted input, output and cache prices.
+Codex choices instead carry explicitly labelled API-equivalent rates from the
+shared models.dev owner; direct OpenAI API choices use
+that same rate card. Missing values remain absent. Explicit zero numeric rates
+are valid; subscription inclusion is never a free API rate. The picker
 shows units once per provider and the model card exposes the full ID and supplied
 facts. It does not infer vision, tools, context capacity or descriptions.
 
@@ -90,23 +93,47 @@ supersession, closure, error retention and per-account fidelity.
 partial reasoning/fast retries, model events arriving before their acknowledgement, and preserving ultrafast.
 `chat_intelligence_picker_test.dart` covers staging, control availability, cards,
 commit locks and cancellation. `intelligence_sheet_layout_test.dart` renders both
-themes at normal, enlarged and landscape sizes. Its density guard measures actual rendered row spacing, search, tabs and shortcut heights, and requires all 14 unpriced Codex choices to fit on a 412dp phone with Apply reachable. This catches inherited Material minimums and tap-target padding; source linting cannot establish the resolved layout. Existing domain/view dependency
+themes at normal, enlarged and landscape sizes. Its density guard measures actual rendered row spacing, search, tabs and shortcut heights, and requires all 14 Codex choices, in both empty and mixed-price API observations, to fit on a 412dp phone with Apply reachable. This catches inherited Material minimums and tap-target padding; source linting cannot establish the resolved layout. Existing domain/view dependency
 and intelligence read-admission guards protect the structural boundaries;
 behavioral tests establish ordering and uncertainty that import linting cannot.
 
 ## Shared pricing observations
 
-`ModelPrices` owns decoding stock USD-per-million price labels into optional
-numeric rates as well as preserving the picker display strings. Analytics borrows
-`ProfileAdministration.modelCatalog`, with the same `ModelCatalog` decoder as chat
-and administration pickers. `ModelUsageCost` performs arithmetic on these typed
-observations using exact provider plus model identity; it owns no pricing I/O or
-independent rate table. Reader/session retirement prevents deferred usage from
-starting a new pricing read, and the session fences late publications.
+`ModelsDevPricing.shared` owns anonymous HTTPS downloads from
+`https://models.dev/api.json`, independent of Hermes transport credentials. Real
+`ProfileGateway` and `AdministrationRepository` factories inject its read seam
+into their `ProfileModelCatalog` owners. Injected transports can supply a
+controlled rate reader without making public network calls. Views perform no
+rate I/O. Concurrent reads share one request across profiles and catalog policies.
+The owner stores only direct `openai.models` base input/output/cache-read rates,
+with exact model IDs, in a compact device cache. It revalidates after six hours
+using the ETag; explicit Refresh bypasses that interval. Failures retain cached
+rates with an unavailable-freshness observation and throttle ordinary retries
+for one minute. Successful live rates remain usable if device persistence fails.
+Invalid cache data is discarded, with no old-format migration or bundled table.
 
-Stock upstream `8bff64d6ed3414a66976bfa8ab72c14b6bca2a6f`, inspected 9 October
-2026, formats prices in `hermes_cli/inventory.py` using
-`hermes_cli/models_pricing.py`. Only supported API routes supply prices;
-`openai-codex` does not. Missing rates remain unavailable in Analytics. See
-[Analytics pricing behavior](ADMINISTRATION.md) and the focused
-`usage_cost_test.dart` / `usage_analytics_test.dart` regressions.
+`ModelsDevPrices` is the immutable decoder. Missing, negative, nonnumeric or
+nonfinite rates remain absent; it never substitutes Codex or reseller entries,
+guesses aliases or applies context tiers to aggregate usage. `ModelPrices` keeps
+numeric API precision independently of its display labels. `ModelCatalog`
+exposes these same prices on Codex picker choices and as a historical lookup
+independent of today's selectable IDs. Backend prices for other routes remain
+route-specific observations. `ModelUsageCost` performs arithmetic on this typed
+lookup; it owns no pricing I/O or independent rate table. Reader/session
+retirement prevents deferred usage from starting a new pricing read, and the
+catalog fences publication after rate enrichment as well as after backend reads.
+
+Stock upstream `e0550c97bbd916cd5ff8fa0450e6291c31921b94`, inspected 9 October
+2026, formats route prices in `hermes_cli/inventory.py` using
+`hermes_cli/models_pricing.py`. Its model/options response does not expose direct
+OpenAI API rates or the internal usage rate card, and Codex's included zero cost
+is not an API-equivalent rate. This implementation requires no Hermes changes.
+
+`models_dev_pricing_test.dart` guards exact source selection, numeric precision,
+cache/revalidation, anonymous requests, corruption, offline retention and
+recovery. `usage_cost_test.dart` guards historical-model admission and rejection
+of included subscription zeroes. Static checks cannot establish runtime payload
+coverage, freshness, transport headers or asynchronous ordering; these are
+behavioral guards. The historical-model check was demonstrated failing with the
+previous choice-only lookup. See [Analytics behavior](ADMINISTRATION.md) and
+`usage_analytics_test.dart` for shared catalog enrichment and recovery.

@@ -18,7 +18,7 @@ enum UsageCostUnavailable { price, tokens, reportedCost }
 /// These estimates intentionally exclude cache writes and request-level surcharges.
 class ModelUsageCost {
   static bool isSubscriptionUsage(Map<dynamic, dynamic> usage) =>
-      usage['provider'] == 'openai-codex';
+      ModelCatalog.isSubscriptionProvider(usage['provider']);
 
   final String model;
   final bool isApiEquivalent;
@@ -61,9 +61,7 @@ class ModelUsageCost {
         amount == null ? UsageCostUnavailable.reportedCost : null,
       );
     }
-    final price = catalog
-        ?.choice('${usage['provider']}', '${usage['model']}')
-        ?.prices;
+    final price = catalog?.subscriptionPrices('${usage['model']}');
     final inputRate = price?.inputUsdPerMillion;
     final cachedRate = price?.cacheUsdPerMillion;
     final outputRate = price?.outputUsdPerMillion;

@@ -441,7 +441,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
       const SizedBox(height: 8),
       _quiet(
         models?.costs.hasSubscription == true
-            ? 'Subscription usage uses the same backend model prices as the model picker, not billed spend. Estimates exclude cache-write charges and long-context or service-tier adjustments.'
+            ? 'Subscription usage uses models.dev OpenAI API rates shared with the model picker, not billed spend. Estimates exclude cache-write charges and long-context or service-tier adjustments.'
             : 'Costs are Hermes estimates, not provider invoices.',
       ),
       if (models?.costs.isMixed == true) ...[

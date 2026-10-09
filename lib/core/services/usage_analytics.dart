@@ -89,6 +89,12 @@ class UsageAnalyticsReader {
                 )) {
               try {
                 catalog = await profile.modelCatalog.load(refresh: refresh);
+                if (catalog.apiPrices.unavailable) {
+                  modelsRetryable = true;
+                  modelsError = catalog.apiPrices.models.isEmpty
+                      ? 'Could not load API prices. Subscription estimates are unavailable.'
+                      : 'Could not refresh API prices. Subscription estimates use cached rates.';
+                }
               } catch (error) {
                 modelsRetryable = isTemporaryWorkspaceFailure(error);
                 modelsError =

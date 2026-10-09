@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:wing/core/models/models_dev_prices.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 
 class AdministrationFixture {
   final String id;
+  ModelsDevPrices apiPrices = subscriptionApiPrices();
   final rpcRequests = <(String, String)>[];
   final requests =
       <(String, String, Map<String, String>, Map<String, dynamic>?)>[];
@@ -57,6 +59,7 @@ class AdministrationFixture {
   consoleOverride;
   final consoleRequests = <(String, String, bool)>[];
   late final AdministrationRepository server = AdministrationRepository(
+    apiPricing: ({refresh = false}) async => apiPrices,
     ownedMutation:
         (method, path, query, body, canDispatch, onDispatched) async {
           if (mutationOverride case final mutation?) {
@@ -213,33 +216,34 @@ class AdministrationFixture {
   }
 }
 
-/// Authored stock-shaped prices exercise valuation when the backend supplies
-/// rates. Current stock Codex catalogs omit them; absence has separate coverage.
+/// Stock Codex model/options has no API prices.
 Map<String, dynamic> subscriptionModelOptions() => {
   'providers': [
     {
       'slug': 'openai-codex',
       'name': 'Subscription',
       'models': ['gpt-6-astra', 'gpt-5.6-sol'],
-      'pricing': {
-        'gpt-6-astra': {
-          'input': r'$10.00',
-          'cache': r'$1.00',
-          'output': r'$50.00',
-          'free': false,
-        },
-        'gpt-5.6-sol': {
-          'input': r'$4.00',
-          'cache': r'$0.40',
-          'output': r'$20.00',
-          'free': false,
-        },
-      },
     },
   ],
 };
 
-AdministrationRequest withSubscriptionPrices(AdministrationRequest request) =>
+ModelsDevPrices subscriptionApiPrices({double input = 10}) =>
+    ModelsDevPrices.fromJson({
+      'openai': {
+        'models': {
+          'gpt-6-astra': {
+            'cost': {'input': input, 'cache_read': 1, 'output': 50},
+          },
+          'gpt-5.6-sol': {
+            'cost': {'input': 4, 'cache_read': 0.4, 'output': 20},
+          },
+        },
+      },
+    });
+
+AdministrationRequest withSubscriptionModelOptions(
+  AdministrationRequest request,
+) =>
     (method, path, query, body) => path == 'model/options'
     ? Future.value(subscriptionModelOptions())
     : request(method, path, query, body);

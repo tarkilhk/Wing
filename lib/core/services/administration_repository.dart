@@ -1,4 +1,5 @@
 import 'profile_model_catalog.dart';
+import 'models_dev_pricing.dart';
 import 'skill_reader_session.dart';
 import '../models/skill_reader.dart';
 import 'connection_access.dart';
@@ -67,6 +68,7 @@ class AdministrationRepository {
       name,
       () => ProfileModelCatalog(
         scope: profile(name).scope,
+        apiPricing: _apiPricing,
         read: ({required refresh, required explicitOnly}) =>
             read('model/options', {
               'profile': name,
@@ -84,6 +86,7 @@ class AdministrationRepository {
     _modelCatalogs.clear();
   }
 
+  final ApiPricingRead? _apiPricing;
   final String connectionId;
   final String connectionIdentity;
   final String connectionLabel;
@@ -98,6 +101,7 @@ class AdministrationRepository {
   bool _closed = false;
 
   AdministrationRepository({
+    ApiPricingRead? apiPricing,
     required this.connectionId,
     required this.connectionIdentity,
     required this.connectionLabel,
@@ -107,7 +111,10 @@ class AdministrationRepository {
     required this.gateway,
     this.providerCommand,
     void Function()? close,
-  }) : _close = close ?? _noop;
+  }) : // The named dependency is an injectable public seam.
+       // ignore: prefer_initializing_formals
+       _apiPricing = apiPricing,
+       _close = close ?? _noop;
   static void _noop() {}
 
   factory AdministrationRepository.forConnection(
@@ -134,6 +141,7 @@ class AdministrationRepository {
       connection.gatewayHeaders,
     );
     return AdministrationRepository(
+      apiPricing: ModelsDevPricing.shared.load,
       connectionId: connection.id,
       connectionIdentity: identity,
       connectionLabel: connection.label,

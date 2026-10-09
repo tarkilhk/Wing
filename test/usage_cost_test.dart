@@ -1,26 +1,30 @@
 import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/models/model_catalog_details.dart';
+import 'package:wing/core/models/models_dev_prices.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/usage_cost.dart';
 
 void main() {
-  ModelCatalog catalog(Map<String, dynamic> rates) => ModelCatalog.fromOptions({
-    'providers': [
-      {
-        'slug': 'openai-codex',
-        'name': 'Subscription',
-        'models': ['example'],
-        'pricing': {'example': rates},
+  ModelCatalog catalog(Map<String, dynamic> rates) => ModelCatalog.fromOptions(
+    {
+      'providers': [
+        {
+          'slug': 'openai-codex',
+          'name': 'Subscription',
+          'models': ['example'],
+        },
+      ],
+    },
+    apiPrices: ModelsDevPrices.fromJson({
+      'openai': {
+        'models': {
+          'example': {'cost': rates},
+        },
       },
-    ],
-  });
-  final prices = catalog({
-    'input': r'$2.00',
-    'cache': r'$0.25',
-    'output': r'$10.00',
-    'free': false,
-  });
+    }),
+  );
+  final prices = catalog({'input': 2, 'cache_read': 0.25, 'output': 10});
   Map<String, dynamic> usage() => {
     'model': 'example',
     'provider': 'openai-codex',
@@ -170,58 +174,69 @@ void main() {
         });
         expect(observation.inputUsdPerMillion, expected, reason: '$label');
       }
-      final missingCache = catalog({
-        'input': 'free',
-        'output': 'free',
-        'free': true,
-      });
+      final missingCache = catalog({'input': 0, 'output': 0});
       expect(
         ModelUsageCost.fromUsage(usage(), missingCache).unavailable,
         UsageCostUnavailable.price,
       );
-      final free = catalog({
-        'input': 'free',
-        'output': 'free',
-        'cache': 'free',
-        'free': true,
-      });
+      final free = catalog({'input': 0, 'output': 0, 'cache_read': 0});
       expect(ModelUsageCost.fromUsage(usage(), free).amount, 0);
     },
   );
 
-  test('provider routes and exact model IDs cannot borrow another price', () {
-    final otherProvider = ModelCatalog.fromOptions({
-      'providers': [
-        {
-          'slug': 'openrouter',
-          'name': 'API',
-          'models': ['example'],
-          'pricing': {
-            'example': {
-              'input': r'$2.00',
-              'cache': r'$0.25',
-              'output': r'$10.00',
-              'free': false,
+  test(
+    'historical usage retains exact API rates outside the picker choices',
+    () {
+      final historical = ModelCatalog.fromOptions({
+        'providers': [],
+      }, apiPrices: prices.apiPrices);
+      expect(historical.choices, isEmpty);
+      expect(ModelUsageCost.fromUsage(usage(), historical).amount, 3.5);
+    },
+  );
+
+  test(
+    'included Codex zero and reseller rates cannot become API estimates',
+    () {
+      final wrongSources = ModelCatalog.fromOptions({
+        'providers': [
+          {
+            'slug': 'openai-codex',
+            'name': 'Subscription',
+            'models': ['example'],
+            'pricing': {
+              'example': {
+                'input': 'free',
+                'output': 'free',
+                'cache': 'free',
+                'free': true,
+              },
             },
           },
-        },
-      ],
-    });
-    expect(
-      ModelUsageCost.fromUsage(usage(), otherProvider).unavailable,
-      UsageCostUnavailable.price,
-    );
-    for (final field in ['input', 'cache', 'output']) {
-      final incomplete = {
-        'input': r'$2.00',
-        'cache': r'$0.25',
-        'output': r'$10.00',
-        'free': false,
-      }..remove(field);
+          {
+            'slug': 'openrouter',
+            'name': 'API',
+            'models': ['example'],
+            'pricing': {
+              'example': {
+                'input': r'$2.00',
+                'output': r'$10.00',
+                'cache': r'$0.25',
+                'free': false,
+              },
+            },
+          },
+        ],
+      });
       expect(
-        ModelUsageCost.fromUsage(usage(), catalog(incomplete)).unavailable,
+        ModelUsageCost.fromUsage(usage(), wrongSources).unavailable,
         UsageCostUnavailable.price,
       );
-    }
-  });
+      expect(wrongSources.choice('openai-codex', 'example')!.prices, isNull);
+      expect(
+        wrongSources.choice('openrouter', 'example')!.prices!.input,
+        r'$2.00',
+      );
+    },
+  );
 }

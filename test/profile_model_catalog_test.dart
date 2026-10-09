@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/model_catalog.dart';
+import 'package:wing/core/models/models_dev_prices.dart';
 import 'package:wing/core/models/model_catalog_details.dart';
 import 'package:wing/core/services/profile_model_catalog.dart';
 
@@ -21,6 +22,60 @@ void main() {
     connectionId: 'one',
     connectionIdentity: 'identity',
     profileName: 'work',
+  );
+  test('closing during public rate enrichment fences publication', () async {
+    final held = Completer<ModelsDevPrices>();
+    final owner = ProfileModelCatalog(
+      scope: scope,
+      read: ({required refresh, required explicitOnly}) async =>
+          payload('example'),
+      apiPricing: ({refresh = false}) => held.future,
+    );
+    final pending = expectLater(owner.load(), throwsStateError);
+    await Future<void>.delayed(Duration.zero);
+    owner.close();
+    held.complete(ModelsDevPrices({}));
+    await pending;
+    expect(owner.snapshot, isNull);
+  });
+
+  test(
+    'refresh supersedes old rate enrichment as well as backend reads',
+    () async {
+      final held = <Completer<ModelsDevPrices>>[];
+      final owner = ProfileModelCatalog(
+        scope: scope,
+        read: ({required refresh, required explicitOnly}) async =>
+            payload('example'),
+        apiPricing: ({refresh = false}) {
+          final next = Completer<ModelsDevPrices>();
+          held.add(next);
+          return next.future;
+        },
+      );
+      final old = expectLater(owner.load(), throwsStateError);
+      await Future<void>.delayed(Duration.zero);
+      final fresh = owner.load(refresh: true);
+      await Future<void>.delayed(Duration.zero);
+      final rates = ModelsDevPrices.fromJson({
+        'openai': {
+          'models': {
+            'example': {
+              'cost': {'input': 2, 'output': 10, 'cache_read': 0.2},
+            },
+          },
+        },
+      });
+      held[1].complete(rates);
+      expect(
+        (await fresh).subscriptionPrices('example')!.inputUsdPerMillion,
+        2,
+      );
+      held[0].complete(ModelsDevPrices({}));
+      await old;
+      expect(owner.snapshot!.apiPrices, same(rates));
+      owner.close();
+    },
   );
   test(
     'administration consumers share only their captured profile owner and cannot reopen it after close',
@@ -201,7 +256,7 @@ void main() {
       expect(usage.accounts[1].resetsAt, DateTime.utc(2026, 10, 8, 15));
       expect(usage.accounts.last.windows, isEmpty);
       expect(catalog.choices.single.controls, isNull);
-      expect(catalog.choices.single.prices!.output, isNull);
+      expect(catalog.choices.single.prices, isNull);
       expect(() => usage.accounts.clear(), throwsUnsupportedError);
     },
   );

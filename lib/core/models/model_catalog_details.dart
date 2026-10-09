@@ -1,16 +1,49 @@
-/// Optional observations supplied by stock model/options. Absence stays absent.
+/// Optional route prices or direct API-equivalent rates. Absence stays absent.
 class ModelPrices {
-  const ModelPrices({this.input, this.output, this.cache, required this.free});
+  const ModelPrices({this.input, this.output, this.cache, required this.free})
+    : _apiInput = null,
+      _apiOutput = null,
+      _apiCache = null,
+      apiEquivalent = false;
   final String? input;
   final String? output;
   final String? cache;
   final bool free;
+  final double? _apiInput;
+  final double? _apiOutput;
+  final double? _apiCache;
+  final bool apiEquivalent;
+
+  ModelPrices.api({
+    required double input,
+    required double output,
+    double? cache,
+  }) : input = _apiLabel(input),
+       output = _apiLabel(output),
+       cache = cache == null ? null : _apiLabel(cache),
+       free = input == 0 && output == 0 && cache == 0,
+       _apiInput = input,
+       _apiOutput = output,
+       _apiCache = cache,
+       apiEquivalent = true;
+
+  static String _apiLabel(double value) {
+    final exact = value.toString();
+    final fraction = exact.split('.').last;
+    return '\$${!exact.contains('e') && fraction.length <= 2 ? value.toStringAsFixed(2) : exact}';
+  }
+
+  String get units =>
+      apiEquivalent ? 'API equivalent · per 1M tokens' : 'Per 1M tokens';
 
   /// Stock model/options prices are USD per million tokens, formatted as
   /// "$2.50" or "free". Unknown/missing prices are never guessed.
-  double? get inputUsdPerMillion => _usdPerMillion(input);
-  double? get outputUsdPerMillion => _usdPerMillion(output);
-  double? get cacheUsdPerMillion => _usdPerMillion(cache);
+  double? get inputUsdPerMillion =>
+      apiEquivalent ? _apiInput : _usdPerMillion(input);
+  double? get outputUsdPerMillion =>
+      apiEquivalent ? _apiOutput : _usdPerMillion(output);
+  double? get cacheUsdPerMillion =>
+      apiEquivalent ? _apiCache : _usdPerMillion(cache);
 
   static ModelPrices fromJson(Map<dynamic, dynamic> price) => ModelPrices(
     input: _text(price['input']),

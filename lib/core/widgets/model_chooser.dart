@@ -124,6 +124,13 @@ class _ModelChooserState extends State<ModelChooser> {
       c.routeLabel.toLowerCase().contains(q) ||
       c.label.toLowerCase().contains(q);
 
+  String _priceUnits(List<ModelChoice> choices) =>
+      choices
+          .map((choice) => choice.prices?.units)
+          .whereType<String>()
+          .firstOrNull ??
+      'Per 1M tokens';
+
   Widget _choice(
     ModelChoice choice, {
     bool missing = false,
@@ -495,6 +502,23 @@ class _ModelChooserState extends State<ModelChooser> {
                           : Text(option.description!),
                     ),
                   if (showMissing) _choice(selected, missing: true),
+                  if (!widget.groupByProvider &&
+                      filtered.any(
+                        (choice) => choice.prices?.apiEquivalent == true,
+                      ))
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: 8,
+                        top: 8,
+                        bottom: 4,
+                      ),
+                      child: Text(
+                        _priceUnits(filtered),
+                        style: tokens.typography.label.copyWith(
+                          color: tokens.muted,
+                        ),
+                      ),
+                    ),
                   if (widget.groupByProvider)
                     for (final entry in groups.entries) ...[
                       if (_provider == null ||
@@ -517,7 +541,7 @@ class _ModelChooserState extends State<ModelChooser> {
                                 child: Text(
                                   _provider == null
                                       ? entry.value.first.routeLabel
-                                      : 'Per 1M tokens',
+                                      : _priceUnits(entry.value),
                                   style: tokens.typography.label.copyWith(
                                     color: tokens.muted,
                                   ),
@@ -569,7 +593,7 @@ class _ModelChooserState extends State<ModelChooser> {
                         Padding(
                           padding: const EdgeInsets.only(left: 8, bottom: 4),
                           child: Text(
-                            'Per 1M tokens',
+                            _priceUnits(entry.value),
                             style: tokens.typography.label.copyWith(
                               fontSize: 10,
                               color: tokens.muted,

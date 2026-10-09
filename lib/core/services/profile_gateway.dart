@@ -1,4 +1,5 @@
 import 'profile_model_catalog.dart';
+import 'models_dev_pricing.dart';
 import 'skill_reader_session.dart';
 import '../models/skill_reader.dart';
 import 'connection_access.dart';
@@ -134,8 +135,10 @@ class ProfileGateway {
         profile: scope.profileName,
       );
   final WorkspaceScope scope;
+  final ApiPricingRead? _apiPricing;
   late final modelCatalog = ProfileModelCatalog(
     scope: scope,
+    apiPricing: _apiPricing,
     read: ({required refresh, required explicitOnly}) => read('model/options', {
       if (refresh) 'refresh': '1',
       if (explicitOnly) 'explicit_only': '1',
@@ -191,6 +194,7 @@ class ProfileGateway {
   ConnectionCallback? onConnectionChanged;
 
   ProfileGateway({
+    ApiPricingRead? apiPricing,
     required this.scope,
     required ScopedGet get,
     required ScopedRpc rpc,
@@ -203,7 +207,8 @@ class ProfileGateway {
     Future<void> Function()? connect,
     void Function()? close,
     void Function()? disconnect,
-  }) : _getRequest = get,
+  }) : _apiPricing = apiPricing,
+       _getRequest = get,
        _discover = discover,
        _rpcRequest = rpc,
        _ownedPatch = ownedPatch,
@@ -293,6 +298,7 @@ class ProfileGateway {
     }
 
     gateway = ProfileGateway(
+      apiPricing: ModelsDevPricing.shared.load,
       scope: scope,
       get: (endpoint, query) => dashboard
           .apiGet(endpoint, queryParameters: query)

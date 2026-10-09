@@ -6,37 +6,42 @@ import 'package:wing/core/widgets/chat_model_controls.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_choice.dart';
 import 'package:wing/core/models/model_catalog.dart';
+import 'package:wing/core/models/models_dev_prices.dart';
 import 'package:wing/core/presentation/chat_model_labels.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_intelligence_picker.dart';
 import 'package:wing/core/widgets/model_card.dart';
 
 void main() {
-  final catalog = ModelCatalog.fromOptions({
-    'providers': [
-      {
-        'slug': 'openai-codex',
-        'name': 'OpenAI subscription',
-        'models': ['gpt-6-astra', 'gpt-5.6-sol'],
-        'capabilities': {
-          for (final id in ['gpt-6-astra', 'gpt-5.6-sol'])
-            id: {'reasoning': true, 'fast': true},
+  final catalog = ModelCatalog.fromOptions(
+    {
+      'providers': [
+        {
+          'slug': 'openai-codex',
+          'name': 'OpenAI subscription',
+          'models': ['gpt-6-astra', 'gpt-5.6-sol'],
+          'capabilities': {
+            for (final id in ['gpt-6-astra', 'gpt-5.6-sol'])
+              id: {'reasoning': true, 'fast': true},
+          },
         },
-        'pricing': {
+        {
+          'slug': 'openrouter',
+          'name': 'OpenRouter',
+          'models': ['openai/gpt-5.6-sol'],
+        },
+      ],
+    },
+    apiPrices: ModelsDevPrices.fromJson({
+      'openai': {
+        'models': {
           'gpt-6-astra': {
-            'input': r'$5.00',
-            'output': r'$25.00',
-            'free': false,
+            'cost': {'input': 5, 'output': 25, 'cache_read': 0.5},
           },
         },
       },
-      {
-        'slug': 'openrouter',
-        'name': 'OpenRouter',
-        'models': ['openai/gpt-5.6-sol'],
-      },
-    ],
-  });
+    }),
+  );
   final choices = catalog.choices;
   Future<void> open(
     WidgetTester tester, {

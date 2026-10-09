@@ -109,15 +109,16 @@ class ModelCard extends StatelessWidget {
                       prices.output != null ||
                       prices.cache != null)) ...[
                 const Divider(height: 24),
-                if (prices.free)
-                  fact('Price', 'Free')
-                else ...[
+                if (prices.apiEquivalent || !prices.free)
                   Text(
-                    'PER 1M TOKENS',
+                    prices.units.toUpperCase(),
                     style: tokens.typography.label.copyWith(
                       color: tokens.muted,
                     ),
                   ),
+                if (prices.free)
+                  fact('Price', 'Free')
+                else ...[
                   if (prices.input != null) fact('Input', prices.input!),
                   if (prices.output != null) fact('Output', prices.output!),
                   if (prices.cache != null) fact('Cached input', prices.cache!),

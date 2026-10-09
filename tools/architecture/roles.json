@@ -266,6 +266,11 @@
       "feature": "model-selection",
       "library": "lib/core/models/model_choice.dart"
     },
+    "lib/core/models/models_dev_prices.dart": {
+      "role": "domain",
+      "feature": "model-selection",
+      "library": "lib/core/models/models_dev_prices.dart"
+    },
     "lib/core/models/notification_focus.dart": {
       "role": "domain",
       "feature": "notifications",
@@ -1275,6 +1280,11 @@
       "role": "application",
       "feature": "voice",
       "library": "lib/core/services/microphone_permission.dart"
+    },
+    "lib/core/services/models_dev_pricing.dart": {
+      "role": "application",
+      "feature": "model-selection",
+      "library": "lib/core/services/models_dev_pricing.dart"
     },
     "lib/core/services/native_notification_sink.dart": {
       "role": "platform",

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/usage_analytics.dart';
 import 'package:wing/core/models/model_catalog.dart';
+import 'package:wing/core/models/models_dev_prices.dart';
 import 'package:wing/core/services/usage_analytics.dart';
 import 'support/administration_fixture.dart';
 
@@ -16,9 +17,38 @@ void main() {
     'reasoning_tokens': 20000,
     'estimated_cost': 0,
   };
-  final prices = ModelCatalog.fromOptions(subscriptionModelOptions());
-  test('subscription valuation uses the picker backend rates', () async {
-    final fixture = AdministrationFixture();
+  final prices = ModelCatalog.fromOptions(
+    subscriptionModelOptions(),
+    apiPrices: subscriptionApiPrices(),
+  );
+  test(
+    'subscription valuation shares direct API rates with the picker',
+    () async {
+      final fixture = AdministrationFixture()
+        ..apiPrices = subscriptionApiPrices(input: 20);
+      addTearDown(fixture.server.close);
+      fixture.override = withSubscriptionModelOptions(
+        (_, path, _, _) async => path == 'analytics/usage'
+            ? {'daily': []}
+            : {
+                'models': [row],
+              },
+      );
+      final profile = fixture.server.profile('personal');
+      final picker = await profile.modelCatalog.load();
+      expect(
+        picker
+            .choice('openai-codex', 'gpt-6-astra')!
+            .prices!
+            .inputUsdPerMillion,
+        20,
+      );
+      final result = await UsageAnalyticsReader(profile).load(7);
+      expect(result.models!.costs.total, 7.5);
+    },
+  );
+  test('missing registry rates preserve tokens and reported costs', () async {
+    final fixture = AdministrationFixture()..apiPrices = ModelsDevPrices({});
     addTearDown(fixture.server.close);
     fixture.override = (_, path, _, _) async {
       if (path == 'model/options') {
@@ -28,67 +58,78 @@ void main() {
               'slug': 'openai-codex',
               'name': 'Subscription',
               'models': ['gpt-6-astra'],
-              'pricing': {
-                'gpt-6-astra': {
-                  'input': r'$20.00',
-                  'cache': r'$2.00',
-                  'output': r'$100.00',
-                  'free': false,
-                },
-              },
             },
           ],
         };
       }
       if (path == 'analytics/usage') return {'daily': []};
       return {
-        'models': [row],
+        'models': [
+          row,
+          {...row, 'provider': 'openai', 'estimated_cost': 7},
+        ],
       };
     };
-    final profile = fixture.server.profile('personal');
-    final picker = await profile.modelCatalog.load();
-    expect(
-      picker.choice('openai-codex', 'gpt-6-astra')!.prices!.input,
-      r'$20.00',
-    );
-    final result = await UsageAnalyticsReader(profile).load(7);
-    expect(result.models!.costs.total, 10);
+    final result = await UsageAnalyticsReader(
+      fixture.server.profile('personal'),
+    ).load(7);
+    expect(result.models!.tokens.total, 2560000);
+    expect(result.models!.costs.apiEquivalent, isNull);
+    expect(result.models!.costs.reported, 7);
+    expect(result.models!.costs.isPartial, isTrue);
+    expect(result.modelsError, isNull);
   });
+
   test(
-    'missing backend subscription prices preserve tokens and reported costs',
+    'rate download failure keeps tokens, cached estimates and explicit retry state',
     () async {
-      final fixture = AdministrationFixture();
+      final fixture = AdministrationFixture()
+        ..apiPrices = ModelsDevPrices(
+          subscriptionApiPrices().models,
+          unavailable: true,
+        );
       addTearDown(fixture.server.close);
-      fixture.override = (_, path, _, _) async {
-        if (path == 'model/options') {
-          return {
-            'providers': [
-              {
-                'slug': 'openai-codex',
-                'name': 'Subscription',
-                'models': ['gpt-6-astra'],
+      fixture.override = withSubscriptionModelOptions(
+        (_, path, _, _) async => path == 'analytics/usage'
+            ? {'daily': []}
+            : {
+                'models': [row],
               },
-            ],
-          };
-        }
-        if (path == 'analytics/usage') return {'daily': []};
-        return {
-          'models': [
-            row,
-            {...row, 'provider': 'openai', 'estimated_cost': 7},
-          ],
-        };
-      };
-      final result = await UsageAnalyticsReader(
-        fixture.server.profile('personal'),
-      ).load(7);
-      expect(result.models!.tokens.total, 2560000);
-      expect(result.models!.costs.apiEquivalent, isNull);
-      expect(result.models!.costs.reported, 7);
-      expect(result.models!.costs.isPartial, isTrue);
-      expect(result.modelsError, isNull);
+      );
+      final reader = UsageAnalyticsReader(fixture.server.profile('personal'));
+      final stale = await reader.load(7);
+      expect(stale.models!.costs.total, 5);
+      expect(stale.models!.tokens.total, 1280000);
+      expect(stale.modelsError, contains('cached rates'));
+      expect(stale.modelsRetryable, isTrue);
+      fixture.apiPrices = subscriptionApiPrices(input: 20);
+      final recovered = await reader.load(7, retry: stale, refresh: true);
+      expect(recovered.models!.costs.total, 7.5);
+      expect(recovered.modelsError, isNull);
+      expect(recovered.modelsRetryable, isFalse);
+      expect(recovered.daily, same(stale.daily));
     },
   );
+
+  test('initial public price failure never hides successful usage', () async {
+    final fixture = AdministrationFixture()
+      ..apiPrices = ModelsDevPrices({}, unavailable: true);
+    addTearDown(fixture.server.close);
+    fixture.override = withSubscriptionModelOptions(
+      (_, path, _, _) async => path == 'analytics/usage'
+          ? {'daily': []}
+          : {
+              'models': [row],
+            },
+    );
+    final data = await UsageAnalyticsReader(
+      fixture.server.profile('personal'),
+    ).load(7);
+    expect(data.models!.tokens.total, 1280000);
+    expect(data.models!.costs.total, isNull);
+    expect(data.modelsError, contains('unavailable'));
+    expect(data.modelsRetryable, isTrue);
+  });
 
   test(
     'pricing failure retains usage and retries the captured catalog',
@@ -96,7 +137,7 @@ void main() {
       final fixture = AdministrationFixture();
       addTearDown(fixture.server.close);
       var offline = true;
-      final priced = withSubscriptionPrices(
+      final priced = withSubscriptionModelOptions(
         (_, path, _, _) async => path == 'analytics/usage'
             ? {'daily': []}
             : {
@@ -135,7 +176,7 @@ void main() {
   );
 
   test(
-    'analytics and picker share an in-flight catalog and refresh backend prices',
+    'analytics and picker share an in-flight catalog and refresh API prices',
     () async {
       final fixture = AdministrationFixture();
       addTearDown(fixture.server.close);
@@ -162,7 +203,7 @@ void main() {
       await picker;
       expect((await pending).models!.costs.total, 5);
       final updated = subscriptionModelOptions();
-      updated['providers'][0]['pricing']['gpt-6-astra']['input'] = r'$20.00';
+      fixture.apiPrices = subscriptionApiPrices(input: 20);
       fixture.override = (_, path, _, _) async => path == 'model/options'
           ? updated
           : path == 'analytics/usage'
@@ -345,7 +386,7 @@ void main() {
       addTearDown(fixture.server.close);
       final models = Completer<Map<String, dynamic>>();
       final daily = Completer<Map<String, dynamic>>();
-      fixture.override = withSubscriptionPrices(
+      fixture.override = withSubscriptionModelOptions(
         (_, path, _, _) =>
             path == 'analytics/models' ? models.future : daily.future,
       );

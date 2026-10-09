@@ -10,6 +10,7 @@ import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/screens/administration/usage_charts.dart';
 import 'support/administration_fixture.dart';
+import 'package:wing/core/models/models_dev_prices.dart';
 
 Map<String, dynamic> _astra() => {
   'model': 'gpt-6-astra',
@@ -87,7 +88,7 @@ void main() {
     addTearDown(fixture.server.close);
     rows = [_sol(), _astra()];
     offline = false;
-    fixture.override = withSubscriptionPrices((
+    fixture.override = withSubscriptionModelOptions((
       method,
       path,
       query,
@@ -217,9 +218,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('stock subscription catalogs without prices show unavailable', (
-    tester,
-  ) async {
+  testWidgets('missing API rate catalog shows unavailable', (tester) async {
+    fixture.apiPrices = ModelsDevPrices({});
     fixture.override = (_, path, query, _) async => path == 'model/options'
         ? {
             'providers': [
@@ -391,7 +391,7 @@ void main() {
     tester,
   ) async {
     final pending = Completer<Map<String, dynamic>>();
-    fixture.override = withSubscriptionPrices((_, path, query, _) async {
+    fixture.override = withSubscriptionModelOptions((_, path, query, _) async {
       if (path == 'analytics/usage') return dailyData();
       if (query['days'] == '30') return pending.future;
       return {
@@ -420,7 +420,12 @@ void main() {
     (tester) async {
       final date = DateTime.now().toUtc().subtract(const Duration(days: 100));
       final id = date.toIso8601String().substring(0, 10);
-      fixture.override = withSubscriptionPrices((_, path, query, _) async {
+      fixture.override = withSubscriptionModelOptions((
+        _,
+        path,
+        query,
+        _,
+      ) async {
         if (path == 'analytics/models') {
           return {
             'models': [_astra()],
@@ -482,7 +487,12 @@ void main() {
       testWidgets(
         'server date rollover ${brightness.name} at $scale text retains independent year data',
         (tester) async {
-          fixture.override = withSubscriptionPrices((_, path, query, _) async {
+          fixture.override = withSubscriptionModelOptions((
+            _,
+            path,
+            query,
+            _,
+          ) async {
             if (path == 'analytics/models') {
               return {
                 'models': [_astra()],
@@ -522,7 +532,12 @@ void main() {
         tester,
       ) async {
         final today = DateTime.now().toUtc();
-        fixture.override = withSubscriptionPrices((_, path, query, _) async {
+        fixture.override = withSubscriptionModelOptions((
+          _,
+          path,
+          query,
+          _,
+        ) async {
           if (path == 'analytics/usage') {
             final days = int.parse(query['days']!);
             return {

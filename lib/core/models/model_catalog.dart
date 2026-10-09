@@ -1,4 +1,5 @@
 import 'model_choice.dart';
+import 'models_dev_prices.dart';
 import 'model_catalog_details.dart';
 
 /// Immutable profile catalog, with one canonical decoder for stock observations.
@@ -6,8 +7,14 @@ class ModelCatalog {
   ModelCatalog({
     required Iterable<ModelProvider> providers,
     required Iterable<ModelChoice> choices,
+    ModelsDevPrices? apiPrices,
   }) : providers = List.unmodifiable(providers),
-       choices = List.unmodifiable(choices);
+       choices = List.unmodifiable(choices),
+       apiPrices = apiPrices ?? ModelsDevPrices({});
+  final ModelsDevPrices apiPrices;
+  static bool isSubscriptionProvider(Object? provider) =>
+      provider == 'openai-codex';
+  ModelPrices? subscriptionPrices(String model) => apiPrices.models[model];
   final List<ModelProvider> providers;
   final List<ModelChoice> choices;
 
@@ -16,6 +23,18 @@ class ModelCatalog {
   ModelChoice? choice(String provider, String model) => choices
       .where((c) => c.provider == provider && c.model == model)
       .firstOrNull;
+
+  static ModelPrices? _prices(
+    String provider,
+    String model,
+    Object? backend,
+    ModelsDevPrices? api,
+  ) {
+    if (isSubscriptionProvider(provider) || provider == 'openai-api') {
+      return api?.models[model];
+    }
+    return backend is Map ? ModelPrices.fromJson(backend) : null;
+  }
 
   static String? _text(Object? value) =>
       value is String && value.trim().isNotEmpty ? value.trim() : null;
@@ -63,7 +82,10 @@ class ModelCatalog {
     );
   }
 
-  static ModelCatalog fromOptions(Map<String, dynamic> response) {
+  static ModelCatalog fromOptions(
+    Map<String, dynamic> response, {
+    ModelsDevPrices? apiPrices,
+  }) {
     final rows = response['providers'];
     if (rows is! List) {
       throw const FormatException('Expected a list of provider records');
@@ -104,7 +126,7 @@ class ModelCatalog {
             model: model,
             providerLabel: provider.name,
             providerInfo: provider,
-            prices: price is Map ? ModelPrices.fromJson(price) : null,
+            prices: _prices(slug, model, price, apiPrices),
             controls: control is Map
                 ? ModelControls(
                     reasoning: control['reasoning'] == true,
@@ -118,6 +140,10 @@ class ModelCatalog {
         );
       }
     }
-    return ModelCatalog(providers: providers, choices: choices);
+    return ModelCatalog(
+      providers: providers,
+      choices: choices,
+      apiPrices: apiPrices,
+    );
   }
 }

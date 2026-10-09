@@ -6172,6 +6172,15 @@
       "purpose": "Reject release-only Recents reads of Flutter debug paint getters",
       "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml",
       "status": "supported"
+    },
+    {
+      "id": "host-test-test/models_dev_pricing_test.dart",
+      "kind": "host-test",
+      "path": "test/models_dev_pricing_test.dart",
+      "purpose": "Direct API pricing/cache behavioral regressions; no live network",
+      "source": "docs/MODEL_CATALOG.md; test/models_dev_pricing_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -7826,6 +7835,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/models/models_dev_prices.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/models/notification_focus.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -8844,6 +8858,11 @@
       "path": "lib/core/services/microphone_permission.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/services/models_dev_pricing.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/services/native_notification_sink.dart",
@@ -11234,6 +11253,11 @@
       "path": "test/model_chooser_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/models_dev_pricing_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/notification_action_background_test.dart",

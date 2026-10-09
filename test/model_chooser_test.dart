@@ -25,6 +25,38 @@ void main() {
   const first = ModelChoice(provider: 'alpha', model: 'shared');
   const second = ModelChoice(provider: 'beta', model: 'shared');
 
+  for (final grouped in [false, true]) {
+    testWidgets(
+      'API units remain visible with an unpriced first choice, grouped $grouped',
+      (tester) async {
+        const unknown = ModelChoice(provider: 'subscription', model: 'unknown');
+        final known = ModelChoice(
+          provider: 'subscription',
+          model: 'known',
+          prices: ModelPrices.api(input: 2, output: 10, cache: 0.2),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(Brightness.dark),
+            home: Scaffold(
+              body: ModelChooser(
+                choices: [unknown, known],
+                selected: const ModelSelection.model(unknown),
+                onSelected: (_) {},
+                groupByProvider: grouped,
+                scopeLabel: 'Subscription models',
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('API equivalent · per 1M tokens'), findsOneWidget);
+        expect(find.text(r'$2.00'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('arrow keys traverse models and named special choices', (
     tester,
   ) async {
