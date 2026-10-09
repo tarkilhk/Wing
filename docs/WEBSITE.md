@@ -125,6 +125,14 @@ adjacent sections. Header navigation and a guide's table of contents serve
 orientation and skipping; they do not justify duplicate body calls to action.
 Labels must describe the destination: a connection guide is not a guide index.
 
+Section headings stand alone. Do not add a parallel summary beside a heading
+when the feature explanations below already convey that information. Guide
+headers go directly from the title to the contents and the instructions; they
+do not preview the same contents in a paragraph. Keep a sentence only when it
+adds a capability, interaction detail, prerequisite or limit the reader needs.
+Move unique facts out of a redundant summary before deleting it. Empty space
+is preferable to text added to balance a layout.
+
 For each edit, check that the heading, explanation, screenshot and any final link
 answer the same question. A feature name alone is insufficient: the explanation
 must say what the visitor can do, while the image demonstrates the controls or
