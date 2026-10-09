@@ -451,7 +451,7 @@ String _skillBytes(int bytes) =>
     bytes < 1024 ? '$bytes B' : '${(bytes / 1024).toStringAsFixed(1)} KB';
 
 /// Bounded reference browsing, independent of the document's scroll position.
-class _SkillReferences extends StatelessWidget {
+class _SkillReferences extends StatefulWidget {
   const _SkillReferences({
     required this.files,
     required this.opening,
@@ -462,7 +462,21 @@ class _SkillReferences extends StatelessWidget {
   final Future<void> Function(SkillReference) onOpen;
 
   @override
+  State<_SkillReferences> createState() => _SkillReferencesState();
+}
+
+class _SkillReferencesState extends State<_SkillReferences> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final files = widget.files, opening = widget.opening;
     final colors = WingTokens.of(context),
         scaler = MediaQuery.textScalerOf(context);
     final hasSizes = files.any((file) => file.bytes != null);
@@ -500,58 +514,65 @@ class _SkillReferences extends StatelessWidget {
           const _SkillRule(),
           SizedBox(
             height: rowHeight * visible + visible - 1,
-            child: ListView.separated(
-              primary: false,
-              padding: EdgeInsets.zero,
-              itemCount: files.length,
-              separatorBuilder: (_, _) => const _SkillRule(),
-              itemBuilder: (context, index) {
-                final file = files[index];
-                return SizedBox(
-                  height: rowHeight,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.menu_book_outlined,
-                          size: 18,
-                          color: colors.muted,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ResourceFilename(
-                                target: file.path,
-                                label: file.name,
-                                style: colors.typography.body,
-                              ),
-                              if (file.bytes case final bytes?)
-                                Text(
-                                  _skillBytes(bytes),
-                                  style: colors.typography.label.copyWith(
-                                    color: colors.muted,
-                                  ),
-                                ),
-                            ],
+            child: Scrollbar(
+              controller: _scroll,
+              thumbVisibility: files.length > 5,
+              thickness: 3,
+              radius: const Radius.circular(2),
+              child: ListView.separated(
+                controller: _scroll,
+                primary: false,
+                padding: EdgeInsets.zero,
+                itemCount: files.length,
+                separatorBuilder: (_, _) => const _SkillRule(),
+                itemBuilder: (context, index) {
+                  final file = files[index];
+                  return SizedBox(
+                    height: rowHeight,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.menu_book_outlined,
+                            size: 18,
+                            color: colors.muted,
                           ),
-                        ),
-                        ActivityDetailAction(
-                          label: 'Read ${file.name}',
-                          icon: Icons.visibility_outlined,
-                          busy: opening == file.path,
-                          onPressed: opening == null
-                              ? () => onOpen(file)
-                              : null,
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ResourceFilename(
+                                  target: file.path,
+                                  label: file.name,
+                                  style: colors.typography.body,
+                                ),
+                                if (file.bytes case final bytes?)
+                                  Text(
+                                    _skillBytes(bytes),
+                                    style: colors.typography.label.copyWith(
+                                      color: colors.muted,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          ActivityDetailAction(
+                            label: 'Read ${file.name}',
+                            icon: Icons.visibility_outlined,
+                            busy: opening == file.path,
+                            onPressed: opening == null
+                                ? () => widget.onOpen(file)
+                                : null,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ],
