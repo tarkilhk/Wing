@@ -4,7 +4,7 @@
 
 # Wing for Android
 
-Wing is a free, independent, open-source Android companion for [Hermes Agent](https://github.com/NousResearch/hermes-agent). Pick up a conversation, follow live work, and steer the next step when you leave your desk. Your agent runs on your Hermes server; Wing brings its workspace to your phone.
+Wing is a free, independent, open-source Android companion for [Hermes Agent](https://github.com/NousResearch/hermes-agent). Organize work across profiles and projects, multitask through Recents, and steer the next step when you leave your desk. Your agent runs on your Hermes server; Wing brings its workspace to your phone.
 
 [**Download Wing**](https://github.com/tarkilhk/Wing/releases/latest) · [Get connected](docs/GETTING_STARTED.md) · [Explore the features](docs/FEATURES.md)
 
@@ -21,11 +21,11 @@ Every feature is included without a Wing subscription. Your server and model pro
 
 ## Keep the work moving
 
+- Keep work organized across profiles and projects. Search, pin and group conversations, then use Recents to switch between recent chats, running work and conversations that need input.
 - Follow streaming replies, tool activity, delegated tasks and available reasoning. Steer live work, queue a follow-up, or stop a run.
-- Find conversations across profiles and projects. Search, pin, group, and use Recents to catch up on ongoing work.
 - Bring photos and files from Android. Dictate into an editable draft, read replies aloud, and save or share output files.
-- Read code and tables, preview reports and supported media, and keep unsent drafts and staged files across navigation and restart.
-- Manage supported profiles, models, connectors and scheduled tasks. Check health, run diagnostics, and explore token usage.
+- Read properly formatted Markdown and tables, copy or wrap code, and preview, save or share supported output files. Keep unsent drafts and staged files across navigation and restart.
+- Manage supported profiles, models, identity, skills, connectors and scheduled tasks. Check host resources, server diagnostics and profile readiness in Health, and explore token usage in analytics.
 
 [Full feature guide](docs/FEATURES.md) · [Current limitations](docs/KNOWN_LIMITATIONS.md)
 

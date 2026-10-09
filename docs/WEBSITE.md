@@ -8,8 +8,20 @@ same directory works under GitHub Pages' `/Wing/` project path.
 The primary visitor path is to understand Wing's Android/Hermes relationship,
 inspect the real app's workflows, and download the signed Android APK. The
 README gives repository visitors a shorter introduction and documentation links.
-User guides remain authoritative for capabilities and prerequisites; the
-website links to them rather than maintaining a second documentation site.
+The website has short, reader-facing feature and setup guides. Repository user
+guides and production source remain authoritative for capabilities and
+prerequisites; keep the corresponding website explanations aligned with them.
+GitHub links are reserved for downloads, source, complete policies and technical
+server instructions.
+
+| Website page | Authoritative feature/setup references |
+| --- | --- |
+| `workspaces.html` | `FEATURES.md`: profiles, projects, Chats filters, Recents and drafts |
+| `live-work.html` | `FEATURES.md` and `TOOL_ACTIVITY.md`: live activity, steering and tool details |
+| `results.html` | `FEATURES.md`, production `ProfileMessage`, `MarkdownMessageContent` and resource viewers |
+| `health.html` | `ADMINISTRATION.md`: Host, Server and Profile checks and their limits |
+| `administration.html` | `ADMINISTRATION.md` and its ownership handoff: supported profile controls and analytics |
+| `get-started.html` | `GETTING_STARTED.md`, `SELF_HOSTING.md`, `KNOWN_LIMITATIONS.md`, `NOTIFICATIONS.md`, `CONFIGURATION_BACKUPS.md` and `PRIVACY.md` |
 
 ## Local preview
 
@@ -39,6 +51,10 @@ a font. Manrope supplies display text and Source Sans 3 supplies body text.
 The Latin font subsets and their OFL notices are checked in.
 
 The opening pairs a conversation with the expanded tool details behind it.
+Profiles, projects and Recents lead the feature story immediately afterward,
+with real Chats and Recents captures side by side. Result handling has a dedicated
+section showing Markdown structure, code controls and file actions. Health and
+Administration each have their own visible screen and reader-facing guide.
 The workflow explorer shows following work, steering a conversation, and reading
 the result. Its appearance controls change the app captures, not the page theme.
 Tabs support arrow keys, Home and End. Native disclosures provide answers to
@@ -60,10 +76,16 @@ HTML recreation of the app. The page identifies the demo content.
 | --- | --- |
 | `conversation-{dark,light}.png` | Production `ProfileWorkspaceScreen`, public-safe research history and context-usage fixture |
 | `steer-{dark,light}.png` | Same screen with a live message-start fixture, a drafted instruction and the actual held composer overlay |
-| `chats-{dark,light}.png` | Production chat browser with named demo conversations and projects |
+| `chats-{dark,light}.png` | Production chat browser with demo conversations grouped into Launch and Research projects across two profiles |
+| `recents-{dark,light}.png` | Production `ProfileWorkspaceScreen` Recents destination, with recent messages, one running chat and one needing input across two profiles |
+| `results-{dark,light}.png` | Production `ProfileMessage` with Markdown heading, table, quote, code and an explicit report link; demo callbacks make its supported actions visible without performing I/O |
+| `administration-{dark,light}.png` | Production `HermesAdministrationContent`, using the existing administration-design fixture with authored website observations |
+| `health-{dark,light}.png` | Same production content's Health destination, with existing stock-shaped host fixture data and authored diagnostic/profile results |
+| `health-profile-{dark,light}.png` | Same Health destination scrolled to its profile checks in a shorter viewport |
 | `tool-{dark,light}.png` | Production `ProfileToolCall`, an expanded code execution receipt with supplied code and output |
 | `agents-{dark,light}.png` | Existing `build/activity-family/agents-{dark,light}-1.png` production-widget captures with demo task and live output |
 | `analytics-dark.png` | Existing public `docs/screenshots/analytics-dark.png` demo analytics capture |
+| `welcome-light.png` | Existing public `docs/screenshots/welcome-light.png` production welcome capture |
 | `wing.png` | Production 192px Android launcher rendition, `android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png` |
 
 The capture runner is `tools/website/capture_app_test.dart`. It exports only the
@@ -93,8 +115,11 @@ node tools/website/review.cjs \
 ```
 
 It checks five widths (320, 390, 768, 1024 and 1440), both app appearances and
-every workflow. It also checks assets, anchors, keyboard tabs, disclosures,
-visible text contrast, 200% text, reduced motion and reading without JavaScript.
+every homepage workflow, then all six guides at the same widths. It also checks
+assets, local links and cross-page anchors, keyboard tabs, disclosures, visible
+text contrast, 200% text on every page, reduced motion and reading without
+JavaScript. Shared navigation uses real anchors; guide reading has no JavaScript
+dependency. No client router or deployment fallback is required.
 Screenshots and the verification report go under ignored `build/website-preview/`.
 To use locally installed browser executables, pass a fourth argument naming a
 JSON file that maps `chromium`, `firefox` and `webkit` to their executable paths.

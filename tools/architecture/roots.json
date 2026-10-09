@@ -14085,6 +14085,91 @@
       "path": "website/styles.css",
       "area": "website",
       "provenance": "tracked"
+    },
+    {
+      "path": "website/administration.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/administration-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/administration-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/health-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/health-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/health-profile-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/health-profile-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/recents-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/recents-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/results-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/results-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/welcome-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/get-started.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/health.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/live-work.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/results.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/workspaces.html",
+      "area": "website",
+      "provenance": "tracked"
     }
   ],
   "direct_dependencies": {

@@ -75,6 +75,28 @@ async function checkContrast(page) {
   assert.deepEqual(failures, [], 'Text contrast failures');
 }
 
+async function checkLocalLinks(page) {
+  const origin = new URL(baseUrl).origin;
+  const links = await page.locator('a[href]').evaluateAll(elements => [...new Set(elements.map(link => link.href))]);
+  const documents = new Map();
+  for (const href of links) {
+    const target = new URL(href);
+    if (target.origin !== origin) continue;
+    const fragment = target.hash.slice(1);
+    target.hash = '';
+    if (!documents.has(target.href)) {
+      const response = await page.request.get(target.href);
+      assert.equal(response.status(), 200, `Local link ${target.href}`);
+      documents.set(target.href, (response.headers()['content-type'] || '').includes('text/html') ? await response.text() : null);
+    }
+    if (fragment) {
+      const html = documents.get(target.href);
+      assert.ok(html, `Fragment target is HTML: ${href}`);
+      assert.equal(await page.evaluate(({ html, fragment }) => !!new DOMParser().parseFromString(html, 'text/html').getElementById(decodeURIComponent(fragment)), { html, fragment }), true, `Local fragment ${href}`);
+    }
+  }
+}
+
 async function review(engineName) {
   const browser = await playwright[engineName].launch(launchOptions(engineName));
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -129,6 +151,7 @@ async function review(engineName) {
     assert.equal(await question.getAttribute('open'), null);
   }
   await checkContrast(page);
+  await checkLocalLinks(page);
   for (const width of [390, 1024]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.evaluate(() => document.documentElement.style.fontSize = '200%');
@@ -141,6 +164,31 @@ async function review(engineName) {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.locator('#tab-steer').click();
   await page.screenshot({ path: resolve(output, `${engineName}-steer.png`), fullPage: true });
+  await page.locator('.workspace-section').screenshot({ path: resolve(output, `${engineName}-workspaces-section.png`) });
+  for (const name of ['workspaces', 'live-work', 'results', 'health', 'administration', 'get-started']) {
+    const result = await page.goto(new URL(`${name}.html`, baseUrl).href);
+    assert.equal(result.status(), 200, `${name}: loads`);
+    await page.addStyleTag({ content: 'html { scroll-behavior: auto !important; }' });
+    await loadedImages(page);
+    assert.equal(await page.locator('h1').count(), 1, `${name}: one main title`);
+    assert.equal(await page.locator('.topic-nav [aria-current="page"]').count(), 1, `${name}: current feature guide`);
+    await checkLocalLinks(page);
+    await checkContrast(page);
+    for (const width of [320, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: width < 600 ? 844 : 1000 });
+      await checkLayout(page, `${engineName} ${name} ${width}`);
+      if (width === 390 || width === 1440) {
+        await page.evaluate(() => scrollTo(0, 0));
+        await page.screenshot({ path: resolve(output, `${engineName}-${name}-${width}.png`), fullPage: true });
+      }
+    }
+    for (const width of [390, 1024]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.evaluate(() => document.documentElement.style.fontSize = '200%');
+      await checkLayout(page, `${engineName} ${name} ${width} 200% text`);
+      await page.evaluate(() => document.documentElement.style.fontSize = '');
+    }
+  }
   assert.deepEqual(errors, [], `${engineName}: browser errors`);
   await browser.close();
 
@@ -150,7 +198,7 @@ async function review(engineName) {
   assert.equal(await staticPage.locator('[role="tabpanel"]:visible').count(), 3, 'All workflows remain readable without JavaScript');
   await checkLayout(staticPage, `${engineName} JavaScript disabled`);
   await staticBrowser.close();
-  return `${engineName}: 30 viewport/theme/workflow combinations; keyboard tabs; disclosures; text contrast; 200% text; reduced motion; no-JavaScript reading.`;
+  return `${engineName}: 30 homepage viewport/theme/workflow combinations; six guides at five widths; local links and cross-page anchors; keyboard tabs; disclosures; text contrast; 200% text on every page; reduced motion; no-JavaScript reading.`;
 }
 
 (async () => {
