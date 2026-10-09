@@ -100,7 +100,16 @@ final class _WorkspaceRecentConversationSource
     final previousSession = previous?._selectedSession;
     final navigation = controller._navigationGeneration + 1;
     try {
-      await controller.openBrowserSession(key, isCurrentRequest: isCurrent);
+      if (controller._resources[key.workspace]?.offlineSnapshot == true ||
+          controller.recovering) {
+        await controller.openBrowserSession(key, isCurrentRequest: isCurrent);
+      } else {
+        final revealed = Completer<void>();
+        final refresh = _openAndRefresh(key, isCurrent, revealed);
+        // Cached reading releases the route transition while this owned
+        // operation keeps checking the runtime and authoritative history.
+        await Future.any([revealed.future, refresh]);
+      }
     } finally {
       // A failed cross-profile resume may have selected the profile but no chat.
       // Restore only this command's former selection, never a newer navigation.
@@ -124,4 +133,53 @@ final class _WorkspaceRecentConversationSource
       }
     }
   }
+
+  Future<void> _openAndRefresh(
+    ProfileSessionKey key,
+    bool Function() isCurrent,
+    Completer<void> revealed,
+  ) => controller._retainWorkspaceOperation(() async {
+    ProfileChat? retained;
+    final token = Object();
+    try {
+      await controller._openSession(
+        key,
+        isCurrentRequest: isCurrent,
+        propagateHistoryFailure: true,
+        onRetainedReading: (chat) {
+          retained = chat;
+          chat._recentRefresh = token;
+          chat._runtime.beginOpening();
+          revealed.complete();
+        },
+      );
+    } catch (failure) {
+      final chat = retained;
+      if (chat == null) rethrow;
+      if (_ownsRefresh(chat, key, token)) {
+        chat._runtime.finishOpening(
+          error: controller._isMissingSessionFailure(failure)
+              ? 'This conversation is no longer available. Your saved messages are kept.'
+              : 'Conversation could not be refreshed. Retry to check for new messages.',
+        );
+      }
+    } finally {
+      final chat = retained;
+      if (chat != null && _ownsRefresh(chat, key, token)) {
+        chat._recentRefresh = null;
+        if (chat.runtime.opening && chat.runtime.openingError == null) {
+          chat._runtime.finishOpening();
+        }
+        controller._changed();
+      }
+    }
+  });
+
+  bool _ownsRefresh(ProfileChat chat, ProfileSessionKey key, Object token) =>
+      admits(key) &&
+      identical(
+        controller._resources[key.workspace]?._chats[key.sessionId],
+        chat,
+      ) &&
+      identical(chat._recentRefresh, token);
 }

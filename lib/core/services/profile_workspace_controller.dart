@@ -100,6 +100,8 @@ class ProfileChat {
   ComposerSession _composer;
   ComposerSession get composer => _composer;
   final TranscriptReading reading;
+  Object? _recentRefresh;
+  bool get refreshingConversation => _recentRefresh != null;
 
   final List<GatewayNotice> _reviewNotices = [];
   List<GatewayTodo> _todos = [];
@@ -3238,10 +3240,56 @@ class ProfileWorkspaceController extends ChangeNotifier {
     bool recoverExpiredDraft = false,
     bool propagateHistoryFailure = false,
     bool Function()? isCurrentRequest,
+  }) => _openSession(
+    key,
+    recoverExpiredDraft: recoverExpiredDraft,
+    propagateHistoryFailure: propagateHistoryFailure,
+    isCurrentRequest: isCurrentRequest,
+  );
+
+  Future<ProfileChat?> _openSession(
+    ProfileSessionKey key, {
+    bool recoverExpiredDraft = false,
+    bool propagateHistoryFailure = false,
+    bool Function()? isCurrentRequest,
+    void Function(ProfileChat)? onRetainedReading,
   }) async {
     final navigation = ++_navigationGeneration;
     if (!owns(key)) {
       throw ArgumentError('Wrong connection settings or host');
+    }
+    if (_closed || isCurrentRequest?.call() == false) return null;
+    final retainedResource = _resources[key.workspace];
+    final retained = retainedResource?._chats[key.sessionId];
+    if (onRetainedReading != null &&
+        _initialized &&
+        retainedResource?._loaded == true &&
+        retainedResource?._offlineSnapshot == false &&
+        !retainedResource!.blocksSession(key.sessionId) &&
+        retained != null &&
+        retained.composer.observation.restored &&
+        retained.reading.historySessionId != null) {
+      _cancelOlderLoads();
+      if (_current != retainedResource || switching) {
+        // Retained profile facts can be selected without rereading discovery,
+        // chat lists and projects. Supersede any older profile navigation.
+        ++_generation;
+        if (_current != null) _invalidateSessionLoad(_current!);
+        _invalidateSessionLoad(retainedResource);
+        _current = retainedResource;
+        _pendingProfile = null;
+        _error = null;
+        _failedSwitchProfile = null;
+        _failedSwitchError = null;
+        appPreferences.admitProfileSelection(
+          connectionIdentity,
+          key.workspace.profileName,
+        );
+        unawaited(appPreferences.settleProfileSelection(connectionIdentity));
+      }
+      retainedResource._selectedSession = key.sessionId;
+      onRetainedReading(retained);
+      _changed();
     }
     if (recoverExpiredDraft) {
       final replacement = _resources[key.workspace]

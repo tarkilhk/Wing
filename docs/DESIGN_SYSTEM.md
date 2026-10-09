@@ -147,7 +147,13 @@ neighborhood changes until budget eviction. Discarded images are disposed. Side
 previews use lower resolution. Selection begins opening alongside a 240 ms
 expansion. The real chat paints
 beneath the opaque cover before a 100 ms reveal after both painting and expansion
-complete. Genuine snapshots keep their exact viewport throughout; an uncaptured
+complete. For a previously loaded conversation, reveal the canonical retained
+transcript, draft and reading position without waiting for session resume or
+history refresh. Retained loaded profiles can be selected without rereading
+discovery, chat lists or projects. Keep the thin loading bar at the top while
+the selected conversation refreshes; fresh server messages publish through the
+existing transcript reader. Runtime-dependent actions wait for the refresh.
+Genuine snapshots keep their exact viewport throughout; an uncaptured
 excerpt fades into an opening frame rather than becoming a false full-screen
 transcript. Reduced motion reveals directly after the completed paint frame.
 Cards keep stable physical identities as paint order changes. They round and gain shadows only during
@@ -165,8 +171,11 @@ provides Previous / Next / Choose recent conversation; accessible navigation
 uses explicit icon-only stack controls with labels and tooltips. An enabled
 accessibility service alone does not disable expert gestures; Android retains
 ownership of any gestures its accessibility service consumes. A failed stack
-selection keeps the committed chat and reports one error beside the stack
-controls, leaving the cards available for retry or Back.
+selection without retained reading keeps the committed chat and reports one
+error beside the stack controls, leaving the cards available for retry or Back.
+If refresh fails after retained reading was revealed, keep that conversation
+visible, stop the loading bar and show the existing retry banner above its
+messages. Retry rereads the server; it does not discard the retained transcript.
 
 Passive edge cues point along the shortest circular path, with an equal-distance
 tie pointing right. Neutral reply cues are white in dark mode and charcoal in
@@ -182,12 +191,20 @@ Selection uses the existing captured workspace command and its lifetime fences.
 Drafts, attachments and scroll anchors keep their existing owners. Raster captures
 are bounded to the visible neighborhood plus the committed chat and disposed
 when evicted or the route leaves. Failed preview reads show a passive unavailable
-state; a failed selection keeps the current conversation and reports recovery.
+state. Selection and refresh have separate completion boundaries; an older
+refresh cannot clear a newer refresh's progress or change the selected chat.
 
 Client-only integration inspected upstream Hermes main
 `14ec243c1797412d93e6b52c41f29f41e75b0cef` (9 October 2026): stock saved-message
 history, session selection and correlated input/completion observations. No new
 server endpoint or backend modification is required.
+
+Retained-reading refresh inspected upstream main
+`32b77f51c12e6093074b2c8076fc0a3229a7ff76` (10 October 2026):
+`tui_gateway/methods_session.py` supports `session.resume` with `omit_messages`;
+`hermes_cli/web_routers/sessions.py` provides paginated saved messages through
+`GET /api/sessions/{session_id}/messages`. This change uses those stock operations
+and adds no server contract.
 
 ## Bots, 9 October 2026
 

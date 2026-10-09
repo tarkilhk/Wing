@@ -117,6 +117,18 @@ with client-only presentation and no backend changes.
 
 The application flow is intent → owned command → immutable observation → rendering. ProfileWorkspaceController, ProfileWorkspaceData and ProfileChat retain private canonical storage and expose readonly observations and explicit commands. Published collections protect nested values; canonical discovery and rows retain their admitted identities. Extracted sessions borrow those facts instead of sharing mutable bags or creating a second writable cache. Actual runtime composition captures the canonical key/runtime identity; open/create owns registry installation. Use existing ChangeNotifier/Listenable and constructor injection. Small pure rules are functions/value types; I/O seams earn interfaces when production adapters and behavioral fakes differ.
 
+Recents selection borrows canonical retained transcript/composer facts through
+the private workspace adapter. The workspace's open command admits retained
+reading before awaiting server resume, including an already loaded profile;
+the adapter retains the background operation until authoritative history settles.
+`ProfileChat.refreshingConversation` exposes its owned refresh lifetime to the
+existing top loading bar. Each refresh has its own token so older completions
+cannot clear newer progress. Runtime opening gates server-dependent actions;
+refresh failure keeps reading visible and uses the existing opening-error retry
+banner. There is no second writable transcript cache. See the
+[switching contract](DESIGN_SYSTEM.md#switching-recent-conversations) and
+[freshness regressions](TESTING.md#recents-conversation-switching).
+
 ComposerDraftStore is the sole existing draft codec and ordered adapter; AttachmentDraftService owns file/upload work. Composer-issued submission tickets capture work and revisions; the workspace retains runtime admission and RPC authority. Automatic queue draining requires positively observed access and same-profile live availability, separate from optimistic display availability. A local removal retry releases captured files only after durable removal succeeds and does not repeat the server mutation. Steering consumes only the captured text revision. Late dictation also requires the original owner and exact text revision, including edits away and back.
 
 TranscriptMessage and TranscriptToolResult normalize copied passive display facts without raw rows or runtime permission. TranscriptReading owns reading and notification focus; NotificationInput is a pure immutable domain value, imported directly by workspace rather than through the coordinator that borrows workspace/registry authorities. Slash completion uses immutable query-bound observations and required captured completion/save callbacks. Workspace owns catalog-versus-argument strategy, capture validation and stock dispatch expansion of inline skill references before prompt submission; original text remains the displayed message and failed expansion retains queued work. The pure model owns slash-token boundaries, skill identity matching, decoding, Unicode range conversion and exact-query insertion. Cursor, debounce, popup generation and rendering remain in the suggestions widget. SkillComposerController projects catalog-confirmed skill names into bold accent spans, retaining plain text and IME decoration; its skill identity cache retires with the chat scope. See [slash behavior](SLASH_COMMAND_SUPPORT.md).

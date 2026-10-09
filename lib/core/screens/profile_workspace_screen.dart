@@ -1058,7 +1058,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           ),
           body: Column(
             children: [
-              if (controller.switching) const LinearProgressIndicator(),
+              if (controller.switching || chat.refreshingConversation)
+                const LinearProgressIndicator(),
               WorkspaceConnectionStatus(
                 status: controller.connectionStatus,
                 showHint:

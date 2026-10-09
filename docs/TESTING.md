@@ -96,7 +96,14 @@ touch-to-catch and exact moving-card selection, overlapping expansion/resume and
 opaque-cover first-paint ordering, removed double-tap switching and
 completed asynchronous preview publication,
 theme paint and the production Recents route with draft/cursor/Back
-restoration at normal and enlarged text in both themes.
+restoration at normal and enlarged text in both themes. Its held-resume case
+requires the restored chat to be revealed with the top loading bar while the
+server response is still pending. `profile_resume_freshness_test.dart` covers
+retained-reading admission before resume, continued progress through a held
+history read, fresh message publication, cross-profile selection without list
+I/O, refresh failure/retry and overlapping refresh ownership. These asynchronous
+properties use behavioral regressions; source structure alone cannot establish
+which observation publishes before a held network response.
 `chat_notification_coordinator_test.dart` protects fresh journal projections,
 quiet baselines and native-permission independence. Run these plus
 `workspace_activity_filters_test.dart` and `profile_ongoing_activity_test.dart`

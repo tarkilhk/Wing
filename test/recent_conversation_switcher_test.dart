@@ -220,6 +220,15 @@ Future<void> _twoContacts(
 Future<void> _capture(WidgetTester tester, GlobalKey key, String name) async {
   if (!_export) return;
   await _finishFrames(tester);
+  await _captureCurrent(tester, key, name);
+}
+
+Future<void> _captureCurrent(
+  WidgetTester tester,
+  GlobalKey key,
+  String name,
+) async {
+  if (!_export) return;
   await tester.runAsync(() async {
     final boundary =
         key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
@@ -1140,6 +1149,7 @@ void main() {
           final appPreferences = AppPreferences(preferences);
           addTearDown(appPreferences.dispose);
           final fixture = _ScreenFixture();
+          Completer<void>? heldResume, resumeStarted;
           final reads = <String>[];
           final controller = ProfileWorkspaceController(
             access: ConnectionAccess(
@@ -1155,7 +1165,23 @@ void main() {
             connectionIdentity: 'recents-ui',
             preferences: preferences,
             appPreferences: appPreferences,
-            gatewayFactory: fixture.gateway,
+            gatewayFactory: (scope) {
+              final base = fixture.gateway(scope);
+              return ProfileGateway(
+                scope: scope,
+                discover: base.discover,
+                get: base.read,
+                rpc: (method, params) async {
+                  if (method == 'session.resume' && heldResume != null) {
+                    final delay = heldResume!;
+                    heldResume = null;
+                    resumeStarted!.complete();
+                    await delay.future;
+                  }
+                  return base.call(method, params);
+                },
+              );
+            },
             onNotificationRead: (_, identity) async {
               reads.add(identity);
             },
@@ -1276,8 +1302,40 @@ void main() {
           expect(find.text('Swipe to browse · tap to open'), findsNothing);
           await tester.tap(find.byTooltip('Chat actions'));
           await tester.pumpAndSettle();
+          final refreshDelay = Completer<void>();
+          heldResume = refreshDelay;
+          resumeStarted = Completer<void>();
+          addTearDown(() {
+            if (!refreshDelay.isCompleted) refreshDelay.complete();
+          });
           await tester.tap(find.text('Previous recent conversation'));
+          for (var frame = 0; frame < 12; frame++) {
+            await tester.pump(const Duration(milliseconds: 120));
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+          }
+          expect(resumeStarted.isCompleted, isTrue);
+          expect(first.refreshingConversation, isTrue);
+          expect(find.byType(LinearProgressIndicator), findsOneWidget);
+          expect(
+            find.widgetWithText(TextField, 'Return to this draft'),
+            findsOneWidget,
+          );
+          expect(
+            controller.visible,
+            isTrue,
+            reason: 'Cached reading must be revealed while resume is held',
+          );
+          await _captureCurrent(
+            tester,
+            frame,
+            'refreshing-${brightness.name}-$scale',
+          );
+          refreshDelay.complete();
           await _finishFrames(tester);
+          expect(first.refreshingConversation, isFalse);
+          expect(find.byType(LinearProgressIndicator), findsNothing);
           expect(controller.current!.chat!.key, first.key);
           final restored = tester
               .widget<TextField>(
