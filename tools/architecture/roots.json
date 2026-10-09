@@ -6087,46 +6087,6 @@
   ],
   "files": [
     {
-      "path": "website/assets/screenshots/navigator-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/navigator-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/profiles-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/profiles-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/projects-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/projects-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/workspace-view-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/workspace-view-light.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
       "path": ".gitattributes",
       "area": "root",
       "provenance": "tracked"
@@ -6170,6 +6130,11 @@
       "path": ".github/dependabot.yml",
       "area": ".github",
       "provenance": "tracked"
+    },
+    {
+      "path": ".github/workflows/nightly-tests.yml",
+      "area": ".github",
+      "provenance": "intentional-untracked"
     },
     {
       "path": ".github/workflows/pr-quality.yml",
@@ -6900,6 +6865,16 @@
       "path": "docs/design/2026-09-15-wing-identity.md",
       "area": "docs",
       "provenance": "tracked"
+    },
+    {
+      "path": "docs/design/2026-10-08-activity-information-design.md",
+      "area": "docs",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "docs/design/activity-field-policy.md",
+      "area": "docs",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "docs/design/images/connection-notification-proof.png",
@@ -7887,6 +7862,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/models/skill_reader.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/models/slash_command.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -7942,6 +7922,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/presentation/agent_task_presentation.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/presentation/attachment_preview_image.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -7957,7 +7942,47 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/presentation/resource_identity.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/presentation/saved_activity.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/skill_document.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activities/browser_web.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activities/discovery.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activities/execution_media.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activities/files.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activities/state.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/tool_activity_details.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
     },
@@ -8812,6 +8837,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/services/skill_reader_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/transcript_reading.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -8922,6 +8952,26 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/widgets/activity/activity_detail_actions.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/activity/skill_document_viewer.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/activity/skill_reader_activity.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/activity/skill_reader_navigation.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/activity_shimmer.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -9015,6 +9065,11 @@
       "path": "lib/core/widgets/chat_working_border.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/compact_activity_row.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/compact_switch.dart",
@@ -9237,6 +9292,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/widgets/resource_filename.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/retained_markdown_paragraph.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -9300,6 +9360,11 @@
       "path": "lib/core/widgets/text_size_settings_card.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/tool_activity_details.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/user_message_attachment.dart",
@@ -9627,6 +9692,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "scripts/test.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "scripts/test_native_cold_notification.py",
       "area": "scripts",
       "provenance": "tracked"
@@ -9662,9 +9732,19 @@
       "provenance": "tracked"
     },
     {
+      "path": "scripts/tests/test_check_commit_linters.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "scripts/tests/test_release.py",
       "area": "scripts",
       "provenance": "tracked"
+    },
+    {
+      "path": "scripts/tests/test_test_runner.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "scripts/tests/test_verify_release_apks.py",
@@ -9675,6 +9755,16 @@
       "path": "scripts/verify_release_apks.py",
       "area": "scripts",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/activity_density_guard_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/activity_family_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/activity_shimmer_test.dart",
@@ -9953,6 +10043,16 @@
     },
     {
       "path": "test/architecture_contract_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/architecture_proof_process_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/architecture_source_parsing_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },
@@ -10510,6 +10610,11 @@
       "path": "test/fixtures/security_audit.txt",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/fixtures/stock_activity_shapes.json",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/flutter_launcher_test.ps1",
@@ -11562,6 +11667,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "test/resource_filename_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/resource_preview_owner_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
@@ -11775,6 +11885,16 @@
       "path": "test/side_question_delivery_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/skill_document_viewer_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/skill_reader_session_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/skills_view_dependency_guard_test.dart",
@@ -11992,9 +12112,49 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/test_batches_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/text_size_preference_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/tool_activity_actions_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_browser_web_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_catalog_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_discovery_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_execution_media_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_files_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/tool_activity_state_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/tool_call_presentation_test.dart",
@@ -12537,6 +12697,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "tools/architecture/proof_process.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "tools/architecture/prove_workspace_search_owner.py",
       "area": "tools",
       "provenance": "intentional-untracked"
@@ -12553,6 +12718,16 @@
     },
     {
       "path": "tools/architecture/rules/_task_blueprint_contract.py",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/activity_density.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/activity_density.md",
       "area": "tools",
       "provenance": "intentional-untracked"
     },
@@ -13217,6 +13392,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "tools/architecture/tests/activity_density_test.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "tools/architecture/tests/app_preferences_construction_test.dart",
       "area": "tools",
       "provenance": "intentional-untracked"
@@ -13817,194 +13997,49 @@
       "provenance": "tracked"
     },
     {
-      "path": "lib/core/widgets/compact_activity_row.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/activity_density_guard_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "tools/architecture/rules/activity_density.dart",
-      "area": "tools",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "tools/architecture/rules/activity_density.md",
-      "area": "tools",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "tools/architecture/tests/activity_density_test.dart",
-      "area": "tools",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/architecture_proof_process_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "tools/architecture/proof_process.dart",
-      "area": "tools",
-      "provenance": "intentional-untracked"
-    },
-    {
       "path": "tools/testing/test_batches.dart",
       "area": "tools",
       "provenance": "intentional-untracked"
     },
     {
-      "path": "scripts/test.py",
-      "area": "scripts",
-      "provenance": "intentional-untracked"
+      "path": "website/assets/screenshots/navigator-dark.png",
+      "area": "website",
+      "provenance": "tracked"
     },
     {
-      "path": "test/test_batches_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
+      "path": "website/assets/screenshots/navigator-light.png",
+      "area": "website",
+      "provenance": "tracked"
     },
     {
-      "path": ".github/workflows/nightly-tests.yml",
-      "area": ".github",
-      "provenance": "intentional-untracked"
+      "path": "website/assets/screenshots/profiles-dark.png",
+      "area": "website",
+      "provenance": "tracked"
     },
     {
-      "path": "scripts/tests/test_test_runner.py",
-      "area": "scripts",
-      "provenance": "intentional-untracked"
+      "path": "website/assets/screenshots/profiles-light.png",
+      "area": "website",
+      "provenance": "tracked"
     },
     {
-      "path": "test/architecture_source_parsing_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
+      "path": "website/assets/screenshots/projects-dark.png",
+      "area": "website",
+      "provenance": "tracked"
     },
     {
-      "path": "scripts/tests/test_check_commit_linters.py",
-      "area": "scripts",
-      "provenance": "intentional-untracked"
+      "path": "website/assets/screenshots/projects-light.png",
+      "area": "website",
+      "provenance": "tracked"
     },
     {
-      "path": "docs/design/2026-10-08-activity-information-design.md",
-      "area": "docs",
-      "provenance": "intentional-untracked"
+      "path": "website/assets/screenshots/workspace-view-dark.png",
+      "area": "website",
+      "provenance": "tracked"
     },
     {
-      "path": "lib/core/presentation/tool_activity_details.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/widgets/tool_activity_details.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/activity_family_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/presentation/tool_activities/discovery.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/presentation/tool_activities/files.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/presentation/tool_activities/state.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/presentation/tool_activities/execution_media.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/presentation/tool_activities/browser_web.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/tool_activity_browser_web_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/tool_activity_execution_media_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/tool_activity_discovery_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/tool_activity_state_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/tool_activity_catalog_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/tool_activity_files_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/fixtures/stock_activity_shapes.json",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "docs/design/activity-field-policy.md",
-      "area": "docs",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/tool_activity_actions_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/presentation/resource_identity.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/widgets/resource_filename.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/resource_filename_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/presentation/agent_task_presentation.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/presentation/skill_document.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/widgets/activity/skill_document_viewer.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
+      "path": "website/assets/screenshots/workspace-view-light.png",
+      "area": "website",
+      "provenance": "tracked"
     },
     {
       "path": "docs/WEBSITE.md",

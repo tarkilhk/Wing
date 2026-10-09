@@ -1,7 +1,8 @@
+import '../../widgets/activity/activity_detail_actions.dart';
+import '../../widgets/activity/skill_document_viewer.dart';
 import 'package:flutter/material.dart';
 import '../../models/profile_skills.dart';
 import '../../presentation/skill_document.dart';
-import '../../widgets/tool_activity_details.dart';
 import '../../theme/wing_theme.dart';
 import '../../services/profile_skills_session.dart';
 import '../../services/administration_operation_session.dart';
@@ -218,6 +219,7 @@ class _AdminSkillDetailState extends State<AdminSkillDetail> {
       );
       return SkillDocumentViewer(
         document: document,
+        createReader: () => _session.reader(document.readerTarget),
         actions: [
           if (current.editable) ...[
             ActivityDetailAction(
@@ -246,15 +248,6 @@ class _AdminSkillDetailState extends State<AdminSkillDetail> {
         bodyBuilder: (context, body) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(WingSpacing.sm),
-              child: Text(
-                '${_session.scopeLabel} · Origin: ${current.provenance}',
-                style: WingTokens.of(context).typography.label.copyWith(
-                  color: WingTokens.of(context).muted,
-                ),
-              ),
-            ),
             Expanded(
               child: _SkillsRead(
                 session: _session,

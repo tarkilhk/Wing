@@ -22,6 +22,8 @@ import 'block_reusing_markdown_body.dart';
 import 'background_markdown_content.dart';
 import 'deliverable_attachment.dart';
 
+typedef MarkdownHeadingAnchor = ({String label, int level, GlobalKey key});
+
 /// Renders Markdown message content without conversation chrome.
 class MarkdownMessageContent extends StatefulWidget {
   final String data;
@@ -32,6 +34,7 @@ class MarkdownMessageContent extends StatefulWidget {
   final bool deliverables;
   final String? documentPath;
   final String? initialFragment;
+  final ValueChanged<List<MarkdownHeadingAnchor>>? onHeadings;
 
   const MarkdownMessageContent({
     super.key,
@@ -43,6 +46,7 @@ class MarkdownMessageContent extends StatefulWidget {
     this.deliverables = false,
     this.documentPath,
     this.initialFragment,
+    this.onHeadings,
   });
 
   @override
@@ -117,6 +121,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
         widget.deliverables != oldWidget.deliverables ||
         widget.documentPath != oldWidget.documentPath ||
         widget.initialFragment != oldWidget.initialFragment ||
+        (widget.onHeadings == null) != (oldWidget.onHeadings == null) ||
         (widget.loadImage == null) != (oldWidget.loadImage == null) ||
         (widget.onOpenRemoteFile == null) !=
             (oldWidget.onOpenRemoteFile == null) ||
@@ -256,6 +261,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
         : 0;
     final result = _content =
         widget.documentPath == null &&
+            widget.onHeadings == null &&
             markdownQaVariant == MarkdownQaVariant.background
         ? BackgroundMarkdownContent(
             data: widget.data,
@@ -297,7 +303,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     final styleSheet = _styleSheet ??= profileMarkdownStyle(theme);
     final markdownTheme = _markdownTheme ??= profileMarkdownTheme(theme);
     final builders = _markdownBuilders ??= {
-      if (widget.documentPath != null)
+      if (widget.documentPath != null || widget.onHeadings != null)
         _headingAnchorTag: _HeadingAnchorBuilder(_headingKeys),
       if (widget.deliverables)
         deliverableElementTag: _DeliverableBuilder(
@@ -314,7 +320,15 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
         ),
     };
     _headingKeys.clear();
-    final headings = _HeadingBuilder(_headingKeys);
+    final anchors = <MarkdownHeadingAnchor>[];
+    final headings = _HeadingBuilder(_headingKeys, anchors);
+    if (widget.onHeadings != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && anchors.isNotEmpty) {
+          widget.onHeadings?.call(List.unmodifiable(anchors));
+        }
+      });
+    }
     // The production message path receives a complete snapshot from the
     // worker. Only the explicit synchronous QA variants and document previews
     // run the splitter here.
@@ -357,6 +371,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
       // to rebuild their document-wide anchor registry.
       if (!_refreshSegments &&
           widget.documentPath == null &&
+          widget.onHeadings == null &&
           previous != null &&
           (prepared != null ||
               _segmentsStreaming == widget.streaming ||
@@ -367,7 +382,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
         continue;
       }
       Widget prose(String text, List<md.Node>? nodes) {
-        final options = widget.documentPath != null
+        final options = widget.documentPath != null || widget.onHeadings != null
             ? MarkdownBody(
                 data: text,
                 checkboxBuilder: _buildTaskMarker,
@@ -501,8 +516,9 @@ const _headingAnchorTag = 'wing-heading-anchor';
 /// Insert an invisible scroll target while retaining the renderer's heading
 /// typography, emphasis, links and selection behavior.
 class _HeadingBuilder extends MarkdownPaddingBuilder {
-  _HeadingBuilder(this.keys);
+  _HeadingBuilder(this.keys, this.anchors);
   final Map<String, GlobalKey> keys;
+  final List<MarkdownHeadingAnchor> anchors;
 
   @override
   void visitElementBefore(md.Element element) {
@@ -517,6 +533,11 @@ class _HeadingBuilder extends MarkdownPaddingBuilder {
       id = '$slug-${++suffix}';
     }
     keys[id] = GlobalKey();
+    anchors.add((
+      label: element.textContent,
+      level: int.parse(element.tag.substring(1)),
+      key: keys[id]!,
+    ));
     element.children!.insert(
       0,
       md.Element.empty(_headingAnchorTag)..attributes['id'] = id,

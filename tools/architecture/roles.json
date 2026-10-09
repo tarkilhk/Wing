@@ -416,6 +416,11 @@
       "feature": "conversation",
       "library": "lib/core/models/skill_invocation.dart"
     },
+    "lib/core/models/skill_reader.dart": {
+      "role": "domain",
+      "feature": "administration-skills-tools",
+      "library": "lib/core/models/skill_reader.dart"
+    },
     "lib/core/models/slash_command.dart": {
       "role": "domain",
       "feature": "conversation",
@@ -471,6 +476,11 @@
       "feature": "app-shell",
       "library": "lib/core/models/workspace_entry.dart"
     },
+    "lib/core/presentation/agent_task_presentation.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/agent_task_presentation.dart"
+    },
     "lib/core/presentation/attachment_preview_image.dart": {
       "role": "presentation",
       "feature": "attachments-and-sharing",
@@ -486,10 +496,45 @@
       "feature": "chat-activity",
       "library": "lib/core/presentation/desktop_tool_labels.dart"
     },
+    "lib/core/presentation/resource_identity.dart": {
+      "role": "presentation",
+      "feature": "outputs-and-viewers",
+      "library": "lib/core/presentation/resource_identity.dart"
+    },
     "lib/core/presentation/saved_activity.dart": {
       "role": "presentation",
       "feature": "chat-activity",
       "library": "lib/core/presentation/saved_activity.dart"
+    },
+    "lib/core/presentation/skill_document.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/skill_document.dart"
+    },
+    "lib/core/presentation/tool_activities/browser_web.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_activity_details.dart"
+    },
+    "lib/core/presentation/tool_activities/discovery.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_activity_details.dart"
+    },
+    "lib/core/presentation/tool_activities/execution_media.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_activity_details.dart"
+    },
+    "lib/core/presentation/tool_activities/files.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_activity_details.dart"
+    },
+    "lib/core/presentation/tool_activities/state.dart": {
+      "role": "presentation",
+      "feature": "chat-activity",
+      "library": "lib/core/presentation/tool_activity_details.dart"
     },
     "lib/core/presentation/tool_activity_details.dart": {
       "role": "presentation",
@@ -1336,6 +1381,11 @@
       "feature": "attachments-sharing",
       "library": "lib/core/services/shared_draft_session.dart"
     },
+    "lib/core/services/skill_reader_session.dart": {
+      "role": "application",
+      "feature": "administration-skills-tools",
+      "library": "lib/core/services/skill_reader_session.dart"
+    },
     "lib/core/services/transcript_reading.dart": {
       "role": "application",
       "feature": "conversation",
@@ -1445,6 +1495,26 @@
       "role": "utility",
       "feature": "chat-activity",
       "library": "lib/core/utils/tool_activity_clock.dart"
+    },
+    "lib/core/widgets/activity/activity_detail_actions.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/activity/activity_detail_actions.dart"
+    },
+    "lib/core/widgets/activity/skill_document_viewer.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/activity/skill_document_viewer.dart"
+    },
+    "lib/core/widgets/activity/skill_reader_activity.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/activity/skill_document_viewer.dart"
+    },
+    "lib/core/widgets/activity/skill_reader_navigation.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/activity/skill_document_viewer.dart"
     },
     "lib/core/widgets/activity_shimmer.dart": {
       "role": "view",
@@ -1766,6 +1836,11 @@
       "feature": "ui-foundations",
       "library": "lib/core/widgets/read_recovery.dart"
     },
+    "lib/core/widgets/resource_filename.dart": {
+      "role": "view",
+      "feature": "outputs-and-viewers",
+      "library": "lib/core/widgets/resource_filename.dart"
+    },
     "lib/core/widgets/retained_markdown_paragraph.dart": {
       "role": "view",
       "feature": "markdown",
@@ -1890,56 +1965,6 @@
       "role": "view",
       "feature": "app-shell",
       "library": "lib/main.dart"
-    },
-    "lib/core/presentation/tool_activities/discovery.dart": {
-      "role": "presentation",
-      "feature": "chat-activity",
-      "library": "lib/core/presentation/tool_activity_details.dart"
-    },
-    "lib/core/presentation/tool_activities/files.dart": {
-      "role": "presentation",
-      "feature": "chat-activity",
-      "library": "lib/core/presentation/tool_activity_details.dart"
-    },
-    "lib/core/presentation/tool_activities/state.dart": {
-      "role": "presentation",
-      "feature": "chat-activity",
-      "library": "lib/core/presentation/tool_activity_details.dart"
-    },
-    "lib/core/presentation/tool_activities/execution_media.dart": {
-      "role": "presentation",
-      "feature": "chat-activity",
-      "library": "lib/core/presentation/tool_activity_details.dart"
-    },
-    "lib/core/presentation/tool_activities/browser_web.dart": {
-      "role": "presentation",
-      "feature": "chat-activity",
-      "library": "lib/core/presentation/tool_activity_details.dart"
-    },
-    "lib/core/presentation/resource_identity.dart": {
-      "role": "presentation",
-      "feature": "outputs-and-viewers",
-      "library": "lib/core/presentation/resource_identity.dart"
-    },
-    "lib/core/widgets/resource_filename.dart": {
-      "role": "view",
-      "feature": "outputs-and-viewers",
-      "library": "lib/core/widgets/resource_filename.dart"
-    },
-    "lib/core/presentation/agent_task_presentation.dart": {
-      "role": "presentation",
-      "feature": "chat-activity",
-      "library": "lib/core/presentation/agent_task_presentation.dart"
-    },
-    "lib/core/presentation/skill_document.dart": {
-      "role": "presentation",
-      "feature": "chat-activity",
-      "library": "lib/core/presentation/skill_document.dart"
-    },
-    "lib/core/widgets/activity/skill_document_viewer.dart": {
-      "role": "view",
-      "feature": "chat-activity",
-      "library": "lib/core/widgets/tool_activity_details.dart"
     }
   }
 }

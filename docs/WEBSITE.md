@@ -55,8 +55,8 @@ enforced. That branch is an export of the reviewed `website/` directory, includi
 `.nojekyll`. GitHub runs its managed Pages build and deployment when that branch
 changes. No custom workflow or app build is required.
 
-The reviewed source lives in `website/` on `design/wing-landing-page`. To publish
-an update from a checkout with the reviewed website changes committed:
+The authored source lives in `website/` on `main`. Review changes on a feature
+branch and merge them before publishing. From a checkout of the reviewed source:
 
 ```sh
 wing_pages_commit=$(git subtree split --prefix=website --quiet)

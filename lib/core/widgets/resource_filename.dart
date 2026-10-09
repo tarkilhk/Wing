@@ -125,7 +125,9 @@ class ResourceViewerAppBar extends StatelessWidget
     this.target,
     this.resourceLabel,
     this.actions = const [],
-  }) : stacked = MediaQuery.textScalerOf(context).scale(14) > 21;
+    bool inlineActions = false,
+  }) : stacked =
+           !inlineActions && MediaQuery.textScalerOf(context).scale(14) > 21;
 
   @override
   Size get preferredSize => Size.fromHeight(

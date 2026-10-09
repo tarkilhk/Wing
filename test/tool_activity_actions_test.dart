@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/activity/activity_detail_actions.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -65,6 +66,22 @@ void main() {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
+          const shareChannel = MethodChannel('dev.fluttercommunity.plus/share');
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            shareChannel,
+            (call) async {
+              if (call.method == 'share') {
+                shared.add((call.arguments as Map)['text'] as String);
+                await sharing.future;
+                return 'dev.fluttercommunity.plus/share/success';
+              }
+              return null;
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(shareChannel, null),
+          );
           await tester.pumpWidget(
             MaterialApp(
               theme: wingTheme(brightness),
@@ -115,31 +132,32 @@ void main() {
           expect(find.text('1.0'), findsOneWidget);
           expect(find.text('Author'), findsOneWidget);
           expect(find.text('Example'), findsOneWidget);
-          expect(find.text('License'), findsOneWidget);
-          expect(find.text('MIT'), findsOneWidget);
+          expect(find.text('License'), findsNothing);
+          expect(find.text('MIT'), findsNothing);
           expect(find.text('build'), findsOneWidget);
           expect(find.text('review'), findsOneWidget);
-          expect(find.byTooltip('Copy skill instructions'), findsOneWidget);
+          expect(find.byTooltip('Copy content'), findsOneWidget);
           await tester.tap(find.text('inspect-build'));
           await tester.pumpAndSettle();
           expect(find.text(source), findsOneWidget);
           await tester.tapAt(const Offset(5, 400));
           await tester.pumpAndSettle();
+          await tester.ensureVisible(find.byTooltip('Show raw content'));
           await tester.tap(find.byTooltip('Show raw content'));
           await tester.pumpAndSettle();
           expect(find.text(raw), findsOneWidget);
-          expect(find.text('Version'), findsNothing);
-          await tester.tap(find.byTooltip('Copy skill instructions'));
+          expect(find.text('Version'), findsOneWidget);
+          await tester.tap(find.byTooltip('Copy content'));
           await tester.pump();
           expect(copied, raw);
-          await tester.tap(find.byTooltip('Share file'));
+          await tester.tap(find.byTooltip('Share content'));
           await tester.pump();
-          expect(shared, [source]);
+          expect(shared, [raw]);
           expect(
             tester
                 .widget<ActivityDetailAction>(
                   find.ancestor(
-                    of: find.byTooltip('Share file'),
+                    of: find.byTooltip('Share content'),
                     matching: find.byType(ActivityDetailAction),
                   ),
                 )

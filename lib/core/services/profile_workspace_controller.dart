@@ -9,6 +9,8 @@ import 'dart:math' as math;
 import 'administration_health_session.dart';
 import 'host_resources_session.dart';
 import 'administration_repository.dart';
+import 'skill_reader_session.dart';
+import '../models/skill_reader.dart';
 import 'app_preferences.dart';
 import 'profile_colors_session.dart';
 
@@ -412,6 +414,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _hostResources ??= HostResourcesSession(
         healthSession(repository: repository).server,
       );
+  SkillReaderSession skillReader(SkillReaderTarget document, String profile) =>
+      healthSession().server.skillReader(document, profile);
   AdministrationHealthSession healthSession({
     AdministrationRepository? repository,
   }) => _healthSession ??= AdministrationHealthSession(

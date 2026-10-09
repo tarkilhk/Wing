@@ -1,4 +1,6 @@
+import '../models/skill_reader.dart';
 import 'package:yaml/yaml.dart';
+import 'package:markdown/markdown.dart' as md;
 
 /// A received skill document, distinct from an executable or editable skill.
 final class SkillDocument {
@@ -8,6 +10,7 @@ final class SkillDocument {
     required this.formattedContent,
     this.sourcePath,
     required this.description,
+    this.category,
     required Iterable<String> tags,
     required Iterable<({String label, String value})> metadata,
   }) : tags = List.unmodifiable(tags),
@@ -17,6 +20,10 @@ final class SkillDocument {
   final String rawContent, formattedContent;
   final String? sourcePath;
   final String? description;
+  final String? category;
+  String get formattedText => _readableText(formattedContent);
+  SkillReaderTarget get readerTarget =>
+      SkillReaderTarget(name: name, sourcePath: sourcePath);
   final List<String> tags;
   final List<({String label, String value})> metadata;
 
@@ -27,6 +34,7 @@ final class SkillDocument {
     Iterable<String>? tags,
     Map? metadata,
     String? sourcePath,
+    String? category,
   }) {
     Map declaration = const {};
     final frontMatter = RegExp(
@@ -62,9 +70,10 @@ final class SkillDocument {
       sourcePath: sourcePath,
       description:
           _nonempty(description) ?? _nonempty(declaration['description']),
+      category: category,
       tags: tags ?? declaredTags,
       metadata: [
-        for (final key in ['version', 'author', 'license'])
+        for (final key in ['version', 'author'])
           if (declaredMetadata[key] ?? declaration[key] case final value?
               when value is String && value.trim().isNotEmpty || value is num)
             (
@@ -74,6 +83,36 @@ final class SkillDocument {
       ],
     );
   }
+}
+
+String _readableText(String source) {
+  final nodes = md.Document(
+    extensionSet: md.ExtensionSet.gitHubFlavored,
+    encodeHtml: false,
+  ).parseLines(source.split('\n'));
+  String read(md.Node node) {
+    if (node is md.Text) return node.text;
+    final element = node as md.Element;
+    if (element.tag == 'img') return element.attributes['alt'] ?? '';
+    if (element.tag == 'br') return '\n';
+    final text = (element.children ?? const <md.Node>[]).map(read).join();
+    return switch (element.tag) {
+      'li' => '• $text\n',
+      'p' ||
+      'h1' ||
+      'h2' ||
+      'h3' ||
+      'h4' ||
+      'h5' ||
+      'h6' ||
+      'pre' ||
+      'tr' => '$text\n\n',
+      'td' || 'th' => '$text\t',
+      _ => text,
+    };
+  }
+
+  return nodes.map(read).join().trim();
 }
 
 String? _nonempty(Object? value) =>

@@ -329,10 +329,7 @@ void main() {
       },
     );
     expect(detail.skill!.document.tags, ['review', 'evidence']);
-    expect(detail.skill!.document.metadata, [
-      (label: 'Version', value: '2.0'),
-      (label: 'License', value: 'MIT'),
-    ]);
+    expect(detail.skill!.document.metadata, [(label: 'Version', value: '2.0')]);
     expect(detail.skill!.document.description, isNull);
     expect(detail.skill!.content.copyText, raw);
     final malformed = project(
