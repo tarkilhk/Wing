@@ -211,11 +211,10 @@ LAN review uses those production views with authored sample data; it never
 connects to a Hermes server. These checks do not certify a live provider's
 image generation or a physical phone's screen control.
 
-For the limited Android form/navigation gate, request a free owned emulator slot
-from the shared coordinator, then run:
+For the limited Android form/navigation gate, run on a disposable emulator:
 
 ```sh
-flock /home/dev/projects/hermes-android/.session-coordination/execution.lock python3 scripts/test_native_bots.py --device <allocated-emulator> --output build/emulator-acceptance/bots
+python3 scripts/test_native_bots.py --device <emulator-id> --output build/emulator-acceptance/bots
 ```
 
 The driver rejects physical devices, restores viewport/density/system font scale,
@@ -224,8 +223,7 @@ and injects actual Android text and Back events. The four light/dark,
 appearance autosave/Back, Android document-picker cancellation, profile settings,
 new-bot creation and exact group-send recovery. Screenshots come from Android's
 window. Only stock transport observations are authored; provider generation,
-real display control and live Hermes delivery remain separate checks. The builder
-owns APK assembly; keep this dependent command sequence under the shared lease.
+real display control and live Hermes delivery remain separate checks.
 Use `--source-directory` for its frozen checkout and `--name` for a failing case.
 
 ## Continuous checks
