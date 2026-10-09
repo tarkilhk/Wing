@@ -126,9 +126,13 @@ retains stack and Recents navigation.
 
 - Two fingers swiping horizontally on the transcript pull the chat into
   a card and commit the adjacent conversation on release. A short drag returns.
+  Once recognized, a swipe stays a swipe until lift, including uneven finger drift.
 - Pinch inward with two fingers to zoom into a persistent card stack. Lifting
-  fingers leaves it open. One-finger swipes coast through multiple circular
-  cards according to their release velocity. A new touch catches the stack immediately; tapping the center or a visible
+  fingers leaves it open. Admission requires more than 24% and 32 logical pixels
+  of finger-spacing reduction, exceeding twice the midpoint's travel, so an
+  ordinary two-finger swipe does not open the stack. One-finger swipes coast
+  through multiple circular cards according to their release velocity. A new
+  touch catches the stack immediately; tapping the center or a visible
   neighboring card commits and expands that conversation. Back returns to the
   committed conversation before a second Back returns to the preserved Recents
   filter. Returning from cards restores an originally visible keyboard; a keyboard

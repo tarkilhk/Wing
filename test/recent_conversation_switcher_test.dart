@@ -1156,6 +1156,83 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    for (final earlyNarrowing in [false, true]) {
+      testWidgets(
+        'two-finger swipe with ${earlyNarrowing ? 'early' : 'late'} narrowing stays a swipe',
+        (tester) async {
+          await mount(tester);
+          final first = await tester.startGesture(
+            const Offset(220, 400),
+            pointer: 1,
+          );
+          final second = await tester.startGesture(
+            const Offset(300, 400),
+            pointer: 2,
+          );
+          await first.moveBy(Offset(earlyNarrowing ? -12 : -24, 0));
+          await second.moveBy(const Offset(-24, 0));
+          await tester.pump(const Duration(milliseconds: 16));
+          await first.moveTo(const Offset(50, 400));
+          await second.moveTo(const Offset(100, 400));
+          await tester.pump(const Duration(milliseconds: 16));
+          await first.up();
+          await second.up();
+          await _finishFrames(tester);
+          expect(find.text('Swipe to browse · tap to open'), findsNothing);
+          expect(source.opens, [source.entries[1].key]);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
+    for (final (span, contraction) in [(60.0, 20.0), (200.0, 40.0)]) {
+      testWidgets(
+        'small inward finger drift does not open the stack at span $span',
+        (tester) async {
+          await mount(tester);
+          await _twoContacts(
+            tester,
+            Offset(180 - span / 2, 400),
+            Offset(180 + span / 2, 400),
+            Offset(180 - (span - contraction) / 2, 400),
+            Offset(180 + (span - contraction) / 2, 400),
+          );
+          expect(find.text('Swipe to browse · tap to open'), findsNothing);
+          expect(source.opens, isEmpty);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
+    testWidgets('two-finger swipe tolerates separately delivered moves', (
+      tester,
+    ) async {
+      await mount(tester);
+      final first = await tester.startGesture(
+        const Offset(220, 400),
+        pointer: 1,
+      );
+      final second = await tester.startGesture(
+        const Offset(300, 400),
+        pointer: 2,
+      );
+      // The trailing finger arrives first, temporarily narrowing the span.
+      await second.moveBy(const Offset(-40, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+      await first.moveBy(const Offset(-40, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+      await second.moveTo(const Offset(130, 400));
+      await tester.pump(const Duration(milliseconds: 16));
+      await first.moveTo(const Offset(50, 400));
+      await tester.pump(const Duration(milliseconds: 16));
+      await first.up();
+      await second.up();
+      await _finishFrames(tester);
+      expect(find.text('Swipe to browse · tap to open'), findsNothing);
+      expect(source.opens, [source.entries[1].key]);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets(
       'pinch stays open after lift; browsing does not select; tap commits',
       (tester) async {

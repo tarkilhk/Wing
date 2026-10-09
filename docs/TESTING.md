@@ -74,7 +74,11 @@ publication.
 
 Prerequisite: at least two chats in the selected Recents filter. Open one from
 Recents. Exercise the two-finger horizontal swipe and
-inward pinch on blank transcript space. Lift both fingers: the stack must remain.
+inward pinch on blank transcript space. Include uneven swipes whose finger
+spacing narrows early or late: release must switch chats without opening the
+stack. Small inward drift must keep the normal chat. A deliberate inward pinch
+with substantially reduced spacing opens the stack; lift both fingers and it
+must remain.
 Browse past either end without selecting or resuming a chat, then tap a center or
 peek card. The selected normal chat expands, retaining that chat's draft,
 attachments and reading position. Back from the stack returns to the entry chat;

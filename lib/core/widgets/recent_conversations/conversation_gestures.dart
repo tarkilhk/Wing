@@ -187,22 +187,24 @@ class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
     if (_contacts.isEmpty) return;
     final delta = _center - _anchor;
     if (_contacts.length == 2) {
-      final shrink = _span > 0 ? 1 - _currentSpan / _span : 0.0;
-      if ((_kind == null ||
-              (_kind == ConversationGestureKind.slide && shrink > .26)) &&
-          shrink > .12 &&
-          _span - _currentSpan > 12) {
-        if (_started) {
-          _kind = ConversationGestureKind.pinch;
-        } else {
+      if (_kind == null) {
+        final contraction = _span - _currentSpan;
+        final shrink = _span > 0 ? contraction / _span : 0.0;
+        // A pinch must converge substantially more than its midpoint travels.
+        // Uneven swipes and separately delivered finger moves can narrow the
+        // span without both fingers intentionally moving inward.
+        if (shrink > .24 &&
+            contraction > 32 &&
+            contraction > delta.distance * 2) {
           _claim(ConversationGestureKind.pinch);
+        } else if (delta.dx.abs() > kTouchSlop &&
+            delta.dx.abs() > delta.dy.abs() * 1.4 &&
+            delta.dx.abs() * 2 > contraction) {
+          _claim(ConversationGestureKind.slide);
         }
-      } else if (_kind == null &&
-          delta.dx.abs() > kTouchSlop &&
-          delta.dx.abs() > delta.dy.abs() * 1.4 &&
-          shrink < .10) {
-        _claim(ConversationGestureKind.slide);
       }
+      // Keep the admitted kind until lift; later finger drift cannot turn a
+      // conversation swipe into a persistent stack.
     } else if (!_claimed && delta.distance > kTouchSlop) {
       resolve(GestureDisposition.rejected);
       _clear();
