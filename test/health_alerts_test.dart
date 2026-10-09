@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/health_alert.dart';
+import 'package:wing/core/models/administration_operation.dart';
 import 'package:wing/core/models/health_alert_evaluator.dart';
 import 'package:wing/core/models/host_thresholds.dart';
 import 'package:wing/core/services/administration_health.dart';
@@ -26,6 +28,18 @@ class _HeldStore extends HealthAlertSettingsStore {
   }
 }
 
+String _sharedDurationPolicy(HealthAlertSettings settings) {
+  final data = settings.encode();
+  data['rules'] = {
+    for (final entry in settings.rules.entries)
+      entry.key.name: entry.value.encode()
+        ..['minutes'] = entry.value.alertMinutes
+        ..remove('alertMinutes')
+        ..remove('clearMinutes'),
+  };
+  return jsonEncode(data);
+}
+
 void main() {
   final start = DateTime.utc(2026, 10, 9);
   final ram = HostMetric.memoryUsedPercent;
@@ -40,7 +54,8 @@ void main() {
       enabled: true,
       warnAbove: 90,
       clearBelow: 85,
-      minutes: 2,
+      alertMinutes: 2,
+      clearMinutes: 2,
     );
   });
   void sample(int seconds, double? value, {bool critical = false}) =>
@@ -59,6 +74,98 @@ void main() {
       sample(i, value);
     }
   }
+
+  test('warning and recovery use independent durations', () {
+    rule = rule.copyWith(alertMinutes: 1, clearMinutes: 3);
+    period(0, 60, 93);
+    expect(evaluator.alerts, hasLength(1));
+    period(75, 240, 80);
+    expect(evaluator.alerts, hasLength(1));
+    sample(255, 80);
+    expect(evaluator.alerts, isEmpty);
+    expect(() => rule.copyWith(alertMinutes: 0), throwsArgumentError);
+    expect(() => rule.copyWith(clearMinutes: 31), throwsArgumentError);
+  });
+
+  test(
+    'approved duration migration preserves policy and writes the new format once',
+    () async {
+      final original = HealthAlertSettings(
+        enabled: false,
+        server: false,
+        showNotice: false,
+      );
+      SharedPreferences.setMockInitialValues({
+        HealthAlertSettingsStore.key: _sharedDurationPolicy(original),
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final store = _HeldStore(prefs);
+      final session = HealthAlertSettingsSession(store);
+      expect(session.settings.enabled, isFalse);
+      expect(session.settings.server, isFalse);
+      expect(session.settings.showNotice, isFalse);
+      for (final metric in hostAlertMetrics) {
+        expect(
+          session.settings.rules[metric]!.alertMinutes,
+          original.rules[metric]!.alertMinutes,
+        );
+        expect(
+          session.settings.rules[metric]!.clearMinutes,
+          original.rules[metric]!.alertMinutes,
+        );
+        expect(
+          session.settings.rules[metric]!.warnAbove,
+          original.rules[metric]!.warnAbove,
+        );
+        expect(
+          session.settings.rules[metric]!.clearBelow,
+          original.rules[metric]!.clearBelow,
+        );
+        expect(
+          session.settings.rules[metric]!.enabled,
+          original.rules[metric]!.enabled,
+        );
+      }
+      expect(store.writes, 1);
+      final migrated = session.retry();
+      store.gate.complete();
+      expect(await migrated, isTrue);
+      final encoded =
+          jsonDecode(prefs.getString(HealthAlertSettingsStore.key)!) as Map;
+      for (final savedRule in (encoded['rules'] as Map).values) {
+        expect(savedRule.containsKey('minutes'), isFalse);
+        expect(savedRule['alertMinutes'], savedRule['clearMinutes']);
+      }
+      final reopened = HealthAlertSettingsSession(store);
+      expect(store.needsMigration, isFalse);
+      expect(store.writes, 1);
+      reopened.dispose();
+      session.dispose();
+    },
+  );
+
+  test(
+    'failed migration preserves stored data and remains retryable',
+    () async {
+      final original = _sharedDurationPolicy(HealthAlertSettings());
+      SharedPreferences.setMockInitialValues({
+        HealthAlertSettingsStore.key: original,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final store = _HeldStore(prefs)..fail = true;
+      final session = HealthAlertSettingsSession(store);
+      final migration = session.retry();
+      store.gate.complete();
+      expect(await migration, isFalse);
+      expect(prefs.getString(HealthAlertSettingsStore.key), original);
+      expect(session.settings.enabled, isTrue);
+      expect(session.error, isNotNull);
+      store.fail = false;
+      expect(await session.retry(), isTrue);
+      expect(prefs.getString(HealthAlertSettingsStore.key), isNot(original));
+      session.dispose();
+    },
+  );
 
   test(
     'requires sustained fresh samples, ignores duplicate receipts, and uses strict limits',
@@ -176,43 +283,63 @@ void main() {
     },
   );
   test(
-    'settings have one serialized durable owner; failed save preserves policy',
+    'failed autosave retains the selection for retry and the confirmed policy',
     () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       final store = _HeldStore(prefs)..fail = true;
       final session = HealthAlertSettingsSession(store);
-      final original = session.settings,
-          draft = original.copyWith(enabled: false);
-      final save = session.save(draft, expected: original);
+      final original = session.settings;
+      final saved = session.update(
+        (current) => current.copyWith(enabled: false),
+      );
       expect(session.saving, isTrue);
+      expect(session.value.enabled, isFalse);
       expect(session.settings, same(original));
-      expect(await session.save(draft, expected: original), isFalse);
-      expect(store.writes, 1);
       store.gate.complete();
-      expect(await save, isFalse);
+      expect(await saved, isFalse);
       expect(session.settings, same(original));
       expect(session.error, isNotNull);
       store.fail = false;
-      expect(await session.save(draft, expected: original), isTrue);
+      expect(await session.retry(), isTrue);
+      expect(session.error, isNull);
       expect(HealthAlertSettingsStore(prefs).read().enabled, isFalse);
       session.dispose();
     },
   );
-  test('stale editor cannot replace another window’s saved policy', () async {
+  test('rapid independent edits compose and writes never overlap', () async {
     SharedPreferences.setMockInitialValues({});
-    final session = HealthAlertSettingsSession(
-      HealthAlertSettingsStore(await SharedPreferences.getInstance()),
+    final prefs = await SharedPreferences.getInstance();
+    final store = _HeldStore(prefs);
+    final session = HealthAlertSettingsSession(store);
+    final original = session.settings;
+    final first = session.update(
+      (current) => current.copyWith(showNotice: false),
     );
-    final baseline = session.settings;
-    final newer = baseline.copyWith(showNotice: false);
-    expect(await session.save(newer, expected: baseline), isTrue);
-    expect(
-      await session.save(baseline.copyWith(enabled: false), expected: baseline),
-      isFalse,
+    final second = session.update(
+      (current) => current.copyWith(enabled: false),
     );
-    expect(session.settings, same(newer));
-    expect(session.error, contains('another window'));
+    final third = session.updateRule(
+      ram,
+      (current) => current.copyWith(warnAbove: 96.5),
+    );
+    expect(store.writes, 1);
+    expect(session.settings, same(original));
+    expect(session.value.showNotice, isFalse);
+    expect(session.value.enabled, isFalse);
+    expect(session.value.rules[ram]!.warnAbove, 96.5);
+    store.gate.complete();
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+    expect(await third, isTrue);
+    expect(store.writes, 2);
+    final restored = HealthAlertSettingsSession(
+      HealthAlertSettingsStore(prefs),
+    );
+    expect(restored.value.showNotice, isFalse);
+    expect(restored.value.enabled, isFalse);
+    expect(restored.value.rules[ram]!.warnAbove, 96.5);
+    restored.dispose();
     session.dispose();
   });
   test('corrupt policy fails closed with a repair path', () async {
@@ -224,12 +351,92 @@ void main() {
     expect(session.settings.enabled, isFalse);
     expect(session.error, isNotNull);
     expect(
-      await session.save(HealthAlertSettings(), expected: session.settings),
+      await session.update((current) => current.copyWith(enabled: true)),
       isTrue,
     );
     expect(session.settings.enabled, isTrue);
     session.dispose();
   });
+  for (final exitCode in [1, 2]) {
+    testWidgets('Doctor/security results never become alerts (exit $exitCode)', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      final fixture = HostResourcesFixture();
+      final host = HostResourcesSession(fixture.server, now: () => start);
+      final health = AdministrationHealth(fixture.server, now: () => start);
+      final connection = ServerConnectionStatus('Home')
+        ..accessAvailable()
+        ..liveChanged('chat', true);
+      final settings = HealthAlertSettingsSession(
+        HealthAlertSettingsStore(await SharedPreferences.getInstance()),
+      );
+      final session = HealthAlertsSession(
+        host: host,
+        health: health,
+        connection: connection,
+        settings: settings,
+        now: () => start,
+      );
+      session.setActive(true);
+      await host.refresh();
+      final saved = health.snapshot();
+      for (final name in ['doctor', 'security-audit']) {
+        final path = 'ops/$name';
+        (saved['generations'] as Map)[path] = 1;
+        (saved['diagnostics'] as Map)[path] = {
+          'name': name,
+          'pid': 42,
+          'generation': 1,
+          'checkedAt': start.toIso8601String(),
+          'status': {
+            'running': false,
+            'exit_code': exitCode,
+            'lines': name == 'doctor'
+                ? [
+                    List.filled(60, '─').join(),
+                    'Found 1 issue(s) to address:',
+                    '1. Missing optional connector',
+                  ]
+                : [
+                    'Found 1 known vulnerability finding(s) across 1 component(s):',
+                    '[node]',
+                    '  HIGH example==1.0 GHSA-example',
+                  ],
+          },
+        };
+      }
+      health.restore(saved);
+      expect(health.diagnostics, hasLength(2));
+      expect(
+        health.diagnostics.values.every((value) => value.exitCode == exitCode),
+        isTrue,
+      );
+      expect(
+        health.diagnostics.values.map((value) => value.classification),
+        everyElement(
+          exitCode == 1
+              ? AdministrationOperationOutcome.findings
+              : AdministrationOperationOutcome.failed,
+        ),
+      );
+      expect(session.alerts, isEmpty);
+      // Ignoring diagnostics must not mute genuine connection/host issues.
+      connection.liveChanged('chat', false);
+      expect(session.alerts.single.title, 'Server connection interrupted');
+      connection.liveChanged('chat', true);
+      fixture.pressure = hostPressurePayload(now: start);
+      fixture.pressure['memory']['pressure'] = 'critical';
+      await host.refresh();
+      expect(session.alerts.single.title, 'Critical memory pressure');
+      session.dispose();
+      host.dispose();
+      health.dispose();
+      connection.dispose();
+      settings.dispose();
+      fixture.server.close();
+    });
+  }
   testWidgets(
     'saved limits immediately retire incidents under the replaced rule',
     (tester) async {
@@ -263,20 +470,9 @@ void main() {
       final before = publications;
       await host.refresh();
       expect(publications, before);
-      final policy = settings.settings;
-      await settings.save(
-        policy.copyWith(
-          rules: {
-            ...policy.rules,
-            ram: HealthAlertRule(
-              enabled: true,
-              warnAbove: 96,
-              clearBelow: 85,
-              minutes: 2,
-            ),
-          },
-        ),
-        expected: policy,
+      await settings.updateRule(
+        ram,
+        (current) => current.copyWith(warnAbove: 96),
       );
       expect(session.alerts, isEmpty);
       session.dispose();
@@ -331,10 +527,7 @@ void main() {
       session.setActive(false);
       await tester.pump(const Duration(minutes: 1));
       expect(session.alerts.single.lastKnown, isTrue);
-      await settings.save(
-        settings.settings.copyWith(enabled: false),
-        expected: settings.settings,
-      );
+      await settings.update((current) => current.copyWith(enabled: false));
       expect(session.alerts, isEmpty);
       session.dispose();
       host.dispose();

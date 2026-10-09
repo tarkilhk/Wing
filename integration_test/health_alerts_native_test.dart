@@ -334,10 +334,14 @@ void main() {
       await tester.tap(find.text('Memory usage'));
       await _settleScreen(tester);
       await _capture('$label-rule');
+      // Remove current critical pressure before the new limit autosaves;
+      // replacing the rule should retire the previous incident.
+      observations.memoryCritical = false;
+      await observations.owner.hostResources().refresh();
       final fields = find.byType(TextField);
-      await tester.tap(fields.at(0));
-      await tester.enterText(fields.at(0), '96.5');
-      await tester.showKeyboard(fields.at(0));
+      await tester.tap(fields.at(1));
+      await tester.enterText(fields.at(1), '96.5');
+      await tester.showKeyboard(fields.at(1));
       final keyboardDeadline = DateTime.now().add(const Duration(seconds: 5));
       while (tester.view.viewInsets.bottom == 0 &&
           DateTime.now().isBefore(keyboardDeadline)) {
@@ -346,16 +350,11 @@ void main() {
       await _settleScreen(tester);
       // Dialog removes inherited insets after applying them to its own padding.
       expect(tester.view.viewInsets.bottom, greaterThan(0));
-      expect(
-        find.byTooltip('Apply this rule to the settings draft').hitTestable(),
-        findsOneWidget,
-      );
+      expect(find.byTooltip('Close rule editor').hitTestable(), findsOneWidget);
       await _capture('$label-keyboard');
-      await tester.tap(find.byTooltip('Apply this rule to the settings draft'));
-      await _settleScreen(tester);
-      observations.memoryCritical = false;
-      await observations.owner.hostResources().refresh();
-      await tester.tap(find.byTooltip('Save health alert settings'));
+      expect(prefs.getString('wing-health-alert-settings'), contains('96.5'));
+      expect(find.byTooltip('Save health alert settings'), findsNothing);
+      await tester.tap(find.byTooltip('Close rule editor'));
       await _settleScreen(tester);
       expect(prefs.getString('wing-health-alert-settings'), contains('96.5'));
       expect(bell, findsNothing);

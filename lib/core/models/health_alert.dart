@@ -56,7 +56,8 @@ class HealthAlertRule {
     required this.enabled,
     required this.warnAbove,
     required this.clearBelow,
-    required this.minutes,
+    required this.alertMinutes,
+    required this.clearMinutes,
   }) {
     if (!warnAbove.isFinite ||
         !clearBelow.isFinite ||
@@ -64,8 +65,10 @@ class HealthAlertRule {
         warnAbove <= 0 ||
         clearBelow < 0 ||
         clearBelow >= warnAbove ||
-        minutes < 1 ||
-        minutes > 30) {
+        alertMinutes < 1 ||
+        alertMinutes > 30 ||
+        clearMinutes < 1 ||
+        clearMinutes > 30) {
       throw ArgumentError(
         'Use 0–100%, a recovery limit below the warning, and 1–30 minutes.',
       );
@@ -73,18 +76,33 @@ class HealthAlertRule {
   }
   final bool enabled;
   final double warnAbove, clearBelow;
-  final int minutes;
+  final int alertMinutes, clearMinutes;
+  HealthAlertRule copyWith({
+    bool? enabled,
+    double? warnAbove,
+    double? clearBelow,
+    int? alertMinutes,
+    int? clearMinutes,
+  }) => HealthAlertRule(
+    enabled: enabled ?? this.enabled,
+    warnAbove: warnAbove ?? this.warnAbove,
+    clearBelow: clearBelow ?? this.clearBelow,
+    alertMinutes: alertMinutes ?? this.alertMinutes,
+    clearMinutes: clearMinutes ?? this.clearMinutes,
+  );
   Map<String, Object> encode() => {
     'enabled': enabled,
     'warnAbove': warnAbove,
     'clearBelow': clearBelow,
-    'minutes': minutes,
+    'alertMinutes': alertMinutes,
+    'clearMinutes': clearMinutes,
   };
   factory HealthAlertRule.decode(Map value) => HealthAlertRule(
     enabled: value['enabled'] as bool,
     warnAbove: (value['warnAbove'] as num).toDouble(),
     clearBelow: (value['clearBelow'] as num).toDouble(),
-    minutes: value['minutes'] as int,
+    alertMinutes: value['alertMinutes'] as int,
+    clearMinutes: value['clearMinutes'] as int,
   );
 }
 
@@ -103,19 +121,22 @@ class HealthAlertSettings {
                  enabled: true,
                  warnAbove: 90,
                  clearBelow: 85,
-                 minutes: 2,
+                 alertMinutes: 2,
+                 clearMinutes: 2,
                ),
                HostMetric.diskUsedPercent: HealthAlertRule(
                  enabled: true,
                  warnAbove: 90,
                  clearBelow: 85,
-                 minutes: 2,
+                 alertMinutes: 2,
+                 clearMinutes: 2,
                ),
                HostMetric.cpuPercent: HealthAlertRule(
                  enabled: false,
                  warnAbove: 95,
                  clearBelow: 80,
-                 minutes: 3,
+                 alertMinutes: 3,
+                 clearMinutes: 3,
                ),
              },
        ) {

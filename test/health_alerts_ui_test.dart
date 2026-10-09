@@ -2,6 +2,7 @@ import 'package:wing/core/screens/health_alert_health_screen.dart';
 import 'package:wing/core/widgets/health_alerts/health_alert_notice.dart';
 import 'package:wing/core/models/health_alert.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -12,10 +13,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/health_alert_settings_screen.dart';
 import 'package:wing/core/screens/administration/admin_health_page.dart';
 import 'package:wing/core/services/background_monitoring_service.dart';
+import 'package:wing/core/services/health_alert_settings_session.dart';
+import 'package:wing/core/services/health_alert_settings_store.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/widgets/health_alerts/health_alerts_scope.dart';
 import 'support/health_alerts_fixture.dart';
+
+class _DelayedSettingsStore extends HealthAlertSettingsStore {
+  _DelayedSettingsStore(super.preferences);
+  final gate = Completer<void>();
+  bool fail = true;
+  @override
+  Future<void> write(HealthAlertSettings settings) async {
+    await gate.future;
+    if (fail) throw StateError('Storage unavailable');
+    await super.write(settings);
+  }
+}
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_ALERTS');
@@ -60,6 +75,74 @@ void main() {
       img.dispose();
     });
   }
+
+  testWidgets(
+    'Back never blocks autosave; failed edits remain retryable on return',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = _DelayedSettingsStore(prefs);
+      final session = HealthAlertSettingsSession(store);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: IconButton(
+                tooltip: 'Open alert settings',
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => HealthAlertSettingsScreen(session: session),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('Open alert settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Health alerts'));
+      await tester.pump();
+      expect(session.saving, isTrue);
+      expect(session.value.enabled, isFalse);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(HealthAlertSettingsScreen), findsNothing);
+      expect(find.byType(AlertDialog), findsNothing);
+      store.gate.complete();
+      await tester.pumpAndSettle();
+      expect(session.error, isNotNull);
+      expect(session.settings.enabled, isTrue);
+      await tester.tap(find.byTooltip('Open alert settings'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.widgetWithText(SwitchListTile, 'Health alerts'),
+            )
+            .value,
+        isFalse,
+      );
+      expect(
+        find.textContaining('Previous settings remain active'),
+        findsOneWidget,
+      );
+      store.fail = false;
+      await tester.tap(find.byTooltip('Retry saving alert settings'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Previous settings remain active'),
+        findsNothing,
+      );
+      expect(HealthAlertSettingsStore(prefs).read().enabled, isFalse);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox());
+      session.dispose();
+    },
+  );
 
   testWidgets(
     'collection follows foreground routes or the existing active task monitor',
@@ -176,20 +259,19 @@ void main() {
       await fixture.critical();
       await tester.pump();
       expect(find.text('Critical memory pressure'), findsNothing);
-      final policy = fixture.settings.settings;
-      await fixture.settings.save(
-        policy.copyWith(
+      await fixture.settings.update(
+        (policy) => policy.copyWith(
           rules: {
             for (final e in policy.rules.entries)
               e.key: HealthAlertRule(
                 enabled: false,
                 warnAbove: e.value.warnAbove,
                 clearBelow: e.value.clearBelow,
-                minutes: e.value.minutes,
+                alertMinutes: e.value.alertMinutes,
+                clearMinutes: e.value.clearMinutes,
               ),
           },
         ),
-        expected: policy,
       );
       final requests = fixture.host.requests.length;
       await tester.pump(const Duration(seconds: 45));
@@ -324,6 +406,9 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(find.byType(HealthAlertSettingsScreen), findsOneWidget);
+          expect(find.text('Unsaved changes'), findsNothing);
+          expect(find.byTooltip('Save health alert settings'), findsNothing);
+          expect(find.byTooltip('Reset draft'), findsNothing);
           await shot(tester, '${brightness.name}-$scale-settings');
           await tester.scrollUntilVisible(
             find.text('Memory usage'),
@@ -333,33 +418,82 @@ void main() {
           await tester.tap(find.text('Memory usage'));
           await tester.pumpAndSettle();
           await shot(tester, '${brightness.name}-$scale-editor');
-          expect(find.byType(TextField), findsNWidgets(3));
+          expect(find.byType(TextField), findsNWidgets(4));
           final fields = find.byType(TextField);
-          await tester.enterText(fields.at(0), '96.5');
-          await tester.enterText(fields.at(1), '85.25');
-          await tester.tap(
-            find.byTooltip('Apply this rule to the settings draft'),
+          expect(
+            tester.getTopLeft(fields.at(0)).dx,
+            tester.getTopLeft(fields.at(2)).dx,
           );
+          expect(
+            tester.getTopLeft(fields.at(1)).dx,
+            tester.getTopLeft(fields.at(3)).dx,
+          );
+          await tester.enterText(fields.at(1), '0');
+          await tester.pumpAndSettle();
+          expect(find.textContaining('Not saved:'), findsOneWidget);
+          expect(fixture.settings.settings.rules.values.first.warnAbove, 90);
+          await tester.tap(
+            find.descendant(
+              of: find.byType(Dialog),
+              matching: find.byType(Switch),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(fixture.settings.settings.rules.values.first.enabled, isFalse);
+          expect(fixture.settings.settings.rules.values.first.warnAbove, 90);
+          await tester.enterText(fields.at(1), '96.5');
+          await tester.enterText(fields.at(3), '85.25');
+          await tester.enterText(fields.at(0), '1');
+          await tester.enterText(fields.at(2), '3');
+          await tester.pumpAndSettle();
+          expect(find.textContaining('Not saved:'), findsNothing);
+          expect(
+            tester
+                .state<EditableTextState>(find.byType(EditableText).at(3))
+                .renderEditable
+                .offset
+                .pixels,
+            0,
+          );
+          expect(fixture.settings.settings.rules.values.first.warnAbove, 96.5);
+          expect(fixture.settings.settings.rules.values.first.alertMinutes, 1);
+          expect(fixture.settings.settings.rules.values.first.clearMinutes, 3);
+          expect(
+            fixture.settings.settings.rules.values.first.clearBelow,
+            85.25,
+          );
+          tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+          addTearDown(tester.view.resetViewInsets);
+          await tester.pumpAndSettle();
+          expect(
+            find.byTooltip('Close rule editor').hitTestable(),
+            findsOneWidget,
+          );
+          await shot(tester, '${brightness.name}-$scale-keyboard');
+          await tester.tap(find.byTooltip('Close rule editor'));
+          tester.view.resetViewInsets();
           await tester.pumpAndSettle();
           await tester.tap(find.text('Memory usage'));
           await tester.pumpAndSettle();
           expect(
-            tester.widget<TextField>(fields.at(0)).controller!.text,
+            tester.widget<TextField>(fields.at(1)).controller!.text,
             '96.5',
           );
           expect(
-            tester.widget<TextField>(fields.at(1)).controller!.text,
+            tester.widget<TextField>(fields.at(3)).controller!.text,
             '85.25',
           );
           await tester.tap(find.byTooltip('Close rule editor'));
-          await tester.pumpAndSettle();
-          await tester.tap(find.byTooltip('Save health alert settings'));
           await tester.pumpAndSettle();
           expect(fixture.settings.settings.rules.values.first.warnAbove, 96.5);
           expect(
             fixture.settings.settings.rules.values.first.clearBelow,
             85.25,
           );
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          expect(find.byType(HealthAlertSettingsScreen), findsNothing);
+          expect(find.text('Discard alert changes?'), findsNothing);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
           fixture.dispose();

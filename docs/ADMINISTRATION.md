@@ -535,20 +535,28 @@ Open Menu → Hermes health → Alert settings (the outlined bell row above Host
 Settings apply on this device across active connections. RAM and disk warn
 strictly above 90% for two minutes and clear strictly below 85% for two minutes.
 CPU is off initially; its editable defaults are 95%, 80% and three minutes.
-Rules preserve decimal percentages and accept 1–30 minutes. Reported critical memory/disk pressure alerts
+The compact editor reads “Alert after [minutes] if above [percent]” and
+“Clear after [minutes] if below [percent]”. Warning and recovery durations are
+independent, accept 1–30 minutes, and preserve decimal percentages. Existing
+shared durations are copied into both fields in the approved one-time local migration. Reported critical memory/disk pressure alerts
 immediately when that rule is enabled, even if its percentage is unavailable.
-The compact editor applies to a draft; the footer check saves it. Leaving a
-changed draft asks to discard it. Failed or competing saves retain the confirmed
-policy and offer retry/reset. Damaged local settings disable collection until
-reviewed and saved. None of these settings modifies a Hermes profile.
+Toggles and valid threshold edits save automatically. Back and closing the compact
+editor need no confirmation or Save action. Invalid numeric text does not replace
+the last valid rule. The settings owner composes rapid edits and serializes writes,
+which continue after leaving the screen. Failed writes retain the selected values
+for an icon-only retry while the confirmed policy remains active. Damaged local
+settings disable collection until repaired through an edit or retry. None of these
+settings modifies a Hermes profile.
 
 Wing watches while foregrounded with a mounted workspace, or while the existing
 background task monitor is active for that connection's ongoing work. It neither
 starts a new Android service nor keeps monitoring alive on its own. The shared
 host owner coalesces 15-second reads; the evaluator reacts to observations rather
 than polling another cache. Gaps/unknown readings break pending durations and
-retain existing issues as last known. Profile checks and server diagnostic results
-come from their existing owners; the watcher never launches Doctor/security audit.
+retain existing issues as last known. Profile checks and server connection status
+come from their existing owners. Doctor and security-audit findings never generate
+health alerts; they remain available in Health. The watcher never launches
+diagnostics.
 Older recorded findings remain qualified as last known. Open Health to investigate
 or request a fresh check. This is a warning about current Hermes usage, not an
 always-on server monitor. Thresholds and qualified notices do not predict OOM.
@@ -569,9 +577,10 @@ against upstream `1744a19e0df568c647e4f3ff9c37f2a284a282fb`, including
 
 Ownership is mapped in [ARCHITECTURE.md](ARCHITECTURE.md). The regressions in
 `test/health_alerts_test.dart` cover duration, hysteresis, unknown data, escalation,
-snooze, save ordering/failure/conflict and inactive late reads.
+snooze, independent durations, ordered autosave/retry, approved migration
+preservation/failure, diagnostic exclusion and inactive late reads.
 `test/health_alerts_ui_test.dart` covers activity admission, shared title alignment,
-conditional bell, Health navigation, focused details and editor/save behavior in
+conditional bell, Health navigation, focused details and immediate settings persistence in
 both themes at normal and 320 dp/200% text. Layout depends on rendered metrics,
 not a source pattern; these behavioral checks guard title geometry. Run with
 `CAPTURE_ALERTS=true`, `CAPTURE_FONT_DIR=<font directory>` and

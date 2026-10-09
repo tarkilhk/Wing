@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import '../models/administration_operation.dart';
 import '../models/health_alert.dart';
 import '../models/health_alert_evaluator.dart';
 import '../models/health_finding.dart';
@@ -68,8 +67,20 @@ class HealthAlertsSession extends ChangeNotifier {
       final old = previous?.rules[metric];
       final rule = settings.settings.rules[metric]!;
       if (old == null ||
-          (old.enabled, old.warnAbove, old.clearBelow, old.minutes) !=
-              (rule.enabled, rule.warnAbove, rule.clearBelow, rule.minutes)) {
+          (
+                old.enabled,
+                old.warnAbove,
+                old.clearBelow,
+                old.alertMinutes,
+                old.clearMinutes,
+              ) !=
+              (
+                rule.enabled,
+                rule.warnAbove,
+                rule.clearBelow,
+                rule.alertMinutes,
+                rule.clearMinutes,
+              )) {
         _evaluator.remove(_evaluator.hostKey(metric));
       }
     }
@@ -153,37 +164,6 @@ class HealthAlertsSession extends ChangeNotifier {
             ? null
             : failed,
       );
-      for (final entry in health.diagnostics.entries) {
-        final value = entry.value;
-        final outcome = value.classification;
-        final at = value.checkedAt;
-        final fresh =
-            at != null &&
-            !now.isBefore(at) &&
-            now.difference(at) < health.maxAge;
-        _evaluator.finding(
-          key: '${host.connectionIdentity}:server:${entry.key}',
-          title: entry.key == 'ops/doctor'
-              ? 'Doctor reported a problem'
-              : 'Security audit reported a problem',
-          detail: 'Review the completed diagnostic in Hermes health.',
-          scope: HealthAlertScope.server,
-          at: value.checkedAt,
-          failed:
-              at != null &&
-                  !now.isBefore(at) &&
-                  !value.resultUnavailable &&
-                  value.readError == null &&
-                  outcome != AdministrationOperationOutcome.unknown &&
-                  outcome != AdministrationOperationOutcome.running
-              ? outcome == AdministrationOperationOutcome.failed ||
-                    outcome == AdministrationOperationOutcome.findings
-              : null,
-        );
-        if (!fresh) {
-          _evaluator.unknown('${host.connectionIdentity}:server:${entry.key}');
-        }
-      }
     }
     for (final alert in alerts) {
       if (alert.scope == HealthAlertScope.profile &&

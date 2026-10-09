@@ -7,62 +7,20 @@ import '../widgets/wing_app_bar.dart';
 import '../widgets/studio_error.dart';
 import 'administration/admin_widgets.dart';
 
-class HealthAlertSettingsScreen extends StatefulWidget {
+class HealthAlertSettingsScreen extends StatelessWidget {
   const HealthAlertSettingsScreen({super.key, required this.session});
   final HealthAlertSettingsSession session;
-  @override
-  State<HealthAlertSettingsScreen> createState() =>
-      _HealthAlertSettingsScreenState();
-}
-
-class _HealthAlertSettingsScreenState extends State<HealthAlertSettingsScreen> {
-  late HealthAlertSettings _baseline = widget.session.settings;
-  late HealthAlertSettings _draft = _baseline;
-  bool _saved = false;
-  bool get _dirty => _draft != _baseline;
-  void _edit(HealthAlertSettings value) => setState(() {
-    _draft = value;
-    _saved = false;
-  });
-  Future<void> _back() async {
-    if (widget.session.saving) return;
-    if (_dirty) {
-      final discard = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Discard alert changes?'),
-          actions: [
-            IconButton(
-              tooltip: 'Keep editing',
-              onPressed: () => Navigator.pop(context, false),
-              icon: const Icon(Icons.close),
-            ),
-            IconButton(
-              tooltip: 'Discard changes',
-              onPressed: () => Navigator.pop(context, true),
-              icon: const Icon(Icons.delete_outline),
-            ),
-          ],
-        ),
-      );
-      if (discard != true) return;
-    }
-    if (mounted) Navigator.pop(context);
-  }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.session,
-    builder: (context, _) => PopScope(
-      canPop: !_dirty && !widget.session.saving,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _back();
-      },
-      child: Scaffold(
+    listenable: session,
+    builder: (context, _) {
+      final settings = session.value;
+      return Scaffold(
         appBar: WingAppBar(
           context: context,
           title: const Text('Alert settings'),
-          leading: BackButton(onPressed: _back),
+          leading: const BackButton(),
         ),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
@@ -72,12 +30,13 @@ class _HealthAlertSettingsScreenState extends State<HealthAlertSettingsScreen> {
             const Text(
               'Warn about problems that may affect Hermes. Checks run while Wing is open or monitoring work.',
             ),
-            if (widget.session.error case final error?) StudioError(error),
+            _SaveError(session: session),
             _toggle(
               'Health alerts',
               'Applies to active connections on this device.',
-              _draft.enabled,
-              (value) => _edit(_draft.copyWith(enabled: value)),
+              settings.enabled,
+              (value) =>
+                  session.update((current) => current.copyWith(enabled: value)),
             ),
             const Text('Host thresholds'),
             AdminGroup(
@@ -93,37 +52,24 @@ class _HealthAlertSettingsScreenState extends State<HealthAlertSettingsScreen> {
                     }),
                     title: Text(healthAlertMetricLabel(metric)),
                     subtitle: Text(
-                      _draft.rules[metric]!.enabled
-                          ? 'For ${_draft.rules[metric]!.minutes} min · clears below ${healthAlertPercentage(_draft.rules[metric]!.clearBelow)}%'
+                      settings.rules[metric]!.enabled
+                          ? 'Alert after ${settings.rules[metric]!.alertMinutes} min · clear below ${healthAlertPercentage(settings.rules[metric]!.clearBelow)}% after ${settings.rules[metric]!.clearMinutes} min'
                           : 'Not watched',
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          '${healthAlertPercentage(_draft.rules[metric]!.warnAbove)}%',
+                          '${healthAlertPercentage(settings.rules[metric]!.warnAbove)}%',
                         ),
                         const Icon(Icons.chevron_right, size: 18),
                       ],
                     ),
-                    onTap: widget.session.saving
-                        ? null
-                        : () async {
-                            final rule = await showDialog<HealthAlertRule>(
-                              context: context,
-                              builder: (_) => _RuleEditor(
-                                metric: metric,
-                                initial: _draft.rules[metric]!,
-                              ),
-                            );
-                            if (rule != null && mounted) {
-                              _edit(
-                                _draft.copyWith(
-                                  rules: {..._draft.rules, metric: rule},
-                                ),
-                              );
-                            }
-                          },
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (_) =>
+                          _RuleEditor(metric: metric, session: session),
+                    ),
                   ),
               ],
             ),
@@ -134,90 +80,40 @@ class _HealthAlertSettingsScreenState extends State<HealthAlertSettingsScreen> {
             const Text('Server & profile'),
             _toggle(
               'Server problems',
-              'Observed connection or diagnostic failures.',
-              _draft.server,
-              (v) => _edit(_draft.copyWith(server: v)),
+              'Observed connection failures.',
+              settings.server,
+              (value) =>
+                  session.update((current) => current.copyWith(server: value)),
             ),
             _toggle(
               'Profile problems',
               'Observed access, connector or task failures.',
-              _draft.profile,
-              (v) => _edit(_draft.copyWith(profile: v)),
+              settings.profile,
+              (value) =>
+                  session.update((current) => current.copyWith(profile: value)),
             ),
             const SizedBox(height: 16),
             const Text('When an issue arrives'),
             _toggle(
               'Animate the bell',
               'Ring once for a new issue or escalation.',
-              _draft.animateBell,
-              (v) => _edit(_draft.copyWith(animateBell: v)),
+              settings.animateBell,
+              (value) => session.update(
+                (current) => current.copyWith(animateBell: value),
+              ),
             ),
             _toggle(
               'Show a brief notice',
               'Keep working; tap the bell for details.',
-              _draft.showNotice,
-              (v) => _edit(_draft.copyWith(showNotice: v)),
+              settings.showNotice,
+              (value) => session.update(
+                (current) => current.copyWith(showNotice: value),
+              ),
             ),
           ],
         ),
-        bottomNavigationBar: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _saved
-                        ? 'Saved on this device'
-                        : _dirty
-                        ? 'Unsaved changes'
-                        : 'This device',
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Reset draft',
-                  onPressed:
-                      widget.session.saving ||
-                          (!_dirty && widget.session.error == null)
-                      ? null
-                      : () {
-                          _baseline = widget.session.settings;
-                          _edit(_baseline);
-                        },
-                  icon: const Icon(Icons.undo),
-                ),
-                IconButton(
-                  tooltip: 'Save health alert settings',
-                  onPressed:
-                      widget.session.saving ||
-                          (!_dirty && widget.session.error == null)
-                      ? null
-                      : () async {
-                          if (await widget.session.save(
-                                _draft,
-                                expected: _baseline,
-                              ) &&
-                              mounted) {
-                            setState(() {
-                              _baseline = _draft;
-                              _saved = true;
-                            });
-                          }
-                        },
-                  icon: widget.session.saving
-                      ? const SizedBox.square(
-                          dimension: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.check),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
+      );
+    },
   );
   Widget _toggle(
     String title,
@@ -229,143 +125,268 @@ class _HealthAlertSettingsScreenState extends State<HealthAlertSettingsScreen> {
     title: Text(title),
     subtitle: Text(subtitle),
     value: value,
-    onChanged: widget.session.saving ? null : choose,
+    onChanged: choose,
   );
 }
 
+class _SaveError extends StatelessWidget {
+  const _SaveError({required this.session});
+  final HealthAlertSettingsSession session;
+  @override
+  Widget build(BuildContext context) => session.error == null
+      ? const SizedBox.shrink()
+      : Row(
+          children: [
+            Expanded(child: StudioError(session.error!)),
+            IconButton(
+              tooltip: 'Retry saving alert settings',
+              onPressed: () => session.retry(),
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+        );
+}
+
 class _RuleEditor extends StatefulWidget {
-  const _RuleEditor({required this.metric, required this.initial});
+  const _RuleEditor({required this.metric, required this.session});
   final HostMetric metric;
-  final HealthAlertRule initial;
+  final HealthAlertSettingsSession session;
   @override
   State<_RuleEditor> createState() => _RuleEditorState();
 }
 
 class _RuleEditorState extends State<_RuleEditor> {
-  late bool _enabled = widget.initial.enabled;
+  HealthAlertRule get _rule => widget.session.value.rules[widget.metric]!;
   late final _warn = TextEditingController(
-    text: healthAlertPercentage(widget.initial.warnAbove),
+    text: healthAlertPercentage(_rule.warnAbove),
   );
   late final _clear = TextEditingController(
-    text: healthAlertPercentage(widget.initial.clearBelow),
+    text: healthAlertPercentage(_rule.clearBelow),
   );
-  late final _minutes = TextEditingController(
-    text: '${widget.initial.minutes}',
+  late final _alertMinutes = TextEditingController(
+    text: '${_rule.alertMinutes}',
+  );
+  late final _clearMinutes = TextEditingController(
+    text: '${_rule.clearMinutes}',
   );
   String? _error;
-  void _apply() {
+  void _edit(String _) {
     try {
-      final rule = HealthAlertRule(
-        enabled: _enabled,
-        warnAbove: double.parse(_warn.text),
-        clearBelow: double.parse(_clear.text),
-        minutes: int.parse(_minutes.text),
+      final warning = double.parse(_warn.text);
+      final recovery = double.parse(_clear.text);
+      final alertMinutes = int.parse(_alertMinutes.text);
+      final clearMinutes = int.parse(_clearMinutes.text);
+      widget.session.updateRule(
+        widget.metric,
+        (current) => current.copyWith(
+          warnAbove: warning,
+          clearBelow: recovery,
+          alertMinutes: alertMinutes,
+          clearMinutes: clearMinutes,
+        ),
       );
-      Navigator.pop(context, rule);
-    } catch (_) {
-      setState(
-        () => _error = 'Use 0–100%, recovery below warning, and 1–30 minutes.',
-      );
+      setState(() => _error = null);
+    } on FormatException {
+      _invalid();
+    } on ArgumentError {
+      _invalid();
     }
   }
 
+  void _invalid() => setState(
+    () => _error =
+        'Not saved: use 0–100%, recovery below warning, and 1–30 minutes.',
+  );
+
   @override
-  Widget build(BuildContext context) => Dialog(
-    insetPadding: const EdgeInsets.all(16),
-    child: ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: 420,
-        maxHeight: MediaQuery.sizeOf(context).height * .85,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  healthAlertMetricLabel(widget.metric),
-                  style: Theme.of(context).textTheme.titleMedium,
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.session,
+    builder: (context, _) => Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 420,
+          maxHeight: MediaQuery.sizeOf(context).height * .85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    healthAlertMetricLabel(widget.metric),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
-              ),
-              IconButton(
-                tooltip: 'Apply this rule to the settings draft',
-                onPressed: _apply,
-                icon: const Icon(Icons.check),
-              ),
-              IconButton(
-                tooltip: 'Close rule editor',
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          const Divider(height: 1),
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _row(
-                    'Enabled',
-                    Switch(
-                      value: _enabled,
-                      onChanged: (v) => setState(() => _enabled = v),
+                IconButton(
+                  tooltip: 'Close rule editor',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _row(
+                      'Enabled',
+                      Switch(
+                        value: _rule.enabled,
+                        onChanged: (value) => widget.session.updateRule(
+                          widget.metric,
+                          (current) => current.copyWith(enabled: value),
+                        ),
+                      ),
                     ),
-                  ),
-                  _field('Warn above', _warn, '%'),
-                  _field('Clear below', _clear, '%'),
-                  _field('Duration', _minutes, 'min'),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'Both limits must hold for this duration.',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    _condition(
+                      'Alert after',
+                      _alertMinutes,
+                      'if above',
+                      _warn,
+                      'Warning',
                     ),
-                  ),
-                  if (_error != null)
+                    _condition(
+                      'Clear after',
+                      _clearMinutes,
+                      'if below',
+                      _clear,
+                      'Recovery',
+                    ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: StudioError(_error!),
+                      child: Text(
+                        'Changes save automatically.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: _SaveError(session: widget.session),
+                    ),
+                    if (_error != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: StudioError(_error!),
+                      ),
+                  ],
+                ),
               ),
             ),
+          ],
+        ),
+      ),
+    ),
+  );
+  Widget _condition(
+    String after,
+    TextEditingController duration,
+    String comparison,
+    TextEditingController percent,
+    String label,
+  ) => ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 48),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: _labelWidth(['Alert after', 'Clear after']),
+                child: Text(
+                  after,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+              _input('$label duration', duration, 'min', decimal: false),
+            ],
+          ),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: _labelWidth(['if above', 'if below']),
+                child: Text(
+                  comparison,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+              _input('$label threshold', percent, '%', decimal: true),
+            ],
           ),
         ],
       ),
     ),
   );
-  Widget _field(String label, TextEditingController controller, String unit) =>
-      _row(
-        label,
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                ),
-                style: Theme.of(context).textTheme.bodyMedium,
-                textAlign: TextAlign.end,
-                onSubmitted: (_) => _apply(),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(unit),
-          ],
+
+  double _labelWidth(List<String> labels) {
+    var width = 0.0;
+    for (final label in labels) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: Theme.of(context).textTheme.bodyMedium,
         ),
-      );
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      if (painter.width > width) width = painter.width;
+      painter.dispose();
+    }
+    return width;
+  }
+
+  Widget _input(
+    String label,
+    TextEditingController controller,
+    String unit, {
+    required bool decimal,
+  }) {
+    final large = MediaQuery.textScalerOf(context).scale(16) >= 24;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Semantics(
+          label: '${healthAlertMetricLabel(widget.metric)} $label',
+          child: SizedBox(
+            width: decimal ? (large ? 112 : 64) : 48,
+            child: TextField(
+              controller: controller,
+              keyboardType: TextInputType.numberWithOptions(decimal: decimal),
+              decoration: const InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 8,
+                ),
+              ),
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.end,
+              onChanged: _edit,
+              onSubmitted: _edit,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(unit),
+      ],
+    );
+  }
+
   Widget _row(String label, Widget control) => ConstrainedBox(
     constraints: const BoxConstraints(minHeight: 48),
     child: Padding(
@@ -391,7 +412,8 @@ class _RuleEditorState extends State<_RuleEditor> {
   void dispose() {
     _warn.dispose();
     _clear.dispose();
-    _minutes.dispose();
+    _alertMinutes.dispose();
+    _clearMinutes.dispose();
     super.dispose();
   }
 }

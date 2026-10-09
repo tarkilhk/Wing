@@ -90,7 +90,9 @@ class HealthAlertEvaluator {
       } else {
         old.last = sampledAt;
         if (sampledAt.difference(old.start) >=
-            Duration(minutes: rule.minutes)) {
+            Duration(
+              minutes: clearing ? rule.clearMinutes : rule.alertMinutes,
+            )) {
           if (clearing) {
             remove(key);
             return;

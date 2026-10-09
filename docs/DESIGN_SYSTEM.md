@@ -314,8 +314,13 @@ belongs in Hermes health's compact Alert settings row above Host, using an
 outlined bell. Titles respect the selected text scale and grow; secondary actions
 move below at enlarged text. Viewer headers delegate to the same geometry while
 retaining their exact resource identity disclosure. No settings shortcut belongs
-beside the bell. Keep alert rule editors unpadded, with four aligned rows and
-icon-only Apply/Close in the header. See [Health alerts](ADMINISTRATION.md#health-alerts).
+beside the bell. Keep alert rule editors unpadded: Enabled followed by two compact
+sentence rows, “Alert after [minutes] if above [percent]” and
+“Clear after [minutes] if below [percent]”, with independent durations. Sentence
+fragments wrap at enlarged text while keeping each input beside its unit. Use
+an icon-only Close action in the header. Alert settings autosave toggles and valid
+threshold edits; use no Save/Undo footer or discard confirmation. Persistence
+errors appear inline with an icon-only retry. See [Health alerts](ADMINISTRATION.md#health-alerts).
 
 Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/composer corners, 24-28 sp page titles, 16 sp body text and 12-13 sp metadata. Primary action paint can be about 40 dp high inside a minimum 48 dp touch area. Text scaling must allow rows and controls to grow. Keep established compact activity density; improve touch areas without adding visible card padding.
 
