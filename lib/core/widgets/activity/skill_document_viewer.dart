@@ -296,64 +296,10 @@ class _SkillDocumentViewerState extends State<SkillDocumentViewer> {
                 ),
               ),
             if (observation != null && observation.references.isNotEmpty)
-              _SkillSurface(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Text(
-                        observation.references.length == 1
-                            ? 'Reference file'
-                            : 'Reference files',
-                        style: colors.typography.label,
-                      ),
-                    ),
-                    for (final file in observation.references) ...[
-                      const _SkillRule(),
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.menu_book_outlined,
-                              size: 18,
-                              color: colors.muted,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ResourceFilename(
-                                    target: file.path,
-                                    label: file.name,
-                                    style: colors.typography.body,
-                                  ),
-                                  if (file.bytes case final bytes?)
-                                    Text(
-                                      _skillBytes(bytes),
-                                      style: colors.typography.label.copyWith(
-                                        color: colors.muted,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            ActivityDetailAction(
-                              label: 'Read ${file.name}',
-                              icon: Icons.visibility_outlined,
-                              busy: _openingReference == file.path,
-                              onPressed: _openingReference == null
-                                  ? () => _reference(file)
-                                  : null,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+              _SkillReferences(
+                files: observation.references,
+                opening: _openingReference,
+                onOpen: _reference,
               ),
             if (observation != null &&
                 (observation.uses != null || observation.patches != null))
@@ -503,3 +449,113 @@ class _SkillRule extends StatelessWidget {
 
 String _skillBytes(int bytes) =>
     bytes < 1024 ? '$bytes B' : '${(bytes / 1024).toStringAsFixed(1)} KB';
+
+/// Bounded reference browsing, independent of the document's scroll position.
+class _SkillReferences extends StatelessWidget {
+  const _SkillReferences({
+    required this.files,
+    required this.opening,
+    required this.onOpen,
+  });
+  final List<SkillReference> files;
+  final String? opening;
+  final Future<void> Function(SkillReference) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WingTokens.of(context),
+        scaler = MediaQuery.textScalerOf(context);
+    final hasSizes = files.any((file) => file.bytes != null);
+    double lineHeight(TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(text: 'Ag', style: style),
+        textScaler: scaler,
+        textDirection: Directionality.of(context),
+        maxLines: 1,
+      )..layout();
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    final rowHeight =
+        math.max(
+          32.0,
+          lineHeight(colors.typography.body) +
+              (hasSizes ? lineHeight(colors.typography.label) : 0),
+        ) +
+        16;
+    final visible = math.min(5, files.length);
+    return _SkillSurface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text(
+              files.length == 1 ? 'Reference file' : 'Reference files',
+              style: colors.typography.label,
+            ),
+          ),
+          const _SkillRule(),
+          SizedBox(
+            height: rowHeight * visible + visible - 1,
+            child: ListView.separated(
+              primary: false,
+              padding: EdgeInsets.zero,
+              itemCount: files.length,
+              separatorBuilder: (_, _) => const _SkillRule(),
+              itemBuilder: (context, index) {
+                final file = files[index];
+                return SizedBox(
+                  height: rowHeight,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.menu_book_outlined,
+                          size: 18,
+                          color: colors.muted,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ResourceFilename(
+                                target: file.path,
+                                label: file.name,
+                                style: colors.typography.body,
+                              ),
+                              if (file.bytes case final bytes?)
+                                Text(
+                                  _skillBytes(bytes),
+                                  style: colors.typography.label.copyWith(
+                                    color: colors.muted,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        ActivityDetailAction(
+                          label: 'Read ${file.name}',
+                          icon: Icons.visibility_outlined,
+                          busy: opening == file.path,
+                          onPressed: opening == null
+                              ? () => onOpen(file)
+                              : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

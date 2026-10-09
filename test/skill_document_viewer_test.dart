@@ -261,13 +261,13 @@ void main() {
   for (final theme in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
-        'Contents fits rows, caps six and closes on repeat taps ${theme.name} $scale',
+        'Contents fits rows, caps five and closes on repeat taps ${theme.name} $scale',
         (tester) async {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
           final heights = <int, double>{};
-          for (final count in [3, 6, 9]) {
+          for (final count in [3, 5, 9]) {
             final boundary = GlobalKey();
             await tester.pumpWidget(
               RepaintBoundary(
@@ -311,7 +311,7 @@ void main() {
             expect(
               tester.getSize(scroll).height,
               closeTo(
-                tester.getSize(row).height * (count > 6 ? 6 : count) + 16,
+                tester.getSize(row).height * (count > 5 ? 5 : count) + 16,
                 .1,
               ),
             );
@@ -321,7 +321,7 @@ void main() {
               'contents-${theme.name}-${scale.toInt()}-$count',
             );
             expect(tester.takeException(), isNull);
-            if (count > 6) {
+            if (count > 5) {
               await tester.drag(scroll, const Offset(0, -400));
               await tester.pumpAndSettle();
               expect(find.text('Contents'), findsOneWidget);
@@ -337,7 +337,7 @@ void main() {
             await tester.tap(find.text('Contents'));
             await tester.pumpAndSettle();
             expect(find.byType(BottomSheet), findsNothing);
-            final dock = find.text('Section ${count > 6 ? 9 : 1}').last;
+            final dock = find.text('Section ${count > 5 ? 9 : 1}').last;
             await tester.tap(dock);
             await tester.pumpAndSettle();
             final list = tester.getRect(
@@ -353,8 +353,102 @@ void main() {
             await tester.pumpWidget(const SizedBox.shrink());
             await tester.pumpAndSettle();
           }
-          expect(heights[3], lessThan(heights[6]!));
-          expect(heights[9], closeTo(heights[6]!, .1));
+          expect(heights[3], lessThan(heights[5]!));
+          expect(heights[9], closeTo(heights[5]!, .1));
+        },
+      );
+    }
+  }
+  for (final theme in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'Reference files cap five rows and retain scrolling and opens ${theme.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final heights = <int, double>{};
+          for (final count in [3, 5, 8]) {
+            final document = SkillDocument.fromReceived(
+              name: 'review',
+              content: demo,
+              sourcePath: '/skills/review/SKILL.md',
+            );
+            final fixture = {
+              'references': [
+                for (var i = 1; i <= count; i++)
+                  {
+                    'name': 'reference-$i.md',
+                    'path': '/skills/review/references/reference-$i.md',
+                    'preview': {'byteSize': 3200},
+                  },
+              ],
+            };
+            final boundary = GlobalKey();
+            await tester.pumpWidget(
+              RepaintBoundary(
+                key: boundary,
+                child: MaterialApp(
+                  theme: wingTheme(theme),
+                  debugShowCheckedModeBanner: false,
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(textScaler: TextScaler.linear(scale)),
+                    child: child!,
+                  ),
+                  home: SkillDocumentViewer(
+                    document: document,
+                    createReader: () => reader(document, fixture),
+                  ),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            final list = find.byType(ListView);
+            await tester.ensureVisible(find.text('Reference files'));
+            await tester.pumpAndSettle();
+            heights[count] = tester.getSize(list).height;
+            final first = find.byTooltip('Read reference-1.md');
+            final row = find
+                .ancestor(of: first, matching: find.byType(Padding))
+                .first;
+            final visible = count > 5 ? 5 : count;
+            expect(
+              tester.getSize(list).height,
+              closeTo(tester.getSize(row).height * visible + visible - 1, .1),
+            );
+            await capture(
+              tester,
+              boundary,
+              'references-${theme.name}-${scale.toInt()}-$count',
+            );
+            expect(tester.takeException(), isNull);
+            if (count > 5) {
+              await tester.drag(list, const Offset(0, -900));
+              await tester.pumpAndSettle();
+              final eye = find.byTooltip('Read reference-8.md');
+              await tester.ensureVisible(eye);
+              await tester.tap(eye);
+              await tester.pumpAndSettle();
+              expect(
+                tester
+                    .widget<SkillDocumentViewer>(
+                      find.byType(SkillDocumentViewer),
+                    )
+                    .document
+                    .sourcePath,
+                '/skills/review/references/reference-8.md',
+              );
+              await tester.pageBack();
+              await tester.pumpAndSettle();
+            }
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox.shrink());
+            await tester.pumpAndSettle();
+          }
+          expect(heights[3], lessThan(heights[5]!));
+          expect(heights[8], closeTo(heights[5]!, .1));
         },
       );
     }
@@ -380,6 +474,20 @@ void main() {
       );
       await tester.pumpAndSettle();
       final grip = find.bySemanticsLabel('Browse sections');
+      BoxDecoration gripPaint() =>
+          tester
+                  .widget<Container>(
+                    find.descendant(
+                      of: grip,
+                      matching: find.byWidgetPredicate(
+                        (w) => w is Container && w.constraints?.maxWidth == 44,
+                      ),
+                    ),
+                  )
+                  .decoration!
+              as BoxDecoration;
+      expect(gripPaint().color, Colors.transparent);
+      expect(gripPaint().boxShadow, isEmpty);
       await tester.tap(grip);
       await tester.pumpAndSettle();
       expect(find.text('Contents'), findsNothing);
@@ -390,6 +498,7 @@ void main() {
       await gesture.moveBy(const Offset(0, 8));
       await tester.pump(const Duration(milliseconds: 60));
       expect(find.text('1 · First'), findsOneWidget);
+      expect(gripPaint().color, isNot(Colors.transparent));
       expect(tester.getCenter(grip).dy, closeTo(position.dy + 8, .5));
       await gesture.moveBy(const Offset(0, 32));
       await tester.pump();
@@ -397,6 +506,8 @@ void main() {
       await gesture.cancel();
       await tester.pumpAndSettle();
       expect(find.textContaining(' · First'), findsNothing);
+      expect(gripPaint().color, Colors.transparent);
+      expect(gripPaint().boxShadow, isEmpty);
       final pending = await tester.startGesture(tester.getCenter(grip));
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       await tester.pump(const Duration(milliseconds: 300));

@@ -679,6 +679,8 @@ and profile; keep license in the exact original source. A reference section uses
 actual backend file listings beneath the API-supplied skill directory. Show
 one-line filenames, supplied sizes and eligible eye actions; use the same document
 viewer for reference content, raw/formatted switching and exact copy/share.
+Show at most five reference rows, with independent scrolling for additional
+files. Keep filenames on one line and retain each file's original action target.
 Omit the entire reference section when no files are returned. Omit missing fields
 and technical readiness bookkeeping. If no description was
 supplied, use a bounded excerpt of the actual instructions. Setup problems and
@@ -714,11 +716,13 @@ dp grip target, 4 dp from the right edge, around a 44 × 44 dp painted button.
 Start its rail 64 dp lower than the original 20%-of-screen placement and keep
 the resting button below the trigger text, including at enlarged text sizes.
 Activate on a 250 ms hold or deliberate 12 dp vertical drag; tolerate small
-finger drift. Fade ticks in over 140 ms only while scrubbing, and prefix the
+finger drift. The idle grip has a transparent background and no shadow, with
+visible muted dots; grabbing it makes it solid. Fade ticks in over 140 ms only
+while scrubbing, and prefix the
 destination preview with its section number. Cancellation, leaving the app and
 disposal must cancel pending activation. Reduced motion suppresses animation.
 
-Contents fits its section count, with at most six equal-height rows visible and
+Contents fits its section count, with at most five equal-height rows visible and
 independent scrolling for longer lists. Row height accommodates up to two lines
 of a heading at the reader's text size; the available viewport can reduce the
 visible count. Tapping the sheet header or empty space dismisses it; tapping a

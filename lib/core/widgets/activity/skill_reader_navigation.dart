@@ -297,7 +297,7 @@ class _SkillReaderNavigationState extends State<_SkillReaderNavigation>
                       child: ConstrainedBox(
                         constraints: BoxConstraints(
                           maxHeight:
-                              rowHeight * math.min(6, widget.headings.length) +
+                              rowHeight * math.min(5, widget.headings.length) +
                               16,
                         ),
                         child: SingleChildScrollView(
@@ -542,22 +542,21 @@ class _SkillReaderNavigationState extends State<_SkillReaderNavigation>
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: _held ? colors.onSurface : colors.accent,
+                        color: _held ? colors.onSurface : Colors.transparent,
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: .2),
-                            offset: const Offset(0, 3),
-                            blurRadius: 12,
-                          ),
+                          if (_held)
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: .2),
+                              offset: const Offset(0, 3),
+                              blurRadius: 12,
+                            ),
                         ],
                       ),
                       child: Icon(
                         Icons.drag_indicator,
                         size: 20,
-                        color: _held
-                            ? colors.surface
-                            : Theme.of(context).colorScheme.onPrimary,
+                        color: _held ? colors.surface : colors.muted,
                       ),
                     ),
                   ),
