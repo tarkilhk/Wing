@@ -4,7 +4,7 @@
 
 # Wing for Android
 
-Wing is a free, independent, open-source Android companion for [Hermes Agent](https://github.com/NousResearch/hermes-agent). Organize work across profiles and projects, multitask through Recents, and steer the next step when you leave your desk. Your agent runs on your Hermes server; Wing brings its workspace to your phone.
+Wing is a free, independent, open-source Android companion for [Hermes Agent](https://github.com/NousResearch/hermes-agent). Switch between profiles and projects, multitask through Recents, and steer the next step when you leave your desk. Your agent runs on your Hermes server; Wing brings its workspace to your phone.
 
 [**Download Wing**](https://github.com/tarkilhk/Wing/releases/latest) · [Get connected](docs/GETTING_STARTED.md) · [Explore the features](docs/FEATURES.md)
 
@@ -19,7 +19,7 @@ Every feature is included without a Wing subscription. Your server and model pro
 
 ## What Wing does
 
-- Keep work organized across profiles and projects. Search, pin and group conversations, then use Recents to switch between recent chats, running work and conversations that need input. Unsent drafts and attached files stay with each chat across navigation and restart.
+- Switch profiles with a tap and choose projects across profiles. Group, filter and sort Chats into the view you prefer; Wing remembers it for each connection. The screen navigator opens Chats, Recents and agent settings. Drafts and attached files stay with their chats when you move away or restart Wing.
 - Follow streaming replies, tool activity, delegated tasks and available reasoning. Steer live work, queue a follow-up, or stop a run.
 - Bring photos and files from Android. Dictate into an editable draft and check it before sending.
 - Read formatted Markdown and tables, copy or wrap code, and preview, save or share output files. Copy whole replies or listen to them with read aloud.
