@@ -343,6 +343,7 @@ void main() {
           for (final name in [
             'chats',
             'activity',
+            'bots',
             'connections',
             'settings',
             'administration',

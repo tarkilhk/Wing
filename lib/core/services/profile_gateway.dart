@@ -1103,6 +1103,42 @@ class ProfileGateway {
     return call(method, params);
   }
 
+  /// Bot workflows capture a profile before awaiting connection preparation.
+  /// Admission is checked immediately before the stock RPC is dispatched.
+  Future<Map<String, dynamic>> botCommand(
+    String method,
+    Map<String, dynamic> params, {
+    required bool Function() canDispatch,
+    required void Function() onDispatched,
+  }) async {
+    const allowed = {
+      'profiles.configure',
+      'profiles.create',
+      'profiles.set_asset',
+      'session.create',
+      'session.title',
+      'groups.create',
+      'groups.send',
+      'groups.rename',
+      'groups.stop',
+      'groups.disband',
+      'groups.approve',
+      'groups.retry',
+      'image.generate',
+      'display.start',
+      'display.stop',
+    };
+    if (!allowed.contains(method)) throw ArgumentError('Unknown bot command');
+    await connect();
+    if (!canDispatch()) {
+      throw DashboardRequestNotSentException(
+        StateError('Bot operation closed'),
+      );
+    }
+    onDispatched();
+    return call(method, params);
+  }
+
   Future<Map<String, dynamic>> createProject(
     String name,
     String path, {

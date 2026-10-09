@@ -1,3 +1,6 @@
+import 'core/services/bots_connection_source.dart';
+import 'core/services/bots_session.dart';
+import 'core/models/profile_session_key.dart';
 import 'core/widgets/chat_notice_activity_scope.dart';
 import 'core/widgets/health_alerts/health_alert_dialog.dart';
 import 'core/screens/health_alert_health_screen.dart';
@@ -150,6 +153,10 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   }) => ProfileWorkspaceScreen(
     key: key,
     controller: controller,
+    createBotsSession: () =>
+        savedBotsSession(widget.connManager, _profileControllers),
+    onOpenBotChat: (key, canUse) async =>
+        _homeKey.currentState?.selectBotChat(key, canUse),
     initialDestination: destination,
     enableNotifications: enableProfileNotifications,
     backgroundMonitoringState: _backgroundMonitoring.state,
@@ -490,6 +497,8 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       },
       home: HomeScreen(
         key: _homeKey,
+        createBotsSession: () =>
+            savedBotsSession(widget.connManager, _profileControllers),
         createEntrySession: () => WorkspaceEntrySession(
           connectionManager: widget.connManager,
           appPreferences: _appPreferences,
@@ -548,6 +557,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
 }
 
 class HomeScreen extends StatefulWidget {
+  final BotsSession Function()? createBotsSession;
   final WorkspaceEntrySession Function() createEntrySession;
   final SharedDraftSession Function(WorkspaceEntrySession)
   createSharedDraftSession;
@@ -565,6 +575,7 @@ class HomeScreen extends StatefulWidget {
   final BackupSession Function() createBackupSession;
 
   const HomeScreen({
+    this.createBotsSession,
     required this.createEntrySession,
     required this.createSharedDraftSession,
     this.enableProfileNotifications,
@@ -619,6 +630,26 @@ class HomeScreenState extends State<HomeScreen> {
     destination: destination,
     replaceWorkspace: true,
   );
+
+  Future<void> selectBotChat(
+    ProfileSessionKey key,
+    bool Function() canUse,
+  ) async {
+    if (!canUse()) return;
+    final connections = await widget.connManager.loadConnectionsWithSecrets();
+    if (!mounted || !canUse()) return;
+    final connection = connections
+        .where((c) => c.id == key.workspace.connectionId)
+        .firstOrNull;
+    if (connection == null) throw StateError('Bot instance is no longer saved');
+    await _navigateToWorkspace(
+      connection,
+      destination: AppDestination.bots,
+      replaceWorkspace: true,
+      botChat: key,
+      canUse: canUse,
+    );
+  }
 
   void showConnections() {
     if (mounted) setState(() => _destination = AppDestination.connections);
@@ -872,7 +903,10 @@ class HomeScreenState extends State<HomeScreen> {
     AppDestination destination = AppDestination.chats,
     SharedDraftNavigation? incomingSharedDraft,
     bool replaceWorkspace = false,
+    ProfileSessionKey? botChat,
+    bool Function()? canUse,
   }) async {
+    if (canUse != null && !canUse()) return;
     if (_opening ||
         _entrySession.state.opening ||
         (_sharedDraft.state.reviewing && incomingSharedDraft == null)) {
@@ -882,7 +916,13 @@ class HomeScreenState extends State<HomeScreen> {
         incomingSharedDraft?.entry ?? await _entrySession.prepare(conn);
     if (!mounted) return;
     if (plan == null || !_entrySession.isCurrent(plan)) return;
+    if (canUse != null && !canUse()) return;
     final controller = plan.controller;
+    if (botChat != null && !controller.owns(botChat)) {
+      throw StateError(
+        'Bot instance changed. Reload Bots before opening its chat.',
+      );
+    }
     final launchAction = incomingSharedDraft == null
         ? _entrySession.takeLaunchAction(plan)
         : null;
@@ -909,6 +949,9 @@ class HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (_) => ProfileWorkspaceScreen(
           controller: controller,
+          createBotsSession: widget.createBotsSession,
+          onOpenBotChat: selectBotChat,
+          initialBotSession: botChat,
           savedConnections: widget.connManager.getConnections,
           onSelectConnection: selectWorkspaceConnection,
           configurationActions: buildConfigurationActions,

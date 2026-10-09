@@ -129,6 +129,50 @@ the drawer from a chat and pressing Android Back must close the drawer, retainin
 the chat; the next Back restores Recents. These short probes do not replay the
 gesture journey or depend on its retained transcript scroll position.
 
+## Bots
+
+Open the drawer → Bots. Verify Bots/Groups tabs, one continuous list with pins
+first, the pin glyph, canonical last-message truncation, search and live filters.
+Open a bot and use Back: the original tab, query and filter must remain. Open a
+bot from another saved instance: the secure workspace identity must match the
+captured row before opening its chat. Change appearance, then open Profile
+settings and exercise the existing identity/model/account/capability editors.
+Verify that a concurrent desktop edit requires reload/review, and that partial
+saves retain the remaining draft without repeating acknowledged sections.
+
+Create a hosted Discussion group with 2–6 bots on a ready instance. Send a
+message, mention a member, inspect one-time approval/deny, stop, rename and
+disband controls. A lost send acknowledgement must retain the same event ID
+and text for Retry. Inspect real screen previews, including the human-control
+privacy suppression. See [the current contract and limits](BOTS.md).
+
+`bots_contract_test.dart` covers stock wire shapes, ownership, CAS, canonical
+creation/title races, partial saves, command admission and idempotent sends.
+`bots_view_test.dart` covers the production drawer/chat/Back journey and native
+roster, menus, creation and appearance/settings reachability at 390 dp/100%
+and 320 dp/200% in both themes. Run it with `--dart-define=STUDIO_REVIEW=true`
+to export actual Flutter captures to ignored `build/bots-review/`. The isolated
+LAN review uses those production views with authored sample data; it never
+connects to a Hermes server. These checks do not certify a live provider's
+image generation or a physical phone's screen control.
+
+For the limited Android form/navigation gate, request a free owned emulator slot
+from the shared coordinator, then run:
+
+```sh
+flock /home/dev/projects/hermes-android/.session-coordination/execution.lock python3 scripts/test_native_bots.py --device <allocated-emulator> --output build/emulator-acceptance/bots
+```
+
+The driver rejects physical devices, restores viewport/density/system font scale,
+and injects actual Android text and Back events. The four light/dark,
+390 dp/100% and 320 dp/200% cases cover drawer/chat/Back and retained search,
+appearance save/discard, Android document-picker cancellation, profile settings,
+new-bot creation and exact group-send recovery. Screenshots come from Android's
+window. Only stock transport observations are authored; provider generation,
+real display control and live Hermes delivery remain separate checks. The builder
+owns APK assembly; keep this dependent command sequence under the shared lease.
+Use `--source-directory` for its frozen checkout and `--name` for a failing case.
+
 ## Continuous checks
 
 After activating the Flutter toolchain, run `python3 scripts/test.py` for routine

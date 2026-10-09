@@ -26,6 +26,8 @@
 
 ## Keep work moving
 
+- **Talk to your bots.** Open Bots in the side menu for a compact roster across saved instances. Switch between Bots and Groups, keep pinned rows at the top, and see the last message from each bot's continuing chat. Change a bot's name, shape, color or avatar; open its role, instructions, model, accounts and tool settings. Hosted Discussion groups bring 2–6 bots from one instance together, with mentions, approvals, stop and recovery controls. [Bots and current desktop differences](BOTS.md).
+
 - **Choose your model.** Browse a compact provider-filtered list and open model cards for supplied prices and account usage. The small brain control selects reasoning; lightning toggles fast mode where available. In the composer, tap the short model name to open the picker, tap lightning to toggle fast, or hold thinking, slide to a level and release to apply; slide away to cancel. Picker changes wait for Apply.
 - **Choose what happens next.** Send a new message, steer active work, queue a follow-up or stop it. An empty composer shows Stop while work is running; start typing to restore the send arrow and your usual held-action order. Hold, slide and release to choose another action. Edit a queued item before it sends. Drafts and staged files survive navigation and restart.
 - **Use a skill while writing.** Type `/` after a space or on a new line anywhere in your message to open the skill helper. Pick a skill to insert its name in bold accent text. Keep writing, then Send to load its instructions with your message.

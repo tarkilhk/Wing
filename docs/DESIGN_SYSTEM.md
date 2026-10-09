@@ -170,6 +170,31 @@ Client-only integration inspected upstream Hermes main
 history, session selection and correlated input/completion observations. No new
 server endpoint or backend modification is required.
 
+## Bots, 9 October 2026
+
+Use the selected **Compact roster** arrangement from `prototype/bots-studio`
+(`c85eabbb11a19eea84dc00b2c41acc205f6dd4c1`). Bots and Groups are peer tabs.
+Use one continuous grouped list per tab: pins sort first and carry a small pin
+glyph; there is no separate pinned heading. Every bot row shows the truncated
+last message from the same continuing Bot Chat it opens. Instance/status stays
+secondary to the bot's name. Use native shape faces, shared Studio surfaces,
+16 dp gutters and icon-only 48 dp actions with tooltips. At enlarged text,
+titles/context wrap and message previews remain bounded in the scrolling list.
+Creation and appearance are scrollable pages; profile settings reuse Wing's
+existing captured-profile editors.
+
+| Before | After | Why |
+| --- | --- | --- |
+| Small bot name beside a heavier preview | 16 sp semibold name above a muted preview | Identity leads the compact row |
+| Separate pinned region in the earlier exploration | One list, pinned first with glyph | Follows the owner's selected arrangement |
+| A stale full appearance form could restore untouched fields | Save only edited fields; reload refreshes untouched values | Preserves edits made in another desktop client |
+| Dense fixed forms at enlarged text | Scrollable controls and separate app-bar action row | Keeps avatar, settings and save actions reachable at 320 dp/200% |
+
+Native captures cover roster, groups, anchored menus, new-bot page and both ends
+of the appearance page plus its settings handoff in light/dark at both text
+sizes. [Bots](BOTS.md) records action scope, failure behavior and current desktop
+differences. Synthetic previews do not establish production render acceptance.
+
 ## App and notification identity
 
 The official app name and wordmark are **Wing**, with a capital **W** and

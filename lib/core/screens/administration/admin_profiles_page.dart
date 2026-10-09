@@ -5,9 +5,18 @@ import 'package:flutter/material.dart';
 import '../../services/profiles_management_session.dart';
 import 'admin_widgets.dart';
 
+enum ProfileManagementEntry { rename, delete }
+
 class AdminProfilesPage extends StatefulWidget {
-  const AdminProfilesPage({super.key, required this.createSession});
+  const AdminProfilesPage({
+    super.key,
+    required this.createSession,
+    this.initialProfile,
+    this.initialAction,
+  });
   final ProfilesManagementSession Function() createSession;
+  final String? initialProfile;
+  final ProfileManagementEntry? initialAction;
   @override
   State<AdminProfilesPage> createState() => _AdminProfilesPageState();
 }
@@ -21,7 +30,22 @@ class _AdminProfilesPageState extends State<AdminProfilesPage> {
     super.initState();
     _session = widget.createSession();
     _session.addListener(_changed);
-    unawaited(_session.reload());
+    unawaited(_enter());
+  }
+
+  Future<void> _enter() async {
+    await _session.reload();
+    if (!mounted || widget.initialProfile == null) return;
+    final intent = switch (widget.initialAction) {
+      ProfileManagementEntry.rename => _session.beginRename(
+        widget.initialProfile!,
+      ),
+      ProfileManagementEntry.delete => _session.beginDelete(
+        widget.initialProfile!,
+      ),
+      null => null,
+    };
+    if (intent != null) await _edit(intent);
   }
 
   void _changed() {

@@ -505,6 +505,14 @@
       "status": "supported"
     },
     {
+      "id": "ci-.github/workflows/nightly-tests.yml",
+      "kind": "ci-configuration",
+      "path": ".github/workflows/nightly-tests.yml",
+      "purpose": "Nightly and manual complete product/checker proof verification",
+      "source": "GitHub daily schedule; docs/TESTING.md",
+      "status": "supported"
+    },
+    {
       "id": "ci-.github/workflows/pr-quality.yml",
       "kind": "ci-configuration",
       "path": ".github/workflows/pr-quality.yml",
@@ -527,6 +535,15 @@
       "selector": "main",
       "purpose": "Isolated native share QA entrypoint: rejects kReleaseMode or absent WING_NATIVE_SHARE_QA; native controlled camera requires DEBUG, NATIVE_SHARE_QA and exact QA camera package. No release entry.",
       "source": "integration_test/share_intake_device.dart; tools/qa/check_external_share.py; android/app/src/main/kotlin/com/tarkilhk/wing/MainActivity.kt",
+      "status": "supported"
+    },
+    {
+      "id": "dart-main-test/activity_density_guard_test.dart",
+      "kind": "host-test",
+      "path": "test/activity_density_guard_test.dart",
+      "selector": "main",
+      "purpose": "Compact activity density production and independent density guard checks",
+      "source": "tools/architecture/rules/activity_density.md; tools/architecture/README.md",
       "status": "supported"
     },
     {
@@ -572,6 +589,15 @@
       "selector": "main",
       "purpose": "Protect owner history intent callback frame boundary with finite AST fixtures",
       "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml",
+      "status": "supported"
+    },
+    {
+      "id": "dart-main-tools/architecture/rules/activity_density.dart",
+      "kind": "guard-cli",
+      "path": "tools/architecture/rules/activity_density.dart",
+      "selector": "main",
+      "purpose": "Compact activity density canonical header construction guard",
+      "source": "tools/architecture/rules/activity_density.md; tools/architecture/README.md",
       "status": "supported"
     },
     {
@@ -1043,6 +1069,15 @@
       "status": "supported"
     },
     {
+      "id": "dart-main-tools/architecture/tests/activity_density_test.dart",
+      "kind": "guard-fixture-cli",
+      "path": "tools/architecture/tests/activity_density_test.dart",
+      "selector": "main",
+      "purpose": "Compact activity density regression fixtures and CLI exit proof",
+      "source": "tools/architecture/rules/activity_density.md; tools/architecture/README.md",
+      "status": "supported"
+    },
+    {
       "id": "dart-main-tools/architecture/tests/app_preferences_construction_test.dart",
       "kind": "guard-fixture-cli",
       "path": "tools/architecture/tests/app_preferences_construction_test.dart",
@@ -1502,6 +1537,15 @@
       "status": "supported"
     },
     {
+      "id": "desktop-tool-label-generator",
+      "kind": "tool-script",
+      "path": "tools/generate_tool_labels.py",
+      "purpose": "Refresh built-in action titles from inspected stock Hermes desktop English catalog",
+      "source": "docs/TOOL_ACTIVITY.md",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
       "id": "device-driver-test_driver/roadmap_emulator_driver.dart",
       "kind": "device-driver",
       "path": "test_driver/roadmap_emulator_driver.dart",
@@ -1583,6 +1627,15 @@
       "selector": "main"
     },
     {
+      "id": "device-or-live-test-integration_test/bots_native_test.dart",
+      "kind": "device-or-live-test",
+      "path": "integration_test/bots_native_test.dart",
+      "purpose": "Focused Bots keyboard/Back/forms and Android picker validation on an allocated disposable emulator",
+      "source": "docs/TESTING.md; scripts/test_native_bots.py",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
       "id": "device-or-live-test-integration_test/clipboard_device_test.dart",
       "kind": "device-or-live-test",
       "path": "integration_test/clipboard_device_test.dart",
@@ -1642,6 +1695,15 @@
       "path": "integration_test/file_transfer_native_test.dart",
       "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
       "source": "docs/TESTING.md; integration_test/file_transfer_native_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "device-or-live-test-integration_test/health_alerts_native_test.dart",
+      "kind": "device-or-live-test",
+      "path": "integration_test/health_alerts_native_test.dart",
+      "purpose": "Production Wing alert routes on a disposable emulator with synthetic transport; native viewport, font scaling and keyboard acceptance. Optional host screenshot checkpoints are bounded.",
+      "source": "docs/TESTING.md; integration_test/health_alerts_native_test.dart",
       "status": "supported",
       "selector": "main"
     },
@@ -1844,6 +1906,15 @@
       "selector": "main"
     },
     {
+      "id": "device-or-live-test-integration_test/recent_conversation_native_test.dart",
+      "kind": "device-or-live-test",
+      "path": "integration_test/recent_conversation_native_test.dart",
+      "purpose": "Production Recents chat on API 36 with native two-finger, pinch, scrub, stack, keyboard, recovery and passive cue checks; synthetic transport only",
+      "source": "docs/TESTING.md; scripts/test_native_recents.py",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
       "id": "device-or-live-test-integration_test/remaining_product_live_test.dart",
       "kind": "device-or-live-test",
       "path": "integration_test/remaining_product_live_test.dart",
@@ -1995,6 +2066,23 @@
       "selector": "WingIcons"
     },
     {
+      "id": "git-pre-commit",
+      "kind": "git-hook",
+      "path": ".githooks/pre-commit",
+      "purpose": "Check the exact staged tree with the existing source linters before every local commit",
+      "source": "scripts/install_git_hooks.py; CONTRIBUTING.md#local-commit-checks",
+      "status": "supported"
+    },
+    {
+      "id": "host-test-activity-family",
+      "kind": "host-test",
+      "path": "test/activity_family_test.dart",
+      "purpose": "Shared activity framing, icon-only actions and real-font captures across Tasks, Agents, Work, reasoning and tool results",
+      "source": "docs/TOOL_ACTIVITY.md; test/activity_family_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
       "id": "host-test-app_preferences_workspace_entry_test.dart",
       "kind": "host-test",
       "path": "test/app_preferences_workspace_entry_test.dart",
@@ -2002,6 +2090,14 @@
       "source": "test/app_preferences_workspace_entry_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-batch-generator",
+      "kind": "manual-or-ci-cli",
+      "path": "tools/testing/test_batches.dart",
+      "purpose": "Partition all host tests between routine product verification and complete nightly proofs, preserving unique discovery and special suite lifetimes",
+      "source": "scripts/test.py",
+      "status": "supported"
     },
     {
       "id": "host-test-discovery",
@@ -2013,6 +2109,15 @@
       },
       "purpose": "Mandatory Flutter host test discovery",
       "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml: flutter test",
+      "status": "supported"
+    },
+    {
+      "id": "host-test-profile-model-catalog",
+      "kind": "host-test",
+      "path": "test/profile_model_catalog_test.dart",
+      "selector": "main",
+      "purpose": "Profile catalog concurrency, lifetime, policy isolation and account usage fidelity",
+      "source": "docs/MODEL_CATALOG.md",
       "status": "supported"
     },
     {
@@ -2500,6 +2605,22 @@
       "source": "docs/TESTING.md; test/block_reusing_markdown_body_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-test/bots_contract_test.dart",
+      "kind": "host-test",
+      "path": "test/bots_contract_test.dart",
+      "purpose": "Bots ownership, stock API contracts, scoped mutation and Studio roster/editor render acceptance",
+      "source": "docs/TESTING.md; test/bots_contract_test.dart",
+      "status": "supported"
+    },
+    {
+      "id": "host-test-test/bots_view_test.dart",
+      "kind": "host-test",
+      "path": "test/bots_view_test.dart",
+      "purpose": "Bots ownership, stock API contracts, scoped mutation and Studio roster/editor render acceptance",
+      "source": "docs/TESTING.md; test/bots_view_test.dart",
+      "status": "supported"
     },
     {
       "id": "host-test-test/browser_prerequisite_live_test.dart",
@@ -4230,6 +4351,15 @@
       "selector": "main"
     },
     {
+      "id": "host-test-test/profile_tool_call_test.dart",
+      "kind": "host-test",
+      "path": "test/profile_tool_call_test.dart",
+      "purpose": "Readable tool facts, timing and action detail regressions",
+      "source": "docs/TOOL_ACTIVITY.md; test/profile_tool_call_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
       "id": "host-test-test/profile_transcript_test.dart",
       "kind": "host-test",
       "path": "test/profile_transcript_test.dart",
@@ -4426,6 +4556,24 @@
       "purpose": "Canonical passive reading input contract and focused fixture proof",
       "source": "tools/architecture/rules/reading_view_inputs.md",
       "status": "supported"
+    },
+    {
+      "id": "host-test-test/recent_conversation_session_test.dart",
+      "kind": "host-test",
+      "path": "test/recent_conversation_session_test.dart",
+      "purpose": "Recents visit ownership, multitouch switching, motion, cue and production route regressions; STUDIO_REVIEW optionally renders authored fixture captures",
+      "source": "docs/TESTING.md; test/recent_conversation_session_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/recent_conversation_switcher_test.dart",
+      "kind": "host-test",
+      "path": "test/recent_conversation_switcher_test.dart",
+      "purpose": "Recents visit ownership, multitouch switching, motion, cue and production route regressions; STUDIO_REVIEW optionally renders authored fixture captures",
+      "source": "docs/TESTING.md; test/recent_conversation_switcher_test.dart",
+      "status": "supported",
+      "selector": "main"
     },
     {
       "id": "host-test-test/release_identity_test.dart",
@@ -4766,6 +4914,15 @@
       "path": "test/text_size_preference_test.dart",
       "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
       "source": "docs/TESTING.md; test/text_size_preference_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/tool_call_presentation_test.dart",
+      "kind": "host-test",
+      "path": "test/tool_call_presentation_test.dart",
+      "purpose": "Readable tool facts, timing and action detail regressions",
+      "source": "docs/TOOL_ACTIVITY.md; test/tool_call_presentation_test.dart",
       "status": "supported",
       "selector": "main"
     },
@@ -5239,6 +5396,18 @@
       ]
     },
     {
+      "id": "performance-workspace_navigation_soak",
+      "kind": "alternate-dart-main",
+      "path": "tools/performance/workspace_navigation_soak.dart",
+      "selector": [
+        "main",
+        "WING_PERF_INSTRUMENTATION"
+      ],
+      "purpose": "Profile-only offline20-chat same/increasing-set retention probe; real workspace owner/view, bounded fixture logs and numeric counters",
+      "source": "docs/PERFORMANCE.md; tools/performance/workspace_navigation_soak.dart",
+      "status": "supported"
+    },
+    {
       "id": "performance-workspace_streaming_replay",
       "kind": "alternate-dart-main",
       "path": "tools/performance/workspace_streaming_replay.dart",
@@ -5318,6 +5487,32 @@
       "purpose": "Native resource valid/original-invalid/input-error CLI regression fixtures",
       "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml: offline QA discovery",
       "status": "supported"
+    },
+    {
+      "id": "qa-commit-linters",
+      "kind": "qa-fixture",
+      "path": "tools/qa/test_commit_linters.py",
+      "purpose": "Disposable-repository hook, failure propagation and staged/unstaged isolation regressions",
+      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml offline QA discovery",
+      "status": "supported"
+    },
+    {
+      "id": "qa-native-recents",
+      "kind": "qa-fixture",
+      "path": "scripts/test_native_recents.py",
+      "purpose": "Disposable emulator driver, isolated build, native input and bounded screenshot receipts with viewport/settings restoration",
+      "source": "docs/TESTING.md",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "qa-native-recents-touch",
+      "kind": "qa-fixture",
+      "path": "integration_test/fixtures/recents_touch/NativeRecentsTouch.java",
+      "purpose": "API 36 shell input helper compiled to a disposable dex by the native Recents driver; never packaged in Wing",
+      "source": "scripts/test_native_recents.py",
+      "status": "supported",
+      "selector": "main"
     },
     {
       "id": "qa-tools/qa/audit_desktop_process_projection.cjs",
@@ -5683,6 +5878,15 @@
       "selector": "script-entry"
     },
     {
+      "id": "reviewed-cli-tools/architecture/native_voice/permission_lifecycle.py",
+      "kind": "manual-or-ci-cli",
+      "path": "tools/architecture/native_voice/permission_lifecycle.py",
+      "purpose": "Required independent native permission/media lifecycle dispatch guard; fixtureproof in native_voice/prove_boundary.py",
+      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml; tools/architecture/native_voice/README.md",
+      "status": "supported",
+      "selector": "script-entry"
+    },
+    {
       "id": "reviewed-cli-tools/architecture/native_voice/prove_boundary.py",
       "kind": "manual-or-ci-cli",
       "path": "tools/architecture/native_voice/prove_boundary.py",
@@ -5856,6 +6060,31 @@
       "selector": "@xml/shortcuts"
     },
     {
+      "id": "tool-check-commit-linters-tests",
+      "kind": "host-test",
+      "path": "scripts/tests/test_check_commit_linters.py",
+      "purpose": "Discover every Dart source guard, preserve baseline arguments and prove linter failure propagation and native dependency separation",
+      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml: Python unittest discovery",
+      "status": "supported",
+      "selector": "unittest"
+    },
+    {
+      "id": "tool-commit-linters",
+      "kind": "tool-cli",
+      "path": "scripts/check_commit_linters.py",
+      "purpose": "One-process Dart linter batch and native/Python source checks; --staged isolates the Git index",
+      "source": ".githooks/pre-commit; CONTRIBUTING.md#local-commit-checks",
+      "status": "supported"
+    },
+    {
+      "id": "tool-install-git-hooks",
+      "kind": "tool-cli",
+      "path": "scripts/install_git_hooks.py",
+      "purpose": "Explicit local activation of the tracked commit hook without replacing another hook setup",
+      "source": "AGENTS.md; CONTRIBUTING.md#local-commit-checks",
+      "status": "supported"
+    },
+    {
       "id": "usage-prevention-test/usage_view_dependency_guard_test.dart",
       "kind": "host-test",
       "path": "test/usage_view_dependency_guard_test.dart",
@@ -5880,6 +6109,23 @@
       "selector": "main",
       "purpose": "Independent usage raw-adapter dependency prevention and public CLI controls",
       "source": "tools/architecture/rules/usage_view_dependencies.md",
+      "status": "supported"
+    },
+    {
+      "id": "website-app-capture",
+      "kind": "manual-or-ci-cli",
+      "path": "tools/website/capture_app_test.dart",
+      "purpose": "Export real Wing widgets with public-safe demo content for website app captures",
+      "source": "docs/WEBSITE.md",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "website-browser-review",
+      "kind": "manual-or-ci-cli",
+      "path": "tools/website/review.cjs",
+      "purpose": "Local browser acceptance of website layouts, interactions, accessibility and assets",
+      "source": "docs/WEBSITE.md",
       "status": "supported"
     },
     {
@@ -5908,227 +6154,6 @@
       "purpose": "Independent remembered-entry key ownership prevention and real CLI fixtures",
       "source": "tools/architecture/rules/workspace_entry_key_owner.md",
       "status": "supported"
-    },
-    {
-      "id": "reviewed-cli-tools/architecture/native_voice/permission_lifecycle.py",
-      "kind": "manual-or-ci-cli",
-      "path": "tools/architecture/native_voice/permission_lifecycle.py",
-      "purpose": "Required independent native permission/media lifecycle dispatch guard; fixtureproof in native_voice/prove_boundary.py",
-      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml; tools/architecture/native_voice/README.md",
-      "status": "supported",
-      "selector": "script-entry"
-    },
-    {
-      "id": "performance-workspace_navigation_soak",
-      "kind": "alternate-dart-main",
-      "path": "tools/performance/workspace_navigation_soak.dart",
-      "selector": [
-        "main",
-        "WING_PERF_INSTRUMENTATION"
-      ],
-      "purpose": "Profile-only offline20-chat same/increasing-set retention probe; real workspace owner/view, bounded fixture logs and numeric counters",
-      "source": "docs/PERFORMANCE.md; tools/performance/workspace_navigation_soak.dart",
-      "status": "supported"
-    },
-    {
-      "id": "host-test-test/tool_call_presentation_test.dart",
-      "kind": "host-test",
-      "path": "test/tool_call_presentation_test.dart",
-      "purpose": "Readable tool facts, timing and action detail regressions",
-      "source": "docs/TOOL_ACTIVITY.md; test/tool_call_presentation_test.dart",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
-      "id": "host-test-test/profile_tool_call_test.dart",
-      "kind": "host-test",
-      "path": "test/profile_tool_call_test.dart",
-      "purpose": "Readable tool facts, timing and action detail regressions",
-      "source": "docs/TOOL_ACTIVITY.md; test/profile_tool_call_test.dart",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
-      "id": "desktop-tool-label-generator",
-      "kind": "tool-script",
-      "path": "tools/generate_tool_labels.py",
-      "purpose": "Refresh built-in action titles from inspected stock Hermes desktop English catalog",
-      "source": "docs/TOOL_ACTIVITY.md",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
-      "id": "host-test-profile-model-catalog",
-      "kind": "host-test",
-      "path": "test/profile_model_catalog_test.dart",
-      "selector": "main",
-      "purpose": "Profile catalog concurrency, lifetime, policy isolation and account usage fidelity",
-      "source": "docs/MODEL_CATALOG.md",
-      "status": "supported"
-    },
-    {
-      "id": "git-pre-commit",
-      "kind": "git-hook",
-      "path": ".githooks/pre-commit",
-      "purpose": "Check the exact staged tree with the existing source linters before every local commit",
-      "source": "scripts/install_git_hooks.py; CONTRIBUTING.md#local-commit-checks",
-      "status": "supported"
-    },
-    {
-      "id": "tool-commit-linters",
-      "kind": "tool-cli",
-      "path": "scripts/check_commit_linters.py",
-      "purpose": "One-process Dart linter batch and native/Python source checks; --staged isolates the Git index",
-      "source": ".githooks/pre-commit; CONTRIBUTING.md#local-commit-checks",
-      "status": "supported"
-    },
-    {
-      "id": "tool-install-git-hooks",
-      "kind": "tool-cli",
-      "path": "scripts/install_git_hooks.py",
-      "purpose": "Explicit local activation of the tracked commit hook without replacing another hook setup",
-      "source": "AGENTS.md; CONTRIBUTING.md#local-commit-checks",
-      "status": "supported"
-    },
-    {
-      "id": "qa-commit-linters",
-      "kind": "qa-fixture",
-      "path": "tools/qa/test_commit_linters.py",
-      "purpose": "Disposable-repository hook, failure propagation and staged/unstaged isolation regressions",
-      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml offline QA discovery",
-      "status": "supported"
-    },
-    {
-      "id": "dart-main-test/activity_density_guard_test.dart",
-      "kind": "host-test",
-      "path": "test/activity_density_guard_test.dart",
-      "selector": "main",
-      "purpose": "Compact activity density production and independent density guard checks",
-      "source": "tools/architecture/rules/activity_density.md; tools/architecture/README.md",
-      "status": "supported"
-    },
-    {
-      "id": "dart-main-tools/architecture/rules/activity_density.dart",
-      "kind": "guard-cli",
-      "path": "tools/architecture/rules/activity_density.dart",
-      "selector": "main",
-      "purpose": "Compact activity density canonical header construction guard",
-      "source": "tools/architecture/rules/activity_density.md; tools/architecture/README.md",
-      "status": "supported"
-    },
-    {
-      "id": "dart-main-tools/architecture/tests/activity_density_test.dart",
-      "kind": "guard-fixture-cli",
-      "path": "tools/architecture/tests/activity_density_test.dart",
-      "selector": "main",
-      "purpose": "Compact activity density regression fixtures and CLI exit proof",
-      "source": "tools/architecture/rules/activity_density.md; tools/architecture/README.md",
-      "status": "supported"
-    },
-    {
-      "id": "host-test-batch-generator",
-      "kind": "manual-or-ci-cli",
-      "path": "tools/testing/test_batches.dart",
-      "purpose": "Partition all host tests between routine product verification and complete nightly proofs, preserving unique discovery and special suite lifetimes",
-      "source": "scripts/test.py",
-      "status": "supported"
-    },
-    {
-      "id": "ci-.github/workflows/nightly-tests.yml",
-      "kind": "ci-configuration",
-      "path": ".github/workflows/nightly-tests.yml",
-      "purpose": "Nightly and manual complete product/checker proof verification",
-      "source": "GitHub daily schedule; docs/TESTING.md",
-      "status": "supported"
-    },
-    {
-      "id": "tool-check-commit-linters-tests",
-      "kind": "host-test",
-      "path": "scripts/tests/test_check_commit_linters.py",
-      "purpose": "Discover every Dart source guard, preserve baseline arguments and prove linter failure propagation and native dependency separation",
-      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml: Python unittest discovery",
-      "status": "supported",
-      "selector": "unittest"
-    },
-    {
-      "id": "host-test-activity-family",
-      "kind": "host-test",
-      "path": "test/activity_family_test.dart",
-      "purpose": "Shared activity framing, icon-only actions and real-font captures across Tasks, Agents, Work, reasoning and tool results",
-      "source": "docs/TOOL_ACTIVITY.md; test/activity_family_test.dart",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
-      "id": "device-or-live-test-integration_test/health_alerts_native_test.dart",
-      "kind": "device-or-live-test",
-      "path": "integration_test/health_alerts_native_test.dart",
-      "purpose": "Production Wing alert routes on a disposable emulator with synthetic transport; native viewport, font scaling and keyboard acceptance. Optional host screenshot checkpoints are bounded.",
-      "source": "docs/TESTING.md; integration_test/health_alerts_native_test.dart",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
-      "id": "website-app-capture",
-      "kind": "manual-or-ci-cli",
-      "path": "tools/website/capture_app_test.dart",
-      "purpose": "Export real Wing widgets with public-safe demo content for website app captures",
-      "source": "docs/WEBSITE.md",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
-      "id": "website-browser-review",
-      "kind": "manual-or-ci-cli",
-      "path": "tools/website/review.cjs",
-      "purpose": "Local browser acceptance of website layouts, interactions, accessibility and assets",
-      "source": "docs/WEBSITE.md",
-      "status": "supported"
-    },
-    {
-      "id": "device-or-live-test-integration_test/recent_conversation_native_test.dart",
-      "kind": "device-or-live-test",
-      "path": "integration_test/recent_conversation_native_test.dart",
-      "purpose": "Production Recents chat on API 36 with native two-finger, pinch, scrub, stack, keyboard, recovery and passive cue checks; synthetic transport only",
-      "source": "docs/TESTING.md; scripts/test_native_recents.py",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
-      "id": "host-test-test/recent_conversation_session_test.dart",
-      "kind": "host-test",
-      "path": "test/recent_conversation_session_test.dart",
-      "purpose": "Recents visit ownership, multitouch switching, motion, cue and production route regressions; STUDIO_REVIEW optionally renders authored fixture captures",
-      "source": "docs/TESTING.md; test/recent_conversation_session_test.dart",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
-      "id": "host-test-test/recent_conversation_switcher_test.dart",
-      "kind": "host-test",
-      "path": "test/recent_conversation_switcher_test.dart",
-      "purpose": "Recents visit ownership, multitouch switching, motion, cue and production route regressions; STUDIO_REVIEW optionally renders authored fixture captures",
-      "source": "docs/TESTING.md; test/recent_conversation_switcher_test.dart",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
-      "id": "qa-native-recents",
-      "kind": "qa-fixture",
-      "path": "scripts/test_native_recents.py",
-      "purpose": "Disposable emulator driver, isolated build, native input and bounded screenshot receipts with viewport/settings restoration",
-      "source": "docs/TESTING.md",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
-      "id": "qa-native-recents-touch",
-      "kind": "qa-fixture",
-      "path": "integration_test/fixtures/recents_touch/NativeRecentsTouch.java",
-      "purpose": "API 36 shell input helper compiled to a disposable dex by the native Recents driver; never packaged in Wing",
-      "source": "scripts/test_native_recents.py",
-      "status": "supported",
-      "selector": "main"
     }
   ],
   "files": [
@@ -6688,6 +6713,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "docs/BOTS.md",
+      "area": "docs",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "docs/BUG_TRACKER.md",
       "area": "docs",
       "provenance": "tracked"
@@ -7046,6 +7076,11 @@
       "path": "integration_test/background_monitoring_device.dart",
       "area": "integration_test",
       "provenance": "tracked"
+    },
+    {
+      "path": "integration_test/bots_native_test.dart",
+      "area": "integration_test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "integration_test/clipboard_device_test.dart",
@@ -7561,6 +7596,11 @@
       "path": "lib/core/models/backend_update.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/models/bots.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/models/browser_actions.dart",
@@ -8283,6 +8323,36 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/screens/bots/bot_group_screen.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/screens/bots/bot_profile_editor.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/screens/bots/bot_screen_view.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/screens/bots/bot_settings_screen.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/screens/bots/bots_content.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/screens/bots/bots_create_screen.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/screens/chat_outputs_screen.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -8499,6 +8569,46 @@
     },
     {
       "path": "lib/core/services/backup_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bot_avatar_io.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bot_group_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bot_profile_edit_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bot_screen_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bots_connection_source.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bots_preferences.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bots_repository.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bots_session.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
     },
@@ -9136,6 +9246,11 @@
       "path": "lib/core/widgets/block_reusing_markdown_body.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/bot_avatar.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/chat_find_sheet.dart",
@@ -9873,6 +9988,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "scripts/test_native_bots.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "scripts/test_native_cold_notification.py",
       "area": "scripts",
       "provenance": "tracked"
@@ -10341,6 +10461,16 @@
       "path": "test/block_reusing_markdown_body_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/bots_contract_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bots_view_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/browser_filter_accessibility_test.dart",
@@ -12184,6 +12314,11 @@
     },
     {
       "path": "test/support/administration_operation_fixture.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/support/bots_fixture.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },

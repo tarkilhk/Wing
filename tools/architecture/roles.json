@@ -56,6 +56,11 @@
       "feature": "versions-updates",
       "library": "lib/core/models/backend_update.dart"
     },
+    "lib/core/models/bots.dart": {
+      "role": "domain",
+      "feature": "bots",
+      "library": "lib/core/models/bots.dart"
+    },
     "lib/core/models/browser_actions.dart": {
       "role": "domain",
       "feature": "chat-browser",
@@ -776,6 +781,36 @@
       "feature": "versions-updates",
       "library": "lib/core/screens/backend_update_changes_screen.dart"
     },
+    "lib/core/screens/bots/bot_group_screen.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/screens/bots/bot_group_screen.dart"
+    },
+    "lib/core/screens/bots/bot_profile_editor.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/screens/bots/bot_profile_editor.dart"
+    },
+    "lib/core/screens/bots/bot_screen_view.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/screens/bots/bot_screen_view.dart"
+    },
+    "lib/core/screens/bots/bot_settings_screen.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/screens/bots/bot_settings_screen.dart"
+    },
+    "lib/core/screens/bots/bots_content.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/screens/bots/bots_content.dart"
+    },
+    "lib/core/screens/bots/bots_create_screen.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/screens/bots/bots_create_screen.dart"
+    },
     "lib/core/screens/chat_outputs_screen.dart": {
       "role": "view",
       "feature": "outputs-and-viewers",
@@ -990,6 +1025,46 @@
       "role": "application",
       "feature": "app-preferences-backup",
       "library": "lib/core/services/backup_session.dart"
+    },
+    "lib/core/services/bot_avatar_io.dart": {
+      "role": "platform",
+      "feature": "bots",
+      "library": "lib/core/services/bot_avatar_io.dart"
+    },
+    "lib/core/services/bot_group_session.dart": {
+      "role": "application",
+      "feature": "bots",
+      "library": "lib/core/services/bot_group_session.dart"
+    },
+    "lib/core/services/bot_profile_edit_session.dart": {
+      "role": "application",
+      "feature": "bots",
+      "library": "lib/core/services/bot_profile_edit_session.dart"
+    },
+    "lib/core/services/bot_screen_session.dart": {
+      "role": "application",
+      "feature": "bots",
+      "library": "lib/core/services/bot_screen_session.dart"
+    },
+    "lib/core/services/bots_connection_source.dart": {
+      "role": "composition",
+      "feature": "bots",
+      "library": "lib/core/services/bots_connection_source.dart"
+    },
+    "lib/core/services/bots_preferences.dart": {
+      "role": "data",
+      "feature": "bots",
+      "library": "lib/core/services/bots_preferences.dart"
+    },
+    "lib/core/services/bots_repository.dart": {
+      "role": "data",
+      "feature": "bots",
+      "library": "lib/core/services/bots_repository.dart"
+    },
+    "lib/core/services/bots_session.dart": {
+      "role": "application",
+      "feature": "bots",
+      "library": "lib/core/services/bots_session.dart"
     },
     "lib/core/services/chat_browser_data.dart": {
       "role": "application",
@@ -1620,6 +1695,11 @@
       "role": "view",
       "feature": "markdown",
       "library": "lib/core/widgets/block_reusing_markdown_body.dart"
+    },
+    "lib/core/widgets/bot_avatar.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/widgets/bot_avatar.dart"
     },
     "lib/core/widgets/chat_find_sheet.dart": {
       "role": "view",

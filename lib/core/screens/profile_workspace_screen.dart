@@ -77,6 +77,9 @@ import 'profile_row_actions.dart';
 import 'profile_transcript.dart';
 import 'chat_outputs_screen.dart';
 import '../widgets/app_drawer.dart';
+import 'bots/bots_content.dart';
+import '../services/bots_session.dart';
+import '../services/bots_repository.dart';
 import 'app_settings_content.dart';
 import 'analytics_content.dart';
 import 'workspace_overview_content.dart';
@@ -109,6 +112,10 @@ class ProfileWorkspaceScreen extends StatefulWidget {
   final Future<void> Function(ProfileSessionKey)? onCapturePhoto;
   final AppDestination initialDestination;
   final VoiceDevice? voiceDevice;
+  final BotsSession Function()? createBotsSession;
+  final Future<void> Function(ProfileSessionKey, bool Function())?
+  onOpenBotChat;
+  final ProfileSessionKey? initialBotSession;
   const ProfileWorkspaceScreen({
     super.key,
     required this.controller,
@@ -125,6 +132,9 @@ class ProfileWorkspaceScreen extends StatefulWidget {
     this.onCapturePhoto,
     this.initialDestination = AppDestination.chats,
     this.voiceDevice,
+    this.createBotsSession,
+    this.onOpenBotChat,
+    this.initialBotSession,
   });
   @override
   ProfileWorkspaceScreenState createState() => ProfileWorkspaceScreenState();
@@ -133,6 +143,41 @@ class ProfileWorkspaceScreen extends StatefulWidget {
 class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     with WidgetsBindingObserver {
   ProfileWorkspaceController get controller => widget.controller;
+  BotsSession? _botsOwner;
+  BotsViewState _botsView = const BotsViewState();
+  int _botNavigation = 0;
+  BotsSession get _bots => _botsOwner ??=
+      widget.createBotsSession?.call() ??
+      BotsSession(
+        (canUse) async => [
+          BotsRepository.forServer(controller.healthSession().server),
+        ],
+      );
+
+  Future<void> _openBotChat(ProfileSessionKey key) => _run(() async {
+    if (_destination != AppDestination.bots) return;
+    final navigation = ++_botNavigation;
+    bool current() =>
+        mounted &&
+        navigation == _botNavigation &&
+        _destination == AppDestination.bots;
+    if (!controller.owns(key)) {
+      final open = widget.onOpenBotChat;
+      if (open == null) {
+        throw StateError('Open this bot from its saved instance');
+      }
+      await open(key, current);
+      return;
+    }
+    await controller.openSession(
+      key,
+      propagateHistoryFailure: true,
+      isCurrentRequest: current,
+    );
+    if (!current()) return;
+    _selectDestination(AppDestination.chats);
+    _chatOrigin = AppDestination.bots;
+  });
   (ProfileWorkspaceController, ChatReadingFocus)? _renderedReadingFocus;
   final _composer = SkillComposerController();
   final _profileNavigation = WorkspaceProfileNavigation();
@@ -501,6 +546,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       await controller.initialize();
     }
     if (!mounted || controller.current == null) return;
+    if (widget.initialBotSession case final key?) {
+      await _openBotChat(key);
+      return;
+    }
+    if (_destination == AppDestination.bots) _bots.setVisible(_appIsActive);
     if (_destination == AppDestination.activity) {
       await controller.refreshRecents();
     }
@@ -529,6 +579,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       _cancelVoice();
     }
     final active = state == AppLifecycleState.resumed;
+    _botsOwner?.setVisible(active && _destination == AppDestination.bots);
     _supervision?.setActive(active);
     if (_appIsActive != active) {
       // A notification handoff can render the answer while inactive. Rebuild
@@ -562,6 +613,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   @override
   void dispose() {
+    _botsOwner?.dispose();
     _disposeRecentVisit();
     _composerFocus.removeListener(_composerFocusChanged);
     _composerEditing.dispose();
@@ -814,9 +866,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
-              tooltip: _chatOrigin == AppDestination.activity
-                  ? 'Back to Recents'
-                  : 'Back to sessions',
+              tooltip: switch (_chatOrigin) {
+                AppDestination.activity => 'Back to Recents',
+                AppDestination.bots => 'Back to Bots',
+                _ => 'Back to sessions',
+              },
               onPressed: _leaveChat,
             ),
             // Share the project action across title and scope so the title
@@ -2695,6 +2749,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }
 
   void _selectDestination(AppDestination destination) {
+    _botNavigation++;
     _disposeRecentVisit();
     _chatOrigin = null;
     _cancelVoice();
@@ -2708,6 +2763,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       return;
     }
     setState(() => _destination = destination);
+    if (destination == AppDestination.bots) {
+      _bots.setVisible(_appIsActive);
+    } else {
+      _botsOwner?.setVisible(false);
+    }
     controller.setRouteVisibility(this, _hasChatFocus);
     if (destination == AppDestination.activity) {
       unawaited(_run(controller.refreshRecents));
@@ -2732,7 +2792,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     child: Scaffold(
       key: _scaffoldKey,
       drawer: _drawer(),
-      appBar: _destination == AppDestination.administration
+      appBar:
+          _destination == AppDestination.administration ||
+              _destination == AppDestination.bots
           ? null
           : WingAppBar(
               context: context,
@@ -2757,6 +2819,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       body: Column(
         children: [
           if (controller.switching &&
+              _destination != AppDestination.bots &&
               _destination != AppDestination.settings &&
               _destination != AppDestination.administration)
             const LinearProgressIndicator(),
@@ -2782,10 +2845,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 ),
               ),
             ),
-          if (_destination != AppDestination.settings &&
+          if (_destination != AppDestination.bots &&
+              _destination != AppDestination.settings &&
               _destination != AppDestination.administration)
             WorkspaceConnectionStatus(status: controller.connectionStatus),
           if (controller.error != null &&
+              _destination != AppDestination.bots &&
               _destination != AppDestination.settings &&
               _destination != AppDestination.administration)
             ListTile(
@@ -2797,6 +2862,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             ),
           Expanded(
             child: switch (_destination) {
+              AppDestination.bots => BotsContent(
+                session: _bots,
+                viewState: _botsView,
+                onViewChanged: (view) => setState(() => _botsView = view),
+                onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                onOpenChat: _openBotChat,
+              ),
               AppDestination.analytics => HermesAnalyticsContent(
                 key: ValueKey(controller.connectionIdentity),
                 controller: controller,
