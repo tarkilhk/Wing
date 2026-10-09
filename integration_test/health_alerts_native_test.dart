@@ -306,8 +306,9 @@ void main() {
           of: find.byType(AppBar),
           matching: find.text(destination.label),
         );
-        if (!large)
+        if (!large) {
           expect(tester.getCenter(title).dy, closeTo(chatsCenter, .01));
+        }
         await _capture('$label-${destination.name}-header');
         expect(tester.takeException(), isNull);
       }

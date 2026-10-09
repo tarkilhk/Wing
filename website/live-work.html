@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0c304a">
+<meta name="description" content="Watch tool calls and delegated agents while a reply streams. Send a correction during a run, queue a follow-up, or stop the run.">
+<title>Live chat and activity · Wing</title>
+<link rel="icon" type="image/png" href="assets/wing.png">
+<link rel="stylesheet" href="styles.css">
+<script src="script.js" defer></script>
+</head>
+<body class="guide-page">
+<a class="skip-link" href="#main">Skip to content</a>
+<svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<symbol id="github" viewBox="0 0 24 24">
+<path fill="currentColor" stroke="none" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.86c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.99 1.03-2.69-.1-.25-.45-1.28.1-2.67 0 0 .84-.27 2.75 1.03A9.6 9.6 0 0 1 12 6.8c.85 0 1.71.12 2.51.34 1.91-1.3 2.75-1.03 2.75-1.03.55 1.39.2 2.42.1 2.67.64.7 1.03 1.6 1.03 2.69 0 3.84-2.33 4.69-4.56 4.94.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></symbol>
+<symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/>
+<path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
+<symbol id="moon" viewBox="0 0 24 24">
+<path d="M20.6 14A9 9 0 0 1 10 3.4 9 9 0 1 0 20.6 14Z"/></symbol>
+<symbol id="plus" viewBox="0 0 24 24">
+<path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+<div class="header-surface">
+<header class="site-header page-width">
+<a class="brand" href="index.html" aria-label="Wing home"><img class="brand-portrait" src="assets/wing.png" width="48" height="48" alt=""><img class="brand-wordmark" src="assets/wordmark.svg" width="104" height="52" alt="Wing"></a>
+<nav aria-label="Main navigation">
+<a class="nav-link" href="index.html#workspaces">Features</a>
+<a class="nav-link" href="get-started.html">Get connected</a>
+<a class="icon-button source-link" href="https://github.com/tarkilhk/Wing" aria-label="Wing source code on GitHub" title="Source code on GitHub">
+<svg><use href="#github"/></svg></a>
+</nav>
+</header>
+</div>
+<nav class="topic-nav page-width" aria-label="Wing feature guides">
+<a href="workspaces.html">Profiles &amp; projects</a>
+<a href="recents.html">Recents</a>
+<a href="live-work.html" aria-current="page">Live work</a>
+<a href="results.html">Results</a>
+<a href="health.html">Health</a>
+<a href="administration.html">Administration</a>
+<a href="scheduled-tasks.html">Schedules</a>
+<a href="usage.html">Usage</a>
+<a href="get-started.html">Get connected</a>
+</nav>
+<main id="main">
+<section class="guide-hero page-width" aria-labelledby="guide-title">
+<div>
+<h1 id="guide-title">Follow and steer<br> live work</h1>
+</div>
+</section>
+<div class="guide-layout page-width" id="guide-content">
+<aside>
+<nav class="guide-toc" aria-label="On this page">
+<a href="#activity">Watch tools and delegated agents</a>
+<a href="#steer">Steer, queue, stop or fork</a>
+<a href="#details">Inspect tool requests and results</a>
+<a href="#input">Send files, photos or a dictated message</a>
+<a href="#connection">Reconnect to ongoing work</a>
+</nav>
+</aside>
+<div class="guide-copy">
+<section id="activity" aria-labelledby="activity-title">
+<h2 id="activity-title">Watch tools and delegated agents</h2>
+<p>Open Activity to switch between the tool timeline, tasks and delegated agents.</p>
+<figure class="guide-shot guide-inline-shot">
+<div class="app-frame">
+<a class="screenshot-link" data-screenshot href="assets/screenshots/activity-dark.png" aria-label="Enlarge screenshot: Wing Activity with Timeline selected beside Tasks and Agents tabs"><img src="assets/screenshots/activity-dark.png" width="780" height="1688" alt="Wing Activity with Timeline selected beside Tasks and Agents tabs" loading="lazy"></a>
+</div>
+</figure>
+<p>Open an agent to read its task and live output. Send a correction to that agent or stop its work from the same view.</p>
+<figure class="guide-shot guide-inline-shot">
+<div class="app-frame">
+<a class="screenshot-link" data-screenshot href="assets/screenshots/agents-light.png" aria-label="Enlarge screenshot: Wing delegated agent detail with task and live output"><img src="assets/screenshots/agents-light.png" width="780" height="1688" alt="Wing delegated agent detail with task and live output" loading="lazy"></a>
+</div>
+</figure>
+<p>Past chats retain saved activity when Hermes supplies it.</p>
+</section>
+<section id="steer" aria-labelledby="steer-title">
+<h2 id="steer-title">Steer, queue, stop or fork</h2>
+<p>Type an instruction, then hold the send control, slide to an action and release. <strong>Steer</strong> sends it to work in progress. <strong>Queue</strong> keeps it for later; you can edit it before it sends.</p>
+<p>Use <strong>Stop</strong> to interrupt an active run. You can also edit a saved message or regenerate an answer.</p>
+<figure class="guide-shot guide-inline-shot ">
+<div class="app-frame">
+<a class="screenshot-link" data-screenshot href="assets/screenshots/steer-dark.png" aria-label="Enlarge screenshot: Wing held composer menu with Steer selected during live work"><img src="assets/screenshots/steer-dark.png" width="780" height="1688" alt="Wing held composer menu with Steer selected during live work" loading="lazy"></a>
+</div>
+</figure>
+<p>To explore another direction after a completed saved answer, type a text-only follow-up and choose <strong>Fork</strong> from the send control. Wing branches at the latest saved answer and sends your message in a new chat, keeping the original conversation available.</p>
+</section>
+<section id="details" aria-labelledby="details-title">
+<h2 id="details-title">Inspect tool requests and results</h2>
+<p>Expand a tool call to see what was requested and what it returned. Code execution shows code and output. Other calls can show file contents, changes, search matches or structured data.</p>
+<p>Copy the code or output separately, wrap long lines, or open a full view. File and image results have preview and share actions. Raw details shows the supplied inputs and output.</p>
+<figure class="guide-shot guide-inline-shot receipt-shot">
+<div class="app-frame">
+<a class="screenshot-link" data-screenshot href="assets/screenshots/tool-dark.png" aria-label="Enlarge screenshot: Wing expanded tool receipt with Python code, output and copy controls"><img src="assets/screenshots/tool-dark.png" width="780" height="800" alt="Wing expanded tool receipt with Python code, output and copy controls" loading="lazy"></a>
+</div>
+</figure>
+</section>
+<section id="input" aria-labelledby="input-title">
+<h2 id="input-title">Send files, photos or a dictated message</h2>
+<p>Attach a file or photo, take a picture in the chat, or send content to Wing from another Android app. Review attachments before sending.</p>
+<p>Dictation writes into an editable draft, so you can check and change the words first.</p>
+</section>
+<section id="connection" aria-labelledby="connection-title">
+<h2 id="connection-title">Reconnect to ongoing work</h2>
+<p>Work accepted by Hermes can continue while your phone is disconnected. Reconnect to follow it or send another instruction. New messages and live controls need a connection.</p>
+</section>
+</div>
+</div>
+<div class="guide-next page-width">
+<h2>Related guides</h2>
+<nav aria-label="Related guides">
+<a class="text-link" href="recents.html">Find running chats</a>
+<a class="text-link" href="results.html">Read and export results</a>
+</nav>
+<a class="button button-navy" href="https://github.com/tarkilhk/Wing/releases/latest">Download Wing</a>
+<p>Android 7.0+ · Requires a reachable Hermes server</p>
+</div>
+</main>
+<footer class="site-footer">
+<div class="page-width footer-top">
+<a class="brand" href="index.html" aria-label="Wing home"><img class="brand-portrait" src="assets/wing.png" width="48" height="48" alt=""><img class="brand-wordmark" src="assets/wordmark.svg" width="104" height="52" alt="Wing"></a>
+<p>An independent, open-source client for Hermes Agent.</p>
+<nav aria-label="Footer navigation">
+<a href="https://github.com/tarkilhk/Wing">Source</a>
+<a href="get-started.html">Get connected</a>
+<a href="get-started.html#privacy">Privacy</a>
+<a href="https://github.com/sponsors/tarkilhk">Support Wing</a>
+</nav>
+</div>
+<div class="page-width footer-bottom">
+<a href="https://github.com/tarkilhk/Wing/blob/main/NOTICE.md">Credits and licenses</a>
+</div>
+</footer>
+</body>
+</html>

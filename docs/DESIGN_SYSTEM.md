@@ -684,8 +684,11 @@ card. The name stays on one line with end ellipsis; tapping it reveals the actua
 source path when supplied. One header owns eye, eligible share and exact-content
 copy. The eye opens received instructions, not an invented file or a new read.
 Keep full instructions in that Markdown viewer, with raw/formatted switching
-inside it. Supplied tags, author, version and directory category are quiet viewer
-context. Obtain category from the stock skills catalog, matched to the same skill
+inside it.
+Recognize the stock plugin bundle-context envelope before extracting YAML
+frontmatter. Both are metadata, not document prose or Contents headings. Keep
+the exact received source, including the envelope and declaration, in raw mode.
+Supplied tags, author, version and directory category are quiet viewer context. Obtain category from the stock skills catalog, matched to the same skill
 and profile; keep license in the exact original source. A reference section uses
 actual backend file listings beneath the API-supplied skill directory. Show
 one-line filenames, supplied sizes and eligible eye actions; use the same document
