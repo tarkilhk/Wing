@@ -138,17 +138,26 @@ class VoiceFileWorkTest {
         val directory = root()
         val posted = java.util.concurrent.LinkedBlockingQueue<() -> Unit>()
         val ready = CountDownLatch(1); val cleaned = CountDownLatch(1)
+        val acknowledgeDeletion = CountDownLatch(1)
         val io = object : VoiceFiles by LocalVoiceFiles {
-            override fun delete(file: File): Boolean = LocalVoiceFiles.delete(file).also { cleaned.countDown() }
+            override fun delete(file: File): Boolean = LocalVoiceFiles.delete(file).also {
+                cleaned.countDown(); hold(acknowledgeDeletion)
+            }
         }
         val work = VoiceFileWork(io)
         val lease = work.create(directory.path, "playback-", byteArrayOf(1), { posted.add(it); ready.countDown() }) { _, _ -> }
         try {
             await(ready); lease.cancel(); await(cleaned)
+            assertTrue(directory.listFiles()!!.isEmpty())
             assertEquals(1, work.outstanding())
             repeat(2) { posted.poll(5, TimeUnit.SECONDS)?.invoke() ?: fail("Missing queued delivery") }
+            // The file is gone, but cleanup still owns admission until delete returns.
+            assertEquals(1, work.outstanding())
+            acknowledgeDeletion.countDown()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (work.outstanding() != 0 && System.nanoTime() < deadline) Thread.sleep(1)
             assertEquals(0, work.outstanding())
-        } finally { lease.cancel() }
+        } finally { acknowledgeDeletion.countDown(); lease.cancel(); directory.deleteRecursively() }
     }
 
     @Test fun failedDeletionRetainsOwnedFileAndAdmission() {
