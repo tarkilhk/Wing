@@ -2,7 +2,8 @@ import 'health_alert.dart';
 import 'host_thresholds.dart';
 
 /// Stateful hysteresis over independent fresh samples. No I/O, timers or UI.
-/// Gaps break pending duration; unknown data retains an existing incident.
+/// Gaps over three times the applicable duration break progress. Collection
+/// pauses retain progress; unknown readings retain incidents but reset progress.
 class HealthAlertEvaluator {
   HealthAlertEvaluator({
     required this.connectionIdentity,
@@ -14,6 +15,12 @@ class HealthAlertEvaluator {
   int _occurrence = 0;
   List<HealthAlert> get alerts => List.unmodifiable(_alerts.values);
   void resetPeriods() => _periods.clear();
+  void pause() {
+    for (final entry in _alerts.entries.toList()) {
+      _alerts[entry.key] = entry.value.copyWith(lastKnown: true);
+    }
+  }
+
   void clear() {
     _alerts.clear();
     resetPeriods();
@@ -82,17 +89,17 @@ class HealthAlertEvaluator {
       _periods.remove(key);
     } else {
       final old = _periods[key];
+      final duration = Duration(
+        minutes: clearing ? rule.clearMinutes : rule.alertMinutes,
+      );
       if (old == null ||
           old.clearing != clearing ||
           sampledAt.isBefore(old.last) ||
-          sampledAt.difference(old.last) > const Duration(seconds: 45)) {
+          sampledAt.difference(old.last) > duration * 3) {
         _periods[key] = _Period(sampledAt, sampledAt, clearing);
       } else {
         old.last = sampledAt;
-        if (sampledAt.difference(old.start) >=
-            Duration(
-              minutes: clearing ? rule.clearMinutes : rule.alertMinutes,
-            )) {
+        if (sampledAt.difference(old.start) >= duration) {
           if (clearing) {
             remove(key);
             return;

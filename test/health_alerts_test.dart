@@ -87,6 +87,48 @@ void main() {
     expect(() => rule.copyWith(clearMinutes: 31), throwsArgumentError);
   });
 
+  for (final minutes in [1, 2, 30]) {
+    test('warning retains a gap of exactly 3 times $minutes minutes', () {
+      rule = rule.copyWith(alertMinutes: minutes);
+      sample(0, 93);
+      sample(minutes * 180, 93);
+      expect(evaluator.alerts.single.severity, HealthAlertSeverity.warning);
+    });
+    test('warning restarts beyond 3 times $minutes minutes', () {
+      rule = rule.copyWith(alertMinutes: minutes);
+      sample(0, 93);
+      final resumed = minutes * 180 + 1;
+      sample(resumed, 93);
+      expect(evaluator.alerts, isEmpty);
+      sample(resumed + minutes * 60, 93);
+      expect(evaluator.alerts.single.severity, HealthAlertSeverity.warning);
+    });
+    test('recovery uses its own 3 times $minutes minutes gap', () {
+      rule = rule.copyWith(alertMinutes: 30, clearMinutes: minutes);
+      sample(0, null, critical: true);
+      sample(15, 80);
+      sample(15 + minutes * 180, 80);
+      expect(evaluator.alerts, isEmpty);
+    });
+    test('recovery restarts beyond 3 times $minutes minutes', () {
+      rule = rule.copyWith(alertMinutes: 30, clearMinutes: minutes);
+      sample(0, null, critical: true);
+      sample(15, 80);
+      final resumed = 15 + minutes * 180 + 1;
+      sample(resumed, 80);
+      expect(evaluator.alerts, hasLength(1));
+      sample(resumed + minutes * 60, 80);
+      expect(evaluator.alerts, isEmpty);
+    });
+  }
+  test('warning retention slides from the latest fresh reading', () {
+    rule = rule.copyWith(alertMinutes: 1);
+    sample(0, 93);
+    sample(30, 93);
+    sample(210, 93);
+    expect(evaluator.alerts, hasLength(1));
+  });
+
   test(
     'approved duration migration preserves policy and writes the new format once',
     () async {
@@ -186,22 +228,30 @@ void main() {
     },
   );
   test(
-    'gaps/unknown break pending periods and never clear a known incident',
+    'expired gaps and unknown readings break progress and retain incidents',
     () {
-      period(0, 105, 93);
-      sample(180, 93);
+      sample(0, 93);
+      sample(361, 93);
       expect(evaluator.alerts, isEmpty);
-      period(195, 300, 93);
+      sample(481, 93);
       expect(evaluator.alerts, hasLength(1));
-      sample(315, null);
+      sample(496, null);
       expect(evaluator.alerts.single.lastKnown, isTrue);
-      period(330, 435, 80);
-      sample(500, 80);
+      sample(511, 80);
+      sample(872, 80);
       expect(evaluator.alerts, hasLength(1));
-      period(515, 620, 80);
+      sample(992, 80);
       expect(evaluator.alerts, isEmpty);
     },
   );
+  test('unknown readings restart a pending warning', () {
+    sample(0, 93);
+    sample(30, null);
+    sample(120, 93);
+    expect(evaluator.alerts, isEmpty);
+    sample(240, 93);
+    expect(evaluator.alerts, hasLength(1));
+  });
   test(
     'critical pressure bypasses duration and does not require a percentage',
     () {
@@ -440,6 +490,143 @@ void main() {
       settings.dispose();
       fixture.server.close();
     });
+  }
+  testWidgets(
+    'memory alert retains progress through repeated 30 second background pauses',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      var now = start;
+      final fixture = HostResourcesFixture();
+      fixture.stats['memory']['percent'] = 46.2;
+      final host = HostResourcesSession(fixture.server, now: () => now);
+      final health = AdministrationHealth(fixture.server, now: () => now);
+      final connection = ServerConnectionStatus('Home');
+      final settings = HealthAlertSettingsSession(
+        HealthAlertSettingsStore(await SharedPreferences.getInstance()),
+      );
+      await settings.updateRule(
+        ram,
+        (current) => current.copyWith(
+          warnAbove: 35,
+          clearBelow: 30,
+          alertMinutes: 1,
+          clearMinutes: 2,
+        ),
+      );
+      final session = HealthAlertsSession(
+        host: host,
+        health: health,
+        connection: connection,
+        settings: settings,
+        now: () => now,
+      );
+      try {
+        session.setActive(true);
+        await tester.pump();
+        for (var seconds = 30; seconds <= 60; seconds += 30) {
+          expect(session.alerts, isEmpty);
+          session.setActive(false);
+          final pausedReads = fixture.requests.length;
+          now = start.add(Duration(seconds: seconds));
+          fixture.pressure = hostPressurePayload(now: now);
+          await tester.pump(const Duration(seconds: 30));
+          expect(fixture.requests, hasLength(pausedReads));
+          expect(session.alerts, isEmpty);
+          session.setActive(true);
+          await tester.pump();
+        }
+        expect(session.alerts.single.title, 'High memory usage');
+        expect(session.alerts.single.severity, HealthAlertSeverity.warning);
+      } finally {
+        session.dispose();
+        host.dispose();
+        health.dispose();
+        connection.dispose();
+        settings.dispose();
+        fixture.server.close();
+      }
+    },
+  );
+  for (final clearing in [false, true]) {
+    final minutes = clearing ? 2 : 1;
+    for (final gap in [120, minutes * 180, minutes * 180 + 1]) {
+      testWidgets(
+        '${clearing ? 'recovery' : 'warning'} resumes after $gap seconds only with a fresh response',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          var now = start;
+          final fixture = HostResourcesFixture();
+          fixture.stats['memory']['percent'] = 46.2;
+          final host = HostResourcesSession(fixture.server, now: () => now);
+          final health = AdministrationHealth(fixture.server, now: () => now);
+          final connection = ServerConnectionStatus('Home');
+          final settings = HealthAlertSettingsSession(
+            HealthAlertSettingsStore(await SharedPreferences.getInstance()),
+          );
+          await settings.updateRule(
+            ram,
+            (current) => current.copyWith(
+              warnAbove: 35,
+              clearBelow: 30,
+              alertMinutes: 1,
+              clearMinutes: 2,
+            ),
+          );
+          final session = HealthAlertsSession(
+            host: host,
+            health: health,
+            connection: connection,
+            settings: settings,
+            now: () => now,
+          );
+          final otherWatch = host.watch(active: false);
+          try {
+            session.setActive(true);
+            await host.refresh();
+            if (clearing) {
+              now = now.add(const Duration(minutes: 1));
+              await host.refresh();
+              expect(session.alerts.single.title, 'High memory usage');
+              now = now.add(const Duration(seconds: 15));
+              fixture.stats['memory']['percent'] = 25.0;
+              await host.refresh();
+            }
+            otherWatch.setActive(true);
+            session.setActive(false);
+            if (clearing) expect(session.alerts.single.lastKnown, isTrue);
+            now = now.add(Duration(seconds: gap));
+            await tester.pump(Duration(seconds: gap));
+            final reads = fixture.requests.length;
+            fixture.statsGate = Completer<void>();
+            session.setActive(true);
+            expect(fixture.requests, hasLength(reads + 2));
+            await tester.pump();
+            // An unrelated publication must not use the other watch's cache.
+            connection.accessAvailable();
+            expect(session.alerts, hasLength(clearing ? 1 : 0));
+            fixture.statsGate!.complete();
+            await host.refresh();
+            final retained = gap <= minutes * 180;
+            expect(session.alerts, hasLength(clearing == retained ? 0 : 1));
+            if (!retained) {
+              now = now.add(Duration(minutes: minutes));
+              await host.refresh();
+              expect(session.alerts, hasLength(clearing ? 0 : 1));
+            }
+          } finally {
+            final gate = fixture.statsGate;
+            if (gate != null && !gate.isCompleted) gate.complete();
+            otherWatch.close();
+            session.dispose();
+            host.dispose();
+            health.dispose();
+            connection.dispose();
+            settings.dispose();
+            fixture.server.close();
+          }
+        },
+      );
+    }
   }
   testWidgets(
     'saved limits immediately retire incidents under the replaced rule',

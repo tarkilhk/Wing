@@ -556,8 +556,20 @@ Wing watches while foregrounded with a mounted workspace, or while the existing
 background task monitor is active for that connection's ongoing work. It neither
 starts a new Android service nor keeps monitoring alive on its own. The shared
 host owner coalesces 15-second reads; the evaluator reacts to observations rather
-than polling another cache. Gaps/unknown readings break pending durations and
-retain existing issues as last known. Profile checks and server connection status
+than polling another cache. Background pauses retain pending warning and recovery
+progress while the connection owner remains alive. Returning requests a fresh,
+coalesced host read before either raising or clearing an alert. The maximum gap
+between confirming readings is three times the applicable configured duration:
+three times **Alert after** while raising and three times **Clear after** while
+recovering. Equality retains progress; a longer gap starts a new period. The gap
+is measured from the latest confirming reading, while elapsed time is measured
+from the first reading in that period. For a one-minute warning, above-threshold
+readings at 00:00, 00:30 and 01:00 raise the alert even when Wing backgrounds
+between reads; returning after two minutes can raise it on the fresh reading,
+but a gap over three minutes restarts the period. This infers continuity between
+nearby readings; it does not observe usage while collection is paused. Failed or
+unknown readings break pending progress. Existing issues remain qualified as
+last known while paused or unknown. Profile checks and server connection status
 come from their existing owners. Doctor and security-audit findings never generate
 health alerts; they remain available in Health. The watcher never launches
 diagnostics.
@@ -582,15 +594,20 @@ issue and count. Recovery removes it; recurrence/escalation starts a new occurre
 The modal links to Hermes health, and configuration stays on Health's settings
 row. No notification permission is requested for these in-app alerts.
 
-The stock endpoints and pressure semantics were reverified on 9 October 2026
-against upstream `1744a19e0df568c647e4f3ff9c37f2a284a282fb`, including
+The stock endpoints and pressure semantics were reverified on 10 October 2026
+against upstream `b56a10246e81e23d10bf6f49ae176c082db53ed9`, including
 `hermes_cli/web_routers/status.py`, `gateway/memory_status.py` and
 `gateway/disk_status.py`. No backend change or alternative endpoint is used.
 
 Ownership is mapped in [ARCHITECTURE.md](ARCHITECTURE.md). The regressions in
 `test/health_alerts_test.dart` cover duration, hysteresis, unknown data, escalation,
 snooze, independent durations, ordered autosave/retry, approved migration
-preservation/failure, diagnostic exclusion and inactive late reads.
+preservation/failure, diagnostic exclusion and inactive late reads. Timestamped
+regressions cover three-times-duration gaps at and beyond the limit, sliding
+retention, repeated 30-second background pauses, independent recovery retention,
+and fresh-response admission when another host consumer keeps polling. These
+temporal and asynchronous properties require behavioral tests; a static source
+guard cannot establish which reading confirms a period or when it expires.
 `test/health_alerts_ui_test.dart` covers activity admission, shared title alignment,
 conditional bell, Health navigation, focused details and immediate settings persistence in
 both themes at normal and 320 dp/200% text, plus quiet foreground return and

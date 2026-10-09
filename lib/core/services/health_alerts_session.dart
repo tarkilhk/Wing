@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import '../models/health_alert.dart';
 import '../models/health_alert_evaluator.dart';
@@ -39,6 +41,8 @@ class HealthAlertsSession extends ChangeNotifier {
   late final HostResourcesWatch _watch;
   bool _active = false;
   HealthAlertSettings? _lastSettings;
+  (HostReading<HostSystemStats>, HostReading<HostPressureStatus>)?
+  _evaluatedHost;
   List<HealthAlert> get alerts => _evaluator.alerts;
   List<Object> _published = const [];
   bool get _wantsHost =>
@@ -47,14 +51,14 @@ class HealthAlertsSession extends ChangeNotifier {
   void setActive(bool value) {
     if (_active == value) return;
     _active = value;
-    _evaluator.resetPeriods();
     _watch.setActive(value && _wantsHost);
     if (value) {
+      // Another consumer may have kept the shared watch active. Always request
+      // a fresh, coalesced read before resuming threshold evaluation.
+      if (_wantsHost) unawaited(host.refresh());
       _changed();
     } else {
-      for (final alert in alerts) {
-        _evaluator.unknown(alert.id);
-      }
+      _evaluator.pause();
       _publish();
     }
   }
@@ -86,6 +90,7 @@ class HealthAlertsSession extends ChangeNotifier {
     }
     // A new rule starts a new sustained period under its own limits.
     _evaluator.resetPeriods();
+    _evaluatedHost = null;
     _watch.setActive(_active && _wantsHost);
     _changed();
   }
@@ -114,7 +119,11 @@ class HealthAlertsSession extends ChangeNotifier {
       return;
     }
     final now = _now(), data = host.state;
-    if (!data.refreshing) {
+    final observation = (data.stats, data.pressure);
+    if (!data.refreshing && _evaluatedHost != observation) {
+      // Repeated owner notifications are not new host samples. In particular,
+      // an aging cached reading must not cancel a retained pending period.
+      _evaluatedHost = observation;
       final current = data.stats.isCurrent(now, const Duration(seconds: 30));
       final values = HostThresholdPolicy([
         for (final metric in hostAlertMetrics)
