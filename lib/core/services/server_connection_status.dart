@@ -20,9 +20,10 @@ class ServerConnectionStatus extends ChangeNotifier {
   ConnectionAvailability access = ConnectionAvailability.unchecked;
   final Map<String, ConnectionAvailability> _live = {};
   final Set<String> _recoveries = {};
-  final Map<String, String> _failedRecoveries = {};
+  final Map<String, ({String message, bool connectionUnavailable})>
+  _failedRecoveries = {};
   String? _accessProblem;
-  String? get recoveryProblem => _failedRecoveries.values.lastOrNull;
+  String? get recoveryProblem => _failedRecoveries.values.lastOrNull?.message;
   String? get problem => recoveryProblem ?? _accessProblem;
   DateTime? lastConnected;
   Future<void> Function()? retry;
@@ -40,6 +41,16 @@ class ServerConnectionStatus extends ChangeNotifier {
   bool hasLiveObservation(String owner) => _live.containsKey(owner);
   bool liveAvailable(String owner) =>
       _live[owner] == ConnectionAvailability.available;
+  bool get _connectionUnavailable =>
+      access == ConnectionAvailability.unavailable ||
+      live == ConnectionAvailability.unavailable;
+
+  /// Only a stopped recovery of an unavailable connection needs a global
+  /// notice. A transport gap or an unavailable chat alone does not establish it.
+  bool get requiresManualRefresh =>
+      _recoveries.isEmpty &&
+      _connectionUnavailable &&
+      _failedRecoveries.values.any((failure) => failure.connectionUnavailable);
   ServerConnectionPhase get phase {
     if (_recoveries.isNotEmpty) return ServerConnectionPhase.reconnecting;
     if (_failedRecoveries.isNotEmpty) return ServerConnectionPhase.disconnected;
@@ -94,7 +105,10 @@ class ServerConnectionStatus extends ChangeNotifier {
   void failRecovery(String owner, String message) {
     if (_closed) return;
     _recoveries.remove(owner);
-    _failedRecoveries[owner] = message;
+    _failedRecoveries[owner] = (
+      message: message,
+      connectionUnavailable: _connectionUnavailable,
+    );
     _changed();
   }
 

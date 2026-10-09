@@ -147,6 +147,19 @@ the drawer from a chat and pressing Android Back must close the drawer, retainin
 the chat; the next Back restores Recents. These short probes do not replay the
 gesture journey or depend on its retained transcript scroll position.
 
+## Connection notice recovery
+
+Switch away and return while the network wakes or automatic retries are active:
+no connection health notice or bell issue should appear. Exhaust the recovery
+burst with the connection still unavailable: Wing should show “Connection needs
+refresh”. Start a fresh retry or restore availability: the connection incident
+and its notice should disappear. A chat-only failure with healthy transport stays
+local to that chat. Run `server_connection_status_test.dart`,
+`profile_workspace_controller_test.dart`, `health_alerts_test.dart` and
+`health_alerts_ui_test.dart` for the controlled owner/retry/foreground regressions.
+Host tests establish event ordering under supplied failures; they do not establish
+physical-device network timing.
+
 ## Bots
 
 Open the drawer → Bots. Verify Bots/Groups tabs, one continuous list with pins

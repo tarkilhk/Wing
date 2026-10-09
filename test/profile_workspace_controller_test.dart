@@ -2692,6 +2692,35 @@ void main() {
     expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
   });
 
+  testWidgets('startup requires refresh only after its retry burst stops', (
+    tester,
+  ) async {
+    final access = controller.access;
+    controller.dispose();
+    controller = ProfileWorkspaceController(
+      access: access,
+      connectionIdentity: 'original-settings',
+      preferences: preferences,
+      appPreferences: appPreferences,
+      gatewayFactory: host.gateway,
+    );
+    host.discoveryFailure = const SocketException('Network asleep');
+    await controller.initialize();
+    expect(controller.connectionStatus.requiresManualRefresh, isFalse);
+    for (final seconds in [1, 2, 4, 8, 16]) {
+      await tester.pump(Duration(seconds: seconds));
+      expect(controller.connectionStatus.requiresManualRefresh, seconds == 16);
+    }
+    await tester.pump(const Duration(minutes: 2));
+    expect(controller.connectionStatus.requiresManualRefresh, isTrue);
+    host.discoveryFailure = null;
+    await controller.resumeConnection();
+    await tester.pump();
+    expect(controller.initialized, isTrue);
+    expect(controller.connectionStatus.requiresManualRefresh, isFalse);
+    expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
+  });
+
   testWidgets('refresh keeps loaded chats visible while the network stalls', (
     tester,
   ) async {
@@ -3048,8 +3077,13 @@ void main() {
     (tester) async {
       host.connectFailures = 20;
       host.gateways['a']!.onConnectionChanged!(false);
+      expect(controller.connectionStatus.requiresManualRefresh, isFalse);
       for (final seconds in [1, 2, 4, 8, 16]) {
         await tester.pump(Duration(seconds: seconds));
+        expect(
+          controller.connectionStatus.requiresManualRefresh,
+          seconds == 16,
+        );
       }
       final calls = host.connectCalls;
       await tester.pump(const Duration(minutes: 2));
@@ -3062,6 +3096,7 @@ void main() {
       await tester.pump();
       expect(controller.connectionStatus.description, 'Connected');
       expect(controller.current!.reconnectScheduled, isFalse);
+      expect(controller.connectionStatus.requiresManualRefresh, isFalse);
     },
   );
 

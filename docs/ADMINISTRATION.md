@@ -557,6 +557,14 @@ retain existing issues as last known. Profile checks and server connection statu
 come from their existing owners. Doctor and security-audit findings never generate
 health alerts; they remain available in Health. The watcher never launches
 diagnostics.
+Connection notices stay quiet during transport interruptions and automatic
+recovery. “Connection needs refresh” appears only when every active recovery has
+stopped and a failed recovery left the connection unavailable, requiring a manual
+refresh. This includes exhausted startup retries and failures that cannot be
+retried automatically, such as rejected sign-in or certificate verification.
+Starting another recovery burst or restoring connection availability removes the
+incident. A chat-only failure on a healthy connection does not create a global
+connection notice or turn a later transient interruption into one.
 Older recorded findings remain qualified as last known. Open Health to investigate
 or request a fresh check. This is a warning about current Hermes usage, not an
 always-on server monitor. Thresholds and qualified notices do not predict OOM.
@@ -581,7 +589,13 @@ snooze, independent durations, ordered autosave/retry, approved migration
 preservation/failure, diagnostic exclusion and inactive late reads.
 `test/health_alerts_ui_test.dart` covers activity admission, shared title alignment,
 conditional bell, Health navigation, focused details and immediate settings persistence in
-both themes at normal and 320 dp/200% text. Layout depends on rendered metrics,
+both themes at normal and 320 dp/200% text, plus quiet foreground return and
+connection notices gated by stopped recovery. `server_connection_status_test.dart`
+and `profile_workspace_controller_test.dart` cover multiple recovery owners,
+stale chat failures, exhausted startup/live retries and refresh recovery. These
+are behavioral guards: a static source rule cannot establish retry completion or
+the ordering of transport loss, foreground return and recovery publication.
+Layout depends on rendered metrics,
 not a source pattern; these behavioral checks guard title geometry. Run with
 `CAPTURE_ALERTS=true`, `CAPTURE_FONT_DIR=<font directory>` and
 `CAPTURE_ALERT_DIR=<private output directory>` to inspect Flutter captures.

@@ -1840,7 +1840,17 @@ class ProfileWorkspaceController extends ChangeNotifier {
         },
       );
     } else {
-      connectionStatus.endRecovery('initialization');
+      if (_notificationTarget != null ||
+          failure is ProfileSelectionRepairRequired) {
+        // Notification opening owns its outer retry burst; profile-selection
+        // repair has its own presentation and is not a connection failure.
+        connectionStatus.endRecovery('initialization');
+      } else {
+        connectionStatus.failRecovery(
+          'initialization',
+          workspaceFailureMessage(failure),
+        );
+      }
     }
   }
 

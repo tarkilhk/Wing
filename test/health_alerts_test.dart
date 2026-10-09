@@ -423,8 +423,12 @@ void main() {
       expect(session.alerts, isEmpty);
       // Ignoring diagnostics must not mute genuine connection/host issues.
       connection.liveChanged('chat', false);
-      expect(session.alerts.single.title, 'Server connection interrupted');
+      expect(session.alerts, isEmpty);
+      connection.beginRecovery('chat');
+      connection.failRecovery('chat', 'Connection attempts exhausted');
+      expect(session.alerts.single.title, 'Connection needs refresh');
       connection.liveChanged('chat', true);
+      connection.endRecovery('chat');
       fixture.pressure = hostPressurePayload(now: start);
       fixture.pressure['memory']['pressure'] = 'critical';
       await host.refresh();

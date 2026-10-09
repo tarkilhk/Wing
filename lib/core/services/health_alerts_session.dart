@@ -146,23 +146,15 @@ class HealthAlertsSession extends ChangeNotifier {
       }
     }
     if (policy.server) {
-      final phase = connection.phase;
-      final failed =
-          phase == ServerConnectionPhase.disconnected ||
-          phase == ServerConnectionPhase.limited &&
-              (connection.access == ConnectionAvailability.unavailable ||
-                  connection.live == ConnectionAvailability.unavailable);
       _evaluator.finding(
         key: '${host.connectionIdentity}:server:connection',
-        title: 'Server connection interrupted',
-        detail: connection.problem ?? connection.description,
+        title: 'Connection needs refresh',
+        detail:
+            '${connection.problem ?? connection.description}\n'
+            'Automatic recovery has stopped. Refresh the connection to try again.',
         scope: HealthAlertScope.server,
         at: now,
-        failed:
-            phase == ServerConnectionPhase.unchecked ||
-                phase == ServerConnectionPhase.reconnecting
-            ? null
-            : failed,
+        failed: connection.requiresManualRefresh,
       );
     }
     for (final alert in alerts) {
