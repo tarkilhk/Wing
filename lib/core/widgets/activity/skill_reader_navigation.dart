@@ -542,7 +542,14 @@ class _SkillReaderNavigationState extends State<_SkillReaderNavigation>
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: _held ? colors.onSurface : Colors.transparent,
+                        color: _held
+                            ? colors.onSurface
+                            : colors.accent.withValues(alpha: .28),
+                        border: Border.all(
+                          color: _held
+                              ? colors.onSurface
+                              : colors.accent.withValues(alpha: .55),
+                        ),
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [
                           if (_held)
@@ -556,7 +563,7 @@ class _SkillReaderNavigationState extends State<_SkillReaderNavigation>
                       child: Icon(
                         Icons.drag_indicator,
                         size: 20,
-                        color: _held ? colors.surface : colors.muted,
+                        color: _held ? colors.surface : colors.onSurface,
                       ),
                     ),
                   ),

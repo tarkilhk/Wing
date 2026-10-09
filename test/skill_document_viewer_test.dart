@@ -406,6 +406,12 @@ void main() {
             );
             await tester.pumpAndSettle();
             final list = find.byType(ListView);
+            final scrollbar = tester.widget<Scrollbar>(find.byType(Scrollbar));
+            expect(scrollbar.thumbVisibility, count > 5);
+            expect(
+              scrollbar.controller,
+              tester.widget<ListView>(list).controller,
+            );
             await tester.ensureVisible(find.text('Reference files'));
             await tester.pumpAndSettle();
             heights[count] = tester.getSize(list).height;
@@ -453,6 +459,81 @@ void main() {
       );
     }
   }
+  for (final theme in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'small activity slices remain readable ${theme.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final document = SkillDocument.fromReceived(
+            name: 'review',
+            content: demo,
+            sourcePath: '/skills/review/SKILL.md',
+          );
+          final fixture = {
+            'telemetry': {
+              'byProfile': [
+                for (final record in [
+                  ('default', 455, 38),
+                  ('butler', 423, 28),
+                  ('client-work', 50, 0),
+                  ('pace', 14, 2),
+                  ('reminder-inbox', 1, 0),
+                  ('sluice-processing', 101, 8),
+                ])
+                  {
+                    'profile': record.$1,
+                    'useCount': record.$2,
+                    'patchCount': record.$3,
+                  },
+              ],
+            },
+            'activity': {'byProfile': []},
+          };
+          final boundary = GlobalKey();
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: boundary,
+              child: MaterialApp(
+                theme: wingTheme(theme),
+                debugShowCheckedModeBanner: false,
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: SkillDocumentViewer(
+                  document: document,
+                  createReader: () => reader(document, fixture),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Activity'));
+          await tester.pumpAndSettle();
+          expect(
+            find.bySemanticsLabel(RegExp(r'^Uses: 1044\.')),
+            findsOneWidget,
+          );
+          expect(
+            find.bySemanticsLabel(RegExp(r'^Patches / edits: 76\.')),
+            findsOneWidget,
+          );
+          expect(find.text('reminder-inbox'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await capture(
+            tester,
+            boundary,
+            'small-slices-${theme.name}-${scale.toInt()}',
+          );
+        },
+      );
+    }
+  }
   testWidgets(
     'grip is dedicated, tolerates drift, tracks continuously and cancels',
     (tester) async {
@@ -486,7 +567,8 @@ void main() {
                   )
                   .decoration!
               as BoxDecoration;
-      expect(gripPaint().color, Colors.transparent);
+      expect(gripPaint().color!.a, closeTo(.28, .01));
+      expect((gripPaint().border! as Border).top.color.a, closeTo(.55, .01));
       expect(gripPaint().boxShadow, isEmpty);
       await tester.tap(grip);
       await tester.pumpAndSettle();
@@ -498,7 +580,7 @@ void main() {
       await gesture.moveBy(const Offset(0, 8));
       await tester.pump(const Duration(milliseconds: 60));
       expect(find.text('1 · First'), findsOneWidget);
-      expect(gripPaint().color, isNot(Colors.transparent));
+      expect(gripPaint().color!.a, 1);
       expect(tester.getCenter(grip).dy, closeTo(position.dy + 8, .5));
       await gesture.moveBy(const Offset(0, 32));
       await tester.pump();
@@ -506,7 +588,8 @@ void main() {
       await gesture.cancel();
       await tester.pumpAndSettle();
       expect(find.textContaining(' · First'), findsNothing);
-      expect(gripPaint().color, Colors.transparent);
+      expect(gripPaint().color!.a, closeTo(.28, .01));
+      expect((gripPaint().border! as Border).top.color.a, closeTo(.55, .01));
       expect(gripPaint().boxShadow, isEmpty);
       final pending = await tester.startGesture(tester.getCenter(grip));
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);

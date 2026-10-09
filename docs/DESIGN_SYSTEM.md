@@ -680,7 +680,9 @@ actual backend file listings beneath the API-supplied skill directory. Show
 one-line filenames, supplied sizes and eligible eye actions; use the same document
 viewer for reference content, raw/formatted switching and exact copy/share.
 Show at most five reference rows, with independent scrolling for additional
-files. Keep filenames on one line and retain each file's original action target.
+files. Keep a scrollbar thumb visible whenever additional rows exist so the
+scrolling affordance is discoverable. Keep filenames on one line and retain
+each file's original action target.
 Omit the entire reference section when no files are returned. Omit missing fields
 and technical readiness bookkeeping. If no description was
 supplied, use a bounded excerpt of the actual instructions. Setup problems and
@@ -716,10 +718,10 @@ dp grip target, 4 dp from the right edge, around a 44 × 44 dp painted button.
 Start its rail 64 dp lower than the original 20%-of-screen placement and keep
 the resting button below the trigger text, including at enlarged text sizes.
 Activate on a 250 ms hold or deliberate 12 dp vertical drag; tolerate small
-finger drift. The idle grip has a transparent background and no shadow, with
-visible muted dots; grabbing it makes it solid. Fade ticks in over 140 ms only
-while scrubbing, and prefix the
-destination preview with its section number. Cancellation, leaving the app and
+finger drift. Keep the idle grip discoverable without obscuring document text:
+use a 28%-opaque accent fill, a 55%-opaque accent outline, high-contrast dots
+and no shadow. Grabbing it makes it solid. Fade ticks in over 140 ms only
+while scrubbing, and prefix the destination preview with its section number. Cancellation, leaving the app and
 disposal must cancel pending activation. Reduced motion suppresses animation.
 
 Contents fits its section count, with at most five equal-height rows visible and
@@ -751,8 +753,10 @@ count once within the disclosure: when donuts show counts, the shared legend
 identifies profiles, without a repeated count table. Secondary read requests use
 one stacked horizontal bar with counts inside segments and the same profile
 colours. Place valid per-profile last-change dates after Read requests, under a
-separator. Keep exact small-slice values accessible through chart descriptions or
-inspection. Put charts beside each other when labels and counts fit, and stack
+separator. Place a donut count inside only when it fits the actual slice;
+otherwise use an external count with a colour-matched leader line. Reserve
+callout space and separate neighbouring labels vertically. Keep exact counts
+in chart semantics. Put charts beside each other when labels and counts fit, and stack
 them at narrow widths or enlarged text. Represent confirmed zero totals without
 inventing a proportional ring; missing records remain unknown.
 

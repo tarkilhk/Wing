@@ -373,7 +373,11 @@ class _SkillDonut extends StatelessWidget {
         scale = MediaQuery.textScalerOf(context);
     return LayoutBuilder(
       builder: (context, box) {
-        final size = math.min(box.maxWidth, scale.scale(160));
+        final size = math.min(box.maxWidth - 8, scale.scale(200));
+        final chartHeight = math.max(
+          size,
+          scale.scale(20) * values.where((p) => p.count > 0).length + 8,
+        );
         return Padding(
           padding: const EdgeInsets.all(4),
           child: Column(
@@ -400,7 +404,7 @@ class _SkillDonut extends StatelessWidget {
                         )
                       : SizedBox(
                           width: size,
-                          height: size,
+                          height: chartHeight,
                           child: CustomPaint(
                             painter: _SkillDonutPainter(
                               values: values,
@@ -435,25 +439,28 @@ class _SkillDonutPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final total = values.fold<int>(0, (sum, p) => sum + p.count),
         center = size.center(Offset.zero),
-        stroke = size.width * .18,
-        radius = (size.width - stroke) / 2;
-    var angle = -math.pi / 2;
-    void text(String text, Offset at, double font, Color colour) {
-      final painter = TextPainter(
-        text: TextSpan(
-          text: text,
-          style: TextStyle(
-            color: colour,
-            fontSize: scale.scale(font),
-            fontWeight: FontWeight.w500,
-            fontFamily: WingTypography.sans,
-          ),
+        diameter = size.width - scale.scale(40),
+        stroke = diameter * .22,
+        radius = (diameter - stroke) / 2,
+        outerRadius = radius + stroke / 2;
+    final outside = <({TextPainter text, Offset anchor, Color color})>[];
+    TextPainter text(String value, double font, Color color) => TextPainter(
+      text: TextSpan(
+        text: value,
+        style: TextStyle(
+          color: color,
+          fontSize: scale.scale(font),
+          fontWeight: FontWeight.w500,
+          fontFamily: WingTypography.sans,
         ),
-        textDirection: TextDirection.ltr,
-      )..layout();
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    void centered(TextPainter painter, Offset at) {
       painter.paint(canvas, at - Offset(painter.width / 2, painter.height / 2));
     }
 
+    var angle = -math.pi / 2;
     for (final value in values) {
       if (value.count == 0) continue;
       final sweep = value.count / total * math.pi * 2;
@@ -467,20 +474,110 @@ class _SkillDonutPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = stroke,
       );
-      final middle = angle + sweep / 2;
-      text(
-        value.count.toString(),
-        center + Offset(math.cos(middle) * radius, math.sin(middle) * radius),
-        12,
-        _chartInk(value.color),
-      );
+      final middle = angle + sweep / 2,
+          direction = Offset(math.cos(middle), math.sin(middle)),
+          at = center + direction * radius,
+          painter = text(value.count.toString(), 12, _chartInk(value.color)),
+          bounds = Rect.fromCenter(
+            center: at,
+            width: painter.width,
+            height: painter.height,
+          );
+      // A label belongs inside only when all its corners fit the actual slice.
+      final fits =
+          [
+            bounds.topLeft,
+            bounds.topRight,
+            bounds.bottomLeft,
+            bounds.bottomRight,
+          ].every((point) {
+            final delta = point - center;
+            final distance = delta.distance;
+            final relative =
+                (math.atan2(delta.dy, delta.dx) - middle + math.pi) %
+                    (math.pi * 2) -
+                math.pi;
+            return distance >= radius - stroke / 2 &&
+                distance <= outerRadius &&
+                relative.abs() <= sweep / 2;
+          });
+      if (fits) {
+        centered(painter, at);
+      } else {
+        outside.add((
+          text: text(value.count.toString(), 12, ink),
+          anchor: center + direction * (outerRadius + 1),
+          color: value.color,
+        ));
+      }
+      painter.dispose();
       angle += sweep;
     }
-    text(total.toString(), center - Offset(0, scale.scale(6)), 24, ink);
-    text(label, center + Offset(0, scale.scale(16)), 11, ink);
+    // Order each side by its slice position, then resolve vertical collisions.
+    for (final left in [true, false]) {
+      final labels =
+          outside.where((p) => (p.anchor.dx < center.dx) == left).toList()
+            ..sort((a, b) => a.anchor.dy.compareTo(b.anchor.dy));
+      final positions = <double>[];
+      var edge = 4.0;
+      for (final item in labels) {
+        final y = math.max(item.anchor.dy, edge + item.text.height / 2);
+        positions.add(y);
+        edge = y + item.text.height / 2 + scale.scale(4);
+      }
+      edge = size.height - 4;
+      for (var i = labels.length - 1; i >= 0; i--) {
+        positions[i] = math.min(positions[i], edge - labels[i].text.height / 2);
+        edge = positions[i] - labels[i].text.height / 2 - scale.scale(4);
+      }
+      for (var i = 0; i < labels.length; i++) {
+        final item = labels[i],
+            x = left ? 2.0 : size.width - item.text.width - 2,
+            end = Offset(left ? x + item.text.width + 3 : x - 3, positions[i]);
+        canvas.drawLine(
+          item.anchor,
+          end,
+          Paint()
+            ..color = item.color
+            ..strokeWidth = 1,
+        );
+        item.text.paint(canvas, Offset(x, positions[i] - item.text.height / 2));
+      }
+    }
+    // Keep the complete center block inside an inscribed square of the hole.
+    final square = (radius - stroke / 2) * math.sqrt2 - 4;
+    TextPainter fitCenter(String value, double font, double maxHeight) {
+      var painter = text(value, font, ink);
+      final factor = math.min(
+        1.0,
+        math.min(square / painter.width, maxHeight / painter.height),
+      );
+      if (factor < 1) {
+        painter.dispose();
+        painter = text(value, font * factor, ink);
+      }
+      return painter;
+    }
+
+    final count = fitCenter(total.toString(), 24, square * .6),
+        caption = fitCenter(label, 11, square * .3),
+        height =
+            count.height +
+            caption.height +
+            math.min(scale.scale(3), square * .08);
+    centered(count, center + Offset(0, (count.height - height) / 2));
+    centered(caption, center + Offset(0, (height - caption.height) / 2));
+    count.dispose();
+    caption.dispose();
+    for (final item in outside) {
+      item.text.dispose();
+    }
   }
 
   @override
   bool shouldRepaint(_SkillDonutPainter old) =>
-      old.values != values || old.ink != ink || old.scale != scale;
+      old.values != values ||
+      old.label != label ||
+      old.ink != ink ||
+      old.scale != scale;
 }
