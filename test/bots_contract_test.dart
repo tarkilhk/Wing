@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/bots.dart';
@@ -71,13 +72,13 @@ void main() {
       addTearDown(edit.dispose);
       edit.change(title: 'Atlas revised');
       fixture.conflict = true;
-      expect(await edit.save(), false);
+      expect(await edit.flush(), false);
       expect(edit.conflicted, true);
       expect(edit.title, 'Atlas revised');
       fixture.conflict = false;
       await edit.reload();
       expect(edit.title, 'Atlas revised');
-      expect(await edit.save(), true);
+      expect(await edit.flush(), true);
       expect(
         fixture.commands.last.$3['ui_meta']['hermes-bots']['unrelated'],
         bot.metadata['unrelated'],
@@ -293,6 +294,155 @@ void main() {
     );
     expect(fixture.commands, isEmpty);
   });
+  testWidgets(
+    'appearance autosave coalesces typing and drains edits made during a write',
+    (tester) async {
+      final fixture = BotsFixture();
+      final gate = Completer<void>();
+      fixture.beforeCommand = () => gate.future;
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        (await fixture.repository.bots()).first,
+      );
+      addTearDown(edit.dispose);
+      edit.change(title: 'First name');
+      await tester.pump(const Duration(milliseconds: 300));
+      edit.change(title: 'Second name', color: '#123456');
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(fixture.commands, isEmpty);
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(edit.saving, true);
+      edit.change(title: 'Latest name', color: '#654321');
+      expect(edit.title, 'Latest name');
+      gate.complete();
+      await tester.pump();
+      expect(await edit.flush(), true);
+      expect(fixture.commands.length, 2);
+      expect(
+        fixture.commands.first.$3['ui_meta']['hermes-bots']['title'],
+        'Second name',
+      );
+      expect(
+        fixture.commands.last.$3['ui_meta']['hermes-bots']['title'],
+        'Latest name',
+      );
+      expect(
+        fixture.commands.last.$3['ui_meta']['hermes-bots']['color'],
+        '#654321',
+      );
+      expect(edit.dirty, false);
+      expect(edit.error, isNull);
+    },
+  );
+  testWidgets(
+    'appearance autosave never writes an empty name or a retired draft',
+    (tester) async {
+      final fixture = BotsFixture();
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        (await fixture.repository.bots()).first,
+      );
+      edit.change(title: '');
+      await tester.pump(const Duration(seconds: 1));
+      expect(fixture.commands, isEmpty);
+      edit.change(title: 'Valid name');
+      edit.dispose();
+      await tester.pump(const Duration(seconds: 1));
+      expect(fixture.commands, isEmpty);
+    },
+  );
+  testWidgets('a generated avatar stays visible after automatic persistence', (
+    tester,
+  ) async {
+    const png =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=';
+    final fixture = BotsFixture();
+    fixture.commandHook = (_, method, _) async => method == 'image.generate'
+        ? {'success': true, 'image_data': png}
+        : null;
+    final edit = BotProfileEditSession(
+      fixture.repository,
+      (await fixture.repository.bots()).first,
+    );
+    addTearDown(edit.dispose);
+    await edit.generate('An owl');
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(edit.dirty, false);
+    expect(edit.image, orderedEquals(base64Decode(png)));
+    expect(
+      fixture.commands.where((c) => c.$2 == 'profiles.set_asset').length,
+      1,
+    );
+  });
+  testWidgets(
+    'conflicted autosave waits for reload and review before retrying',
+    (tester) async {
+      final fixture = BotsFixture()..conflict = true;
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        (await fixture.repository.bots()).first,
+      );
+      addTearDown(edit.dispose);
+      edit.change(title: 'My edit');
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(edit.conflicted, true);
+      fixture.conflict = false;
+      fixture.profiles.first['ui_meta']['hermes-bots']['title'] =
+          'Desktop edit';
+      fixture.profiles.first['ui_meta_revisions']['hermes-bots'] = 3;
+      await edit.reload();
+      expect(edit.title, 'My edit');
+      expect(edit.error, isNull);
+      expect(edit.needsReview, true);
+      await tester.pump(const Duration(seconds: 1));
+      expect(fixture.commands.length, 1);
+      expect(await edit.flush(), true);
+      expect(fixture.commands.length, 2);
+      expect(edit.needsReview, false);
+    },
+  );
+  testWidgets(
+    'failed appearance reload keeps the draft without an automatic write',
+    (tester) async {
+      final fixture = BotsFixture();
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        (await fixture.repository.bots()).first,
+      );
+      addTearDown(edit.dispose);
+      edit.change(title: 'Unsaved name');
+      fixture.readHook = (_, method, _) async {
+        if (method == 'profiles.list') throw StateError('Disconnected');
+        return null;
+      };
+      await edit.reload();
+      expect(edit.error, 'Saved appearance could not be reloaded.');
+      expect(edit.title, 'Unsaved name');
+      expect(edit.dirty, true);
+      await tester.pump(const Duration(seconds: 1));
+      expect(fixture.commands, isEmpty);
+    },
+  );
+  test(
+    'successful appearance reload is silent and preserves edited fields',
+    () async {
+      final fixture = BotsFixture();
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        (await fixture.repository.bots()).first,
+      );
+      addTearDown(edit.dispose);
+      edit.change(color: '#a58cdf');
+      fixture.profiles.first['ui_meta']['hermes-bots']['title'] =
+          'Desktop title';
+      await edit.reload();
+      expect(edit.title, 'Desktop title');
+      expect(edit.color, '#a58cdf');
+      expect(edit.error, isNull);
+      expect(edit.conflicted, false);
+      expect(fixture.commands, isEmpty);
+    },
+  );
   test(
     'color-only edits do not overwrite an untouched title after CAS reload',
     () async {
@@ -306,11 +456,11 @@ void main() {
       fixture.profiles.first['ui_meta']['hermes-bots']['title'] =
           'Desktop title';
       fixture.profiles.first['ui_meta_revisions']['hermes-bots'] = 3;
-      expect(await edit.save(), false);
+      expect(await edit.flush(), false);
       await edit.reload();
       expect(edit.title, 'Desktop title');
       expect(edit.color, '#a58cdf');
-      expect(await edit.save(), true);
+      expect(await edit.flush(), true);
       expect(
         fixture.commands.last.$3['ui_meta']['hermes-bots']['title'],
         'Desktop title',
@@ -336,9 +486,9 @@ void main() {
       addTearDown(edit.dispose);
       edit.change(title: 'Updated title');
       edit.removeImage();
-      expect(await edit.save(), false);
+      expect(await edit.flush(), false);
       expect(edit.dirty, true);
-      expect(await edit.save(), true);
+      expect(await edit.flush(), true);
       expect(
         fixture.commands.where((c) => c.$2 == 'profiles.configure').length,
         1,

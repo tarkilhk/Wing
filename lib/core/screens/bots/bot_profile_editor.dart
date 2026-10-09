@@ -19,6 +19,7 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
   late final _title = TextEditingController(text: _session.title);
   final _prompt = TextEditingController();
   bool _allowPop = false;
+  bool _leaving = false;
   @override
   void initState() {
     super.initState();
@@ -41,21 +42,23 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
     super.dispose();
   }
 
-  Future<void> _save() async {
-    final saved = await _session.save();
-    if (mounted && saved) {
-      setState(() => _allowPop = true);
-      Navigator.pop(context, true);
-    }
-  }
-
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: _allowPop || !_session.dirty && !_session.busy,
+    canPop: _allowPop || !_session.dirty && !_session.busy && !_session.saving,
     onPopInvokedWithResult: (didPop, _) async {
-      if (didPop || _session.busy) return;
+      if (didPop || _session.busy || _leaving) return;
+      _leaving = true;
+      if (await _session.flush()) {
+        if (mounted) {
+          setState(() => _allowPop = true);
+          Navigator.pop(this.context, true);
+        }
+        _leaving = false;
+        return;
+      }
+      if (!mounted) return;
       final discard = await showDialog<bool>(
-        context: context,
+        context: this.context,
         builder: (context) => AlertDialog(
           title: const Text('Discard edits?'),
           actions: [
@@ -74,6 +77,7 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
         setState(() => _allowPop = true);
         Navigator.pop(this.context);
       }
+      _leaving = false;
     },
     child: Scaffold(
       appBar: WingAppBar(
@@ -82,13 +86,10 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
         actions: [
           IconButton(
             tooltip: 'Reload saved appearance',
-            onPressed: _session.busy ? null : _session.reload,
+            onPressed: _session.busy || _session.saving
+                ? null
+                : _session.reload,
             icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            tooltip: 'Save appearance',
-            onPressed: _session.busy || _session.conflicted ? null : _save,
-            icon: const Icon(Icons.check),
           ),
         ],
       ),
@@ -99,11 +100,42 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
             '${_session.bot.instance} · ${_session.bot.profile.name}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          if (_session.busy) const LinearProgressIndicator(),
+          if (_session.busy || _session.saving) const LinearProgressIndicator(),
           if (_session.error != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              child: StudioError(_session.error!),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  StudioError(_session.error!),
+                  if (!_session.conflicted && _session.dirty)
+                    IconButton(
+                      tooltip: 'Retry saving appearance',
+                      onPressed: _session.busy || _session.saving
+                          ? null
+                          : _session.flush,
+                      icon: const Icon(Icons.replay),
+                    ),
+                ],
+              ),
+            ),
+          if (_session.needsReview && _session.error == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text('Review your edits before retrying.'),
+                  ),
+                  IconButton(
+                    tooltip: 'Retry saving appearance',
+                    onPressed: _session.busy || _session.saving
+                        ? null
+                        : _session.flush,
+                    icon: const Icon(Icons.replay),
+                  ),
+                ],
+              ),
             ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
@@ -121,7 +153,12 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
             controller: _title,
             enabled: !_session.busy,
             textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Bot name'),
+            decoration: InputDecoration(
+              labelText: 'Bot name',
+              errorText: _session.title.trim().isEmpty
+                  ? 'Give your bot a name.'
+                  : null,
+            ),
             onChanged: (text) => _session.change(title: text),
           ),
           const SizedBox(height: 24),
@@ -216,7 +253,9 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
               ),
               IconButton(
                 tooltip: 'Upload avatar',
-                onPressed: _session.busy ? null : _session.pickImage,
+                onPressed: _session.busy || _session.saving
+                    ? null
+                    : _session.pickImage,
                 icon: const Icon(Icons.upload_outlined),
               ),
               IconButton(
@@ -236,7 +275,7 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
               hintText: 'A friendly midnight-blue owl',
               suffixIcon: IconButton(
                 tooltip: 'Generate avatar',
-                onPressed: _session.busy
+                onPressed: _session.busy || _session.saving
                     ? null
                     : () => _session.generate(_prompt.text),
                 icon: const Icon(Icons.auto_awesome_outlined),

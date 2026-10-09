@@ -172,7 +172,10 @@ void main() {
           await tester.pumpAndSettle();
         }
 
-        await edit('Atlas');
+        await tester.tap(find.byTooltip('Edit name & appearance for Atlas'));
+        await tester.pumpAndSettle();
+        expect(find.byType(BotProfileEditor), findsOneWidget);
+        await _native(tester, '$label-avatar-editor');
         final name = find.widgetWithText(TextField, 'Bot name');
         await tester.tap(name);
         await _native(
@@ -188,7 +191,8 @@ void main() {
         await _native(tester, '$label-name-hide', action: 'hide-keyboard');
         await frames();
         expect(tester.view.viewInsets.bottom, 0);
-        await tester.tap(find.byTooltip('Save appearance'));
+        expect(find.byTooltip('Save appearance'), findsNothing);
+        await _native(tester, '$label-name-autosave-back', action: 'back');
         await tester.pumpAndSettle();
         expect(find.byType(BotProfileEditor), findsNothing);
         expect(
@@ -210,7 +214,8 @@ void main() {
         );
         await _native(tester, '$label-editor-bottom');
         await tester.tap(find.byTooltip('Upload avatar'));
-        await frames();
+        // The picker suspends Flutter rendering. Let Android cancel it before
+        // pumping the restored editor, rather than waiting for background frames.
         await _native(tester, '$label-picker-cancel', action: 'picker-cancel');
         await tester.pumpAndSettle();
         expect(find.byType(BotProfileEditor), findsOneWidget);
@@ -229,17 +234,13 @@ void main() {
         await tester.ensureVisible(find.byTooltip('Color 1'));
         await tester.pumpAndSettle();
         await tester.tap(find.byTooltip('Color 1'));
-        await _native(tester, '$label-editor-back', action: 'back');
+        await _native(tester, '$label-color-autosave-back', action: 'back');
         await tester.pumpAndSettle();
-        expect(find.text('Discard edits?'), findsOneWidget);
-        await _native(tester, '$label-discard');
-        await tester.tap(find.text('Keep editing'));
-        await tester.pumpAndSettle();
-        expect(find.byType(BotProfileEditor), findsOneWidget);
-        await _native(tester, '$label-discard-back', action: 'back');
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Discard'));
-        await tester.pumpAndSettle();
+        expect(find.text('Discard edits?'), findsNothing);
+        expect(
+          fixture.profiles.first['ui_meta']['hermes-bots']['color'],
+          isNot('#65c7bc'),
+        );
         expect(find.byType(BotsContent), findsOneWidget);
 
         await tester.tap(find.byTooltip('Create bot'));

@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/screens/bots/bots_content.dart';
 import 'package:wing/core/screens/bots/bot_profile_editor.dart';
 import 'package:wing/core/screens/bots/bots_create_screen.dart';
@@ -105,6 +106,15 @@ void main() {
             tester.getTopLeft(atlas).dy,
             lessThan(tester.getTopLeft(forge).dy),
           );
+          expect(find.text('All saved instances'), findsNothing);
+          expect(find.byIcon(Icons.refresh), findsNothing);
+          expect(find.byType(FloatingActionButton), findsOneWidget);
+          expect(find.byTooltip('Create bot'), findsOneWidget);
+          expect(
+            tester.getBottomRight(find.byType(FloatingActionButton)).dy,
+            closeTo(828, 1),
+          );
+          expect(find.byType(RefreshIndicator), findsNothing);
           expect(find.text('Pinned'), findsNothing);
           expect(find.byTooltip('Pinned'), findsOneWidget);
           final previews = tester
@@ -112,21 +122,101 @@ void main() {
               .where((text) => text.data?.startsWith('I found three') == true);
           expect(previews.single.overflow, TextOverflow.ellipsis);
           await _capture(tester, frame, 'bots-${brightness.name}-$scale');
+          await tester.drag(
+            find.byType(ListView).first,
+            const Offset(0, -1200),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .getBottomRight(
+                  find.byKey(const ValueKey('bot-instance-1/mira')),
+                )
+                .dy,
+            lessThan(tester.getTopLeft(find.byType(FloatingActionButton)).dy),
+          );
+          expect(
+            find.byTooltip('Actions for Mira').hitTestable(),
+            findsOneWidget,
+          );
+          await _capture(
+            tester,
+            frame,
+            'bots-bottom-${brightness.name}-$scale',
+          );
+          await tester.drag(find.byType(ListView).first, const Offset(0, 1200));
+          await tester.pumpAndSettle();
           await tester.tap(find.text('Groups').first);
           await tester.pumpAndSettle();
           expect(find.text('Research team'), findsOneWidget);
+          expect(find.byTooltip('Create group'), findsOneWidget);
           expect(find.text('Atlas'), findsNothing);
           await _capture(tester, frame, 'groups-${brightness.name}-$scale');
           await tester.tap(find.widgetWithText(Tab, 'Bots'));
           await tester.pumpAndSettle();
+          final avatar = find.byTooltip('Edit name & appearance for Atlas');
+          expect(tester.getSize(avatar).width, greaterThanOrEqualTo(48));
+          expect(tester.getSize(avatar).height, greaterThanOrEqualTo(48));
+          await tester.tap(avatar);
+          await tester.pumpAndSettle();
+          expect(find.byType(BotProfileEditor), findsOneWidget);
+          expect(opened, isEmpty);
+          expect(fixture.commands, isEmpty);
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Atlas').last);
+          await tester.pumpAndSettle();
+          expect(opened, ['atlas-chat']);
           await tester.tap(find.byTooltip('Actions for Atlas'));
           await tester.pumpAndSettle();
           await _capture(tester, frame, 'menu-${brightness.name}-$scale');
           await tester.tap(find.byKey(const ValueKey('bot-menu-edit')));
           await tester.pumpAndSettle();
           expect(find.byType(BotProfileEditor), findsOneWidget);
+          expect(find.byTooltip('Save appearance'), findsNothing);
+          await tester.tap(find.byTooltip('Reload saved appearance'));
+          await tester.pumpAndSettle();
+          expect(
+            find.textContaining('Saved appearance reloaded'),
+            findsNothing,
+          );
           expect(tester.takeException(), isNull);
           await _capture(tester, frame, 'editor-${brightness.name}-$scale');
+          fixture.conflict = true;
+          await tester.enterText(
+            find.widgetWithText(TextField, 'Bot name'),
+            'Atlas draft',
+          );
+          await tester.pump(const Duration(milliseconds: 500));
+          await tester.pumpAndSettle();
+          expect(
+            find.textContaining('This bot changed in another client'),
+            findsOneWidget,
+          );
+          await _capture(
+            tester,
+            frame,
+            'editor-conflict-${brightness.name}-$scale',
+          );
+          fixture.conflict = false;
+          await tester.tap(find.byTooltip('Reload saved appearance'));
+          await tester.pumpAndSettle();
+          expect(
+            find.textContaining('This bot changed in another client'),
+            findsNothing,
+          );
+          expect(
+            find.text('Review your edits before retrying.'),
+            findsOneWidget,
+          );
+          await _capture(
+            tester,
+            frame,
+            'editor-review-${brightness.name}-$scale',
+          );
+          await tester.tap(find.byTooltip('Retry saving appearance'));
+          await tester.pumpAndSettle();
+          expect(find.byTooltip('Retry saving appearance'), findsNothing);
           await tester.scrollUntilVisible(
             find.text('Profile settings'),
             240,
@@ -167,12 +257,7 @@ void main() {
           await tester.pumpAndSettle();
           await tester.pageBack();
           await tester.pumpAndSettle();
-          expect(find.text('Discard edits?'), findsOneWidget);
-          await _capture(tester, frame, 'discard-${brightness.name}-$scale');
-          await tester.tap(find.text('Keep editing'));
-          await tester.pumpAndSettle();
-          await tester.tap(find.byTooltip('Save appearance'));
-          await tester.pumpAndSettle();
+          expect(find.text('Discard edits?'), findsNothing);
           expect(find.byType(BotProfileEditor), findsNothing);
           expect(fixture.commands.last.$2, 'profiles.configure');
           session.setVisible(false);
@@ -254,6 +339,11 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final fixture = BotsFixture();
+    var rosterReads = 0;
+    fixture.readHook = (_, method, _) async {
+      if (method == 'profiles.list') rosterReads++;
+      return null;
+    };
     fixture.profiles.first['ui_meta']['hermes-bots']['hidden'] = true;
     final session = BotsSession((_) async => [fixture.repository]);
     addTearDown(session.dispose);
@@ -284,6 +374,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Forge'), findsOneWidget);
     expect(find.text('Mira'), findsNothing);
+    final beforeMenu = rosterReads;
+    await tester.tap(find.byTooltip('Roster options'));
+    await tester.pumpAndSettle();
+    expect(find.text('Refresh bots and groups'), findsNothing);
+    await tester.tap(find.byType(CheckedPopupMenuItem<String>));
+    await tester.pumpAndSettle();
+    expect(view.showHidden, true);
+    expect(rosterReads, beforeMenu);
+    expect(find.text('Forge'), findsOneWidget);
+    expect(view.filter, BotPresence.working);
+    await tester.fling(find.byType(ListView).first, const Offset(0, 300), 1000);
+    await tester.pumpAndSettle();
+    expect(rosterReads, beforeMenu);
     expect(fixture.commands, isEmpty);
     await tester.pumpWidget(const SizedBox());
   });

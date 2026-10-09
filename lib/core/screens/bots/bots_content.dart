@@ -96,6 +96,15 @@ class _BotsContentState extends State<BotsContent> {
     if (mounted && key != null) await widget.onOpenChat(key);
   }
 
+  Future<void> _editAppearance(BotRecord bot) {
+    final repository = widget.session.repository(bot.scope.connectionIdentity);
+    return _push(
+      BotProfileEditor(
+        createSession: () => BotProfileEditSession(repository, bot),
+      ),
+    );
+  }
+
   Future<void> _botMenu(BuildContext anchor, BotRecord bot) async {
     final repository = widget.session.repository(bot.scope.connectionIdentity);
     final server = repository.server;
@@ -153,22 +162,10 @@ class _BotsContentState extends State<BotsContent> {
       case 'hide':
         await widget.session.setHidden(bot, canUse: _canUse);
       case 'edit':
-        await _push(
-          BotProfileEditor(
-            createSession: () => BotProfileEditSession(
-                repository,
-              bot,
-            ),
-          ),
-        );
+        await _editAppearance(bot);
       case 'screen':
         await _push(
-          BotScreenView(
-            createSession: () => BotScreenSession(
-                repository,
-              bot,
-            ),
-          ),
+          BotScreenView(createSession: () => BotScreenSession(repository, bot)),
         );
       case 'settings':
         if (server != null) {
@@ -321,35 +318,13 @@ class _BotsContentState extends State<BotsContent> {
             ),
             title: const Text('Bots'),
             actions: [
-              IconButton(
-                tooltip: 'Refresh bots and groups',
-                onPressed: state.loading || state.busy
-                    ? null
-                    : widget.session.refresh,
-                icon: const Icon(Icons.refresh),
-              ),
-              IconButton(
-                tooltip: view.tab == 0 ? 'Create bot' : 'Create group',
-                onPressed:
-                    state.busy ||
-                        state.instances.isEmpty ||
-                        view.tab == 1 && state.groupHosts.isEmpty
-                    ? null
-                    : () => _push(
-                        BotsCreateScreen(
-                          session: widget.session,
-                          group: view.tab == 1,
-                        ),
-                      ),
-                icon: const Icon(Icons.add),
-              ),
-              PopupMenuButton<bool>(
+              PopupMenuButton<String>(
                 tooltip: 'Roster options',
                 icon: const Icon(Icons.more_horiz),
-                onSelected: (show) => _change(hidden: show),
+                onSelected: (_) => _change(hidden: !view.showHidden),
                 itemBuilder: (_) => [
                   CheckedPopupMenuItem(
-                    value: !view.showHidden,
+                    value: 'hidden',
                     checked: view.showHidden,
                     child: const Text('Show hidden bots'),
                   ),
@@ -361,16 +336,6 @@ class _BotsContentState extends State<BotsContent> {
             top: false,
             child: Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: Text(
-                      'All saved instances',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                ),
                 TabBar(
                   onTap: (tab) => _change(tab: tab),
                   tabs: const [
@@ -382,7 +347,7 @@ class _BotsContentState extends State<BotsContent> {
                   const LinearProgressIndicator(),
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
                     children: [
                       TextField(
                         key: const ValueKey('bots-search'),
@@ -464,6 +429,23 @@ class _BotsContentState extends State<BotsContent> {
               ],
             ),
           ),
+          floatingActionButton: FloatingActionButton(
+            key: const ValueKey('bots-create'),
+            tooltip: view.tab == 0 ? 'Create bot' : 'Create group',
+            elevation: 2,
+            onPressed:
+                state.busy ||
+                    state.instances.isEmpty ||
+                    view.tab == 1 && state.groupHosts.isEmpty
+                ? null
+                : () => _push(
+                    BotsCreateScreen(
+                      session: widget.session,
+                      group: view.tab == 1,
+                    ),
+                  ),
+            child: const Icon(Icons.add),
+          ),
         ),
       );
     },
@@ -495,11 +477,21 @@ class _BotsContentState extends State<BotsContent> {
       key: 'bot-${bot.id}',
       title: bot.title,
       pinned: bot.pinned,
-      leading: BotAvatar(
-        name: bot.profile.name,
-        shape: bot.shape,
-        color: bot.color,
-        image: bot.avatar,
+      leading: IconButton(
+        key: ValueKey('bot-avatar-${bot.id}'),
+        tooltip: 'Edit name & appearance for ${bot.title}',
+        onPressed: busy ? null : () => _editAppearance(bot),
+        style: IconButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          fixedSize: const Size(48, 48),
+          padding: const EdgeInsets.all(4),
+        ),
+        icon: BotAvatar(
+          name: bot.profile.name,
+          shape: bot.shape,
+          color: bot.color,
+          image: bot.avatar,
+        ),
       ),
       subtitle: '${bot.instance} · $label',
       preview: bot.preview.isEmpty ? 'Start a conversation' : bot.preview,
@@ -514,9 +506,8 @@ class _BotsContentState extends State<BotsContent> {
     key: 'group-${group.key}',
     title: group.name,
     pinned: group.pinned,
-    leading: const SizedBox.square(
-      dimension: 40,
-      child: Icon(Icons.forum_outlined),
+    leading: const ExcludeSemantics(
+      child: SizedBox.square(dimension: 40, child: Icon(Icons.forum_outlined)),
     ),
     subtitle:
         '${group.instance} · ${group.members.length} bots${group.working ? ' · Working' : ''}',
@@ -553,7 +544,7 @@ class _BotsContentState extends State<BotsContent> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ExcludeSemantics(child: leading),
+                  leading,
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

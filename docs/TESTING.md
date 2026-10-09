@@ -148,12 +148,19 @@ gesture journey or depend on its retained transcript scroll position.
 
 Open the drawer → Bots. Verify Bots/Groups tabs, one continuous list with pins
 first, the pin glyph, canonical last-message truncation, search and live filters.
+Tap the avatar to open Edit name & appearance without opening chat; tap the
+name/message area to open chat. Avatar actions have accessible labels and 48 dp targets.
 Open a bot and use Back: the original tab, query and filter must remain. Open a
 bot from another saved instance: the secure workspace identity must match the
 captured row before opening its chat. Change appearance, then open Profile
 settings and exercise the existing identity/model/account/capability editors.
 Verify that a concurrent desktop edit requires reload/review, and that partial
 saves retain the remaining draft without repeating acknowledged sections.
+Appearance has no confirmation tick: valid edits autosave after typing pauses,
+and Back flushes pending changes. Reload saved appearance must succeed silently,
+preserve edited fields and adopt fresh untouched fields. A real write failure
+keeps the draft and exposes retry; a conflict requires reload/review. Back asks
+about discarding only when pending changes cannot be saved.
 
 Create a hosted Discussion group with 2–6 bots on a ready instance. Send a
 message, mention a member, inspect one-time approval/deny, stop, rename and
@@ -162,7 +169,8 @@ and text for Retry. Inspect real screen previews, including the human-control
 privacy suppression. See [the current contract and limits](BOTS.md).
 
 `bots_contract_test.dart` covers stock wire shapes, ownership, CAS, canonical
-creation/title races, partial saves, command admission and idempotent sends.
+creation/title races, coalesced autosaves, edits during writes, silent reload,
+conflict review, retired timers, partial saves, command admission and idempotent sends.
 `bots_view_test.dart` covers the production drawer/chat/Back journey and native
 roster, menus, creation and appearance/settings reachability at 390 dp/100%
 and 320 dp/200% in both themes. Run it with `--dart-define=STUDIO_REVIEW=true`
@@ -181,7 +189,7 @@ flock /home/dev/projects/hermes-android/.session-coordination/execution.lock pyt
 The driver rejects physical devices, restores viewport/density/system font scale,
 and injects actual Android text and Back events. The four light/dark,
 390 dp/100% and 320 dp/200% cases cover drawer/chat/Back and retained search,
-appearance save/discard, Android document-picker cancellation, profile settings,
+appearance autosave/Back, Android document-picker cancellation, profile settings,
 new-bot creation and exact group-send recovery. Screenshots come from Android's
 window. Only stock transport observations are authored; provider generation,
 real display control and live Hermes delivery remain separate checks. The builder

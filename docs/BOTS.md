@@ -4,9 +4,13 @@ Open **Bots** from Wing's side menu. The screen lists profiles from every saved
 Hermes instance as bots, with Bots and Groups tabs. Search either roster; filter
 bots by Working or Needs input. Pins lead the same list and show a pin glyph.
 Bot pins and appearance synchronize through profile metadata. Group pins are
-device preferences, as in desktop's room records.
+device preferences, as in desktop's room records. The floating + creates a bot
+or group for the selected tab. Both rosters update automatically on entry,
+every eight seconds while visible, and after actions. There is no manual
+refresh control or pull-to-refresh gesture.
 
-Tap a bot to open its continuing **Bot Chat**. Its truncated preview comes from
+Tap a bot's avatar to edit its name and appearance directly. Tap its name or
+message area to open its continuing **Bot Chat**. Its truncated preview comes from
 that same chat, rather than a scheduled task or another recent conversation.
 Back returns to the preserved Bots tab, search and filter. Another saved
 instance opens through Wing's secure workspace-entry flow; an edited or removed
@@ -25,10 +29,15 @@ Appearance includes a display title, eight classic desktop shapes, twelve
 profile hues, name-derived color, image upload/remove and generation through
 the captured profile's configured image provider. PNG/JPEG/WebP images are
 streamed through Wing's allocation preflight and limited to the stock
-2,000,000-byte avatar limit. Only actual user edits are sent. A desktop metadata
-conflict keeps the draft and requires Reload/review; untouched fields adopt the
-new server values. Metadata and asset saves acknowledge separately, so a retry
-does not resend an already-saved section.
+2,000,000-byte avatar limit. Valid edits save automatically after a short typing
+pause; Back flushes pending edits before leaving. There is no confirmation tick.
+Only actual user edits are sent, and edits made during a write are saved next.
+Reload saved appearance rereads the name, shape, color and avatar, preserving
+edited fields and adopting fresh untouched fields. Successful reload is silent.
+A desktop metadata conflict keeps the draft and requires Reload/review, then an
+explicit retry or another edit. Metadata and asset saves acknowledge separately,
+so a retry does not resend an already-saved section. If pending edits cannot be
+saved when leaving, the editor offers Keep editing or Discard.
 
 **Profile settings** opens the existing role/SOUL, model/defaults, provider
 accounts/credentials and skills/tools/library/hub/plugin editors for that
@@ -74,7 +83,7 @@ plugin, custom endpoint, deployment upgrade or old-protocol fallback is added.
 | Wire parsing | `BotsRepository` validates current stock objects, profile ownership, revisions, monotonic log cursors and room authority |
 | Continuing chat | Exact server-owned `Bot Chat` title; hidden/follow-profile-config creation, eager title materialization, re-list/adopt after a race |
 | Working/input status | `session.active_list` has no profile field: prove unique ownership through hidden-inclusive profile search before attribution; ambiguity/read failure stays unknown |
-| Appearance | `BotProfileEditSession` owns changed-field drafts, metadata CAS and partial acknowledgements |
+| Appearance | `BotProfileEditSession` owns debounced serial autosaves, changed-field drafts, metadata CAS, silent reload/review and partial acknowledgements; Back flushes before disposing |
 | Hosted discussions | `BotGroupSession` owns log replay, visible polling, exact frozen sends and fenced approval/recovery commands |
 | Screen | `BotScreenSession` owns visible read-only frame polling and profile-scoped power actions |
 | Presentation | Native views own navigation, text input, tab/filter/search and geometry; established settings editors retain their own save workflows |

@@ -191,11 +191,27 @@ last message from the same continuing Bot Chat it opens. Instance/status stays
 secondary to the bot's name. Use native shape faces, shared Studio surfaces,
 16 dp gutters and icon-only 48 dp actions with tooltips. At enlarged text,
 titles/context wrap and message previews remain bounded in the scrolling list.
+Each bot avatar is an icon-only 48 dp action opening Edit name & appearance;
+the name/message area opens the chat. Keep the avatar action independently
+labelled and prevent its tap from opening the chat.
+Creation uses one icon-only 56 dp floating + in the bottom-right, with the
+selected tab determining bot or group creation. Omit the all-instances subtitle
+and all manual refresh controls, including pull-to-refresh and overflow refresh.
+Roster updates happen automatically. Keep 88 dp of trailing list padding so
+every row action can scroll above the FAB.
 Creation and appearance are scrollable pages; profile settings reuse Wing's
 existing captured-profile editors.
+Appearance edits save automatically; omit the permanent confirmation tick.
+Keep typing and shape/color choices responsive during writes. Back flushes
+pending changes. Reload saved appearance preserves edited fields and silently
+adopts saved values for untouched fields; reserve error styling for failures.
+Conflicts pause autosave until reload/review and retry or a new edit.
 
 | Before | After | Why |
 | --- | --- | --- |
+| All-instances subtitle and header refresh/+ | Title and overflow above the tabs; contextual floating + | Reduces header weight and brings creation within thumb reach |
+| Permanent appearance confirmation tick and red reload-success message | Automatic saving and silent successful reload | Removes unnecessary confirmation and reserves red for failures |
+| Appearance requires the row menu | Avatar opens the same appearance editor directly | Makes the visible identity editable in one tap |
 | Small bot name beside a heavier preview | 16 sp semibold name above a muted preview | Identity leads the compact row |
 | Separate pinned region in the earlier exploration | One list, pinned first with glyph | Follows the owner's selected arrangement |
 | A stale full appearance form could restore untouched fields | Save only edited fields; reload refreshes untouched values | Preserves edits made in another desktop client |

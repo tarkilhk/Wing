@@ -180,7 +180,7 @@ class BotsSession extends ChangeNotifier {
         _operationError = error is BotMetadataConflict
             ? error.toString()
             : dispatched
-            ? 'The change could not be confirmed. Refresh to check the result.'
+            ? 'The change could not be confirmed. Check the result before trying again.'
             : 'The change was not sent. Check the instance and try again.';
       }
       return null;

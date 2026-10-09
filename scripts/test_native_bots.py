@@ -113,9 +113,16 @@ def main():
                     shell("input", "keyevent", "KEYCODE_BACK")
                     time.sleep(.5)
                 elif action == "picker-cancel":
-                    activity = shell("dumpsys", "activity", "activities")
-                    resumed = "\n".join(line for line in activity.splitlines()
-                                        if "ResumedActivity" in line)
+                    end = time.monotonic() + 5
+                    while True:
+                        activity = shell("dumpsys", "activity", "activities")
+                        resumed = "\n".join(line for line in activity.splitlines()
+                                            if "ResumedActivity" in line)
+                        if re.search(r"documentsui|DocumentsActivity|PickActivity", resumed):
+                            break
+                        if time.monotonic() >= end:
+                            break
+                        time.sleep(.1)
                     if not re.search(r"documentsui|DocumentsActivity|PickActivity", resumed):
                         (output / (name + "-activity.txt")).write_text(activity)
                         raise RuntimeError("Android document picker did not open")
