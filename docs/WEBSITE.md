@@ -17,6 +17,8 @@ server instructions.
 | Website page | Authoritative feature/setup references |
 | --- | --- |
 | `workspaces.html` | `FEATURES.md`: profiles, projects, Chats filters and drafts |
+| `bots.html` | `BOTS.md`: continuing bot chats, appearance, hosted discussions and read-only screen previews |
+| `health-alerts.html` | `ADMINISTRATION.md`: device alert policy, incident details, thresholds and monitoring limits |
 | `recents.html` | `FEATURES.md`: recent and ongoing chats, status filters and launcher shortcut |
 | `live-work.html` | `FEATURES.md` and `TOOL_ACTIVITY.md`: live activity, steering and tool details |
 | `results.html` | `FEATURES.md`, production `ProfileMessage`, `MarkdownMessageContent` and resource viewers |
@@ -86,12 +88,15 @@ The Latin font subsets and their OFL notices are checked in.
 The opening pairs a conversation with the expanded tool details behind it.
 Profiles, projects and Recents lead the feature story immediately afterward,
 with the open cross-profile Project selector below the switching explanation and
-a Recents capture below its own. The profiles guide demonstrates the profile
-switcher, project choices, view controls and screen navigator in their own sections.
+a Recents card-stack capture below its switching explanation. The profiles guide
+demonstrates the profile switcher, project choices, view controls and screen navigator in their own sections.
 Result handling shows formatting, code controls, message actions and file actions
 with the corresponding production widgets. Health and Administration each have
 their own visible screen and reader-facing guide. Analytics has its own homepage
 section with the activity grid, model breakdown and token trends.
+Bots and hosted discussions have their own homepage section and guide. Health
+alerts demonstrate incident details and independent warning/recovery controls;
+their guide states when monitoring is active.
 The workflow explorer stays focused on following work and steering a conversation.
 Result handling has its own section. Its appearance controls change the app captures, not the page theme.
 Tabs support arrow keys, Home and End. Native disclosures provide answers to
@@ -133,7 +138,9 @@ do not repeat it merely to illustrate another sentence.
 | --- | --- | --- | --- |
 | Home | Can Wing help me run several pieces of work from my phone? | Cross-profile/project navigation, Recents, inspectable activity, reusable results, settings and analytics | Focused guides and download |
 | Profiles and projects | How do I switch agents and projects, move between screens, and keep the chat view I prefer? | One-tap profile choices, combined profile/project filters, remembered Group by/Sort by/Show details, screen navigator and retained drafts | Recents; profile settings |
-| Recents | Which chats are running or waiting for me, and how do I return to them? | Running/Needs input filters; opening a chat selects its profile; back returns to Recents | Live controls; Chats organization |
+| Recents | How do I move among several conversations without losing my work? | Running/Needs input filters; two-finger switching; persistent card stack; edge cues; drafts and restored filter | Live controls; Chats organization |
+| Bots | How do I return to my agents and ask them to work together? | Continuing chats across saved connections; appearance; hosted discussions with mentions | Profile settings; Recents |
+| Health alerts | How will Wing surface a problem, and when is it checking? | Severity bell; triggering readings; independent warning/recovery thresholds; active-use limits | Health readings; profile settings |
 | Live work | What is the agent doing, and how can I respond or change direction? | Timeline/Tasks/Agents tabs; requests and results; steering/queueing; forking at a saved answer; editable input | Recents; using results |
 | Results | How do I read, reuse or export what the agent produced? | Markdown layout; separate code and message actions; file previews and Android sharing | Tool details; sending attachments |
 | Health | Where is my setup having trouble, and what can I check? | Host/Server/Profile scopes, timestamps, diagnostic findings and targeted repair links | Profile settings; connection recovery |
@@ -146,6 +153,8 @@ do not repeat it merely to illustrate another sentence.
 | --- | --- | --- |
 | Opening | Wing is the Android client for your Hermes setup | Actual conversation and expanded tool output |
 | Profiles/projects and Recents | Switch profiles and projects, keep the preferred view and return to work without losing drafts | Switching text followed by the cross-profile Project selector; Recents text followed by Recents |
+| Bots and discussions | Return to each agent or bring several into one server-hosted discussion | Roster with distinct appearance and status; populated shared discussion |
+| Health alerts | Inspect a problem and choose when Wing should raise or clear it | Real issue details and memory threshold editor |
 | Follow and steer | Inspect work before deciding whether to correct, queue or stop it | Activity with all three tabs on Timeline; held composer controls |
 | Markdown/code/files | Read and reuse the exact part of an answer you need | Formatted reply; code controls; message actions; file actions, each after its own text |
 | Health and settings | Inspect a problem and change the correct profile's setup from the phone | Health and Administration after their respective explanations |
@@ -187,6 +196,9 @@ copy explains capabilities rather than capture tooling or fixtures.
 | `chats-{dark,light}.png` | Production chat browser with demo conversations grouped into Launch and Research projects across two profiles |
 | `profiles-{dark,light}.png`, `projects-{dark,light}.png`, `workspace-view-{dark,light}.png` | Production `ProfileWorkspaceScreen` with a focused public-safe project fixture; actual one-tap profile selection, Profile/Project anchored menus and Chat list options |
 | `navigator-{dark,light}.png` | Production `AppDrawer` in a minimal Scaffold host; actual destination controls and connection identity, with a no-I/O versions controller showing unavailable version |
+| `recents-stack-dark.png` | Production `ProfileWorkspaceScreen` with the website conversation fixture and `ChatNoticeActivityScope`; actual Choose recent conversation opens the persistent card stack |
+| `bots-dark.png`, `bot-appearance-dark.png`, `bot-discussion-dark.png` | Production `BotsContent` and its routed appearance/discussion screens, with five authored bot profiles, stock-shaped roster status and a public-safe discussion log |
+| `health-alerts-light.png`, `alert-thresholds-light.png` | Production Health content, app bar, alert dialog and settings editor composed through `HealthAlertsScope`; existing resource fixture with a consistent 97.3% memory sample and native critical pressure |
 | `recents-{dark,light}.png` | Production `ProfileWorkspaceScreen` Recents destination, with recent messages, one running chat and one needing input across two profiles |
 | `results-{dark,light}.png` | Production `ProfileMessage` with Markdown heading, table, quote, code and an explicit report link; demo callbacks make its supported actions visible without performing I/O |
 | `administration-{dark,light}.png` | Production `HermesAdministrationContent`, using the existing administration-design fixture with authored website observations |
@@ -208,6 +220,13 @@ Wing icon font comes from the checkout. Follow the existing font setup in
 flutter test --no-pub tools/website/capture_app_test.dart \
   --dart-define=WING_CAPTURE_FONTS=/absolute/path/to/capture-fonts
 ```
+
+To regenerate the new feature images only, use
+`--name 'export bots and a group discussion|export Recents conversation switching|export health alerts and resource thresholds'`.
+These opt-in exports use production widgets and do not connect to Hermes. Recents
+opens the stack through its normal menu, using the application activity scope and
+bounded pumping while cached-image futures complete. Health disposes its watcher
+after unmounting the capture.
 
 To regenerate only Analytics, add
 `--plain-name 'export analytics with 30 days selected'`. Its sample history ends
@@ -231,7 +250,7 @@ node tools/website/review.cjs \
 ```
 
 It checks five widths (320, 390, 768, 1024 and 1440), both app appearances and
-both live-work workflows, then all nine guides at the same widths. It also checks
+both live-work workflows, then all eleven guides at the same widths. It also checks
 assets, local links and cross-page anchors, keyboard tabs, disclosures, visible
 text contrast, 200% text on every page, reduced motion and reading without
 JavaScript. It opens every visible screenshot, checks enlargement and complete

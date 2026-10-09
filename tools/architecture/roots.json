@@ -14465,7 +14465,27 @@
       "provenance": "tracked"
     },
     {
+      "path": "website/assets/screenshots/alert-thresholds-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
       "path": "website/assets/screenshots/analytics-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/bot-appearance-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/bot-discussion-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/bots-dark.png",
       "area": "website",
       "provenance": "tracked"
     },
@@ -14506,6 +14526,11 @@
     },
     {
       "path": "website/assets/screenshots/files-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/health-alerts-light.png",
       "area": "website",
       "provenance": "tracked"
     },
@@ -14580,6 +14605,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "website/assets/screenshots/recents-stack-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
       "path": "website/assets/screenshots/results-dark.png",
       "area": "website",
       "provenance": "tracked"
@@ -14635,7 +14665,17 @@
       "provenance": "tracked"
     },
     {
+      "path": "website/bots.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
       "path": "website/get-started.html",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/health-alerts.html",
       "area": "website",
       "provenance": "tracked"
     },

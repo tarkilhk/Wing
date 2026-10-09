@@ -13,10 +13,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/transcript_message.dart';
+import 'package:wing/core/models/recent_conversation.dart';
+import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:wing/core/presentation/tool_call_presentation.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
+import 'package:wing/core/screens/bots/bots_content.dart';
+import 'package:wing/core/screens/administration/admin_health_page.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -27,6 +32,8 @@ import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/composer_action_button.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/core/widgets/wing_app_bar.dart';
+import 'package:wing/core/widgets/health_alerts/health_alerts_scope.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 
@@ -34,6 +41,8 @@ import '../../test/helpers/pump_markdown_widget.dart';
 import '../../test/support/profile_browser_fixture.dart';
 import '../../test/support/administration_design_fixture.dart';
 import '../../test/support/host_resources_fixture.dart';
+import '../../test/support/bots_fixture.dart';
+import '../../test/support/health_alerts_fixture.dart';
 
 class _CaptureBinding extends AutomatedTestWidgetsFlutterBinding {
   @override
@@ -46,6 +55,7 @@ class _WebsiteFixture extends ProfileBrowserFixture {
     for (final row in super.sessions(profile))
       {
         ...row,
+        'profile': profile,
         if (row['id'] == 'newest') 'title': 'The research, ready to use',
         if (row['id'] == 'pinned') 'title': 'Ideas for the next release',
         if (row['id'] == 'project-only')
@@ -405,6 +415,252 @@ void main() {
       image.dispose();
     });
   }
+
+  testWidgets('export bots and a group discussion', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    // Opt-in screenshot tooling runs outside test/ discovery.
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
+    final fixture = BotsFixture();
+    fixture.profiles.addAll([
+      BotsFixture.profile(
+        'sage',
+        'Sage',
+        preview: 'The source notes are saved with the report.',
+      ),
+      BotsFixture.profile(
+        'orbit',
+        'Orbit',
+        preview: 'Your weekly review is scheduled for Friday.',
+      ),
+    ]);
+    const colors = ['#65c7bc', '#ebaa65', '#bca6e8', '#86afda', '#db94af'];
+    const shapes = ['squircle', 'hexagon', 'circle', 'cloud', 'pill'];
+    for (var i = 0; i < fixture.profiles.length; i++) {
+      final meta = fixture.profiles[i]['ui_meta']['hermes-bots'] as Map;
+      meta['color'] = colors[i];
+      meta['shape'] = shapes[i];
+    }
+    final messages = [
+      (
+        'user',
+        'you',
+        'Compare the rollout options. @bot_atlas check the evidence; @bot_mira review the risks.',
+      ),
+      (
+        'member',
+        'atlas',
+        'The small pilot covers all three required integrations. I saved the source notes with the comparison.',
+      ),
+      (
+        'member',
+        'mira',
+        'Keep the pilot to one team first. Confirm the rollback steps before expanding access.',
+      ),
+      ('user', 'you', 'Agreed. Turn that into a launch checklist.'),
+      (
+        'member',
+        'atlas',
+        'The checklist is ready: verify access, test the integrations, then invite the pilot team.',
+      ),
+    ];
+    fixture.events.addAll([
+      for (var i = 0; i < messages.length; i++)
+        {
+          'room_id': 'room-1',
+          'seq': i + 1,
+          'event_id': 'message-$i',
+          'kind': 'message.${messages[i].$1}',
+          'actor': {'kind': messages[i].$1, 'profile': messages[i].$2},
+          'payload': {'text': messages[i].$3},
+        },
+    ]);
+    final session = BotsSession((_) async => [fixture.repository]);
+    addTearDown(session.dispose);
+    await session.refresh();
+    var view = const BotsViewState();
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: wingTheme(Brightness.dark),
+        builder: (_, child) => RepaintBoundary(key: frame, child: child!),
+        home: StatefulBuilder(
+          builder: (_, setState) => BotsContent(
+            session: session,
+            viewState: view,
+            onViewChanged: (next) => setState(() => view = next),
+            onOpenMenu: () {},
+            onOpenChat: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await capture(tester, 'bots-dark');
+    await tester.tap(find.byTooltip('Edit name & appearance for Atlas'));
+    await tester.pumpAndSettle();
+    await capture(tester, 'bot-appearance-dark');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(Tab, 'Groups'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Research team'));
+    await tester.pumpAndSettle();
+    await capture(tester, 'bot-discussion-dark');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('export Recents conversation switching', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    // Opt-in screenshot tooling runs outside test/ discovery.
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
+    final fixture = _WebsiteFixture();
+    final controller = ProfileWorkspaceController(
+      connectionIdentity: 'website-recents',
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'Home server',
+          label: 'My Hermes',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
+      ),
+      preferences: preferences,
+      appPreferences: appPreferences,
+      gatewayFactory: fixture.gateway,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    fixture.liveSessions['personal'] = [
+      {
+        'id': 'research-runtime',
+        'session_key': 'project-only',
+        'status': 'working',
+        'last_active': fixture.now,
+      },
+    ];
+    fixture.liveSessions['work'] = [
+      {
+        'id': 'launch-runtime',
+        'session_key': 'launch-copy',
+        'status': 'waiting',
+        'last_active': fixture.now,
+      },
+    ];
+    await controller.refreshRecents();
+    final activity = ValueNotifier<ChatNoticeActivity?>(null);
+    addTearDown(activity.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: wingTheme(Brightness.dark),
+        builder: (_, child) => ChatNoticeActivityScope(
+          activity: activity,
+          child: RepaintBoundary(key: frame, child: child!),
+        ),
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          initialDestination: AppDestination.activity,
+        ),
+      ),
+    );
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 80));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+    }
+    await capture(tester, 'recents-dark');
+    await tester.tap(find.text('The research, ready to use').first);
+    for (var i = 0; i < 18; i++) {
+      await tester.pump(const Duration(milliseconds: 80));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+    }
+    await tester.tap(find.byTooltip('Chat actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose recent conversation'));
+    for (var i = 0; i < 24; i++) {
+      await tester.pump(const Duration(milliseconds: 80));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+    }
+    expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+    await capture(tester, 'recents-stack-dark');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('export health alerts and resource thresholds', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    // Opt-in screenshot tooling runs outside test/ discovery.
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
+    final fixture = HealthAlertsFixture(await SharedPreferences.getInstance());
+    fixture.host.stats['memory'] = {
+      'total': 34359738368,
+      'used': 33432025432,
+      'available': 927712936,
+      'percent': 97.3,
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: wingTheme(Brightness.light),
+        builder: (_, child) => HealthAlertsScope(
+          alerts: fixture.coordinator,
+          openHealth: (_) async {},
+          child: RepaintBoundary(key: frame, child: child!),
+        ),
+        home: Builder(
+          builder: (context) => Scaffold(
+            appBar: WingAppBar(
+              context: context,
+              title: const Text('Hermes health'),
+              leading: const BackButton(),
+            ),
+            body: AdminHealthContent(
+              health: fixture.owner.healthSession().health,
+              hostResources: fixture.owner.hostResources(),
+              profile: null,
+              onRefresh: fixture.owner.hostResources().refresh,
+              onOpenDestination: (_) async {},
+              accessChecks: () => null,
+              onReviewAccess: null,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await fixture.critical();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('health-alert-bell')));
+    await tester.pumpAndSettle();
+    await capture(tester, 'health-alerts-light');
+    await tester.tap(find.byTooltip('Close alerts'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('health-alert-settings-entry')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Memory usage'));
+    await tester.pumpAndSettle();
+    await capture(tester, 'alert-thresholds-light');
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
 
   testWidgets('export analytics with 30 days selected', (tester) async {
     tester.view.devicePixelRatio = 1;

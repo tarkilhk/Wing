@@ -16,22 +16,43 @@ Requires Android 7.0 or newer and a Hermes server you can reach from your phone.
 
 Tap a profile to focus its chats, or combine profiles in one view. Choose projects, group and sort conversations, and select the details you want to see. Wing remembers your view for each connection.
 
-Use the screen navigator to jump between Chats, Recents and agent settings. Recents gathers running work and chats waiting for your input across profiles. Opening a chat selects its profile; your draft and attachments stay with their conversation when you move away.
+Use the screen navigator to jump between Chats, Recents and agent settings.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/workspaces.html">
     <img src="website/assets/screenshots/profiles-light.png" alt="Wing profile switcher with the personal profile selected and the Profile filter open" width="260">
   </a>
+</p>
+
+[Profile switching and view controls](https://tarkilhk.github.io/Wing/workspaces.html)
+
+## Multitask with Recents
+
+Find running chats and conversations waiting for your input across profiles. In a chat opened from Recents, swipe sideways with two fingers to switch, or pinch into a card stack and tap another conversation. Drafts and attachments stay with their chats.
+
+<p align="center">
   <a href="https://tarkilhk.github.io/Wing/recents.html">
-    <img src="website/assets/screenshots/recents-dark.png" alt="Wing Recents showing running work and chats that need input across profiles" width="260">
+    <img src="website/assets/screenshots/recents-stack-dark.png" alt="Wing Recents card stack with conversation previews for switching chats" width="260">
   </a>
 </p>
 
-[Profile switching and view controls](https://tarkilhk.github.io/Wing/workspaces.html) · [Multitasking with Recents](https://tarkilhk.github.io/Wing/recents.html)
+[Explore Recents and gestures](https://tarkilhk.github.io/Wing/recents.html)
+
+## Bots and group discussions
+
+Keep a continuing chat with each bot across your saved connections. Pin favorites, personalize their appearance, or bring 2–6 bots from one connection into a hosted discussion with mentions and shared replies.
+
+<p align="center">
+  <a href="https://tarkilhk.github.io/Wing/bots.html">
+    <img src="website/assets/screenshots/bots-dark.png" alt="Wing Bots roster with distinct avatars, a pinned bot and working or needs-input states" width="260">
+  </a>
+</p>
+
+[Explore bots and discussions](https://tarkilhk.github.io/Wing/bots.html)
 
 ## Live work
 
-Inspect tool calls, tasks and delegated agents, then steer or stop a run, queue a follow-up, or fork the conversation.
+Inspect tool calls, tasks and delegated agents, then steer or stop a run, queue a follow-up, or fork the conversation. Choose a skill while composing a message to send its instructions with your request.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/live-work.html">
@@ -64,6 +85,18 @@ Manage models, instructions, skills, connectors and scheduled tasks for each pro
 </p>
 
 [Explore Administration](https://tarkilhk.github.io/Wing/administration.html) · [Check Health](https://tarkilhk.github.io/Wing/health.html)
+
+## Health alerts
+
+Inspect resource pressure and observed profile problems from the bell on any screen. Set memory, disk and CPU warning and recovery thresholds. Checks run while Wing is open or its background task monitor is active for ongoing work.
+
+<p align="center">
+  <a href="https://tarkilhk.github.io/Wing/health-alerts.html">
+    <img src="website/assets/screenshots/health-alerts-light.png" alt="Wing health alert with the triggering memory reading and an action to open Health" width="260">
+  </a>
+</p>
+
+[Explore health alerts](https://tarkilhk.github.io/Wing/health-alerts.html)
 
 ## Analytics
 

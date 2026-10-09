@@ -4,6 +4,51 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+### Bots and discussions
+
+- Add Bots in the side menu, with agents across saved Hermes connections,
+  Working and Needs input filters, pins and continuing bot conversations.
+- Edit bot names, shapes, colors and avatars with automatic saving. Create or
+  duplicate bots and open their existing instructions, models, accounts and tools.
+- Create hosted Discussion groups with 2–6 bots on one connection, mentions,
+  shared replies, approvals, stop and interrupted-task recovery. Accepted group
+  work runs on Hermes and can continue while Wing is backgrounded.
+- Add read-only bot screen previews and profile-scoped display start/stop controls.
+  Hide the preview while a person controls that screen.
+
+### Recents and composing
+
+- Switch between chats opened from Recents with a two-finger sideways swipe.
+  Pinch inward to leave a card stack open, swipe through the circular stack with
+  momentum and tap a card to expand its conversation. The chat actions menu
+  offers the same navigation. Back restores the Recents filter; drafts stay
+  with their chats.
+- Show soft edge cues for replies and confirmed requests for input in other
+  recent conversations. Animate switching with retained conversation snapshots
+  and keep available Recents rows visible during background refresh.
+- Choose a skill by typing `/` after a space or on a new line within a message.
+  Highlight its name in the draft and load its instructions when sending.
+- Show Stop in an empty composer while work is running; restore Send and held
+  action choices when typing begins.
+
+### Health alerts and usage
+
+- Add in-app health alerts for host resource pressure and observed profile
+  problems. A bell on every screen opens issue details and the triggering reading;
+  optional brief notices leave unresolved issues available in the bell.
+- Configure warning and recovery percentages and durations independently for
+  memory, disk and CPU. Save valid edits automatically, with separate toggles
+  for immediate native Hermes critical memory and disk pressure alerts.
+- Check while Wing is open or its existing background task monitor is active.
+  Retain warning/recovery progress across short background pauses and confirm
+  with a fresh reading on return. Keep unavailable findings marked as last known.
+- Show connection notices only when automatic recovery has failed and needs
+  manual help. Keep Doctor and security-audit findings in Health without alerts.
+- Use Hermes' model catalog for subscription API-equivalent estimates and share
+  the models.dev API price catalog between Analytics and model selection.
+
+### Other fixes
+
 - Recover retained tool durations from earlier runtimes when reopening a saved
   conversation, including after Hermes retires the original runtime.
 
