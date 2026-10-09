@@ -16,6 +16,8 @@ class SlashCommand {
   final String description;
   final String category;
   const SlashCommand(this.text, this.description, this.category);
+
+  bool get isSkill => category == 'Skills';
 }
 
 /// The gateway owns the catalog, including user commands, plugins and skills.
@@ -97,6 +99,33 @@ class SlashCatalog {
         )
         .toList();
   }
+
+  /// Exact skill references at word boundaries; paths and URLs stay literal.
+  Iterable<SlashSkillReference> skillReferences(String text) =>
+      SlashSkillReference.inText(
+        text,
+        commands.where((c) => c.isSkill).map((c) => c.text),
+      );
+}
+
+class SlashSkillReference {
+  const SlashSkillReference(this.text, this.start, this.end);
+  final String text;
+  final int start;
+  final int end;
+
+  static Iterable<SlashSkillReference> inText(
+    String text,
+    Iterable<String> names,
+  ) sync* {
+    final skills = names.toSet();
+    for (final match in RegExp(r'(^|\s)(/[^\s/]+)(?=\s|$)').allMatches(text)) {
+      final token = match[2]!;
+      if (skills.contains(token)) {
+        yield SlashSkillReference(token, match.end - token.length, match.end);
+      }
+    }
+  }
 }
 
 /// One immutable response for the exact query before the Flutter cursor.
@@ -114,12 +143,30 @@ class SlashCompletion {
   final int replaceFrom;
   final String warning;
 
-  static bool isQuery(String query) => query.startsWith('/');
-  static bool usesCatalog(String query) => !query.contains(RegExp(r'\s'));
-  bool get showsNoMatches => items.isEmpty && !query.contains(' ');
+  /// The active inline token, or the leading command and its arguments.
+  static String? queryToken(String prefix) {
+    final inline = RegExp(r'(^|\s)(/[^\s/]*)$').firstMatch(prefix);
+    if (inline != null) return inline[2];
+    if (RegExp(r'^/[^\s/]+(?:\s[\s\S]*)$').hasMatch(prefix)) return prefix;
+    return null;
+  }
 
-  factory SlashCompletion.fromCatalog(String query, SlashCatalog catalog) =>
-      SlashCompletion._(query, catalog.search(query), 0, catalog.warning);
+  static bool isQuery(String query) => queryToken(query) != null;
+  static bool usesCatalog(String query) =>
+      queryToken(query) != query || !query.contains(RegExp(r'\s'));
+  bool get showsNoMatches => items.isEmpty && usesCatalog(query);
+
+  factory SlashCompletion.fromCatalog(String query, SlashCatalog catalog) {
+    final token = queryToken(query);
+    if (token == null) throw const FormatException('No slash query at cursor');
+    final start = query.length - token.length;
+    return SlashCompletion._(
+      query,
+      catalog.search(token).where((item) => start == 0 || item.isSkill),
+      start,
+      catalog.warning,
+    );
+  }
 
   factory SlashCompletion.fromJson(
     String query,
@@ -143,7 +190,11 @@ class SlashCompletion {
         throw const FormatException('Invalid slash completion item');
       }
       items.add(
-        SlashCommand(row['text'] as String, row['meta'] as String? ?? '', ''),
+        SlashCommand(
+          row['text'] as String,
+          row['meta'] as String? ?? '',
+          row['kind'] == 'skill' ? 'Skills' : '',
+        ),
       );
     }
     return SlashCompletion._(

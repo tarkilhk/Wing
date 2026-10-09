@@ -128,7 +128,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     with WidgetsBindingObserver {
   ProfileWorkspaceController get controller => widget.controller;
   (ProfileWorkspaceController, ChatReadingFocus)? _renderedReadingFocus;
-  final _composer = TextEditingController();
+  final _composer = SkillComposerController();
   final _profileNavigation = WorkspaceProfileNavigation();
   final _composerFocus = FocusNode();
   final _chatSearchFocus = FocusNode();
@@ -580,6 +580,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     if (_composerKey != chat?.key ||
         _composer.text != (chat?.composer.observation.displayedText ?? '')) {
       _composerKey = chat?.key;
+      _composer.setScope(chat?.key);
       _composer.value = TextEditingValue(
         text: chat?.composer.observation.displayedText ?? '',
         selection: TextSelection.collapsed(

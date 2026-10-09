@@ -199,6 +199,9 @@ class ProfileBrowserFixture {
     },
     rpc: (method, params) async {
       calls.add((scope.profileName, method, params));
+      if (method == 'commands.catalog') {
+        return {'pairs': <List<String>>[]};
+      }
       if (method == 'session.active_list') {
         return {
           'sessions': liveSessions.values.expand((rows) => rows).toList(),

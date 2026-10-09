@@ -5,10 +5,15 @@ import 'support/composer_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:wing/core/models/slash_command.dart';
+import 'package:wing/core/models/answer_versions.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/side_question_delivery.dart';
@@ -26,6 +31,7 @@ import 'profile_workspace_controller_test.dart' show Host;
 
 class CommandHost extends Host {
   final commandCalls = <(String, Map<String, dynamic>)>[];
+  final extraSkillNames = <String>[];
   Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)? respond;
   String yolo = '0';
   bool reportYolo = true;
@@ -40,6 +46,7 @@ class CommandHost extends Host {
   Map<String, dynamic> catalog(String profile) => {
     'pairs': [
       ['/$profile-skill', 'Profile $profile skill'],
+      for (final name in extraSkillNames) [name, 'Another skill'],
       ['/model', 'Choose model'],
       ['/approvals', 'Manage approval mode'],
       ['/undo', 'Edit last prompt'],
@@ -54,6 +61,7 @@ class CommandHost extends Host {
       },
     ],
     'canon': {'/short': '/$profile-skill'},
+    'skills': {for (final name in extraSkillNames) name: <String, dynamic>{}},
     'commands': {
       '/clear': {'desktop': 'terminal'},
     },
@@ -190,6 +198,22 @@ void main() {
   late AppPreferences appPreferences;
   late ProfileChat chat;
   late _HeldPromptDraftStore draftStore;
+  setUpAll(() async {
+    final fonts = Platform.environment['CAPTURE_SKILL_COMPOSER_FONTS'];
+    if (fonts == null) return;
+    for (final entry in {
+      'Roboto': ['Roboto-Regular.ttf', 'Roboto-Bold.ttf'],
+      'MaterialIcons': ['MaterialIcons-Regular.otf'],
+    }.entries) {
+      final loader = FontLoader(entry.key);
+      for (final font in entry.value) {
+        loader.addFont(
+          File('$fonts/$font').readAsBytes().then((b) => b.buffer.asByteData()),
+        );
+      }
+      await loader.load();
+    }
+  });
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = CommandHost();
@@ -1109,7 +1133,7 @@ void main() {
       addTearDown(tester.view.reset);
       host.warning =
           'Some commands are unavailable while this server is reconnecting. Your draft is kept. You can still send a command by name after checking its availability.';
-      final input = TextEditingController(text: '/a-');
+      final input = SkillComposerController(text: '/a-');
       addTearDown(input.dispose);
       await tester.pumpWidget(
         MaterialApp(
@@ -1147,7 +1171,7 @@ void main() {
   testWidgets(
     'picker searches all skills and inserts selection without sending',
     (tester) async {
-      final input = TextEditingController(text: '/a-');
+      final input = SkillComposerController(text: '/a-');
       addTearDown(input.dispose);
       await tester.pumpWidget(
         MaterialApp(
@@ -1206,6 +1230,282 @@ void main() {
     },
   );
 
+  testWidgets('inline skill picker replaces the token at the cursor', (
+    tester,
+  ) async {
+    final input = SkillComposerController.fromValue(
+      const TextEditingValue(
+        text: 'Please 😀 use /a- for this task',
+        selection: TextSelection.collapsed(offset: 17),
+      ),
+    );
+    addTearDown(input.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SlashCommandSuggestions(
+            loadCompletion: (query) => controller.completeCommand(chat, query),
+            saveDraft: (text) => controller.updateDraft(chat, text),
+            composer: input,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    expect(find.text('/a-skill'), findsOneWidget);
+    expect(find.text('/model'), findsNothing);
+    await tester.tap(find.text('/a-skill'));
+    expect(input.text, 'Please 😀 use /a-skill for this task');
+    expect(input.selection.extentOffset, 22);
+    expect(chat.composer.observation.text, input.text);
+    expect(host.commandCalls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  test(
+    'inline skills expand through stock dispatch and retain the visible message',
+    () async {
+      const original = 'Please use /a-skill for this task';
+      host.respond = (_, params) async => {
+        'type': 'skill',
+        'message': 'Expanded instructions for ${params['arg']}',
+      };
+      chat.composer.editText(original);
+      await controller.send(chat);
+      final dispatch = host.commandCalls
+          .singleWhere((c) => c.$1 == 'command.dispatch')
+          .$2;
+      expect(dispatch['name'], 'a-skill');
+      expect(dispatch['arg'], original);
+      expect(dispatch['session_id'], 'a-runtime');
+      expect(
+        host.commandCalls
+            .singleWhere((c) => c.$1 == 'prompt.submit')
+            .$2['text'],
+        'Expanded instructions for $original',
+      );
+      expect(chat.reading.messages.single['display_content'], original);
+    },
+  );
+
+  test(
+    'an inline skill failure retains queued work without submitting plain text',
+    () async {
+      host.respond = (_, _) async => throw StateError('Skill load failed');
+      const original = 'Please use /a-skill for this task';
+      chat.composer.editText(original);
+      await controller.send(chat);
+      expect(host.commandCalls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
+      expect(chat.composer.observation.queue.single.text, original);
+      expect(chat.runtime.error, contains('Skill load failed'));
+    },
+  );
+
+  test('inline commands and paths stay literal', () async {
+    const original =
+        'Explain /model and /usr/local and https://example.com/a-skill';
+    chat.composer.editText(original);
+    await controller.send(chat);
+    expect(host.commandCalls.where((c) => c.$1 == 'command.dispatch'), isEmpty);
+    expect(
+      host.commandCalls.singleWhere((c) => c.$1 == 'prompt.submit').$2['text'],
+      original,
+    );
+    for (final text in [
+      'hello https://example.com/a-',
+      'hello /usr/local',
+      'hello word/a-',
+      'hello /a- done',
+    ]) {
+      expect(SlashCompletion.isQuery(text), isFalse, reason: text);
+    }
+    expect(SlashCompletion.isQuery('hello\n/a-'), isTrue);
+  });
+
+  for (final original in [
+    'Use /a-skill and /a-other then /a-skill again',
+    '/a-skill use /a-other then /a-skill again',
+  ]) {
+    test('distinct skills load once: $original', () async {
+      host.extraSkillNames.add('/a-other');
+      host.respond = (_, params) async => {
+        'type': 'skill',
+        'message': 'Expanded ${params['name']}',
+      };
+      chat.composer.editText(original);
+      await controller.send(chat);
+      expect(
+        host.commandCalls
+            .where((c) => c.$1 == 'command.dispatch')
+            .map((c) => c.$2['name']),
+        ['a-skill', 'a-other'],
+      );
+      expect(
+        host.commandCalls
+            .singleWhere((c) => c.$1 == 'prompt.submit')
+            .$2['text'],
+        'Expanded a-skill\n\nExpanded a-other',
+      );
+      expect(chat.reading.messages.single['display_content'], original);
+    });
+  }
+
+  test(
+    'saved inline skill messages recover the original multiline instruction',
+    () {
+      const original = 'Please use /a-skill\nfor this task';
+      const expanded =
+          '[IMPORTANT: The user has invoked the "a-skill" skill.\n'
+          'The full skill content is loaded below.]\nPrivate skill body\n'
+          'The user has provided the following instruction alongside the skill invocation: $original\n\n'
+          '[Runtime note: private]';
+      expect(
+        answerMessageDisplayText({'role': 'user', 'content': expanded}),
+        original,
+      );
+    },
+  );
+
+  testWidgets(
+    'skill emphasis preserves plain text, editing and IME decoration',
+    (tester) async {
+      final input = SkillComposerController(
+        text: 'Use /a-skill then /model and /a-skill/path',
+      );
+      addTearDown(input.dispose);
+      input.observeCommands(const [SlashCommand('/a-skill', '', 'Skills')]);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: TextField(controller: input)),
+        ),
+      );
+      final editable = tester.widget<EditableText>(find.byType(EditableText));
+      final context = tester.element(find.byType(EditableText));
+      TextSpan span() => input.buildTextSpan(
+        context: context,
+        style: editable.style,
+        withComposing: true,
+      );
+      expect(span().toPlainText(), input.text);
+      final skill = span().children!.whereType<TextSpan>().singleWhere(
+        (s) => s.text == '/a-skill',
+      );
+      expect(skill.style!.fontWeight, FontWeight.w700);
+      expect(skill.style!.color, Theme.of(context).colorScheme.primary);
+      input.value = input.value.copyWith(
+        composing: const TextRange(start: 6, end: 10),
+      );
+      expect(
+        span().children!
+            .whereType<TextSpan>()
+            .where((s) => s.style?.decoration == TextDecoration.underline)
+            .map((s) => s.text)
+            .join(),
+        '-ski',
+      );
+      input.text = 'Use /a-skil then /model';
+      expect(
+        span().children!.whereType<TextSpan>().where(
+          (s) => s.style?.fontWeight == FontWeight.w700,
+        ),
+        isEmpty,
+      );
+      input.text = 'Use /a-skill';
+      input.setScope('another profile');
+      expect(
+        span().children!.whereType<TextSpan>().where(
+          (s) => s.style?.fontWeight == FontWeight.w700,
+        ),
+        isEmpty,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('mobile inline skill composer ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final captureKey = GlobalKey();
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: captureKey,
+            child: MaterialApp(
+              theme: wingTheme(brightness),
+              debugShowCheckedModeBanner: false,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          ),
+        );
+        final composer = find.byKey(const Key('profile-message-composer'));
+        await tester.enterText(composer, 'Please use /a-');
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pumpAndSettle();
+        expect(find.text('/a-skill'), findsOneWidget);
+        Future<void> capture(String state) async {
+          if (!Platform.environment.containsKey('CAPTURE_SKILL_COMPOSER')) {
+            return;
+          }
+          await tester.runAsync(() async {
+            final render =
+                captureKey.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary;
+            final image = await render.toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final file = File(
+              'build/skill-composer/${brightness.name}-$scale-$state.png',
+            );
+            await file.parent.create(recursive: true);
+            await file.writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+
+        await capture('picker');
+        await tester.tap(find.text('/a-skill'));
+        await tester.pumpAndSettle();
+        final input = tester.widget<TextField>(composer).controller!;
+        expect(input.text, 'Please use /a-skill ');
+        expect(
+          find.byType(SlashCommandSuggestions).hitTestable(),
+          findsNothing,
+        );
+        final editable = tester.widget<EditableText>(
+          find.descendant(of: composer, matching: find.byType(EditableText)),
+        );
+        final span = input.buildTextSpan(
+          context: tester.element(composer),
+          style: editable.style,
+          withComposing: true,
+        );
+        expect(
+          span.children!
+              .whereType<TextSpan>()
+              .singleWhere((s) => s.text == '/a-skill')
+              .style!
+              .fontWeight,
+          FontWeight.w700,
+        );
+        expect(tester.takeException(), isNull);
+        await capture('selected');
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
   test('completion keeps the owning session after a profile switch', () async {
     await controller.switchProfile('b');
     final other = await controller.createChat(canDispatch: () => true);
@@ -1231,7 +1531,7 @@ void main() {
     host.warning =
         'slash command /handoff unavailable — name taken by built-in; use /skill handoff; '
         'slash command /plan unavailable — name taken by built-in; use /skill plan';
-    final input = TextEditingController(text: '/app');
+    final input = SkillComposerController(text: '/app');
     addTearDown(input.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -1271,7 +1571,7 @@ void main() {
         ],
         'replace_from': 7,
       };
-      final input = TextEditingController.fromValue(
+      final input = SkillComposerController.fromValue(
         const TextEditingValue(
           text: '/model pr keep',
           selection: TextSelection.collapsed(offset: 9),
@@ -1327,7 +1627,7 @@ void main() {
   testWidgets('late completion cannot replace a newer search', (tester) async {
     final delayed = Completer<Map<String, dynamic>>();
     host.respond = (_, _) => delayed.future;
-    final input = TextEditingController(text: '/model pr');
+    final input = SkillComposerController(text: '/model pr');
     addTearDown(input.dispose);
     await tester.pumpWidget(
       MaterialApp(

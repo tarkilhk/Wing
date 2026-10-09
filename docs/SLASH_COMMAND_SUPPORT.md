@@ -1,6 +1,10 @@
 # Slash commands
 
-Type `/` in the composer to browse the connected gateway's catalog. Search matches names, aliases and descriptions across commands, plugins and installed skills. Choosing a result inserts it into the draft; Send executes it. Argument completion uses the server's replacement offset. Refresh the workspace after changing skills.
+Type `/` at the start of the composer to browse the connected gateway's commands, plugins and installed skills. Type `/` after a space or on a new line anywhere in a message to browse skills. Search matches names, aliases and descriptions. Choosing a result replaces the slash token at the cursor, retaining surrounding text; selected skills appear in bold with the Studio accent color. Skill text stays editable and copies as ordinary text. URLs and paths stay literal. Argument completion uses the server's replacement offset. Refresh the workspace after changing skills.
+
+Send resolves inline skill references through `command.dispatch` before submitting the expanded instructions. The chat displays the original message. Repeated references to the same skill load it once; multiple distinct inline skills each load through the captured profile and runtime. Failed loading retains the queued message and never silently submits an unexpanded prompt. Built-in commands mentioned in prose remain literal text.
+
+Inspected stock Hermes commit `5f045f842a60184748dda30acb9fecbd961cc18b` on 9 October 2026: `tui_gateway/methods_tools.py` supplies the session-scoped skill catalog and `command.dispatch` skill payload; `tui_gateway/methods_complete.py` supplies argument ranges and skill identity. This is implemented entirely in Wing.
 
 ## Dispatch contract
 

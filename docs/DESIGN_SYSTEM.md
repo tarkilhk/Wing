@@ -351,7 +351,7 @@ commit `603007ead347608c81bf95fd7b40c3fff9e4bed5`, desktop
 `apps/desktop/src/app/chat/composer/status-stack/status-row.tsx`, on 19 September
 2026. The change uses the existing client task states and requires no API changes.
 
-Keep activity status and queued-message controls above the composer. Preserve the two-row composer: draft and dictation first, then attachment/capture controls, context, the compact model controls and Send/Stop. Controls wrap at enlarged text without shrinking touch targets. Preserve existing voice states and attachment options.
+Keep activity status and queued-message controls above the composer. Preserve the two-row composer: draft and dictation first, then attachment/capture controls, context, the compact model controls and Send/Stop. Controls wrap at enlarged text without shrinking touch targets. Preserve existing voice states and attachment options. Inline skill references use bold text and the shared primary accent inside the editable draft, with no separate chip or action. The slash helper remains above the composer and offers only skills for a slash token inside prose; leading commands retain argument completion. Reveal completed results or read recovery within the scrolling composer without moving input focus, including longer drafts with the Android keyboard open. Selection, copy and keyboard composition remain native text behavior.
 
 The activity summary occupies no space while idle, after completion or after
 cancellation. Keep notices for ongoing work, active subagents, input requests,

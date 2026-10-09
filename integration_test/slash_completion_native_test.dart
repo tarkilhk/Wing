@@ -1,6 +1,7 @@
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -17,6 +18,23 @@ import 'package:wing/core/widgets/slash_command_suggestions.dart';
 
 import '../test/slash_commands_test.dart' show CommandHost;
 
+/// Native input/screenshot checkpoints for a host driving the disposable emulator.
+Future<void> _nativeCheckpoint(WidgetTester tester, String name) async {
+  if (!const bool.fromEnvironment('SLASH_NATIVE_INPUT')) return;
+  final directory = Directory.systemTemp.path;
+  final token = '$name-${DateTime.now().microsecondsSinceEpoch}';
+  await File(
+    '$directory/wing-slash-stage.json',
+  ).writeAsString(jsonEncode({'name': name, 'token': token}));
+  final receipt = File('$directory/wing-slash-ack');
+  final deadline = DateTime.now().add(const Duration(seconds: 30));
+  while (DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 100));
+    if (await receipt.exists() && await receipt.readAsString() == token) return;
+  }
+  throw StateError('Native Android driver did not complete $name');
+}
+
 /// Production Android composer with a strict stock completion-contract fixture.
 /// No live server or model requests. Run only on a disposable emulator.
 void main() {
@@ -26,6 +44,7 @@ void main() {
   for (final brightness in [Brightness.dark, Brightness.light]) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('/app selection ${brightness.name} $scale', (tester) async {
+        await _nativeCheckpoint(tester, '${brightness.name}-$scale-configure');
         SharedPreferences.setMockInitialValues({});
         final host = CommandHost()
           ..warning =
@@ -86,7 +105,16 @@ void main() {
             i < 15 && item.hitTestable().evaluate().isEmpty;
             i++
           ) {
-            await tester.drag(list, const Offset(0, -80));
+            final viewport = find
+                .ancestor(
+                  of: list,
+                  matching: find.byType(SingleChildScrollView),
+                )
+                .first;
+            final visible = tester
+                .getRect(list)
+                .intersect(tester.getRect(viewport));
+            await tester.dragFrom(visible.center, const Offset(0, -80));
             await frames();
           }
           expect(item.hitTestable(), findsOneWidget);
@@ -142,6 +170,92 @@ void main() {
         expect(chat.composer.observation.text, '/approvals smart ');
         expect(
           host.commandCalls.where((call) => call.$1 == 'command.dispatch'),
+          isEmpty,
+        );
+
+        // The native driver injects real Android key events into the focused
+        // input connection. Without it, retain an ordinary emulator smoke case.
+        await controller.updateDraft(chat, '');
+        await frames();
+        await Scrollable.ensureVisible(tester.element(composer));
+        await frames();
+        await tester.tap(composer);
+        await frames();
+        final label = '${brightness.name}-$scale';
+        if (const bool.fromEnvironment('SLASH_NATIVE_INPUT')) {
+          await _nativeCheckpoint(tester, '$label-type-inline');
+          await frames();
+          expect(tester.view.viewInsets.bottom, greaterThan(0));
+        } else {
+          await tester.enterText(composer, 'Please use /a-');
+        }
+        await frames();
+        expect(chat.composer.observation.text, 'Please use /a-');
+        final skill = find.descendant(
+          of: find.byType(SlashCommandSuggestions),
+          matching: find.text('/a-skill'),
+        );
+        await reveal(skill);
+        expect(
+          find.descendant(
+            of: find.byType(SlashCommandSuggestions),
+            matching: find.text('/model'),
+          ),
+          findsNothing,
+        );
+        await _nativeCheckpoint(tester, '$label-picker-ready');
+        await tester.tap(skill.hitTestable());
+        await frames();
+        final input = tester.widget<TextField>(composer).controller!;
+        expect(input.text, 'Please use /a-skill ');
+        expect(input.selection.isCollapsed, isTrue);
+        expect(find.text('/a-skill'), findsNothing);
+        final editable = tester.widget<EditableText>(
+          find.descendant(of: composer, matching: find.byType(EditableText)),
+        );
+        final spans = input.buildTextSpan(
+          context: tester.element(composer),
+          style: editable.style,
+          withComposing: true,
+        );
+        expect(spans.toPlainText(), input.text);
+        final emphasized = spans.children!.whereType<TextSpan>().singleWhere(
+          (s) => s.text == '/a-skill',
+        );
+        expect(emphasized.style!.fontWeight, FontWeight.w700);
+        expect(
+          emphasized.style!.color,
+          Theme.of(tester.element(composer)).colorScheme.primary,
+        );
+        await _nativeCheckpoint(tester, '$label-selected');
+        if (const bool.fromEnvironment('SLASH_NATIVE_INPUT')) {
+          await _nativeCheckpoint(tester, '$label-type-suffix');
+        } else {
+          await tester.enterText(composer, '${input.text}for this task');
+        }
+        await frames();
+        expect(
+          chat.composer.observation.text,
+          'Please use /a-skill for this task',
+        );
+        await _nativeCheckpoint(tester, '$label-suffix-ready');
+
+        // Replace a token inside existing text and retain the suffix verbatim.
+        await controller.updateDraft(chat, 'Please use /a- for this task');
+        await frames();
+        input.selection = const TextSelection.collapsed(offset: 14);
+        await reveal(skill);
+        await tester.tap(skill.hitTestable());
+        await frames();
+        expect(input.text, 'Please use /a-skill for this task');
+        expect(input.selection.extentOffset, 19);
+        if (const bool.fromEnvironment('SLASH_NATIVE_INPUT')) {
+          await _nativeCheckpoint(tester, '$label-backspace');
+          await frames();
+          expect(input.text, 'Please use /a-skil for this task');
+        }
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'prompt.submit'),
           isEmpty,
         );
         expect(tester.takeException(), isNull);

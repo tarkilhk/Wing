@@ -5443,7 +5443,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           }
         }
         if (type == 'skill' || type == 'send' || type == 'prefill') {
-          final message = result['message'];
+          var message = result['message'];
           if (message is! String || message.isEmpty) {
             throw const FormatException('Command returned an empty prompt');
           }
@@ -5452,6 +5452,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
             // /undo changes server history. Read through the runtime owner.
             await refreshHistory(chat);
           } else {
+            if (type == 'skill') {
+              final extraSkills = await _expandInlineSkills(
+                chat,
+                original,
+                excluding: {'/$name'},
+              );
+              if (extraSkills != null) message = '$message\n\n$extraSkills';
+            }
             await _sendPrompt(
               chat,
               prompt: message,
@@ -5942,7 +5950,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (chat.runtime.runtimeId != runtime) {
         throw StateError('Chat reconnected while preparing this prompt.');
       }
-      final text = ticket.text.trim();
+      final draftText = ticket.text.trim();
+      final expanded = commandPrompt == null && display == null
+          ? await _expandInlineSkills(chat, draftText, excluding: const {})
+          : null;
+      final text = expanded ?? draftText;
+      final displayText = display ?? (text == draftText ? null : draftText);
       final promptText = [
         refs.join('\n'),
         text,
@@ -5954,13 +5967,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._replaceableUnsubmittedRuntime = false;
       chat.reading.appendPrompt(
         text: text,
-        displayText: display,
+        displayText: displayText,
         attachments: chat.composer.submittedAttachments(ticket),
       );
       chat.reading.updateStreaming('');
       chat._runtime.acceptTurn();
       if (chat._title == 'New chat') {
-        chat._title = display ?? (text.isEmpty ? 'Attachment' : text);
+        chat._title = displayText ?? (text.isEmpty ? 'Attachment' : text);
       }
       _changed();
       _commandOwner(chat);
@@ -6063,6 +6076,49 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<void> queuePrompt(ProfileChat chat, String rawText) =>
       _enqueuePrompt(chat, rawText);
+
+  /// Resolve prose references through stock Hermes; never execute built-ins
+  /// mentioned inside a message. The submission ticket retains the exact draft.
+  Future<String?> _expandInlineSkills(
+    ProfileChat chat,
+    String text, {
+    required Set<String> excluding,
+  }) async {
+    if (!RegExp(r'\s/[^\s/]+(?=\s|$)').hasMatch(text)) return null;
+    final resource = _commandOwner(chat);
+    final runtime = chat.runtime.runtimeId;
+    void requireCaptured() {
+      if (!identical(_commandOwner(chat), resource) ||
+          chat.runtime.runtimeId != runtime) {
+        throw StateError('Chat reconnected while loading skills.');
+      }
+    }
+
+    final catalog = await commandCatalog(chat);
+    requireCaptured();
+    final references = catalog.skillReferences(text).where((r) => r.start > 0);
+    final names = references
+        .map((r) => r.text)
+        .where((name) => !excluding.contains(name))
+        .toSet();
+    if (names.isEmpty) return null;
+    final messages = <String>[];
+    for (final name in names) {
+      final result = await resource.gateway.call('command.dispatch', {
+        'session_id': runtime,
+        'name': name.substring(1),
+        'arg': text,
+      });
+      requireCaptured();
+      final message = result['message'];
+      if (result['type'] != 'skill' || message is! String || message.isEmpty) {
+        throw StateError('Could not load $name. Your message is kept.');
+      }
+      messages.add(message);
+    }
+    return messages.join('\n\n');
+  }
+
   Future<void> _enqueuePrompt(
     ProfileChat chat,
     String rawText, {
