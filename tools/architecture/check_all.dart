@@ -12,6 +12,7 @@ import 'dead_code/retired_declarations.dart' as retired;
 import 'rules/image_codec_confinement.dart' as codec;
 import 'rules/image_codec_provenance.dart' as codec_provenance;
 import 'rules/task_view_protocol.dart' as task_protocol;
+import 'rules/recent_capture_release_safe.dart' as recent_capture;
 
 final allRules = <String, Rule>{
   density.id: density.check,
@@ -26,5 +27,6 @@ final allRules = <String, Rule>{
   codec.id: codec.check,
   codec_provenance.id: codec_provenance.check,
   task_protocol.id: (snapshot) => task_protocol.check(snapshot, snapshot.root),
+  recent_capture.id: recent_capture.checkSnapshot,
 };
 Future<void> main(List<String> args) => run(args, allRules);

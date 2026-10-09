@@ -48,6 +48,8 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   );
   final _liveBoundary = GlobalKey();
   final _captures = <ProfileSessionKey, ui.Image>{};
+  final _previews =
+      <ProfileSessionKey, ({RecentConversationCard card, Widget view})>{};
   int _captureGeneration = 0;
   bool _active = false, _stack = false, _selecting = false;
   bool _preparedFrame = false;
@@ -63,8 +65,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       widget.gesturesEnabled &&
       widget.session.active &&
       widget.session.entries.length > 1 &&
-      !_selecting &&
-      !MediaQuery.accessibleNavigationOf(context);
+      !_selecting;
   int get _focusedIndex => _base - _motion.position.round();
   int _indexOf(ProfileSessionKey key) =>
       widget.session.entries.indexWhere((entry) => entry.key == key);
@@ -165,6 +166,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       for (final key in _captures.keys.toList()) {
         if (!wanted.contains(key)) _captures.remove(key)!.dispose();
       }
+      _previews.removeWhere((key, _) => !wanted.contains(key));
     });
   }
 
@@ -172,12 +174,11 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     final key = widget.chatKey, generation = ++_captureGeneration;
     final boundary = _liveBoundary.currentContext?.findRenderObject();
     if (boundary is! RenderRepaintBoundary) return;
-    if (boundary.debugNeedsPaint) await SchedulerBinding.instance.endOfFrame;
+    await SchedulerBinding.instance.endOfFrame;
     if (!mounted ||
         generation != _captureGeneration ||
         widget.chatKey != key ||
-        !boundary.attached ||
-        boundary.debugNeedsPaint) {
+        !boundary.attached) {
       return;
     }
     ui.Image image;
@@ -203,6 +204,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       image.dispose();
     }
     _captures.clear();
+    _previews.clear();
   }
 
   void _notifyPresentation() {
@@ -534,6 +536,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       children: [
         for (final offset in slots)
           Positioned.fill(
+            key: ValueKey(_base + step + offset),
             child: Transform(
               alignment: Alignment.center,
               transform: _cardTransform(offset + fraction),
@@ -572,9 +575,13 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   Widget _cardContent(int index) {
     final key = widget.session.entryAt(index).key;
     final capture = _captures[key];
-    return capture == null
-        ? widget.previewBuilder(widget.session.cardAt(index))
-        : RawImage(image: capture, fit: BoxFit.fill);
+    if (capture != null) return RawImage(image: capture, fit: BoxFit.fill);
+    final card = widget.session.cardAt(index);
+    final cached = _previews[key];
+    if (cached != null && identical(cached.card, card)) return cached.view;
+    final view = widget.previewBuilder(card);
+    _previews[key] = (card: card, view: view);
+    return view;
   }
 
   Widget _nudge() {

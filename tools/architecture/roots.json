@@ -6154,6 +6154,24 @@
       "purpose": "Independent remembered-entry key ownership prevention and real CLI fixtures",
       "source": "tools/architecture/rules/workspace_entry_key_owner.md",
       "status": "supported"
+    },
+    {
+      "id": "dart-main-test/recent_capture_release_safe_guard_test.dart",
+      "kind": "host-test",
+      "path": "test/recent_capture_release_safe_guard_test.dart",
+      "selector": "main",
+      "purpose": "Reject release-only Recents reads of Flutter debug paint getters",
+      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml",
+      "status": "supported"
+    },
+    {
+      "id": "dart-main-tools/architecture/rules/recent_capture_release_safe.dart",
+      "kind": "guard-cli",
+      "path": "tools/architecture/rules/recent_capture_release_safe.dart",
+      "selector": "main",
+      "purpose": "Reject release-only Recents reads of Flutter debug paint getters",
+      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml",
+      "status": "supported"
     }
   ],
   "files": [
@@ -14636,6 +14654,21 @@
       "path": "website/workspaces.html",
       "area": "website",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/recent_capture_release_safe_guard_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/recent_capture_release_safe.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/recent_capture_release_safe.md",
+      "area": "tools",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

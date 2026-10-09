@@ -396,6 +396,8 @@ business logic has left the view.
 
 `ARCH_TRANSCRIPT_HISTORY_DISPATCH` protects the actual history intent callback: explicit button events remain direct, automatic scroll requests run after the frame. Its [finite syntax scope](rules/transcript_history_dispatch.md) complements the renderer coalescing, disposal and streaming-anchor regressions.
 
+`ARCH_RECENT_CAPTURE_RELEASE_SAFE` resolves the actual Flutter debug paint getter in the canonical Recents capture library and rejects reads outside assertions. Its [scope and release regression](rules/recent_capture_release_safe.md) distinguish SDK identity from same-named getters; captured pixels and signed-release interaction remain behavioral checks.
+
 Retirement manifest schema 2 requires every declaration entry to state `kind: any` (all declarations of that exact symbol) or `kind: field` (only fields). A retained named constructor can share a retired field name. Old schemas and missing kinds fail with input exit 2.
 
 `ARCH_PROFILE_DISCOVERY_WRITER` restricts canonical discovery publication to its private adoption seam. [Its finite scope](rules/profile_discovery_writer.md) complements the behavior checks for unchanged discovery identity, changed immutable membership and token updates without list rebuilds. Fixtures: `dart run tools/architecture/tests/profile_discovery_writer_test.dart`.

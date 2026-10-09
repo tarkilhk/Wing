@@ -86,7 +86,10 @@ policy, bounded physical reads, eviction, cancellation, external selection and
 cue admission/coalescing. `recent_conversation_switcher_test.dart` covers real
 multitouch, pinch persistence, circular laps, browse/commit, interrupted springs,
 pointer-time fling decisions, accessible
-controls, theme paint and the production Recents route with draft/cursor/Back
+controls alongside expert gestures when an accessibility service is enabled,
+retained side-card identity across paint-order changes, unchanged rich-preview
+presentation during motion and completed asynchronous preview publication,
+theme paint and the production Recents route with draft/cursor/Back
 restoration at normal and enlarged text in both themes.
 `chat_notification_coordinator_test.dart` protects fresh journal projections,
 quiet baselines and native-permission independence. Run these plus
@@ -98,6 +101,15 @@ switcher suite with `--dart-define=STUDIO_REVIEW=true`; it uses the Studio font
 assets under ignored `build/` and exports normal/stack captures to
 `build/recents-review/`. Host tests do not certify physical-device gesture feel,
 keyboard transitions or frame pacing; inspect those on Android before release.
+
+Recents raster capture waits for the completed paint frame in every build mode.
+The controlled repaint case queues a chat rebuild before opening the stack and
+checks the captured pixels, so an old frame cannot count as success.
+`recent_capture_release_safe_guard_test.dart` also rejects runtime reads of the
+actual Flutter debug paint getter, which throws when assertions are disabled.
+For a capture change, validate Choose recent conversation and previous/next
+conversation from Chat actions in a signed release; debug emulator results alone
+do not establish release safety.
 
 For native acceptance, run the isolated API 36 emulator driver:
 

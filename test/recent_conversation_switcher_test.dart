@@ -1,4 +1,5 @@
 import 'package:wing/core/models/notification_focus.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -24,6 +25,7 @@ import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:wing/core/widgets/recent_conversations/conversation_card_motion.dart';
 import 'package:wing/core/widgets/recent_conversations/conversation_gestures.dart';
+import 'package:wing/core/widgets/recent_conversations/conversation_preview.dart';
 import 'package:wing/core/widgets/recent_conversations/recent_conversation_switcher.dart';
 
 import 'support/profile_browser_fixture.dart';
@@ -57,11 +59,15 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   @override
   late ProfileSessionKey selected;
   final opens = <ProfileSessionKey>[];
+  final waitingPreviews =
+      <ProfileSessionKey, Completer<RecentConversationPreview>>{};
   bool rejectOpen = false;
   @override
   bool admits(ProfileSessionKey key) => current;
   @override
-  RecentConversationPreview cachedPreview(RecentConversationEntry entry) =>
+  RecentConversationPreview? cachedPreview(RecentConversationEntry entry) =>
+      waitingPreviews.containsKey(entry.key) ? null : _readyPreview(entry);
+  RecentConversationPreview _readyPreview(RecentConversationEntry entry) =>
       RecentConversationPreview(
         entry: entry,
         reading: TranscriptReadingSnapshot(
@@ -74,7 +80,7 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   @override
   Future<RecentConversationPreview> loadPreview(
     RecentConversationEntry entry,
-  ) async => cachedPreview(entry);
+  ) async => waitingPreviews[entry.key]?.future ?? _readyPreview(entry);
   @override
   Future<void> open(ProfileSessionKey key, bool Function() isCurrent) async {
     if (!isCurrent()) return;
@@ -83,6 +89,26 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
     selected = key;
     notifyListeners();
   }
+}
+
+class _MountedCard extends StatefulWidget {
+  const _MountedCard({required this.owner, required this.child});
+  final ProfileSessionKey owner;
+  final Widget child;
+  @override
+  State<_MountedCard> createState() => _MountedCardState();
+}
+
+class _MountedCardState extends State<_MountedCard> {
+  late final ProfileSessionKey initialOwner;
+  @override
+  void initState() {
+    super.initState();
+    initialOwner = widget.owner;
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _ScreenFixture extends ProfileBrowserFixture {
@@ -234,6 +260,48 @@ void main() {
       activity.dispose();
       source.dispose();
     });
+    testWidgets('capture waits for a scheduled chat repaint', (tester) async {
+      final color = ValueNotifier(Colors.red);
+      addTearDown(color.dispose);
+      await session.select(source.selected);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ValueListenableBuilder<Color>(
+            valueListenable: color,
+            builder: (context, value, _) => RecentConversationSwitcher(
+              key: switcher,
+              session: session,
+              chatKey: source.selected,
+              gesturesEnabled: true,
+              nudgesEnabled: true,
+              onPresentationChanged: (_, _) {},
+              previewBuilder: (_) => const SizedBox.expand(),
+              child: SizedBox.expand(child: ColoredBox(color: value)),
+            ),
+          ),
+        ),
+      );
+
+      // The rebuild is queued, but the live boundary is not paint-dirty yet.
+      color.value = Colors.green;
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      final image = tester
+          .widgetList<RawImage>(find.byType(RawImage))
+          .map((widget) => widget.image)
+          .whereType<ui.Image>()
+          .first;
+      final pixels = await tester.runAsync(
+        () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+      );
+      expect(pixels, isNotNull);
+      expect(pixels!.getUint8(0), 76);
+      expect(pixels.getUint8(1), 175);
+      expect(pixels.getUint8(2), 80);
+      expect(pixels.getUint8(3), 255);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
     Future<void> mount(
       WidgetTester tester, {
       Brightness brightness = Brightness.dark,
@@ -298,6 +366,141 @@ void main() {
       );
       await tester.pumpAndSettle();
     }
+
+    testWidgets('accessibility service leaves expert gestures available', (
+      tester,
+    ) async {
+      await mount(tester, accessible: true);
+      await _twoContacts(
+        tester,
+        const Offset(220, 400),
+        const Offset(300, 400),
+        const Offset(50, 400),
+        const Offset(130, 400),
+      );
+      expect(source.opens, [source.entries[1].key]);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      expect(find.byTooltip('Open conversation'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('cached card presentation publishes a completed preview read', (
+      tester,
+    ) async {
+      final entry = source.entries[1];
+      final pending = Completer<RecentConversationPreview>();
+      source.waitingPreviews[entry.key] = pending;
+      await mount(tester);
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      expect(find.text('Preview pending'), findsOneWidget);
+      pending.complete(
+        RecentConversationPreview(
+          entry: entry,
+          reading: TranscriptReadingSnapshot(
+            messages: const [],
+            historySessionId: entry.key.sessionId,
+          ),
+          draft: '',
+          scopeLabel: 'Loaded saved conversation',
+        ),
+      );
+      await _finishFrames(tester);
+      expect(find.text('Loaded saved conversation'), findsOneWidget);
+      expect(find.text('Preview pending'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('browsing preserves side-card identity and rich preview builds', (
+      tester,
+    ) async {
+      await session.select(source.selected);
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      var previewsBuilt = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: RecentConversationSwitcher(
+            key: switcher,
+            session: session,
+            chatKey: source.selected,
+            gesturesEnabled: true,
+            nudgesEnabled: true,
+            onPresentationChanged: (_, _) {},
+            previewBuilder: (card) {
+              previewsBuilt++;
+              final preview = RecentConversationPreview(
+                entry: card.entry,
+                reading: TranscriptReadingSnapshot(
+                  messages: [
+                    for (var row = 0; row < 20; row++)
+                      {
+                        'id': row,
+                        'role': row.isEven ? 'user' : 'assistant',
+                        'content':
+                            '${card.entry.title} message $row\n\n'
+                            '**Saved discussion** with distinct reading state.\n\n'
+                            '- First task\n- Second task',
+                      },
+                  ],
+                  historySessionId: card.entry.key.sessionId,
+                ),
+                draft: '',
+                scopeLabel: 'personal',
+              );
+              return _MountedCard(
+                owner: card.entry.key,
+                child: ConversationPreview(
+                  card: RecentConversationCard(
+                    entry: card.entry,
+                    preview: preview,
+                  ),
+                  connectionLabel: 'Owned fixture',
+                ),
+              );
+            },
+            child: const ColoredBox(
+              color: Colors.teal,
+              child: SizedBox.expand(),
+            ),
+          ),
+        ),
+      );
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      final before = previewsBuilt;
+      final drag = await tester.startGesture(const Offset(180, 400));
+      for (var step = 1; step <= 10; step++) {
+        await drag.moveTo(Offset(180 + step * 8, 400));
+        await tester.pump(const Duration(milliseconds: 16));
+        for (final state in tester.stateList<_MountedCardState>(
+          find.byType(_MountedCard),
+        )) {
+          expect(
+            state.initialOwner,
+            state.widget.owner,
+            reason:
+                'A neighboring card must retain its own transcript state '
+                'when paint order changes.',
+          );
+        }
+      }
+      expect(
+        previewsBuilt,
+        before,
+        reason:
+            'Dragging transforms already loaded rich previews; it must '
+            'not reconstruct their message trees every animation frame.',
+      );
+      await drag.up();
+      await _finishFrames(tester);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
 
     testWidgets('two-finger horizontal movement switches once and wraps', (
       tester,
@@ -494,7 +697,7 @@ void main() {
     });
 
     testWidgets(
-      'messages, OS edge and accessibility do not admit expert gestures',
+      'blocked messages keep their gestures and accessibility exposes navigation',
       (tester) async {
         await mount(tester);
         await _twoContacts(

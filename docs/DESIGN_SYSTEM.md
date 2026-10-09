@@ -135,7 +135,10 @@ No permanent carousel controls or status strip are added.
   focus, including when a menu restores its previous focus target.
 
 Cards use the existing chat capture or passive saved-history renderers. They
-round and gain shadows only during motion; scale is about .86 during a switch
+keep stable per-card widget identity as paint order changes. Unchanged passive
+preview widgets are retained within the same bounded neighborhood, so dragging
+transforms their existing message trees rather than reconstructing them per frame.
+Cards round and gain shadows only during motion; scale is about .86 during a switch
 and .72 in the stack. Independent numerical springs retain current positions and
 velocities when interrupted; reduced motion settles directly. Input uses native
 pointer timestamps for velocity. A new gesture can interrupt a returning card
@@ -145,7 +148,9 @@ blank transcript space. Both exclude Android's 24 dp edge zones. Active text
 selection, code, message actions, Activity controls, pending-input panels, composer,
 voice and queued-prompt editing keep their input. The existing Chat actions menu
 provides Previous / Next / Choose recent conversation; accessible navigation
-uses explicit icon-only stack controls with labels and tooltips. A failed stack
+uses explicit icon-only stack controls with labels and tooltips. An enabled
+accessibility service alone does not disable expert gestures; Android retains
+ownership of any gestures its accessibility service consumes. A failed stack
 selection keeps the committed chat and reports one error beside the stack
 controls, leaving the cards available for retry or Back.
 
