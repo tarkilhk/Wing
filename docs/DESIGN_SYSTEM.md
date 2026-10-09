@@ -197,11 +197,11 @@ pointer timestamps for velocity. A new gesture can interrupt a returning card
 once selection has settled. Two-finger gestures admit unselected transcript prose
 and exclude Android's 24 dp edge zones. Active text
 selection, code, message actions, Activity controls, pending-input panels, composer,
-voice and queued-prompt editing keep their input. The existing Chat actions menu
-provides Previous / Next / Choose recent conversation; accessible navigation
-uses explicit icon-only stack controls with labels and tooltips. An enabled
-accessibility service alone does not disable expert gestures; Android retains
-ownership of any gestures its accessibility service consumes. A failed stack
+voice and queued-prompt editing keep their input. Chat actions omits recent
+conversation navigation; use the two-finger swipe and inward pinch instead.
+Accessible navigation within the stack uses explicit icon-only controls with
+labels and tooltips. An enabled accessibility service alone does not disable expert
+gestures; Android retains ownership of any gestures its accessibility service consumes. A failed stack
 selection without retained reading keeps the committed chat and reports one
 error beside the stack controls, leaving the cards available for retry or Back.
 If refresh fails after retained reading was revealed, keep that conversation

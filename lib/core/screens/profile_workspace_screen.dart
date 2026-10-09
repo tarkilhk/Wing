@@ -971,13 +971,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 tooltip: 'Chat actions',
                 icon: const Icon(Icons.more_vert),
                 onSelected: (action) {
-                  if (action == 'recent-previous') {
-                    unawaited(_recentSwitcher.currentState?.selectAdjacent(-1));
-                  } else if (action == 'recent-next') {
-                    unawaited(_recentSwitcher.currentState?.selectAdjacent(1));
-                  } else if (action == 'recent-stack') {
-                    _recentSwitcher.currentState?.openStack();
-                  } else if (action == 'refresh') {
+                  if (action == 'refresh') {
                     unawaited(_run(controller.refresh));
                   } else if (action == 'find') {
                     unawaited(_openFind(chat));
@@ -1015,22 +1009,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   }
                 },
                 itemBuilder: (_) => [
-                  if (_recentVisit?.active == true &&
-                      _recentVisit!.entries.length > 1) ...[
-                    const PopupMenuItem(
-                      value: 'recent-previous',
-                      child: Text('Previous recent conversation'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'recent-next',
-                      child: Text('Next recent conversation'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'recent-stack',
-                      child: Text('Choose recent conversation'),
-                    ),
-                    const PopupMenuDivider(),
-                  ],
                   if (parentSessionId != null)
                     const PopupMenuItem(
                       value: 'parent',

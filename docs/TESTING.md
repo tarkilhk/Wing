@@ -84,9 +84,10 @@ peek card. The selected normal chat expands, retaining that chat's draft,
 attachments and reading position. Back from the stack returns to the entry chat;
 Back from the normal chat restores the selected Recents filter. Text selection, code,
 Activity controls, pending-input forms, composer and system Back edges must retain
-ordinary gestures. Use Chat actions with accessibility enabled. Verify an
-adjacent fresh reply cue in both themes, confirmed input amber, suppression while
-editing/manipulating and direct settling with reduced motion.
+ordinary gestures. Exercise swipe and pinch with accessibility enabled, then use
+the labelled icon-only stack controls. Verify an adjacent fresh reply cue in both
+themes, confirmed input amber, suppression while editing/manipulating and direct
+settling with reduced motion.
 
 The construction-order regression is a behavioral work budget: the selected
 mounted subtree stays absent during expansion, and reveal follows its initial
@@ -136,7 +137,7 @@ assets under ignored `build/` and exports normal/stack captures to
 keyboard transitions or frame pacing; inspect those on Android before release.
 
 Recents passive page preparation runs after motion settles and waits for completed
-Markdown and paint in every build mode. Genuine capture starts at gesture/menu
+Markdown and paint in every build mode. Genuine capture starts at gesture
 admission from the already-painted chat before it is hidden; it does not prewarm
 on a timer. Physical performance acceptance measures first movement and
 frame pacing for swipe, pinch and card browsing on representative rich history.
@@ -144,8 +145,8 @@ The controlled repaint case completes a queued chat repaint before opening the
 stack and checks its captured pixels, so an older paint cannot count as success.
 `recent_capture_release_safe_guard_test.dart` also rejects runtime reads of the
 actual Flutter debug paint getter, which throws when assertions are disabled.
-For a capture change, validate Choose recent conversation and previous/next
-conversation from Chat actions in a signed release; debug emulator results alone
+For a capture change, validate inward pinch and two-finger previous/next
+conversation swipes in a signed release; debug emulator results alone
 do not establish release safety.
 
 For native acceptance, run the isolated API 36 emulator driver:
