@@ -534,6 +534,79 @@ void main() {
       );
     }
   }
+  for (final theme in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'plugin instructions omit envelope and YAML in the reader ${theme.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          const banner =
+              "[Bundle context: This skill is part of the 'mattpocock-skills' plugin.\nSibling skills: code-review, diagnosing-bugs.\nUse qualified form to invoke siblings (e.g. mattpocock-skills:code-review).]\n\n";
+          final received =
+              '$banner---\nname: writing-for-agents\ndescription: Writing documents for agents. Use when creating or editing skills, or modifying AGENTS.md or CLAUDE.md.\n---\n# Writing for agents\n\n## Purpose\n${List.filled(20, 'Read the project instructions carefully.\n\n').join()}## Workflow\nPreserve the source.';
+          final boundary = GlobalKey();
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: boundary,
+              child: MaterialApp(
+                theme: wingTheme(theme),
+                debugShowCheckedModeBanner: false,
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: SkillDocumentViewer(
+                  document: SkillDocument.fromReceived(
+                    name: 'mattpocock-skills:writing-for-agents',
+                    content: received,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.textContaining('Bundle context:'), findsNothing);
+          expect(find.textContaining('name: writing-for-agents'), findsNothing);
+          expect(find.text('1 / 2'), findsOneWidget);
+          await capture(
+            tester,
+            boundary,
+            'plugin-${theme.name}-${scale.toInt()}',
+          );
+          await tester.tap(find.text('Purpose').last);
+          await tester.pumpAndSettle();
+          final contents = find.byType(BottomSheet);
+          expect(
+            find.descendant(of: contents, matching: find.text('Purpose')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: contents, matching: find.text('Workflow')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(
+              of: contents,
+              matching: find.textContaining('name:'),
+            ),
+            findsNothing,
+          );
+          await tester.tap(find.text('Contents'));
+          await tester.pumpAndSettle();
+          final raw = find.byTooltip('Show raw content');
+          await tester.ensureVisible(raw);
+          await tester.tap(raw);
+          await tester.pumpAndSettle();
+          expect(find.text(received), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
   testWidgets(
     'grip is dedicated, tolerates drift, tracks continuously and cancels',
     (tester) async {

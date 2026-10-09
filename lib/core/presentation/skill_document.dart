@@ -37,10 +37,11 @@ final class SkillDocument {
     String? category,
   }) {
     Map declaration = const {};
+    final documentContent = _withoutPluginEnvelope(name, content);
     final frontMatter = RegExp(
       r'^---\r?\n(.*?)\r?\n---(?:\r?\n|$)',
       dotAll: true,
-    ).firstMatch(content);
+    ).firstMatch(documentContent);
     if (frontMatter != null) {
       try {
         final parsed = loadYaml(frontMatter.group(1)!);
@@ -65,8 +66,8 @@ final class SkillDocument {
       name: name,
       rawContent: content,
       formattedContent: frontMatter == null
-          ? content
-          : content.substring(frontMatter.end),
+          ? documentContent
+          : documentContent.substring(frontMatter.end),
       sourcePath: sourcePath,
       description:
           _nonempty(description) ?? _nonempty(declaration['description']),
@@ -83,6 +84,20 @@ final class SkillDocument {
       ],
     );
   }
+}
+
+/// Stock skill_view prepends this envelope to namespaced plugin instructions.
+/// Recognize the producer's structure and namespace; rawContent stays exact.
+String _withoutPluginEnvelope(String name, String content) {
+  final separator = name.indexOf(':');
+  if (separator <= 0) return content;
+  final header =
+      "[Bundle context: This skill is part of the '${name.substring(0, separator)}' plugin.";
+  final envelope = RegExp(
+    '^${RegExp.escape(header)}'
+    r'(?:\r?\nSibling skills: [^\r\n]+\.\r?\nUse qualified form to invoke siblings \(e\.g\. [^\r\n]+\)\.)?\]\r?\n\r?\n',
+  ).firstMatch(content);
+  return envelope == null ? content : content.substring(envelope.end);
 }
 
 String _readableText(String source) {

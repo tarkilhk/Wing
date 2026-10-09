@@ -187,6 +187,46 @@ void main() {
       expect(content.content, '# Notes');
     },
   );
+  test('stock plugin envelope is metadata, not rendered prose or a heading', () {
+    const name = 'mattpocock-skills:writing-for-agents';
+    const body = '# Writing for agents\n\n## Purpose\nRead **carefully**.\n';
+    const declaration =
+        '---\nname: writing-for-agents\ndescription: Writing documents for agents.\nversion: 1.0\nauthor: A\nmetadata:\n  hermes:\n    tags: [writing, agents]\n---\n';
+    for (final banner in [
+      "[Bundle context: This skill is part of the 'mattpocock-skills' plugin.]\n\n",
+      "[Bundle context: This skill is part of the 'mattpocock-skills' plugin.\nSibling skills: code-review, diagnosing-bugs.\nUse qualified form to invoke siblings (e.g. mattpocock-skills:code-review).]\n\n",
+    ]) {
+      final received = '$banner$declaration$body';
+      final skill = SkillDocument.fromReceived(name: name, content: received);
+      expect(skill.formattedContent, body);
+      expect(
+        skill.formattedText,
+        'Writing for agents\n\nPurpose\n\nRead carefully.',
+      );
+      expect(skill.description, 'Writing documents for agents.');
+      expect(skill.tags, ['writing', 'agents']);
+      expect(skill.metadata, [
+        (label: 'Version', value: '1.0'),
+        (label: 'Author', value: 'A'),
+      ]);
+      expect(skill.name, name);
+      expect(skill.rawContent, received);
+    }
+  });
+  test('ordinary introductions and mismatched plugin banners remain exact', () {
+    for (final content in [
+      '[Bundle context: explain this phrase to the reader.]\n\n# Instructions',
+      "[Bundle context: This skill is part of the 'another-plugin' plugin.]\n\n# Instructions",
+      'Introduction.\n\nA real heading\n---\n\nKeep it.',
+    ]) {
+      final skill = SkillDocument.fromReceived(
+        name: 'mattpocock-skills:writing-for-agents',
+        content: content,
+      );
+      expect(skill.formattedContent, content);
+      expect(skill.rawContent, content);
+    }
+  });
   test('formatted copy contains document text, raw copy retains declaration', () {
     final skill = SkillDocument.fromReceived(
       name: 'review',
