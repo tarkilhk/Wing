@@ -303,6 +303,7 @@ summary:active { color: var(--teal); }
 .feature-story { display: flex; flex-direction: column; align-items: start; gap: 1.5rem; }
 /* Shared rows align paired screenshots without fixed text heights. */
 .feature-stories > .feature-story { display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 1.5rem; }
+.feature-pair > .feature-story { grid-row: span 2; }
 .feature-copy { display: grid; gap: 1.5rem; }
 .control-features > article { grid-row: span 3; grid-template-rows: subgrid; align-items: start; }
 .feature-story h3 { font-size: 1.5rem; }
