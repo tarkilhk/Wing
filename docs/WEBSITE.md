@@ -55,7 +55,9 @@ The Latin font subsets and their OFL notices are checked in.
 
 The opening pairs a conversation with the expanded tool details behind it.
 Profiles, projects and Recents lead the feature story immediately afterward,
-with a Chats capture below its explanation and a Recents capture below its own.
+with the open cross-profile Project selector below the switching explanation and
+a Recents capture below its own. The profiles guide demonstrates the profile
+switcher, project choices, view controls and screen navigator in their own sections.
 Result handling shows formatting, code controls, message actions and file actions
 with the corresponding production widgets. Health and Administration each have
 their own visible screen and reader-facing guide. Analytics has its own homepage
@@ -96,7 +98,7 @@ do not repeat it merely to illustrate another sentence.
 | Page | Reader question and outcome | Wing detail to demonstrate | Further reading |
 | --- | --- | --- | --- |
 | Home | Can Wing help me run several pieces of work from my phone? | Cross-profile/project navigation, Recents, inspectable activity, reusable results, settings and analytics | Focused guides and download |
-| Profiles and projects | How do I find and organize conversations for different agents and projects? | Combined profile filters, project grouping, pins and retained drafts | Recents; profile settings |
+| Profiles and projects | How do I switch agents and projects, move between screens, and keep the chat view I prefer? | One-tap profile choices, combined profile/project filters, remembered Group by/Sort by/Show details, screen navigator and retained drafts | Recents; profile settings |
 | Recents | Which chats are running or waiting for me, and how do I return to them? | Running/Needs input filters; opening a chat selects its profile; back returns to Recents | Live controls; Chats organization |
 | Live work | What is the agent doing, and how can I respond or change direction? | Timeline/Tasks/Agents tabs; requests and results; steering/queueing; editable input | Recents; using results |
 | Results | How do I read, reuse or export what the agent produced? | Markdown layout; separate code and message actions; file previews and Android sharing | Tool details; sending attachments |
@@ -109,7 +111,7 @@ do not repeat it merely to illustrate another sentence.
 | Homepage section | One message | Demonstration |
 | --- | --- | --- |
 | Opening | Wing is the Android client for your Hermes setup | Actual conversation and expanded tool output |
-| Profiles/projects and Recents | Manage several conversations without losing drafts or the selected profile | Text followed by Chats; Recents text followed by Recents |
+| Profiles/projects and Recents | Switch profiles and projects, keep the preferred view and return to work without losing drafts | Switching text followed by the cross-profile Project selector; Recents text followed by Recents |
 | Follow and steer | Inspect work before deciding whether to correct, queue or stop it | Activity with all three tabs on Timeline; held composer controls |
 | Markdown/code/files | Read and reuse the exact part of an answer you need | Formatted reply; code controls; message actions; file actions, each after its own text |
 | Health and settings | Inspect a problem and change the correct profile's setup from the phone | Health and Administration after their respective explanations |
@@ -141,6 +143,8 @@ copy explains capabilities rather than capture tooling or fixtures.
 | `code-{dark,light}.png`, `message-actions-{dark,light}.png`, `files-{dark,light}.png` | Focused production `ProfileMessage` captures of a code block, reply actions and output file actions, respectively |
 | `steer-{dark,light}.png` | Same screen with a live message-start fixture, a drafted instruction and the actual held composer overlay |
 | `chats-{dark,light}.png` | Production chat browser with demo conversations grouped into Launch and Research projects across two profiles |
+| `profiles-{dark,light}.png`, `projects-{dark,light}.png`, `workspace-view-{dark,light}.png` | Production `ProfileWorkspaceScreen` with a focused public-safe project fixture; actual one-tap profile selection, Profile/Project anchored menus and Chat list options |
+| `navigator-{dark,light}.png` | Production `AppDrawer` in a minimal Scaffold host; actual destination controls and connection identity, with a no-I/O versions controller showing unavailable version |
 | `recents-{dark,light}.png` | Production `ProfileWorkspaceScreen` Recents destination, with recent messages, one running chat and one needing input across two profiles |
 | `results-{dark,light}.png` | Production `ProfileMessage` with Markdown heading, table, quote, code and an explicit report link; demo callbacks make its supported actions visible without performing I/O |
 | `administration-{dark,light}.png` | Production `HermesAdministrationContent`, using the existing administration-design fixture with authored website observations |

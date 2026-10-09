@@ -20,6 +20,7 @@ import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/versions_controller.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/composer_action_button.dart';
@@ -157,6 +158,17 @@ class _WebsiteFixture extends ProfileBrowserFixture {
       },
     );
   }
+}
+
+class _SwitchingFixture extends _WebsiteFixture {
+  @override
+  List<Map<String, dynamic>> projects(String profile) => [
+    for (final project in super.projects(profile))
+      if (project['isNoProject'] == true ||
+          project['id'] == 'p2' ||
+          project['id'] == 'work-project')
+        project,
+  ];
 }
 
 class _ActivityFixture extends _WebsiteFixture {
@@ -379,6 +391,80 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 250));
       await capture(tester, 'chats-${brightness.name}');
+
+      final switchingController = ProfileWorkspaceController(
+        access: controller.access,
+        connectionIdentity: 'website-switching',
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: _SwitchingFixture().gateway,
+      );
+      addTearDown(switchingController.dispose);
+      await switchingController.initialize();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: frame,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: wingTheme(brightness),
+            home: ProfileWorkspaceScreen(
+              key: const ValueKey('switching-capture'),
+              controller: switchingController,
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.tap(find.byKey(const ValueKey('chat-profile-personal')));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('Profile 1'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('chat-filter-profile')));
+      await tester.pump(const Duration(milliseconds: 250));
+      await capture(tester, 'profiles-${brightness.name}');
+      await tester.tapAt(const Offset(380, 800));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.tap(find.byKey(const ValueKey('chat-profile-personal')));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.tap(find.byKey(const ValueKey('chat-filter-project')));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('Launch'), findsWidgets);
+      expect(find.text('Research'), findsWidgets);
+      await capture(tester, 'projects-${brightness.name}');
+      await tester.tapAt(const Offset(380, 800));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.tap(find.byTooltip('Chat list options'));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('Group by…'), findsOneWidget);
+      expect(find.text('Sort by…'), findsOneWidget);
+      expect(find.text('Show details…'), findsOneWidget);
+      await capture(tester, 'workspace-view-${brightness.name}');
+      await tester.tapAt(const Offset(380, 800));
+      await tester.pump(const Duration(milliseconds: 250));
+
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: frame,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: wingTheme(brightness),
+            home: Scaffold(
+              appBar: AppBar(title: const Text('Chats')),
+              drawer: AppDrawer(
+                selected: AppDestination.chats,
+                access: controller.access,
+                connectionStatus: controller.connectionStatus,
+                versionsControllerFactory: (_) => VersionsController(),
+                onSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('nav-chats')), findsOneWidget);
+      expect(find.byKey(const ValueKey('nav-activity')), findsOneWidget);
+      await capture(tester, 'navigator-${brightness.name}');
       fixture.liveSessions['personal'] = [
         {
           'id': 'research-runtime',
