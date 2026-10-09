@@ -32,12 +32,9 @@ help. Keep server/proxy instructions, contributor information and complete
 policies in the repository. Do not duplicate the website's full guides in the
 README.
 
-The README's public website links target `https://tarkilhk.github.io/Wing/`.
-This is the planned GitHub Pages address, not evidence of an existing deployment.
-Before publishing the revised README, publish the reviewed website and verify
-those links, or replace the base address with the selected public domain. Local
-README previews map that base address to the website's LAN preview. They do not
-change the committed link destinations or publish either artifact.
+The published website is at `https://tarkilhk.github.io/Wing/`. README website
+links use that address. Local README previews map it to the website's LAN preview;
+the README draft remains separate from website deployment.
 
 ## Local preview
 
@@ -51,11 +48,31 @@ Open `http://127.0.0.1:8785/` on the same machine. For a phone on a trusted LAN,
 bind to `0.0.0.0` and use that machine's reachable address. Starting this preview
 does not publish the website or change GitHub Pages settings.
 
-The initial design is isolated on `design/wing-landing-page`. Publication is
-pending owner review. No deployment workflow or automatic publishing trigger
-is included. After approval, configure GitHub Pages to publish exactly the
-`website/` directory through a dedicated Pages artifact. Keep capture tools and
-private review output outside the published directory. See
+## Publishing
+
+GitHub Pages publishes the root of the repository's `gh-pages` branch with HTTPS
+enforced. That branch is an export of the reviewed `website/` directory, including
+`.nojekyll`. GitHub runs its managed Pages build and deployment when that branch
+changes. No custom workflow or app build is required.
+
+The reviewed source lives in `website/` on `design/wing-landing-page`. To publish
+an update from a checkout with the reviewed website changes committed:
+
+```sh
+wing_pages_commit=$(git subtree split --prefix=website --quiet)
+git push origin "$wing_pages_commit:refs/heads/gh-pages"
+```
+
+The export keeps the website's history and copies only website files into the
+publishing branch. Keep capture tools, private review output and the README out
+of that branch. Do not force-push over a divergent publishing branch; inspect
+its changes first.
+
+After publishing, confirm the managed Pages deployment succeeded and that the
+public homepage, guides and assets match the reviewed source. Check navigation
+and screenshot viewing at the `/Wing/` project path. The first deployed source
+was `0cd9d4f`; its website export was `2928a765`. Deployment receipts and browser
+captures live under ignored `build/` directories. See
 [GitHub's publishing instructions](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
 
 ## Design and copy
