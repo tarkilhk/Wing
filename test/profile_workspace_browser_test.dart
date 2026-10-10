@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -12,6 +14,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/widgets/context_ring.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -36,7 +40,7 @@ void main() {
           .load();
     }
   });
-  late ProfileBrowserFixture fixture;
+  late _ProjectFilterFixture fixture;
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
   setUp(() async {
@@ -74,6 +78,115 @@ void main() {
         theme: wingTheme(Brightness.light),
         home: ProfileWorkspaceScreen(controller: controller),
       ),
+    );
+  }
+
+  for (final leaveChat in [false, true]) {
+    testWidgets(
+      leaveChat
+          ? 'Back cancels recovery after the chat browser is replaced'
+          : 'saved chat recovery survives replacing the chat browser',
+      (tester) async {
+        fixture.recoveryHistory = [
+          {'id': 1, 'role': 'assistant', 'content': 'Saved recovery answer'},
+        ];
+        await show(tester);
+        await tester.pumpAndSettle();
+        fixture.connectUnavailable = true;
+        await controller.reconnect(controller.current!.scope);
+        fixture.connectUnavailable = false;
+        fixture.connectDelay = Completer<void>();
+        expect(controller.recovering, isTrue);
+
+        final row = find.byKey(const ValueKey('chat-personal-newest'));
+        await tester.ensureVisible(row);
+        await tester.tap(row);
+        await tester.pump();
+        await tester.pump();
+        expect(controller.notificationChat, isNotNull);
+        await controller.updateDraft(
+          controller.notificationChat!,
+          'Keep this unsent draft',
+        );
+        expect(find.byKey(const ValueKey('chat-filter-profile')), findsNothing);
+        expect(find.text('Reconnecting to Prestige'), findsOneWidget);
+
+        if (leaveChat) {
+          await tester.binding.handlePopRoute();
+          await tester.pump();
+          expect(controller.notificationChat, isNull);
+        }
+        fixture.connectDelay!.complete();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        // Recovery is driven by screen entry and the owner's scheduled retries.
+        // Snapshot encoding can finish on a real isolate while bounded pumps
+        // advance the mounted conversation's fake clock.
+        for (
+          var attempt = 0;
+          attempt < 100 &&
+              (controller.notificationChat != null ||
+                  controller.connectionStatus.phase ==
+                      ServerConnectionPhase.reconnecting);
+          attempt++
+        ) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        expect(controller.notificationChat, isNull);
+        expect(
+          controller.connectionStatus.phase,
+          isNot(ServerConnectionPhase.reconnecting),
+        );
+        if (leaveChat) {
+          expect(controller.current!.chat, isNull);
+          expect(
+            find.byKey(const ValueKey('chat-filter-profile')),
+            findsOneWidget,
+          );
+          expect(
+            fixture.calls.where((call) => call.$2 == 'session.resume'),
+            isEmpty,
+          );
+        } else {
+          final chat = controller.current!.chat!;
+          expect(chat.key.sessionId, 'newest');
+          expect(chat.runtime.opening, isFalse);
+          expect(chat.runtime.openingError, isNull);
+          expect(chat.composer.observation.text, 'Keep this unsent draft');
+          expect(
+            chat.reading.messages.single['content'],
+            'Saved recovery answer',
+          );
+          final answer = find.textContaining(
+            'Saved recovery answer',
+            findRichText: true,
+          );
+          for (
+            var attempt = 0;
+            attempt < 100 && answer.evaluate().isEmpty;
+            attempt++
+          ) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+            await tester.pump(const Duration(milliseconds: 20));
+          }
+          expect(answer, findsOneWidget);
+          expect(find.text('Reconnecting to Prestige'), findsNothing);
+          expect(
+            fixture.calls.where((call) => call.$2 == 'session.resume'),
+            isNotEmpty,
+          );
+        }
+        expect(
+          fixture.calls.where((call) => call.$2 == 'prompt.submit'),
+          isEmpty,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
     );
   }
 
@@ -286,6 +399,31 @@ class _ProjectFilterFixture extends ProfileBrowserFixture {
         if (project['id'] == 'p2') ...{'icon': 'rocket', 'color': '#22c55e'},
       },
   ];
+
+  bool connectUnavailable = false;
+  Completer<void>? connectDelay;
+  List<Map<String, dynamic>> recoveryHistory = [];
+
+  @override
+  List<Map<String, dynamic>> historyRows(String profile, String id) =>
+      recoveryHistory;
+
+  @override
+  ProfileGateway gateway(WorkspaceScope scope) {
+    final base = super.gateway(scope);
+    return ProfileGateway(
+      scope: scope,
+      discover: base.discover,
+      get: base.read,
+      rpc: base.call,
+      connect: () async {
+        if (connectUnavailable) {
+          throw const SocketException('Temporary connection failure');
+        }
+        await connectDelay?.future;
+      },
+    );
+  }
 
   @override
   List<Map<String, dynamic>> projectSessions(String profile, String id) {

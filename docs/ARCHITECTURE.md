@@ -74,6 +74,17 @@ retain their trust/install context without inventing local activity. See
 
 ## Interface and direction contracts
 
+Saved-chat recovery transfers from the browser to `ProfileWorkspaceController`
+when the destination is published. The browser's request predicate admits that
+handoff; disposing the replaced browser cannot revoke the visible conversation.
+The controller's opening generation owns subsequent retries, and Back or a newer
+recovery destination cancels the old attempt. Native notification entry retains
+its application-owned request predicate. `profile_workspace_browser_test.dart`
+exercises real browser replacement, held connection setup and Back cancellation;
+these lifetime and ordering properties require behavioral checks, not a source
+linter. The unchanged stock resume contract was inspected at upstream main
+`dce1e9b37581dd62e480a9064dc04a709c2940d3` on 10 October 2026.
+
 Recents live ownership, notification ownership and recovered titles use
 `ProfileGateway.sessionMetadata` for exact, profile-scoped session-detail reads.
 Search is discovery: Hermes can return a compression successor instead of the

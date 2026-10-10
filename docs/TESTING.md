@@ -131,6 +131,13 @@ on 10 October 2026 in `hermes_cli/projects_db.py` and
 
 ## Recents conversation switching
 
+`profile_workspace_browser_test.dart` covers opening a saved chat during recovery:
+replacing the chat list must not cancel the visible destination's connection
+setup, and Back must cancel a held opening without resuming or submitting a
+prompt. Pair it with `profile_notification_recovery_test.dart`,
+`profile_resume_freshness_test.dart` and `recent_conversation_session_test.dart`
+when changing recovery admission.
+
 Prerequisite: at least two chats in the selected Recents filter. Open one from
 Recents. Exercise the two-finger horizontal swipe and
 inward pinch on blank transcript space. Include uneven swipes whose finger

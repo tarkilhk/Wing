@@ -3230,7 +3230,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (_closed || !isCurrentRequest()) return;
     if (!owns(key)) throw ArgumentError('Wrong connection settings or host');
     if (_resources[key.workspace]?.offlineSnapshot == true || recovering) {
-      await openNotification(key, isCurrent: isCurrentRequest);
+      // Publishing the destination replaces and disposes the browser. Its
+      // request authority admits this handoff; the controller's generation
+      // owns recovery until Back or a newer destination cancels it.
+      await openNotification(key);
     } else {
       await openSession(key, isCurrentRequest: isCurrentRequest);
     }
