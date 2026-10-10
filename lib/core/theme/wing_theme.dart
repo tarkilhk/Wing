@@ -2,7 +2,7 @@
 ///
 /// One typed token layer that every screen consumes, so spacing, radius,
 /// motion, semantic status colors, and the typography ramp are decided once
-/// instead of per screen. See `docs/DESIGN_SYSTEM.md` for the Studio charter.
+/// instead of per screen. See `internal/docs/DESIGN_SYSTEM.md` for the Studio charter.
 library;
 
 import 'package:flutter/material.dart';

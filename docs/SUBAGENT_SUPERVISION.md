@@ -1,48 +1,35 @@
 # Subagent supervision
 
-Open a chat's three-dot menu and choose **Subagents** to refresh its active children. Received subagent events also show a compact expandable roster in the transcript. Chats without known subagents gain no extra transcript row.
+Open a chat's three-dot menu and choose **Subagents**, or open Activity's
+**Agents** tab, to inspect its children. Received activity also shows a compact
+expandable roster in the conversation. Saved delegation results show received
+tasks, status, and output; they do not offer controls for past work.
 
-The same live roster appears in Activity's **Agents** tab. Its rows share the
-existing supervisor and captured parent runtime; opening either surface does
-not create a second roster owner. Saved delegation receipts remain passive
-agent activity, with supplied goals, one lifecycle status and exact received
-output. They do not gain live controls or fabricated elapsed timers. Live
-children show their first goal as a compact title and retain further goal text
-in details; long output uses the shared bounded reader.
+Open a live child's details to read its goal, status, available activity, and
+selectable output. Output refreshes every two seconds while the sheet is open
+and Wing is active. After three consecutive failures, automatic refresh stops;
+use Retry. Closing the sheet stops refreshing. Refresh the roster manually when
+needed; received live events update known progress.
 
-The detail sheet displays the child goal, status and available activity information, plus selectable live output. It refreshes the tail every two seconds while open and the app is active. After three consecutive failures, automatic refresh stops and Retry remains available. Closing the sheet stops its timer. Roster refresh is manual after the initial read; live events update known progress.
-
-Steer appears when the backend says the child accepts guidance. Accepted steering is queued; the backend can still report missed delivery if the child finishes first. Rejected or failed steering retains the typed text. Interrupt reports an acknowledged request and waits for the backend to publish terminal state.
-
-Every read and control uses the originating profile gateway, parent runtime and
-exact child ID. A later profile selection cannot redirect it. Only the latest
-roster refresh may publish its snapshot or read error. An older response cannot
-discard a newer refresh, and live events received during a read retain their
-newer progress. List replies cannot revive terminal rows. Controls require
-matching acknowledgement IDs; replaced runtimes invalidate pending results.
-
-## Server limits
-
-The installed backend lists active children only and exposes up to the final 16 KiB of live output. Finished children disappear from that list and their tails may be unavailable. Completion events received by the open client retain a summary in that chat for the current runtime. There is no local subagent history, new execution engine or cross-session agent tree.
-
-The view uses the backend's existing `subagent.list`, `subagent.tail`, `subagent.steer` and `subagent.interrupt` methods. See [Testing](TESTING.md) for live versus fixture acceptance.
+**Steer** appears when the child accepts guidance. Accepted guidance is queued,
+so delivery can still be missed if the child finishes first. Failed or rejected
+steering keeps your text. **Interrupt** confirms the interruption request, then
+waits for the child to report its final state.
 
 ## Refresh and unavailable output
 
-A roster response can omit children that live events previously reported.
-Refresh now retains those entries with an unconfirmed status and their last
-known activity. It does not treat absence as completion. A subsequent event or
-snapshot for the same child confirms its state again. Controls are disabled
-while its status is unconfirmed. Runtime replacement clears that uncertainty
-with the old roster.
+If a known child disappears from a refresh without a confirmed final state,
+Wing marks it unconfirmed and disables controls. Later activity or another
+refresh can confirm it again. Absence does not mean completion.
 
-The detail sheet keeps the latest received transcript when a subsequent read
-fails or returns unavailable. It also displays up to 40 recent tool/progress
-entries, including tool previews and event output tails, following Desktop's
-activity stream. Snapshot refreshes do not overwrite that event trail with a
-single tool name. Repeated adjacent entries are collapsed.
+The detail sheet retains the last received transcript when a later read fails
+or becomes unavailable. Recent tool and progress entries remain inspectable.
+When no transcript is available, Wing says so and shows the activity it received.
 
-When Hermes returns no live transcript, Android says so and shows the received
-activity instead. This does not create transcript content that the server has
-not exposed. Terminal summaries and known children remain bound to the original
-chat and profile.
+Hermes' live list contains active children only, and live output is limited to
+its final 16 KiB. Finished children can disappear and their output may no longer
+be available. Received completion summaries remain with the current chat; saved
+results depend on what Hermes recorded. Wing does not provide a complete
+cross-session agent tree or archive of live child transcripts.
+
+See [Tool activity](TOOL_ACTIVITY.md) for saved and live activity views.

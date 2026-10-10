@@ -10,10 +10,10 @@ Vendored diagram assets retain [Mermaid's license](android/app/src/main/assets/d
 
 The development-only renderer harness uses [Playwright Core](https://github.com/microsoft/playwright/blob/v1.58.2/LICENSE) under Apache-2.0. It and its test browser are not bundled in the Android app.
 
-The vendored Flutter setup action retains [its MIT license](.github/actions/setup-flutter/LICENSE) and upstream copyright notice. Its source revision and local changes are recorded in [the action README](.github/actions/setup-flutter/README.md).
+The vendored Flutter setup action retains [its MIT license](.github/actions/setup-flutter/LICENSE) and upstream copyright notice.
 
 The New chat and Fork icons use Lucide's `square-pen` and `git-fork` from `lucide-static` 0.468.0, under the [ISC license](assets/fonts/LUCIDE-LICENSE). The app includes a two-glyph font subset and the matching New chat Android shortcut vector; see [icon provenance](assets/fonts/README.md).
 
-The website self-hosts Latin subsets of Manrope and Source Sans 3, distributed under the SIL Open Font License 1.1. Their copyright and license notices are retained in [Manrope's OFL notice](website/assets/fonts/MANROPE-OFL.txt) and [Source Sans 3's OFL notice](website/assets/fonts/SOURCE-SANS-3-OFL.txt). These web fonts are not bundled in the Android app. See [website maintenance](docs/WEBSITE.md) for design and asset provenance.
+The website self-hosts Latin subsets of Manrope and Source Sans 3, distributed under the SIL Open Font License 1.1. Their copyright and license notices are retained in [Manrope's OFL notice](website/assets/fonts/MANROPE-OFL.txt) and [Source Sans 3's OFL notice](website/assets/fonts/SOURCE-SANS-3-OFL.txt). These web fonts are not bundled in the Android app.
 
 Syntax highlighting uses [re_highlight](https://pub.dev/packages/re_highlight) 0.0.3, and the read-only source viewport uses [re_editor](https://pub.dev/packages/re_editor) 0.10.0. Both are by Reqable and distributed under the MIT license. Their dependency licenses are retained in Flutter's bundled notices.

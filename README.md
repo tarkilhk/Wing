@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/">
-    <img src="docs/design/images/wing-readme-hero-tagline.png" alt="Wing: Your agent, with you. Visit the Wing website." width="1000">
+    <img src="docs/images/wing-readme-hero-tagline.png" alt="Wing: Your agent, with you. Visit the Wing website." width="1000">
   </a>
 </p>
 
@@ -117,7 +117,7 @@ For server and proxy configuration, see [self-hosting](docs/SELF_HOSTING.md). Yo
 
 ## Help and contribute
 
-[Report an issue](https://github.com/tarkilhk/Wing/issues) · [Contributing](CONTRIBUTING.md) · [Technical documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Privacy](PRIVACY.md)
+[Report an issue](https://github.com/tarkilhk/Wing/issues) · [Contributing](CONTRIBUTING.md) · [User guides](docs/README.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Privacy](PRIVACY.md)
 
 ## Support Wing
 

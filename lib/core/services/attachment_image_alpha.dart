@@ -1,5 +1,6 @@
 // Adapted from image 4.10.1 lib/src/formats/webp/webp_alpha.dart.
-// Locked source SHA-256 and allocation inventory: attachment_image_codec_audit.md.
+// Locked source SHA-256 and allocation inventory:
+// internal/lib/core/services/attachment_image_codec_audit.md.
 // Allocation charges precede each input-driven allocation, including extensions.
 // MIT copyright (c) 2013-2022 Brendan Duncan; full license in image_codec.LICENSE.
 // ignore_for_file: invalid_use_of_internal_member

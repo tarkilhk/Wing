@@ -1,73 +1,19 @@
 # Drafts and outgoing messages
 
-Each conversation has one editable draft and an ordered outbox. These contain
-unsent work, not copies of the conversation history.
+Each conversation has one editable draft and an ordered outbox of unsent messages.
 
-- Editing an empty composer creates a draft. Clearing its text and attachments
-  removes the draft portion of the saved record.
-- Send saves the current text and attachments into the outbox before contacting
-  Hermes, then clears the composer. The user can immediately start another draft.
-- Offline Send keeps the message locally. After reconnecting and checking that
-  conversation's state and history, known-waiting messages are sent in order,
-  when the conversation is idle.
-- A successful submission acknowledgement removes only that outbox item. New
-  composer text and other outgoing messages remain. When no work remains, the
-  conversation's saved record is removed.
-- Before submission, the outgoing item is saved as uncertain. If acknowledgement
-  is lost or the app exits during submission, it stays paused for review. Wing
-  never automatically retries it. A deleted server conversation also keeps its
-  unsent messages paused, without blocking other conversations.
-- Send waits for an attachment being prepared. A failed initial save preserves
-  the editable work and prevents network submission.
+Typing or adding attachments creates a draft. Clearing both removes it. Send saves the current text and attachments into the outbox before contacting Hermes, then clears the composer so you can start another draft. Sending waits for an attachment still being prepared; a failed initial save keeps the editable work and prevents submission.
 
-Saved-message Edit, Restore checkpoint, Regenerate and Branch use their own
-verified history boundaries and preserve the separate current draft. Edit and
-Restore pause outgoing follow-ups for review. The composer has no Fork action.
-See [Conversation actions](CONVERSATION_ACTIONS_AND_READING.md).
+Offline Send keeps the message on this device. After reconnecting and checking the conversation, messages known to be waiting are sent in order when the chat is idle. Acknowledgement removes only the accepted item; it does not clear newer composer text or other outgoing messages. Acceptance means Hermes received the request, rather than that its answer is finished.
 
-## Storage and performance
+## Uncertain delivery
 
-The `composer_work_v2` format uses one preferences entry per verified connection,
-profile and conversation, with independently encoded identity components. Edits
-serialize only that conversation. Writes to the same record are ordered across
-stores sharing the preferences instance; unrelated records can progress
-independently. Identical saves are skipped. The saved-draft browser uses a change
-revision rather than comparing an aggregate JSON document on each notification.
+If acknowledgement is lost or Wing closes during submission, the item stays paused for review. Wing never automatically resends it. Check the server conversation, then edit or remove the uncertain item before continuing. Matching text in history, or its absence, cannot conclusively establish whether Hermes accepted a lost-response send.
 
-This is a clean format change: old aggregate drafts and old string-only queue
-entries are not read or converted. Existing old entries are not automatically
-deleted. The user chose to clear old drafts before this change.
+A deleted server conversation keeps its unsent work paused without blocking other conversations. Recovering a draft to another conversation may leave two recoverable copies if interrupted; review them before sending.
 
-Preferences cannot atomically move two keys. A runtime replacement saves the
-destination before removing the source; an interrupted transfer can leave two
-recoverable copies. Platform write failures attempt to restore the previous
-record. No storage implementation can promise durability after a failed write.
+## Saved-message actions
 
-Per-conversation encoding reduces Dart-side serialization work. It does not
-establish a frame-time or battery improvement, and Android preferences may still
-rewrite their underlying file. Keep measured results in the private archive
-described in [Performance investigation](PERFORMANCE.md).
+Edit and Restore preserve your separate draft and pause outgoing follow-ups for review. Regenerate and Branch use the chosen saved answer. See [Conversation actions](CONVERSATION_ACTIONS_AND_READING.md) and [Queues and pending input](SUPERVISION_AND_QUEUES.md).
 
-## Stock Hermes contract
-
-Inspected upstream commit: `44a1ce9724502b9c692faaef00af3054bf11f1a6`.
-The client uses stock `prompt.submit` with `session_id`, `text` and `queued: true`;
-the flag prevents a busy-session race from steering an existing answer.
-Acceptance is distinct from answer completion. The stock API provides no client
-idempotency key, so neither matching history text nor a missing history row can
-prove whether a lost-acknowledgement submission was accepted. Queued server
-acceptance does not guarantee durability across a server crash.
-
-References: [prompt contract](https://github.com/NousResearch/hermes-agent/blob/44a1ce9724502b9c692faaef00af3054bf11f1a6/tui_gateway/contracts/prompt_voice.py),
-[submission implementation](https://github.com/NousResearch/hermes-agent/blob/44a1ce9724502b9c692faaef00af3054bf11f1a6/tui_gateway/methods_prompt.py).
-
-## Verification
-
-The focused tests are `composer_draft_record_work_test.dart`,
-`conversation_outbox_lifecycle_test.dart` and
-`conversation_outbox_screen_test.dart`, alongside the existing queue, attachment,
-notification and recovery tests. They cover storage failures, overlapping saves,
-offline/restart recovery, multiple submissions, lost acknowledgements, missing
-conversations, attachment preparation and preservation of a fresh composer.
-Rendered screens are checked at normal and 200% text sizes in both themes.
-These host tests do not replace live Hermes and physical-device acceptance.
+Drafts and the outbox are device-local and are not included in configuration backups. A failed device-storage write cannot guarantee that the latest edit was saved.

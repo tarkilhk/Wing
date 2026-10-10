@@ -1,132 +1,35 @@
 # Background notifications
 
-Wing keeps its authenticated Hermes event connections running in an Android foreground service while at least one chat is working. The ongoing notification shows a live summary such as **Watching 3 chats · 2 working · 1 needs approval**. Firebase and server push registration are not required.
+Wing can keep watching connected work while you use other apps. Its ongoing Android notification shows a summary such as **Watching 3 chats · 2 working · 1 needs approval**. Replies and requests for input appear as separate chat alerts.
 
-The monitoring indicator uses the **wing with circular arrows**; replies use
-the plain wing, and input/stopped alerts add small type cues. Monitoring posts one
-foreground-service notification, without a duplicate app-owned group summary.
-It reopens Wing without selecting a chat. Expand a chat notification group and tap the individual alert
-to open its original chat. Android controls grouping and available status-bar
-space; see [Android notification groups](https://developer.android.com/develop/ui/views/notifications/group).
+## Enable monitoring
 
-The service retains the same Flutter engine and workspace controllers when the activity is backgrounded or destroyed. Reopening Wing attaches to that engine, preserving event subscriptions and notification tap routing while work continues. When no activity is attached and the last working chat ends, the engine can be released after its final notification is posted. It monitors connections opened in this app; it does not subscribe to every saved server or fix missing server events.
+1. Connect Hermes and allow Android notifications in **App settings → Notifications**.
+2. Enable the reply or attention alerts you want. Monitoring starts automatically when a chat begins work while Wing is visible.
+3. If Wing reports battery restrictions, choose **Allow background activity** and approve Android's exemption prompt.
 
-## Enabling monitoring
+There is no separate monitoring switch. Idle chats do not start monitoring. Monitoring uses additional battery and stops when the watched work finishes, after posting final alerts. Another working chat or live child task can keep it active. Disabling both alert categories or revoking notification permission stops it.
 
-1. Connect to Hermes and enable Android notifications using **Enable notifications** (or **Test notification**) in app settings.
-2. Monitoring starts automatically when a chat begins work while Wing is visible and at least one alert category is enabled. Idle chats do not start the service. There is no separate monitoring toggle; app settings show an action only when notification delivery needs attention.
-3. If settings report battery restrictions, choose **Allow background activity** and approve Android's exemption prompt. This allows the authenticated connection and partial wake lock to operate during Doze. A foreground service alone does not exempt networking from Doze.
+Android force-stop, process termination, reboot, connectivity loss and manufacturer restrictions can interrupt delivery. Reopen Wing after restarting your phone or terminating its process. Work started elsewhere cannot wake a stopped Wing app. Accepted Hermes work continues on the server.
 
-Monitoring uses additional battery. Its partial wake lock is held only while the service runs and is released when it stops. When no chats are working, the service stops after posting any final reply or question notification. Those chat notifications remain visible. Opening a question and answering it starts monitoring again when work resumes. Another working chat, queued submission or live child task keeps the service running; a temporary disconnect does not count as completion. Disabling both alert categories or revoking notification permission (reconciled on app resume) also stops the service.
+## Choose alert content
 
-Android force-stop, process termination, a reboot, lost connectivity and manufacturer restrictions can still interrupt delivery. Reopen Wing after the process is terminated. Work started from another client cannot wake a stopped Wing process; reopening Wing reconnects it. While Wing remains connected, global status reconciliation provides the unopened-chat coverage described below. The service deliberately does not restart without its live clients or display a monitoring notification for an empty process. Accepted Hermes work continues on the server.
+Notification settings has independent reply and attention switches, **Show message previews**, and a permission/test action. **Test notification** checks Android posting, rather than delivery of real server events.
 
-Temporary network loss while the process survives triggers automatic retry and verification when Android reports network return, while retaining the conversation, draft and partial reply. Notification destinations survive failed opening attempts, with recent cached reading available after restart. This improves reconnection and reading; it does not add a server push sender or guarantee replay of missed completion events.
+Alerts show their chat and connection/profile. Reply previews omit reasoning, code blocks, tool output and URLs. Turning previews off keeps the chat name and short status. Secure-input alerts use fixed text. Lock-screen visibility also depends on Android settings.
 
-## Android implementation
+Unanswered requests take priority over unread results. When several requests are pending, they are shown in order. Dismissing a notification does not answer or deny the request.
 
-`BackgroundMonitoringService` uses the `specialUse` foreground-service type with a manifest description of continuous self-hosted chat monitoring. `MonitoringRuntime` retains the app engine across activity lifetimes and serializes native start/stop acknowledgements. No second isolate or duplicate session client is created. Any Play distribution must describe this foreground-service use case in its declaration.
+## Answer approvals and open chats
 
-## Settings and text
+Approval actions require unlocking the phone. Depending on the request, an alert offers Once, Session, Always or Deny. Session applies to matching commands for that session. Permanent approval opens a confirmation in Wing. Long or incomplete commands, or hidden previews, require review in the app.
 
-On first launch, after the first screen appears, Wing requests Android notification permission through the native dialog if notifications are not already enabled. Acceptance or denial is remembered on this device, so subsequent launches do not ask again. A failed platform request can be retried on the next launch. No test alert is posted during startup.
+The alert stays visible while an answer is being sent. A failure keeps the request available; changed or expired requests require reopening the chat for review.
 
-App settings has independent completion/attention switches, **Show message previews** (on by default), and a permission/test action. Each alert shows the chat name and connection/profile. Replies and stopped work use expandable text. Approvals use a decorated native layout with every backend-supported choice: Once, Session, Always…, and Deny. At large text sizes the choices use two rows. Side and background answers use their own reply text. Status-only transitions say Chat updated without claiming a successful result. Turning previews off leaves the chat name and short status. Tapping opens the owning chat. The built-in test proves OS posting, not coverage of actual server work.
+Tap an individual alert to open its original chat. The ongoing monitoring notification opens Wing without selecting a chat; an Android group header is not an individual chat destination. Reading the latest answer in Wing clears that result's alert. Opening older history does not. If newer history has arrived, an older alert may open the latest available answer.
 
-Reply previews omit reasoning, code blocks, tool output and URLs. Approval previews show the command being authorized. Secure-input requests and failures use fixed text. Alerts use private lock-screen visibility; Android settings control exposure or generic system text. See [Privacy](../PRIVACY.md). Each scoped chat has one notification slot. Unresolved input takes priority over the latest unread result. Mixed input requests preserve first-seen FIFO order and show counts; accepted or remotely resolved requests advance to the next request. The same dismissed state stays dismissed across refreshes and restarts.
+## Delivery limits
 
-All approval actions require unlocking. Sending keeps the alert visible with disabled choices until Hermes confirms acceptance; failure retains the request. Permanent approval opens a matching-pattern confirmation for the owning request in Wing. Commands that fit offer direct Once and Session; Session explains that it covers matching commands for the session. Truncated or empty commands offer Review… and direct Deny instead of allow buttons. Hidden previews provide Review only. Deny never requires another confirmation.
+Wing monitors connected work and reconciles reported changes while it remains connected. It does not subscribe to every historical chat. Very short work in unopened chats, missing server events and child-only activity can leave alert gaps. Temporary disconnections retain drafts and recent reading, but do not guarantee replay of every missed outcome.
 
-Notification actions enter through an unexported activity. Immutable intents carry opaque handles whose private records bind the chat, request, revision, displayed command, choice and rendering-derived review policy. Each handle is consumed once; replacement revokes earlier notification actions, and cancellation revokes all related handles. A private main-activity review handoff waiting for unlock survives a rerender only when its exact target and revision are unchanged. The exported main activity accepts only a separate five-minute handoff created by that private activity, and preserves the chosen review policy. Loading a chat after process restart does not itself require confirmation. A cold direct action returns to the previous screen after handling; Android may briefly display Wing while starting its engine. It ignores raw interaction JSON and malformed or forged handles. Notification handles survive process restart for up to seven days; expired actions require reopening Wing. Stored inputs are bounded and schema checked. Current preview settings and the live command are checked again before allowing, so disabling previews after posting or changing the command requires review. A command that changes during reconnect is never automatically granted. Denial stays request-correlated and direct.
-
-Approval actions were verified against upstream main commit `bd0affe5e5f723579df8902852f5d0c47795f355` on 3 October 2026: stock [`approval.pending`, `approval.respond`, and `request.answer`](https://github.com/NousResearch/hermes-agent/blob/bd0affe5e5f723579df8902852f5d0c47795f355/tui_gateway/methods_prompt.py) supply current requests and acknowledge their exact responses. The stock [approval callback](https://github.com/NousResearch/hermes-agent/blob/bd0affe5e5f723579df8902852f5d0c47795f355/tui_gateway/server.py) defines the permitted choices and correlates each result to its request. No server changes are required.
-
-While the existing watcher runs, a single 30-second timer reconciles pending notices against corroborated runtime/open-request snapshots and the approval queue. Resume also reconciles once. Pending requests never extend the watcher's lifetime. Stock desktop read watermarks do not prove the latest answer was visible, so desktop opening does not clear result notifications; completed desktop decisions can clear pending-input notices.
-
-Result delivery has three acknowledgements in `ChatNotificationCoordinator`:
-observing an outcome, successfully rendering or intentionally suppressing it,
-and saving the notification journal. Observing a fresh outcome can emit its
-in-app activity cue once without proving native delivery. A failed first post
-remains eligible for replay; replay retries delivery without repeating that cue.
-If posting succeeds but the journal write fails, replay confirms the journal
-without posting again. An unrelated chat's write cannot acknowledge an
-unrendered result.
-
-Silent preference refreshes can reconcile an existing notification slot. When
-there is no slot, a silent refresh does not confirm an earlier failed fresh post;
-replay retains that outcome's original alert admission. An intentional initial
-baseline, disabled category or permission, and an explicitly dismissed revision
-remain quiet. These retry rules add no polling timer and do not recover server
-outcomes Wing never received.
-
-## Event coverage
-
-Loaded chats receive session events through their attached transport. The server's global `sessions.changed` broadcast is an empty, coalesced invalidation. Android uses it to reconcile status snapshots for connected targets; it does not treat it as a completion payload or attach every historical chat.
-
-After an idle connection reconnects from the chat list, a previously loaded chat
-may no longer have a session event subscription. If the global snapshot reports
-that chat working or starting while Wing considers it nonbusy, Wing reattaches
-that chat with stock `session.resume` and `omit_messages=true`. This restores the
-watcher and subsequent answer events without reopening its transcript, fetching
-history, resuming every idle chat, or adding background polling. A live event that
-overtakes the reattach response takes precedence over that older response.
-
-Establish a silent initial baseline, retain verified profile ownership and reconcile meaningful running/waiting/completed transitions. Previously verified unfinished work survives connection loss and failed reads, with a reconnecting summary while uncertain. A confirmed idle result is fetched from official history and posted before monitoring is released. Missing/unknown runtimes or conflicting ownership do not establish completion; a failed history read retains the pending result for the next existing reconciliation. Unknown, disconnected or failed reads must not become completion alerts. Rapid turns can occur between snapshots, an idle transition can be missing, and a failed read can leave a gap. See [issue #9](https://github.com/tarkilhk/Wing/issues/9).
-
-Unopened child-only work also depends on the global backend contract described in [HUP-003](UPSTREAM_HERMES_BUGS.md#hup-003-global-activity-omits-child-only-work). Adding switches or passing a test notification does not close that gap.
-
-## Tap routing
-
-Each notification retains connection/profile/durable-chat identity and request/task or result revision. Stable IDs avoid unrelated replacement, startup navigation retries when initialization is incomplete, and stale connection credentials invalidate obsolete targets. A tap for the same open chat reuses its view; when several requests race, the newest tap wins.
-
-Routing checks include two different chats in the same profile and tapping an
-older alert after a newer alert has been posted. A system-generated group header
-is not an individual chat target.
-
-Reading the latest answer in Wing clears that result's notification. Opening older history or reaching only newer tool activity does not. For main answers without a stable Hermes message ID, tapping deliberately opens the latest available assistant reply (the user-approved option 2); history may have advanced since posting. No copied answer or prose matching is used.
-
-Refresh server state when opening the chat. Notifications supplement that state and are not the durable record of a result or pending request. The unsent queue still needs a running, connected client to drain.
-
-## Verification
-
-Production-controller live-event tests, native permission/posting/tap tests and fixture reconciliation tests cover different boundaries. The emulator lifecycle fixture checks posting after Home, activity destruction/recreation, and forced Doze with the battery exemption, plus idle startup, multiple simultaneous chats, notification retention after the last chat asks for input, reply/resume, and wake-lock release when work ends. These checks do not guarantee every manufacturer policy or every server event. Use the relevant drivers listed in [Testing](TESTING.md) when notification behavior changes.
-
-### Native lifecycle regression
-
-Native boundary unit tests exercise malformed JSON, wrong types, exact target/choice binding, purpose separation, restart, replay, expiry, revocation, storage failure and external share URI policy. Run these sequentially with Flutter checks from the documented toolchain:
-
-```sh
-cd android
-./gradlew :app:testDebugUnitTest
-```
-
-These JVM tests do not exercise Android's actual lock screen, URI grants or provider lookup. Disposable-emulator acceptance must also cover locked/unlocked actions, a process restart, hidden previews, expired server requests, and a second app sending valid granted content, revoked grants, private file URIs and Wing-owned provider URIs. Internal camera capture must continue to recover through its saved descriptor.
-
-Build and install the isolated fixture (never over a production app):
-
-```sh
-flutter build apk --debug --target-platform android-x64 -t integration_test/background_monitoring_device.dart
-adb -s emulator-5554 install -r build/app/outputs/flutter-apk/app-debug.apk
-python3 tools/qa/check_background_monitoring.py --serial emulator-5554
-```
-
-The driver rejects physical devices and restores its power-test settings. It uses production controllers and Android posting with deterministic gateway fixtures, without model calls. Host tests cover registration-free startup, permission/category changes, battery status, start/stop races and event deduplication.
-
-### Revamp verification
-
-`integration_test/notification_revamp_device.dart` exercises production WingApp,
-controllers, native rendering, approval routing, and visibility handling against
-a fake Hermes transport. Build with `ORG_GRADLE_PROJECT_notificationQa=true`
-and `-t integration_test/notification_revamp_device.dart`; this uses the isolated
-`com.tarkilhk.wing.notificationqa` package. Its loopback control endpoint is port
-18766. Never use this test entry point for a distributed build.
-
-The coordinator, answer-visibility, approval-queue, startup-permission and
-monitoring tests cover replacement, FIFO, restart/dismissal, accepted responses,
-stale targets, preview privacy, and failure retention.
-[Coordinator regressions](../test/chat_notification_coordinator_test.dart) hold
-failed delivery, queued replay and journal writes, then verify eventual delivery,
-one activity cue, durable confirmation, suppression and silent-refresh behavior.
-[Preference race regressions](../test/chat_notification_preference_refresh_race_test.dart)
-cover changes during permission checks/delivery and failed journal confirmation.
-These are controlled host checks; native lifecycle acceptance remains separate.
+Opening a chat refreshes its server state. Notifications help you return to work; the conversation on Hermes remains the record to check. Unsent follow-ups still need a running, connected Wing client. See [Queues and pending input](SUPERVISION_AND_QUEUES.md).

@@ -2,116 +2,34 @@
 
 ## Drafts and sending
 
-Draft text and staged files persist per connection identity, canonical profile
-and durable chat. Navigation and restart preserve unsent work. Missing local
-files must not erase the text. Send affects only its submitted snapshot; newer
-typing and attachments stay in the composer.
+Draft text and attachments belong to their original connection, profile and chat. Navigation and restarting Wing preserve unsent work. Send moves the submitted message into the outbox before contacting Hermes, leaving the composer available for another draft.
 
-Send durably moves its submitted snapshot into the outbox before contacting
-Hermes, leaving room for a new draft. Before network submission, the outbox item
-is saved as uncertain. Restore server history and status before continuing work;
-a lost acknowledgement or process exit leaves that item paused for review,
-without automatic resend. See [Drafts and outgoing messages](DRAFTS_OUTBOX.md).
+If acknowledgement is lost, that outgoing message pauses for review and is not automatically resent. A missing chat can retain its saved draft; recovering it into a new chat requires a confirmed missing conversation and an explicit Send. See [Drafts and outgoing messages](DRAFTS_OUTBOX.md).
 
-Saved drafts remain discoverable when their chat is absent from a loaded server
-page. Recover to a new chat only after a confirmed missing-session result, not
-an ambiguous request failure. The draft store orders both records, saves the
-destination before removing the source, resets old upload receipts, pauses
-queues and requires explicit Send. Preferences cannot atomically move two keys;
-an interrupted transfer can leave two recoverable copies.
+Busy-chat choices are explained in [Composer actions](COMPOSER_ACTION_GESTURE.md). Queued follow-ups stay separate from the current draft.
 
-The idle action is Send. Busy actions and accessible alternatives follow [Composer actions](COMPOSER_ACTION_GESTURE.md). [Queues](SUPERVISION_AND_QUEUES.md) remain separate from the current draft.
+## Edit, restore, regenerate and branch
 
-## Edit, restore, regenerate and fork
+Use the pencil in a sent user message's footer to edit it. Editing needs a connected, idle chat. **Replace and resend** confirms replacing that turn and later history; unchanged or empty text cannot be resubmitted. A rejected correction remains available to review or retry. Unrelated composer work is preserved and queued follow-ups pause for review.
 
-Edit targets a saved user row by durable identity, verifies fresh history and confirms replacing that turn and later history. It preserves unrelated composer work and pauses queued follow-ups. Internal deliveries must not become editable human prompts.
+**Restore checkpoint** confirms rerunning the selected saved prompt and replacing that turn and later history. It can interrupt an active turn. A refusal preserves the prior conversation; an uncertain outcome requires checking history before trying again.
 
-Use the pencil in a sent user message's compact footer. The local date is on
-the left; icon-only Edit and Restore actions sit on the right. Copy remains
-outside the bubble at its upper-right corner. Fork and Regenerate remain
-answer actions; the composer has no Fork control. Find's separate history view
-stays read-only. The compact Studio editor has a close control, a scrollable
-message and history-replacement warning, and a fixed resend footer above the
-keyboard. It starts with the displayed prompt and enables
-Replace and resend only for a nonempty correction. Unchanged text does not
-submit or pause the queue. Editing requires a connected, idle chat; the workspace
-controller owns that admission for both the button and the command. The phone
-keeps its explicit history-replacement confirmation and retains a rejected
-correction for retry.
+**Regenerate** replaces the answer in the same chat. **Branch/Fork** creates a separate conversation through the selected saved answer, preserving the original. These are saved-answer actions, rather than composer controls. If a created branch cannot be fully verified, Wing keeps it reachable and explains the incomplete result. See [Server chat relationships](SERVER_CHAT_RELATIONSHIPS.md).
 
-Verified against upstream main `aa74e184ea779994af642ab4f888e10a95415d90`
-on 9 October 2026: desktop `user-message.tsx`, `user-edit-composer.tsx`,
-`use-prompt-actions/index.ts` and `rewind.ts`, plus stock
-`tui_gateway/methods_prompt.py`. Desktop opens an inline editor from the user
-bubble and can interrupt an active turn before resubmission. Wing uses its
-confirmation editor in an idle chat. Both address the saved row through
-`prompt.submit` with `truncate_before_row_id`, `confirm_truncate` and explicit
-empty-history confirmation. Wing never guesses a truncation ordinal or falls
-back to an ordinary send when the saved row cannot be verified.
+Find's historical context view is read-only. Edit and Restore apply to saved human prompts, not internal notices.
 
-`test/saved_message_actions_test.dart` guards sent-message-only entry points,
-keyboard-safe editing in both themes at 320 dp/200% text, unchanged submissions,
-queue preservation, history replacement, refusal and uncertain
-acknowledgements. Static layout checks cannot establish captured-row admission
-or asynchronous ordering. `test/message_timestamp_test.dart` checks the
-48 × 32 dp Edit/Restore footer targets and 44 × 48 dp Copy target in both themes
-at normal and enlarged text, including disabled Edit, nonoverlapping dates and
-corner taps on Copy in short messages. The saved-edit suite checks Copy's outer
-corner in the real workspace transcript before opening Edit. Rendered text
-size, geometry and keyboard insets
-require behavioral checks; a source linter cannot establish their reachability.
+## Attachments
 
-Restore checkpoint confirms rerunning the selected saved human prompt and
-replacing that turn and later history. It uses the same verified saved-row
-boundary as Edit, preserves unrelated drafts and attachments, and pauses queues.
-It can interrupt an active turn and retry a busy refusal with the same captured
-boundary. A refusal restores the prior local presentation; an uncertain result
-requires history readback and never automatically repeats the prompt. Injected
-deliveries and Find's historical context do not expose this action. The
-[conversation design contract](DESIGN_SYSTEM.md#conversation-preservation) records
-its presentation and supported admission.
+Saved messages show their user-facing attachment references without repeating expanded file context. Uploading establishes that a file was staged, not that the model read it. Hermes can reject a file reference outside the conversation's working folder. See [Files](FILES.md) for limits and result actions.
 
-Regenerate replaces the answer in the same chat. Branch/Fork creates a separate chat with an explicit boundary. Ordinary regenerated replacement and fork reopen work through existing APIs; synchronized older alternatives require a server relationship/persistence contract. Do not call invented answer-version methods or recreate a phone-only version database. See [Server chat relationships](SERVER_CHAT_RELATIONSHIPS.md).
+## Models, context and reading
 
-Register a server-created child in the canonical chat resource before hydrating it. Hydration observes model controls through that owner; an unregistered child must never be passed to an owner-checked observer. The durable child stays reachable even when copy validation fails. `test/answer_versions_test.dart` and `test/saved_message_actions_test.dart` exercise the real fork, saved-boundary validation and continuation paths; static layout checks cannot establish this ordering.
+The model selector offers the connected server's models and supported reasoning options. Session controls apply to the current chat; model defaults in Administration apply to new chats.
 
-After compaction, branch validation compares source and child saved REST history using `include_compacted=true`, raw roles/text and expected row counts. The shorter RPC display history is not an adequate copy boundary. If copied history is missing, changed or extra, retain the created child and report the failed validation explicitly rather than hiding the partial outcome.
+The context ring uses reported server usage or a labelled estimate. Unknown usage is not shown as zero. Its warning thresholds are 65% and 85%.
 
-## Attachments in history
+Messages show a local date/time in the footer when available. Long-press it for the full value. Copy at the upper right copies only the message. Newly sent messages may use their local submission time until saved history arrives.
 
-Images use `image.attach_bytes` with filename, base64 content and session receipt. Generic files use `file.attach`; its returned `ref_text` precedes the visible question in the normal prompt. Reuse this contract for queue submission.
+A saved reply can show an approximate time beside **Used N tools**, measured from your saved sent message to the final saved reply. It includes thinking and tool work; missing timestamps leave it unavailable. See [Tool activity](TOOL_ACTIVITY.md#approximate-reply-time).
 
-Saved user display removes generated expanded attachment context while preserving raw history and row identities. Restore missing references once, without expanding them again; assistant content is not subject to user-context stripping. An upload receipt proves staging, not that a model read the file. Automatic `@file` expansion can reject a staged path outside the workspace, matching the observed Desktop contract. Do not paste file bytes or rewrite the reference to conceal that backend boundary.
-
-## Model, context and reading
-
-Beside “Used N tools”, `1m 24s` shows the approximate interval from your saved
-sent message to the final saved reply, using both Hermes timestamps. It includes
-thinking and tool work and remains available after reopening Wing. Its tooltip
-explains the calculation. Missing timestamps omit the time; it appears for a new
-reply when saved history arrives. See [reply timing](TOOL_ACTIVITY.md#approximate-reply-time).
-
-Messages show a discreet local `dd Mmm, HH:mm` date in their footer. User
-messages use a right-aligned bubble; assistant prose has no avatar or author
-header. Copy sits at the upper right of either message, alongside the Activity
-header when present. Long-press the date for its full local value; screen readers
-announce it. The compact user footer's 48 × 32 dp Edit/Restore targets and
-44 × 48 dp Copy target are explicit exceptions in the shared design contract.
-At enlarged text, the footer grows and separates its date and controls when
-needed. Copy still copies only the message.
-Saved history uses the server timestamp. Newly submitted prompts and completed
-reply segments use their local submission/receipt time until history refreshes.
-Messages without a timestamp leave it blank; streaming replies gain their time
-when the segment completes.
-
-Choose models by the server's technical provider route and supported reasoning options. `/yolo` uses the current session's configuration and displays its returned state; it must not change global defaults.
-
-The thin context ring beside the model selector uses server usage or a labelled estimate. Unknown is not zero. Warning thresholds are 65% and 85%. After cold resume, the lazy agent's ready event triggers a guarded `session.info`/breakdown refresh, without submitting a prompt or polling indefinitely.
-
-Markdown, code and tables retain copying and horizontal overflow where
-appropriate. Source coloring renders visible lines without a document-size
-cutoff; literal source and output offer a wrap toggle. Long content supports
-bounded reading and return to latest. Find and tool progress are covered in
-[Execution and search](EXECUTION_FIND_AND_OUTPUTS.md); [output viewers](OPENING_OUTPUT_FILES.md)
-handle files. [Transcript projection](TRANSCRIPT_DISPLAY_TYPES.md) defines compact
-internal notices while preserving raw server history.
+Markdown, code and tables support copying and horizontal scrolling where needed. Literal source and output have a wrap control. Long content can be read separately and returned to the latest conversation. [Execution and search](EXECUTION_FIND_AND_OUTPUTS.md) explains Find and Activity; [Output viewers](OPENING_OUTPUT_FILES.md) covers files.

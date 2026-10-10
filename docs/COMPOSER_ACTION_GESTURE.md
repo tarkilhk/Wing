@@ -1,96 +1,23 @@
-# Composer action gesture
+# Composer actions
 
-Owner direction, 2026-09-14. This replaces the earlier W02 proposal that kept
-Stop as the busy composer's primary action and opened a sheet on long press.
-The 8 October refinement below supersedes the always-arrow resting state for
-an empty composer while a turn is working.
+When a chat is idle, the composer sends your message. While a turn is working and the composer is empty, its button shows **Stop**; tap it to interrupt that turn.
 
-- While a connected turn is working and there is no draft text or attachment,
-  the button shows Stop and a tap interrupts that turn. No held column or
-  alternative keyboard/screen-reader actions are offered in this state. This
-  includes submission before the first reply arrives. Completion returns the
-  button to Send.
-- The first typed character (including whitespace), or a draft attachment,
-  restores the resting up arrow and configured column order. A tap uses Steer
-  for a running draft by default. App settings offers Steer,
-  Queue, or Stop as the default for this device. Idle chats and slash commands
-  use Send. The automatic empty-composer Stop does not change this preference.
-- The arrow lifts away as Stop settles into place; typing reverses the motion
-  with a small settling bounce over 220 ms. Holding animates the button into the
-  configured action, and sliding updates it to the highlighted choice. It
-  returns to its current resting icon on release or cancellation. The held
-  column unfolds upward with staggered 160–250 ms icon reveals. Reduced-motion
-  settings switch icons immediately and omit the column entrance animation.
-- Use the outlined compass (`Icons.explore_outlined`) for every steering icon,
-  including composer actions, settings, queue controls and transcript feedback.
-- Hold the arrow button to open a vertical icon selector above it. Keep the finger
-  down, slide to a choice, and release to run that action once. Holding in
-  place keeps the primary action selected. Slide outside to cancel.
-- The default sits at the bottom of the stack, closest to the button. With
-  Steer as the default, sliding upward visits Steer, Queue, then Stop.
-  Send replaces Steer while idle. Selecting an alternative never changes the
-  saved default.
-- Unavailable choices stay visible and dimmed. Moving onto one shows why it
-  cannot run. Releasing there does nothing. Attachment-only drafts cannot
-  be steered; Stop remains reachable through the gesture for drafts, and as a
-  direct tap when the running composer is empty.
-- Queue waits for the current send to finish submitting before moving the draft
-  or attachments. The unavailable reason explains the wait; typing remains possible.
-- Fork is a saved-answer action. The composer has no Fork icon, availability
-  observation or draft-to-child dispatch.
-- Pointer cancellation, navigation, app backgrounding, geometry changes, and
-  changed action availability dismiss the selector without acting.
-- Screen readers have named actions on the button, so dragging is optional.
-  Queued-message rows still open queue management and support editing.
-- Hardware keyboards can Tab to the action button whenever any action is
-  available. Enter or Space runs an available primary action; when the primary
-  is unavailable, either key opens the action menu. Down arrow, the Menu key and
-  Shift+F10 open the menu directly. Arrow keys select an available action, Enter
-  runs it, and Escape closes the menu and returns focus to the button.
+Typing or adding an attachment restores the arrow button. For a working chat, its default action is **Steer**. Choose Steer, Queue or Stop as your device default in App settings. Idle chats and slash commands use Send.
 
-ComposerSession publishes the empty-running-composer decision in
-`ComposerActions.prefersStopAction`; the view only projects that decision and
-the saved running action into button presentation. Dispatch and eligibility
-remain with the existing owners. The stock `prompt.submit`, `session.interrupt`
-and `session.steer` handlers were inspected at upstream main
-[`ad12263a5ed43109d3942a8af04d4cef210fa6ae`](https://github.com/NousResearch/hermes-agent/tree/ad12263a5ed43109d3942a8af04d4cef210fa6ae),
-in `tui_gateway/methods_prompt.py` and
-`tui_gateway/methods_session_interrupt.py`. This refinement changes only the
-Android client.
+## Choose another action
 
-Tests cover held movement and release, cancellation, disabled choices, default
-preference persistence, keyboard and large text layouts, screen reader actions,
-accepted and rejected steering, queue attachment preservation, and message-level fork isolation.
-`test/composer_action_button_test.dart` covers both animated and reduced-motion
-Stop/typing transitions, the Stop-only state, restored column order and
-cancellation when the resting state changes.
-`test/profile_composer_actions_test.dart` covers actual send-to-stop
-dispatch, first-character restoration, completion and saved defaults in both
-Studio themes at 100% and 200% text, including opt-in rendered captures.
+Hold the arrow button, slide to a choice in the vertical selector, then release to act. The default is nearest the button. Slide outside to cancel. Choosing another action does not change your saved default.
 
-## Feedback
+Unavailable choices are dimmed and explain why they cannot run. An attachment-only draft cannot be steered. Queue waits for an in-flight send to finish before moving the draft. You can keep typing while it waits.
 
+With an empty composer during a working turn, the button offers only Stop. Navigation, backgrounding and changed action availability dismiss an open selector without acting.
 
-Queued prompts stay outside the scrolling transcript, directly above the
-composer. Each entry shows a return arrow and small italic text, including
-attachment names. The list has a bounded height and scrolls when needed. Tapping
-an entry opens the existing queue actions. Saving and paused states are visible.
-Entries disappear when sent or removed; a failed save restores the draft.
+Screen readers provide named actions on the button. With a hardware keyboard, Tab reaches it; Enter or Space runs the available primary action. Down arrow, Menu or Shift+F10 opens its menu. Arrow keys select, Enter runs and Escape closes it.
 
-Accepted steering appears immediately in the transcript as a compact compass
-row: `steered · <message>`. Rejection or connection failure keeps the draft and
-shows the existing error. Typing another draft while acceptance is pending does
-not clear the new text.
+## Steer and queue
 
-Saved `display_kind: steer` rows use the same presentation. Complete standalone
-user steering envelopes lose their `OUT-OF-BAND USER MESSAGE` wrapper only in
-display. Raw history remains intact. Quoted, incomplete and assistant markers
-remain visible.
+Accepted steering appears in the conversation as a compact compass row. Rejected steering or a connection failure keeps the draft. Text typed while a request is pending remains separate.
 
-The local Hermes Desktop reference uses the compact compass row in
-`apps/desktop/src/components/assistant-ui/thread/system-message.tsx` for tool
-steering. Its newer `redirectPrompt` action uses a different RPC and normal user
-messages. This change retains Android's existing `session.steer` behavior.
+Queued prompts appear above the composer. Open an entry for its queue actions; saving and paused states remain visible. A failed save restores the draft. See [Queues and pending input](SUPERVISION_AND_QUEUES.md) and [Drafts and outgoing messages](DRAFTS_OUTBOX.md).
 
-Regression checks cover delayed acceptance, rejection, transport failure, newer
-drafts, history hydration, queued attachments and large text sizes.
+Branch/Fork is an action on a saved answer, rather than a composer action. See [Conversation actions](CONVERSATION_ACTIONS_AND_READING.md).

@@ -10,9 +10,3 @@ Source: [`lucide-static` 0.468.0](https://www.npmjs.com/package/lucide-static/v/
 The git-fork SVG geometry is identical to Lucide 0.577.0 used by upstream desktop
 `GitForkIcon` at Hermes commit `dce1e9b37581dd62e480a9064dc04a709c2940d3`.
 Both retain the [ISC license](LUCIDE-LICENSE).
-
-To reproduce the subset using FontTools, load the source font with `TTFont`,
-create `subset.Options()` with `recalc_timestamp = False`, populate a
-`subset.Subsetter` with `unicodes=[0xe175, 0xe28c]`, subset the font and save it as
-`wing-icons.ttf`. Keep the original codepoints and outlines; Flutter’s font-family
-alias is declared in `pubspec.yaml`.
