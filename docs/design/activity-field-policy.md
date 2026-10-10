@@ -96,7 +96,7 @@ results. Sources over 8 Ki UTF-16 code units or 200 lines, or producing more tha
 and line budgets reject work before spawning an isolate; adjacent equivalent
 tokens are coalesced. The mounted renderer reuses tokens and span trees across
 unchanged parent/selection rebuilds, refreshes colors for palette changes, and
-retains its state across wrap toggles. There is no persistent source cache.
+retains its state across wrap toggles. There is no persistent source cache. Nonempty source, commands, diffs and literal output expose wrap controls even when their lines are short. Full Activity text viewers place wrap immediately before exact Copy; raw Markdown enables it while formatted prose omits it. Empty payloads omit wrap. Partial/failure qualifiers and copy scopes stay attached to the received payload.
 Palette contrast is checked against both Studio content surfaces; source colors do not replace warnings, errors or diffs.
 
 `test/source_highlighting_test.dart` covers language evidence, exact receipt bytes,

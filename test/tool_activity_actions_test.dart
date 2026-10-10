@@ -39,6 +39,77 @@ Future<void> pump(WidgetTester tester, Widget child) async {
 }
 
 void main() {
+  testWidgets(
+    'short code can toggle wrapping while prose and empty code cannot',
+    (tester) async {
+      for (final block in [
+        const ToolDetailBlock(
+          label: 'Code',
+          text: 'print("Wing")',
+          format: ToolDetailFormat.source,
+          language: 'python',
+        ),
+        const ToolDetailBlock(label: 'Prose', text: 'A short explanation.'),
+        const ToolDetailBlock(
+          label: 'Empty code',
+          text: '',
+          format: ToolDetailFormat.source,
+        ),
+      ]) {
+        await pump(tester, ActivityDetailSection(block: block));
+        final horizontal = find.byWidgetPredicate(
+          (widget) =>
+              widget is SingleChildScrollView &&
+              widget.scrollDirection == Axis.horizontal,
+        );
+        if (block.label == 'Code') {
+          await tester.tap(find.byTooltip('Scroll Code horizontally'));
+          await tester.pumpAndSettle();
+          expect(horizontal, findsOneWidget);
+          expect(find.byTooltip('Wrap Code'), findsOneWidget);
+          await tester.tap(find.byTooltip('Wrap Code'));
+          await tester.pumpAndSettle();
+        } else {
+          expect(find.byIcon(Icons.wrap_text), findsNothing);
+          expect(find.byIcon(Icons.swap_horiz), findsNothing);
+        }
+        expect(horizontal, findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      }
+    },
+  );
+
+  testWidgets('Markdown viewer exposes wrap only while showing raw content', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      ActivityDetailSection(
+        block: ToolDetailBlock(
+          label: 'Document',
+          text: '# Heading\n\n${'A long **paragraph**.\n\n' * 30}',
+          markdown: true,
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('Open Document'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Scroll Document horizontally'), findsNothing);
+    await tester.tap(find.byTooltip('Show raw content'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Scroll Document horizontally'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Wrap Document'), findsOneWidget);
+    await tester.tap(find.byTooltip('Show formatted content'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Wrap Document'), findsNothing);
+    await tester.tap(find.byTooltip('Show raw content'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Wrap Document'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(

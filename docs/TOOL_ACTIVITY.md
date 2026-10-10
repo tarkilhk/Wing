@@ -580,6 +580,10 @@ viewport. Actual laid-out overflow enables a text eye. Copy eligibility defaults
 to false; an explicit reusable payload owns one exact clipboard scope. Passive
 Tasks/criteria/context do not acquire reading/copy controls just from length.
 Full text viewers keep one toolbar and Markdown raw/formatted switching there.
+Nonempty code, commands and literal output expose an icon-only wrap toggle before
+Copy, both inline and in that viewer. Wrapping starts enabled; disabling it allows
+horizontal scrolling without changing selection or copied bytes. Raw Markdown
+also exposes wrapping; formatted prose reflows naturally.
 
 Read/write file content has a single resource header and headerless body.
 Markdown reads remove only stock gutters for formatted display and preserve

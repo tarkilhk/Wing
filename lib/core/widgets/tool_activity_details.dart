@@ -655,6 +655,7 @@ class ActivityDetailSection extends StatefulWidget {
     this.facts = const [],
     this.documentPath,
     this.onOpenRemoteFile,
+    this.wrapLines,
   });
   final Widget? leading;
   final List<Widget> actions;
@@ -670,12 +671,16 @@ class ActivityDetailSection extends StatefulWidget {
   final List<String> facts;
   final String? documentPath;
   final Future<void> Function(ChatOutput)? onOpenRemoteFile;
+
+  /// When supplied, the containing viewer owns the wrapping control.
+  final bool? wrapLines;
   @override
   State<ActivityDetailSection> createState() => _ActivityDetailSectionState();
 }
 
 class _ActivityDetailSectionState extends State<ActivityDetailSection> {
   bool _wrap = true;
+  final _sourceKey = GlobalKey();
   bool _contentOverflows = false;
   late bool _collapsed = widget.initiallyCollapsed;
   final _scroll = ScrollController();
@@ -728,16 +733,8 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
         ToolDetailFormat.source => Icons.code_rounded,
         ToolDetailFormat.prose => Icons.notes_outlined,
       };
-      var canWrap = false;
-      if (source && text.isNotEmpty) {
-        final measure = TextPainter(
-          text: TextSpan(text: text, style: style),
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout();
-        canWrap = measure.width > constraints.maxWidth - 16;
-        measure.dispose();
-      }
+      final wrap = widget.wrapLines ?? _wrap;
+      final canWrap = source && !block.markdown && text.isNotEmpty;
       Widget body;
       if (text.isEmpty) {
         body = Text(
@@ -755,6 +752,7 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
         final lines = text.split('\n');
         final content = block.format == ToolDetailFormat.source
             ? SourceCodeText(
+                key: _sourceKey,
                 text: text,
                 language: block.language,
                 numberedLines: block.numberedLines,
@@ -769,7 +767,7 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
                 ),
                 style: style,
               );
-        body = _wrap
+        body = wrap
             ? content
             : SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -802,7 +800,7 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
             icon: _collapsed ? Icons.chevron_right : Icons.expand_more,
             onPressed: () => setState(() => _collapsed = !_collapsed),
           ),
-        if (widget.viewable && canWrap)
+        if (widget.viewable && canWrap && widget.wrapLines == null)
           ActivityDetailAction(
             label: _wrap
                 ? 'Scroll ${block.label} horizontally'
@@ -1002,6 +1000,7 @@ class _ActivityTextViewer extends StatefulWidget {
 
 class _ActivityTextViewerState extends State<_ActivityTextViewer> {
   bool _raw = false;
+  bool _wrap = true;
   @override
   Widget build(BuildContext context) {
     final block = widget.block;
@@ -1017,6 +1016,17 @@ class _ActivityTextViewerState extends State<_ActivityTextViewer> {
               label: _raw ? 'Show formatted content' : 'Show raw content',
               icon: _raw ? Icons.article_outlined : Icons.code_rounded,
               onPressed: () => setState(() => _raw = !_raw),
+            ),
+          if ((_raw ||
+                  (!block.markdown &&
+                      block.format != ToolDetailFormat.prose)) &&
+              block.text.isNotEmpty)
+            ActivityDetailAction(
+              label: _wrap
+                  ? 'Scroll ${block.label} horizontally'
+                  : 'Wrap ${block.label}',
+              icon: _wrap ? Icons.swap_horiz : Icons.wrap_text,
+              onPressed: () => setState(() => _wrap = !_wrap),
             ),
           if (widget.copyable && block.copyable && block.copyText.isNotEmpty)
             ToolDetailCopyButton(
@@ -1045,6 +1055,7 @@ class _ActivityTextViewerState extends State<_ActivityTextViewer> {
                       documentPath: widget.documentPath,
                       onOpenRemoteFile: widget.onOpenRemoteFile,
                       full: true,
+                      wrapLines: _wrap,
                       showHeader: false,
                       copyable: false,
                     ),

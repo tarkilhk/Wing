@@ -97,6 +97,7 @@ Source coloring's focused matrix is `test/source_highlighting_test.dart`, plus
 It checks exact selection/copy, shell/Python and supplied file languages,
 numbered multiline receipts, completion-only live coloring, worker admission and
 span bounds, unchanged span reuse/wrap retention, streamed replacement/disposal,
+full Activity viewer wrap/copy controls and horizontal scrolling,
 both theme palettes and 390 dp/100% versus 320 dp/200% layouts. Optional
 `--dart-define=CAPTURE_SOURCE=true` writes actual renders beneath ignored
 `build/source-highlighting-review/`; supply Roboto-Regular.ttf,

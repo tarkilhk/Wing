@@ -503,6 +503,160 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('source viewer wrap and copy in $brightness at $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final semantics = tester.ensureSemantics();
+        try {
+          String? copied;
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            (call) async {
+              if (call.method == 'Clipboard.setData') {
+                copied = (call.arguments as Map)['text'] as String;
+              }
+              return null;
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+          for (final block in [
+            ToolDetailBlock(
+              label: 'Code',
+              text: '$python${'print("${'long ' * 30}")\n' * 10}',
+              copyable: true,
+              format: ToolDetailFormat.source,
+              language: 'python',
+            ),
+            ToolDetailBlock(
+              label: 'Command',
+              text: shell * 8,
+              copyable: true,
+              format: ToolDetailFormat.source,
+              language: 'bash',
+            ),
+            ToolDetailBlock(
+              label: 'Result',
+              text: '40|def f():\n41|    return "café 🦋"\n' * 12,
+              copyable: true,
+              format: ToolDetailFormat.source,
+              language: 'python',
+              numberedLines: true,
+            ),
+          ]) {
+            final boundary = GlobalKey();
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: RepaintBoundary(key: boundary, child: child!),
+                ),
+                home: Scaffold(
+                  body: SingleChildScrollView(
+                    child: ActivityDetailsCard(
+                      children: [ActivityDetailSection(block: block)],
+                    ),
+                  ),
+                ),
+              ),
+            );
+            await settleSource(tester);
+            await tester.pumpAndSettle();
+            await tester.tap(find.byTooltip('Open ${block.label}'));
+            await tester.pumpAndSettle();
+            await settleSource(tester);
+            final state = tester.state(find.byType(SourceCodeText));
+            final span = tester
+                .widget<SelectableText>(find.byType(SelectableText))
+                .textSpan;
+            final horizontal = find.byWidgetPredicate(
+              (widget) =>
+                  widget is SingleChildScrollView &&
+                  widget.scrollDirection == Axis.horizontal,
+            );
+            final wrappedWidth = tester
+                .getSize(find.byType(SourceCodeText))
+                .width;
+            for (final wrap in [true, false, true]) {
+              final label = wrap
+                  ? 'Scroll ${block.label} horizontally'
+                  : 'Wrap ${block.label}';
+              expect(find.byTooltip(label), findsOneWidget);
+              expect(
+                tester
+                    .getSemantics(find.byTooltip(label))
+                    .getSemanticsData()
+                    .tooltip,
+                label,
+              );
+              expect(find.text(label), findsNothing);
+              expect(horizontal, wrap ? findsNothing : findsOneWidget);
+              expect(tester.state(find.byType(SourceCodeText)), same(state));
+              expect(
+                tester
+                    .widget<SelectableText>(find.byType(SelectableText))
+                    .textSpan,
+                same(span),
+              );
+              expect(
+                selected(tester.widget(find.byType(SelectableText))),
+                block.text,
+              );
+              expect(
+                tester.getCenter(find.byTooltip(label)).dx,
+                lessThan(
+                  tester.getCenter(find.byTooltip('Copy ${block.label}')).dx,
+                ),
+              );
+              if (!wrap && block.label == 'Code') {
+                expect(
+                  tester.getSize(find.byType(SourceCodeText)).width,
+                  greaterThan(wrappedWidth),
+                );
+                await tester.drag(horizontal, const Offset(-100, 0));
+                await tester.pumpAndSettle();
+              }
+              if (const bool.fromEnvironment('CAPTURE_SOURCE')) {
+                await tester.runAsync(() async {
+                  final render =
+                      boundary.currentContext!.findRenderObject()!
+                          as RenderRepaintBoundary;
+                  final image = await render.toImage();
+                  final bytes = await image.toByteData(
+                    format: ui.ImageByteFormat.png,
+                  );
+                  final file = File(
+                    'build/source-highlighting-review/viewer-${block.label}-${brightness.name}-${scale.toInt()}-$wrap.png',
+                  );
+                  await file.parent.create(recursive: true);
+                  await file.writeAsBytes(bytes!.buffer.asUint8List());
+                  image.dispose();
+                });
+              }
+              await tester.tap(find.byTooltip('Copy ${block.label}'));
+              await tester.pump();
+              expect(copied, block.copyText);
+              await tester.pump(const Duration(seconds: 2));
+              await tester.tap(find.byTooltip(label));
+              await tester.pumpAndSettle();
+              expect(tester.takeException(), isNull);
+            }
+            await tester.pageBack();
+            await tester.pumpAndSettle();
+            await tester.pumpWidget(const SizedBox());
+          }
+        } finally {
+          semantics.dispose();
+        }
+      });
       for (final family in ['chat', 'execution', 'file']) {
         testWidgets('$family source in $brightness at $scale', (tester) async {
           final width = scale == 1 ? 390.0 : 320.0;

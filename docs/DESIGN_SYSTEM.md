@@ -1051,7 +1051,7 @@ row below its full-width title instead of squeezing text between icons.
 | Eye | A useful file/image/source resource, or received text with actual layout overflow that benefits from a fuller viewer. Short nonresource results have no eye; eligibility follows rendered overflow rather than character count. Use the same eye glyph rather than a second fullscreen vocabulary. |
 | Copy | A meaningful reusable request/result/excerpt/command/source. Copy its exact supplied content, retaining original receipt text when display formatting differs. Options, status booleans and routine plumbing have no copy control. |
 | Share | An actual shareable resource with its existing pending/error recovery. |
-| Wrap | Literal source/output whose long lines benefit from wrapping. Prose reflows without this control. |
+| Wrap | Nonempty literal source/output, including short code. Show the icon beside Copy in inline payloads and full text viewers; toggle between wrapped lines and horizontal scrolling. Raw Markdown viewers also expose it; formatted prose reflows without this control. |
 
 Each payload has one action for each useful purpose. Combine resource and
 content controls when they address the same read/result scope: one eye and one
