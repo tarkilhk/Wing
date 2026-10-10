@@ -785,7 +785,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.current!.chat!.key.sessionId, 'pin-one');
       expect(controller.current!.chat!.key.workspace.profileName, 'personal');
-      expect(find.byType(BotAvatar), findsNothing);
+      expect(find.byType(BotAvatar), findsOneWidget);
       final chatScaffold = tester.state<ScaffoldState>(
         find.byType(Scaffold).first,
       );
@@ -800,7 +800,11 @@ void main() {
       bots.profiles.single['ui_meta']['hermes-bots']['shape'] = 'triangle';
       await tester.tap(find.text('Atlas').last);
       await tester.pumpAndSettle();
-      expect(find.byType(BotAvatar), findsNothing);
+      expect(find.byType(BotAvatar), findsOneWidget);
+      expect(
+        tester.widget<BotAvatar>(find.byType(BotAvatar)).shape,
+        'triangle',
+      );
       expect(find.text('Atlas'), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -822,7 +826,7 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
-        'canonical bot name without repeated reply header in ${brightness.name} at $scale',
+        'canonical bot avatar and name without repeated reply header in ${brightness.name} at $scale',
         (tester) async {
           SharedPreferences.setMockInitialValues({});
           final preferences = await SharedPreferences.getInstance();
@@ -849,20 +853,29 @@ void main() {
           await controller.openSession(
             ProfileSessionKey(scope, 'canonical-root'),
           );
+          final botName = scale == 1
+              ? 'Atlas'
+              : 'Atlas with a very long bot display name';
+          const avatarPng =
+              'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAJUlEQVR4nGNwCj/ynxLMMGoApgH/byeBMbHiw9GAgY+FUQNIxwDOD2oPx3g6jQAAAABJRU5ErkJggg==';
           final bots = BotsFixture();
           bots.profiles
             ..clear()
-            ..add(BotsFixture.profile('personal', 'Atlas'));
+            ..add(BotsFixture.profile('personal', botName));
           bots.profiles.single['canonical_session'] = {
             'id': 'canonical-root',
             'resolved_id': 'canonical-tip',
           };
+          bots.profiles.single['has_avatar'] = scale == 2;
           var rosterReads = 0;
           Completer<Map<String, dynamic>?>? heldRoster;
           bots.readHook = (_, method, _) async {
             if (method == 'profiles.list') {
               rosterReads++;
               if (heldRoster != null) return heldRoster.future;
+            }
+            if (method == 'profiles.get_asset') {
+              return {'found': true, 'data': avatarPng};
             }
             return null;
           };
@@ -890,13 +903,49 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(find.text('Bot Chat'), findsNothing);
-          expect(find.text('Atlas'), findsOneWidget);
+          expect(find.text(botName), findsOneWidget);
+          final avatar = find.descendant(
+            of: find.byType(AppBar),
+            matching: find.byType(BotAvatar),
+          );
+          expect(avatar, findsOneWidget);
+          final face = tester.widget<BotAvatar>(avatar);
+          expect(face.name, botName);
+          expect(face.shape, 'squircle');
+          expect(face.color, '#65c7bc');
+          expect(face.image, scale == 2 ? base64Decode(avatarPng) : isNull);
+          if (scale == 2) {
+            final uploaded = find.descendant(
+              of: avatar,
+              matching: find.byType(Image),
+            );
+            await tester.runAsync(
+              () => precacheImage(
+                tester.widget<Image>(uploaded).image,
+                tester.element(avatar),
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              tester
+                  .widget<RawImage>(
+                    find.descendant(
+                      of: avatar,
+                      matching: find.byType(RawImage),
+                    ),
+                  )
+                  .image,
+              isNotNull,
+            );
+          }
+          expect(tester.getSize(avatar), const Size(32, 32));
           expect(
-            find.descendant(
-              of: find.byType(AppBar),
-              matching: find.byType(BotAvatar),
-            ),
-            findsNothing,
+            tester.getRect(avatar).right + 8,
+            closeTo(tester.getRect(find.text(botName)).left, 0.1),
+          );
+          expect(
+            tester.getCenter(avatar).dy,
+            closeTo(tester.getCenter(find.text(botName)).dy, 0.1),
           );
           final reply = find.byWidgetPredicate(
             (widget) =>
@@ -907,7 +956,7 @@ void main() {
             findsNothing,
           );
           expect(
-            find.descendant(of: reply, matching: find.text('Atlas')),
+            find.descendant(of: reply, matching: find.text(botName)),
             findsNothing,
           );
           final copy = find.descendant(
@@ -947,7 +996,7 @@ void main() {
             ProfileSessionKey(scope, 'canonical-tip'),
           );
           await tester.pumpAndSettle();
-          expect(find.byType(BotAvatar), findsNothing);
+          expect(avatar, findsOneWidget);
           expect(find.text('Compacted conversation'), findsNothing);
           // A delayed lookup for one chat must not decorate a different chat.
           heldRoster = Completer<Map<String, dynamic>?>();
@@ -956,7 +1005,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           // The root and tip share the same confirmed bot identity.
-          expect(find.text('Atlas'), findsOneWidget);
+          expect(find.text(botName), findsOneWidget);
           await controller.openSession(ProfileSessionKey(scope, 'ordinary'));
           await tester.pumpAndSettle();
           expect(find.byType(BotAvatar), findsNothing);

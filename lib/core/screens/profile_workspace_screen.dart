@@ -6,6 +6,7 @@ import '../widgets/recent_conversations/recent_conversation_switcher.dart';
 import '../widgets/recent_conversations/conversation_preview.dart';
 import '../widgets/recent_conversations/conversation_gestures.dart';
 import '../widgets/wing_app_bar.dart';
+import '../widgets/bot_avatar.dart';
 import '../widgets/activity/skill_document_viewer.dart';
 import '../models/chat_intelligence.dart';
 import '../models/chat_runtime.dart';
@@ -762,10 +763,29 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     child: InkWell(
       borderRadius: WingRadius.card,
       onTap: moveToProject,
-      child: Text(
-        bot?.title ?? chat.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (bot != null) ...[
+            ExcludeSemantics(
+              child: BotAvatar(
+                name: bot.title,
+                shape: bot.shape,
+                color: bot.color,
+                image: bot.avatar,
+                size: 32,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Text(
+              bot?.title ?? chat.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     ),
   );
