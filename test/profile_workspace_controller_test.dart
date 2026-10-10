@@ -6,6 +6,7 @@ import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
@@ -135,6 +136,8 @@ class PhotoPickerFixture extends FilePickerPlatform {
     return files;
   }
 }
+
+class _SocketHttpOverrides extends HttpOverrides {}
 
 class Host {
   final gateways = <String, ProfileGateway>{};
@@ -543,6 +546,87 @@ void main() {
     appPreferences.dispose();
     attachmentCache.deleteSync(recursive: true);
   });
+
+  test(
+    'sent image reads share login across independently disposed owners',
+    () => HttpOverrides.runWithHttpOverrides(() async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      var logins = 0;
+      var downloads = 0;
+      final subscription = server.listen((request) async {
+        if (request.uri.path == '/auth/password-login') {
+          logins++;
+          await utf8.decoder.bind(request).join();
+          if (logins > 10) {
+            request.response.statusCode = HttpStatus.tooManyRequests;
+          } else {
+            request.response.headers.add(
+              'set-cookie',
+              'hermes_session_at=fixture; Path=/',
+            );
+            request.response.write('{}');
+          }
+        } else {
+          expect(request.uri.path, '/api/fs/download');
+          expect(request.headers.value('cookie'), 'hermes_session_at=fixture');
+          expect(request.uri.queryParameters['profile'], 'a');
+          expect(request.uri.queryParameters['session_id'], 'same');
+          downloads++;
+          request.response.add([1, 2, 3]);
+        }
+        await request.response.close();
+      });
+      addTearDown(() async {
+        await server.close(force: true);
+        await subscription.cancel();
+      });
+      controller.dispose();
+      controller = ProfileWorkspaceController(
+        connectionIdentity: 'image-login-fixture',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'image-host',
+            label: 'Images',
+            host: '127.0.0.1',
+            port: 1,
+            dashboardPortOverride: server.port,
+            dashboardUsername: 'fixture',
+            dashboardPassword: 'fixture',
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
+        ),
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+      );
+      await controller.initialize();
+      final chat = (await controller.openSession(
+        ProfileSessionKey(controller.current!.scope, 'same'),
+      ))!;
+      Future<void> imageRead(int index) async {
+        final files = controller.outputFiles(chat);
+        try {
+          expect((await files.download('/images/$index.png')).bytes, [1, 2, 3]);
+        } finally {
+          files.dispose();
+        }
+      }
+
+      await Future.wait([for (var i = 0; i < 3; i++) imageRead(i)]);
+      expect(logins, 1, reason: 'The three chat previews must share one login');
+      await controller.switchProfile('b');
+      for (var i = 3; i < 40; i++) {
+        await imageRead(i);
+      }
+      expect(downloads, 40);
+      expect(
+        logins,
+        1,
+        reason: 'Disposing a file reader must retain connection authentication',
+      );
+    }, _SocketHttpOverrides()),
+  );
 
   test(
     'discovery retains unchanged facts and publishes real membership changes',

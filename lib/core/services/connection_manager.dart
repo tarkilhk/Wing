@@ -953,6 +953,15 @@ class _NoRedirectClient extends http.BaseClient {
   void close() => _inner.close();
 }
 
+// Authentication survives short-lived read transports. The connection client
+// performs sign-in so retiring one image reader cannot cancel another's login.
+class _DashboardAuthentication {
+  String? cookie;
+  String? token;
+  Future<String>? cookieInFlight;
+  Future<String>? tokenInFlight;
+}
+
 class DashboardClient {
   bool _closed = false;
   final http.Client _http;
@@ -965,13 +974,8 @@ class DashboardClient {
   final bool _requiresOAuth;
   final Duration readTimeout;
   late final _reads = DashboardReadTransport(_http, timeout: readTimeout);
-  String? _token;
-  String? _cookie;
-  // In-flight auth requests, shared so concurrent /api calls trigger a single
-  // login / token fetch instead of a thundering herd (the dashboard
-  // rate-limits password logins).
-  Future<String>? _cookieInFlight;
-  Future<String>? _tokenInFlight;
+  final _DashboardAuthentication _authentication;
+  final DashboardClient? _authenticationOwner;
 
   String get baseUrl => _baseUrl;
 
@@ -991,7 +995,9 @@ class DashboardClient {
     Map<String, String> gatewayHeaders = const <String, String>{},
     http.Client? httpClient,
     this.readTimeout = const Duration(seconds: 45),
-  }) : _oauth = dashboardOAuth,
+  }) : _authentication = _DashboardAuthentication(),
+       _authenticationOwner = null,
+       _oauth = dashboardOAuth,
        _requiresOAuth = requiresOAuth || dashboardOAuth != null,
        _proxied = proxied,
        _username = username,
@@ -1006,6 +1012,27 @@ class DashboardClient {
        _http = _NoRedirectClient(
          httpClient ?? IOClient(HttpClient()..connectionTimeout = readTimeout),
        );
+
+  /// Independent cancellable reads sharing this origin's sign-in and renewal.
+  DashboardClient forkReads() {
+    if (_closed) throw StateError('Dashboard client is closed');
+    return DashboardClient._readClient(this);
+  }
+
+  DashboardClient._readClient(DashboardClient owner)
+    : _authentication = owner._authentication,
+      _authenticationOwner = owner._authenticationOwner ?? owner,
+      _oauth = owner._oauth,
+      _requiresOAuth = owner._requiresOAuth,
+      _proxied = owner._proxied,
+      _username = owner._username,
+      _password = owner._password,
+      _gatewayHeaders = owner._gatewayHeaders,
+      _baseUrl = owner._baseUrl,
+      readTimeout = owner.readTimeout,
+      _http = _NoRedirectClient(
+        IOClient(HttpClient()..connectionTimeout = owner.readTimeout),
+      );
 
   Map<String, String> get _jsonHeaders => {
     ..._gatewayHeaders,
@@ -1027,21 +1054,22 @@ class DashboardClient {
     // renewed the session. Only invalidate the credentials actually rejected;
     // retain any newer credentials and the shared in-flight renewal.
     _oauth?.invalidateRejectedBearer(header('authorization'));
-    if (header('cookie') == _cookie) {
-      _cookie = null;
+    if (header('cookie') == _authentication.cookie) {
+      _authentication.cookie = null;
     }
-    if (header('x-hermes-session-token') == _token) {
-      _token = null;
+    if (header('x-hermes-session-token') == _authentication.token) {
+      _authentication.token = null;
     }
   }
 
   /// Returns the session cookie, reusing a cached value or an in-flight login.
   Future<String> _getCookie() {
-    final cached = _cookie;
+    final cached = _authentication.cookie;
     if (cached != null) {
       return Future.value(cached);
     }
-    return _cookieInFlight ??= _login();
+    return _authentication.cookieInFlight ??= (_authenticationOwner ?? this)
+        ._login();
   }
 
   /// Logs in against the `basic` password provider and caches the session
@@ -1078,20 +1106,21 @@ class DashboardClient {
           'Dashboard login succeeded but no session cookie found',
         );
       }
-      _cookie = '${match.group(1)}=${match.group(2)}';
-      return _cookie!;
+      _authentication.cookie = '${match.group(1)}=${match.group(2)}';
+      return _authentication.cookie!;
     } finally {
-      _cookieInFlight = null;
+      _authentication.cookieInFlight = null;
     }
   }
 
   /// Returns the SPA session token, reusing a cached value or an in-flight fetch.
   Future<String> _getToken() {
-    final cached = _token;
+    final cached = _authentication.token;
     if (cached != null) {
       return Future.value(cached);
     }
-    return _tokenInFlight ??= _fetchToken();
+    return _authentication.tokenInFlight ??= (_authenticationOwner ?? this)
+        ._fetchToken();
   }
 
   Future<String> _fetchToken() async {
@@ -1110,10 +1139,10 @@ class DashboardClient {
       if (match == null) {
         throw Exception('Session token not found');
       }
-      _token = match.group(1)!;
-      return _token!;
+      _authentication.token = match.group(1)!;
+      return _authentication.token!;
     } finally {
-      _tokenInFlight = null;
+      _authentication.tokenInFlight = null;
     }
   }
 

@@ -444,7 +444,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   );
   late final ProfileGatewayFactory _factory;
   final ProfileChatRuntimeFactory _runtimeFactory;
-  final ProfileGatewayConnection? _gatewayConnection;
+  final ProfileGatewayConnection _gatewayConnection;
   final AttachmentDraftService attachments;
   late final ComposerDraftStore _drafts;
   late final DeletedDraftCleanupStore _deletedDrafts;
@@ -752,12 +752,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
     this.onNotificationInputs,
     this.onNotificationRead,
     this.notificationResultFor,
-  }) : _gatewayConnection = gatewayFactory == null
-           ? ProfileGatewayConnection(access)
-           : null,
+  }) : _gatewayConnection = ProfileGatewayConnection(access),
        _runtimeFactory = runtimeFactory ?? _createRuntime,
        attachments = attachmentService ?? AttachmentDraftService() {
-    _factory = gatewayFactory ?? _gatewayConnection!.create;
+    _factory = gatewayFactory ?? _gatewayConnection.create;
     if (connectionIdentity.isEmpty) {
       throw ArgumentError('A verified connection identity is required');
     }
@@ -2380,7 +2378,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   OwnedRemoteFiles outputFiles(ProfileChat chat) {
     _owned(chat);
-    final files = RemoteFilesClient.fromConnection(access);
+    final files = RemoteFilesClient(
+      dashboard: _gatewayConnection.createFileReadClient(),
+    );
     return OwnedRemoteFiles(
       source: files,
       profileName: chat._key.workspace.profileName,
@@ -8066,7 +8066,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       resource._retry?.cancel();
       resource.gateway.close();
     }
-    _gatewayConnection?.close();
+    _gatewayConnection.close();
     super.dispose();
   }
 }

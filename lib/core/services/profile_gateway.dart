@@ -1,4 +1,6 @@
 import 'profile_model_catalog.dart';
+import 'gateway_endpoint.dart';
+import 'remote_files_client.dart';
 import 'models_dev_pricing.dart';
 import 'skill_reader_session.dart';
 import '../models/skill_reader.dart';
@@ -107,7 +109,19 @@ class ProfileGatewayConnection {
   final ConnectionAccess access;
   SavedConnection get connection => access.connection;
   late final DashboardClient _dashboard = _dashboardFor(access);
+  // An explicitly distinct file origin owns its own sign-in. Never share a
+  // cookie between that origin and the workspace's Dashboard origin.
+  DashboardClient? _fileDashboard;
   bool _closed = false;
+
+  DashboardClient createFileReadClient() {
+    if (_closed) throw StateError('Connection is closed');
+    final dashboard = _fileDashboard ??=
+        normalizedGatewayBaseUrl(connection) == _dashboard.baseUrl
+        ? _dashboard
+        : RemoteFilesClient.fromConnection(access).dashboard;
+    return dashboard.forkReads();
+  }
 
   ProfileGateway create(WorkspaceScope scope) {
     if (_closed) throw StateError('Connection is closed');
@@ -122,6 +136,10 @@ class ProfileGatewayConnection {
   void close() {
     if (_closed) return;
     _closed = true;
+    final fileDashboard = _fileDashboard;
+    if (fileDashboard != null && !identical(fileDashboard, _dashboard)) {
+      fileDashboard.close();
+    }
     _dashboard.close();
   }
 }
