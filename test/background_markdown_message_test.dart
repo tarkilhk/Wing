@@ -59,7 +59,7 @@ void main() {
       final parser = tester.state<BackgroundMarkdownContentState>(
         find.byType(BackgroundMarkdownContent),
       );
-      await tester.tap(find.byTooltip('Wrap lines'));
+      await tester.tap(find.byTooltip('Scroll horizontally'));
       await tester.pump();
       final codeState = tester.state(find.byType(SourceCodeBlock));
       final parses = parser.parsesCompleted;
@@ -92,7 +92,7 @@ void main() {
       }
       expect(parser.pending, isFalse);
       expect(tester.state(find.byType(SourceCodeBlock)), same(codeState));
-      expect(find.byTooltip('Scroll horizontally'), findsOneWidget);
+      expect(find.byTooltip('Wrap lines'), findsOneWidget);
       expect(
         tester
             .widget<MarkdownCodeBlock>(find.byType(MarkdownCodeBlock))

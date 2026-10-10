@@ -219,7 +219,7 @@ void main() {
       final lastCode = find.byType(SourceCodeBlock).last;
       final wrap = find.descendant(
         of: lastCode,
-        matching: find.byTooltip('Wrap lines'),
+        matching: find.byTooltip('Scroll horizontally'),
       );
       await tester.ensureVisible(wrap);
       await tester.pump();
@@ -266,7 +266,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(SourceCodeBlock).last,
-          matching: find.byTooltip('Scroll horizontally'),
+          matching: find.byTooltip('Wrap lines'),
         ),
         findsOneWidget,
       );

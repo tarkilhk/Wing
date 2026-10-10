@@ -109,6 +109,10 @@ void main() {
     await tester.tap(find.byTooltip('Copy code'));
     await tester.pump();
     expect(copied, code);
+    expect(find.byTooltip('Scroll horizontally'), findsOneWidget);
+    await tester.tap(find.byTooltip('Scroll horizontally'));
+    await tester.pump();
+    expect(find.byTooltip('Wrap lines'), findsOneWidget);
     await tester.tap(find.byTooltip('Wrap lines'));
     await tester.pump();
     expect(find.byTooltip('Scroll horizontally'), findsOneWidget);

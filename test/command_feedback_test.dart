@@ -201,16 +201,29 @@ void main() {
           final approval = find.text('/approvals · $_approval');
           final yolo = find.text('YOLO enabled for this session.');
           final next = find.text('Continue with the plan.');
-          expect(approval, findsOneWidget);
-          expect(yolo, findsOneWidget);
-          expect(
-            tester.getTopLeft(approval).dy,
-            lessThan(tester.getTopLeft(yolo).dy),
+          final transcript = tester.widget<ListView>(
+            find.byKey(const ValueKey('profile-transcript')),
           );
-          expect(
-            tester.getTopLeft(yolo).dy,
-            lessThan(tester.getTopLeft(next).dy),
+          final scrollable = find.byWidgetPredicate(
+            (widget) =>
+                widget is Scrollable &&
+                widget.controller == transcript.controller,
           );
+          Future<double> revealPosition(Finder label) async {
+            await tester.scrollUntilVisible(label, 120, scrollable: scrollable);
+            await frames(tester);
+            expect(label.hitTestable(), findsOneWidget);
+            // Reverse scrolling moves content down. Compare positions in the
+            // transcript, even when enlarged rows cannot share one viewport.
+            return tester.getTopLeft(label).dy -
+                transcript.controller!.position.pixels;
+          }
+
+          final nextPosition = await revealPosition(next);
+          final yoloPosition = await revealPosition(yolo);
+          final approvalPosition = await revealPosition(approval);
+          expect(approvalPosition, lessThan(yoloPosition));
+          expect(yoloPosition, lessThan(nextPosition));
           expect(find.byType(SnackBar), findsNothing);
           await capture(tester, '${brightness.name}-${scale.toInt()}x');
           await tester.pumpWidget(const SizedBox.shrink());

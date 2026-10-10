@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
 import 'package:wing/core/widgets/source_code_block.dart';
+import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 
 void main() {
@@ -42,7 +43,7 @@ Growing tail''';
     );
     // Local code state and an actual nonempty text selection must survive the
     // optimization, rather than just preserving the final visible strings.
-    await tester.tap(find.byIcon(Icons.wrap_text).first);
+    await tester.tap(find.byTooltip('Scroll horizontally').first);
     await tester.pump();
     final prefix = tester
         .widgetList<SelectableText>(find.byType(SelectableText))
@@ -123,12 +124,16 @@ Growing tail''';
       expect(find.byWidget(body), findsOneWidget);
     }
     expect(
-      find.descendant(
-        of: find.byWidget(after.first),
-        matching: find.byType(SingleChildScrollView),
-      ),
-      findsNothing,
-      reason: 'The first code block must remain wrapped.',
+      tester
+          .widget<SourceCodeText>(
+            find.descendant(
+              of: find.byWidget(after.first),
+              matching: find.byType(SourceCodeText),
+            ),
+          )
+          .wrap,
+      isFalse,
+      reason: 'The first code block must retain its selected horizontal mode.',
     );
     expect(tester.element(find.byWidget(prefix)), same(prefixElement));
     expect(editable.mounted, isTrue);
