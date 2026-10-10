@@ -8,6 +8,9 @@ import '../widgets/recent_conversations/conversation_gestures.dart';
 import '../widgets/wing_app_bar.dart';
 import '../widgets/bot_avatar.dart';
 import '../widgets/activity/skill_document_viewer.dart';
+import '../presentation/skill_document.dart';
+import '../models/slash_command.dart';
+import '../services/profile_capabilities_session.dart';
 import '../models/chat_intelligence.dart';
 import '../models/chat_runtime.dart';
 import '../services/profile_supervision_session.dart';
@@ -1922,6 +1925,36 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
   }
 
+  Future<void> _inspectSkill(ProfileChat chat, SlashCommand skill) async {
+    final resource = controller.current;
+    if (!skill.isSkill || resource == null || resource.chat != chat) return;
+    final session = ProfileCapabilitiesSession(resource.gateway);
+    try {
+      final instructions = await session.instructions(skill.text.substring(1));
+      if (!mounted ||
+          controller.current != resource ||
+          resource.chat != chat ||
+          instructions == null) {
+        return;
+      }
+      final document = SkillDocument.fromReceived(
+        name: instructions.name,
+        content: instructions.content,
+        sourcePath: instructions.sourcePath,
+      );
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => SkillDocumentViewer(
+            document: document,
+            createReader: () => session.reader(document.readerTarget),
+          ),
+        ),
+      );
+    } finally {
+      session.dispose();
+    }
+  }
+
   Widget _composerPanel(
     ProfileChat chat,
     BoxConstraints constraints,
@@ -1943,6 +1976,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   loadCompletion: (query) =>
                       controller.completeCommand(chat, query),
                   saveDraft: (text) => controller.updateDraft(chat, text),
+                  inspectSkill: (skill) => _inspectSkill(chat, skill),
                   composer: _composer,
                 ),
               if (chat.runtime.commandRunning) const LinearProgressIndicator(),

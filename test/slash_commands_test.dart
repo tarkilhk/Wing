@@ -24,12 +24,15 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/widgets/slash_command_suggestions.dart';
+import 'package:wing/core/widgets/activity/skill_document_viewer.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_workspace_controller_test.dart' show Host;
 
 class CommandHost extends Host {
+  final skillReads = <Map<String, String>>[];
+  Future<Map<String, dynamic>> Function()? readSkill;
   final commandCalls = <(String, Map<String, dynamic>)>[];
   final extraSkillNames = <String>[];
   Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)? respond;
@@ -80,6 +83,18 @@ class CommandHost extends Host {
         await base.connect();
       },
       get: (endpoint, query) async {
+        if (endpoint == 'skills/content') {
+          skillReads.add(Map.of(query));
+          return readSkill == null
+              ? {
+                  'name': query['name'],
+                  'content':
+                      '# Skill instructions\n\nInspect the original sources.',
+                  'path':
+                      '/profiles/${scope.profileName}/skills/${query['name']}/SKILL.md',
+                }
+              : await readSkill!();
+        }
         final result = await base.read(endpoint, query);
         if (!endpoint.endsWith('/messages') || historyMessages != null) {
           return result;
@@ -1148,6 +1163,7 @@ void main() {
             body: Column(
               children: [
                 SlashCommandSuggestions(
+                  inspectSkill: (_) async {},
                   loadCompletion: (query) =>
                       controller.completeCommand(chat, query),
                   saveDraft: (text) => controller.updateDraft(chat, text),
@@ -1179,6 +1195,7 @@ void main() {
             body: Column(
               children: [
                 SlashCommandSuggestions(
+                  inspectSkill: (_) async {},
                   loadCompletion: (query) =>
                       controller.completeCommand(chat, query),
                   saveDraft: (text) => controller.updateDraft(chat, text),
@@ -1244,6 +1261,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SlashCommandSuggestions(
+            inspectSkill: (_) async {},
             loadCompletion: (query) => controller.completeCommand(chat, query),
             saveDraft: (text) => controller.updateDraft(chat, text),
             composer: input,
@@ -1475,6 +1493,31 @@ void main() {
         }
 
         await capture('picker');
+        final inspect = find.byTooltip('Inspect /a-skill');
+        expect(tester.getSize(inspect), const Size(48, 48));
+        await tester.tap(inspect);
+        await tester.pumpAndSettle();
+        expect(find.byType(SkillDocumentViewer), findsOneWidget);
+        expect(
+          tester
+              .widget<SkillDocumentViewer>(find.byType(SkillDocumentViewer))
+              .document
+              .rawContent,
+          contains('Inspect the original sources.'),
+        );
+        expect(host.skillReads.single, {'profile': 'a', 'name': 'a-skill'});
+        expect(chat.composer.observation.text, 'Please use /a-');
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'prompt.submit'),
+          isEmpty,
+        );
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(composer).controller!.text,
+          'Please use /a-',
+        );
+        expect(inspect.hitTestable(), findsOneWidget);
         await tester.tap(find.text('/a-skill'));
         await tester.pumpAndSettle();
         final input = tester.widget<TextField>(composer).controller!;
@@ -1505,6 +1548,68 @@ void main() {
       });
     }
   }
+
+  testWidgets('skill inspection failure retains draft and permits retry', (
+    tester,
+  ) async {
+    host.readSkill = () async => throw StateError('Offline');
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    final composer = find.byKey(const Key('profile-message-composer'));
+    await tester.enterText(composer, '/a-');
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Inspect /a-skill'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SkillDocumentViewer), findsNothing);
+    expect(
+      find.text(
+        'Could not read this skill. Check the connection and try again.',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.widget<TextField>(composer).controller!.text, '/a-');
+    host.readSkill = null;
+    await tester.tap(find.byTooltip('Inspect /a-skill'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SkillDocumentViewer), findsOneWidget);
+    expect(host.skillReads, hasLength(2));
+    expect(host.commandCalls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'held skill inspection ignores repeat taps and a changed profile',
+    (tester) async {
+      final pending = Completer<Map<String, dynamic>>();
+      host.readSkill = () => pending.future;
+      await tester.pumpWidget(
+        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      );
+      await tester.enterText(
+        find.byKey(const Key('profile-message-composer')),
+        '/',
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Inspect /model'), findsNothing);
+      final inspect = find.byTooltip('Inspect /a-skill');
+      await tester.tap(inspect);
+      await tester.pump();
+      await tester.tap(inspect);
+      await tester.pump();
+      expect(host.skillReads, hasLength(1));
+      await controller.switchProfile('b');
+      await tester.pump();
+      pending.complete({'name': 'a-skill', 'content': 'Late instructions'});
+      await tester.pumpAndSettle();
+      expect(find.byType(SkillDocumentViewer), findsNothing);
+      expect(host.skillReads.single, {'profile': 'a', 'name': 'a-skill'});
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   test('completion keeps the owning session after a profile switch', () async {
     await controller.switchProfile('b');
@@ -1537,6 +1642,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SlashCommandSuggestions(
+            inspectSkill: (_) async {},
             loadCompletion: (query) => controller.completeCommand(chat, query),
             saveDraft: (text) => controller.updateDraft(chat, text),
             composer: input,
@@ -1582,6 +1688,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: SlashCommandSuggestions(
+              inspectSkill: (_) async {},
               loadCompletion: (query) =>
                   controller.completeCommand(chat, query),
               saveDraft: (text) => controller.updateDraft(chat, text),
@@ -1633,6 +1740,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SlashCommandSuggestions(
+            inspectSkill: (_) async {},
             loadCompletion: (query) => controller.completeCommand(chat, query),
             saveDraft: (text) => controller.updateDraft(chat, text),
             composer: input,

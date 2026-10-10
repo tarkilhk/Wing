@@ -81,11 +81,13 @@ class SkillComposerController extends TextEditingController {
 class SlashCommandSuggestions extends StatefulWidget {
   final Future<SlashCompletion> Function(String query) loadCompletion;
   final Future<void> Function(String text) saveDraft;
+  final Future<void> Function(SlashCommand skill) inspectSkill;
   final SkillComposerController composer;
   const SlashCommandSuggestions({
     super.key,
     required this.loadCompletion,
     required this.saveDraft,
+    required this.inspectSkill,
     required this.composer,
   });
 
@@ -102,6 +104,7 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
   String? _error;
   bool _loading = false;
   String _query = '';
+  SlashCommand? _inspecting;
 
   @override
   void initState() {
@@ -196,6 +199,25 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
     }
   }
 
+  Future<void> _inspect(SlashCommand item) async {
+    if (_inspecting != null) return;
+    setState(() => _inspecting = item);
+    try {
+      await widget.inspectSkill(item);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: StudioError(
+            'Could not read this skill. Check the connection and try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _inspecting = null);
+    }
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
@@ -252,7 +274,26 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  trailing: item.category.isEmpty
+                  trailing: item.isSkill
+                      ? IconButton(
+                          tooltip: 'Inspect ${item.text}',
+                          constraints: const BoxConstraints.tightFor(
+                            width: 48,
+                            height: 48,
+                          ),
+                          onPressed: _inspecting == null
+                              ? () => _inspect(item)
+                              : null,
+                          icon: identical(_inspecting, item)
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.visibility_outlined, size: 20),
+                        )
+                      : item.category.isEmpty
                       ? null
                       : Text(
                           item.category,
