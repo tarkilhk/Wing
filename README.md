@@ -26,7 +26,7 @@ Tap a profile to focus its chats, or combine profiles in one view. Choose projec
 
 ## Multitask with Recents
 
-Find running chats and conversations waiting for your input across profiles. In a chat opened from Recents, swipe sideways with two fingers to switch, or pinch into a card stack and tap another conversation. Drafts and attachments stay with their chats.
+Find running chats and conversations waiting for your input across profiles. In a chat opened from Recents, swipe sideways with two fingers to switch, or pinch into a card stack and tap another conversation.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/recents.html">
