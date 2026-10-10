@@ -159,7 +159,7 @@ async function checkScreenshotViewer(page, label, all = false) {
 async function checkReadingOrder(page, label) {
   const failures = await page.evaluate(() => {
     const results = [];
-    for (const group of document.querySelectorAll('.feature-story, .work-panel, .control-features article, .guide-copy section')) {
+    for (const group of document.querySelectorAll('.feature-story, .work-panel, .guide-copy section')) {
       if (!group.getBoundingClientRect().height) continue;
       const images = [...group.querySelectorAll('figure')];
       const links = [...group.querySelectorAll(':scope > .text-link')];
@@ -254,7 +254,7 @@ async function review(engineName) {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.locator('#tab-steer').click();
   await page.screenshot({ path: resolve(output, `${engineName}-steer.png`), fullPage: true });
-  await page.locator('.workspace-section').screenshot({ path: resolve(output, `${engineName}-workspaces-section.png`) });
+  await page.locator('#workspaces').screenshot({ path: resolve(output, `${engineName}-workspaces-section.png`) });
   for (const name of ['workspaces', 'bots', 'recents', 'live-work', 'results', 'health', 'administration', 'scheduled-tasks', 'usage', 'get-started']) {
     const result = await page.goto(new URL(`${name}.html`, baseUrl).href);
     assert.equal(result.status(), 200, `${name}: loads`);

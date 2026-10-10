@@ -88,7 +88,7 @@ Manage models, instructions, skills, connectors and scheduled tasks for each pro
 
 ## Health
 
-Check host resources, run server diagnostics and inspect profile problems. Tap the bell on any screen to inspect current issues. In Health, set warning and recovery thresholds for memory, disk and CPU. Alerts are checked while Wing is open or monitoring ongoing work.
+Check host resources, backend diagnostics and profiles. Set alerts for resource pressure, backend connection failures or profile problems, then inspect notifications from any screen. Checks run while Wing is open or monitoring ongoing work.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/health.html">

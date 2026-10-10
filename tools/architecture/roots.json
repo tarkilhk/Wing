@@ -14465,6 +14465,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "website/assets/screenshots/alert-settings-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
       "path": "website/assets/screenshots/alert-thresholds-light.png",
       "area": "website",
       "provenance": "tracked"

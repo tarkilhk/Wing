@@ -757,6 +757,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('health-alert-settings-entry')));
     await tester.pumpAndSettle();
+    expect(find.text('Server problems'), findsOneWidget);
+    expect(find.text('Profile problems'), findsOneWidget);
+    await capture(tester, 'alert-settings-light');
     await tester.tap(find.text('Memory usage'));
     await tester.pumpAndSettle();
     await capture(tester, 'alert-thresholds-light');

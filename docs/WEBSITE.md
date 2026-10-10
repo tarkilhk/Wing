@@ -95,7 +95,7 @@ their own visible screen and reader-facing guide. Analytics has its own homepage
 section with the activity grid, model breakdown and token trends.
 Bots and hosted discussions have their own homepage section and guide. Health
 includes alerts: its overview shows Alert settings, and its guide demonstrates
-incident details and independent warning/recovery controls alongside monitoring limits.
+host, backend and profile alert controls and notification details in three short sections. Monitoring limits stay beside the alert settings.
 The workflow explorer stays focused on following work and steering a conversation.
 Result handling has its own section. Its appearance controls change the app captures, not the page theme.
 Tabs support arrow keys, Home and End. Native disclosures provide answers to
@@ -121,6 +121,15 @@ implementation commentary and captions that repeat the surrounding text.
 
 ## Page and section purposes
 
+Write for a stranger deciding whether Wing fits their work, not for someone
+who already knows its controls. The homepage shows the workflows worth trying;
+each guide demonstrates one of them. A sentence earns its place by explaining a
+useful action, the care that makes it easier, or a condition that affects the
+reader's decision. A feature list, repeated heading or vague promise does not.
+Show polish through specific behavior: retained drafts, remembered views,
+inspectable work, confirmed saves and readable results. Do not describe Wing as
+polished instead of demonstrating those details.
+
 These are editorial constraints, not visitor-facing labels. A section earns its
 place by explaining a specific action or outcome and demonstrating the detail
 that makes it easier. Put the relevant screenshot after that explanation, with
@@ -138,7 +147,7 @@ do not repeat it merely to illustrate another sentence.
 | Home | Can Wing help me run several pieces of work from my phone? | Cross-profile/project navigation, Recents, inspectable activity, reusable results, settings and analytics | Focused guides and download |
 | Profiles and projects | How do I switch agents and projects, move between screens, and keep the chat view I prefer? | One-tap profile choices, combined profile/project filters, remembered Group by/Sort by/Show details, screen navigator and retained drafts | Recents; profile settings |
 | Recents | How do I move among several conversations without losing my work? | Running/Needs input filters; two-finger switching; persistent card stack; edge cues; drafts and restored filter | Live controls; Chats organization |
-| Bots | How do I return to my agents and ask them to work together? | Continuing chats across saved connections; appearance; hosted discussions with mentions | Profile settings; Recents |
+| Bots | How do I keep agents for different work and bring them into a shared discussion? | Continuing chats across saved connections; names, appearance and profile settings; hosted discussions with mentions | Profile settings; Recents |
 | Live work | What is the agent doing, and how can I respond or change direction? | Timeline/Tasks/Agents tabs; requests and results; steering/queueing; forking at a saved answer; editable input | Recents; using results |
 | Results | How do I read, reuse or export what the agent produced? | Markdown layout; separate code and message actions; file previews and Android sharing | Tool details; sending attachments |
 | Health | Where is my setup having trouble, what can I check, and when will Wing alert me? | Host/Server/Profile checks; issue bell and triggering readings; warning/recovery thresholds; active-use monitoring limits | Profile settings; connection recovery |
@@ -154,7 +163,8 @@ do not repeat it merely to illustrate another sentence.
 | Bots and discussions | Return to each agent or bring several into one server-hosted discussion | Roster with distinct appearance and status; populated shared discussion |
 | Follow and steer | Inspect work before deciding whether to correct, queue or stop it | Activity with all three tabs on Timeline; held composer controls |
 | Markdown/code/files | Read and reuse the exact part of an answer you need | Formatted reply; code controls; message actions; file actions, each after its own text |
-| Health and settings | Inspect problems, choose alert thresholds and change the correct profile's setup from the phone | Refreshed Health overview including Alert settings; Administration after its explanation |
+| Health | Check the host, backend and profiles, then set alerts and inspect notifications | Aligned Health overview and notification screenshots, with the active-monitoring limit and guide link last |
+| Administration | Change the selected profile's setup from the phone | Settings overview after the explanation, with its guide link last |
 | Analytics | See activity and model usage, with cost estimates clearly identified | Production analytics screen; link to the usage guide last |
 | Download and connection | Install Wing with the prerequisites understood | Signed download, requirements and questions; connection links last |
 
@@ -195,7 +205,7 @@ copy explains capabilities rather than capture tooling or fixtures.
 | `navigator-{dark,light}.png` | Production `AppDrawer` in a minimal Scaffold host; actual destination controls and connection identity, with a no-I/O versions controller showing unavailable version |
 | `recents-stack-dark.png` | Production `ProfileWorkspaceScreen` with the website conversation fixture and `ChatNoticeActivityScope`; an inward pinch opens the persistent card stack |
 | `bots-dark.png`, `bot-appearance-dark.png`, `bot-discussion-dark.png` | Production `BotsContent` and its routed appearance/discussion screens, with five authored bot profiles, stock-shaped roster status and a public-safe discussion log |
-| `health-alerts-light.png`, `alert-thresholds-light.png` | Production Health content, app bar, alert dialog and settings editor composed through `HealthAlertsScope`; existing resource fixture with a consistent 97.3% memory sample and native critical pressure |
+| `health-alerts-light.png`, `alert-settings-light.png`, `alert-thresholds-light.png` | Production Health content, app bar, alert dialog and settings editor composed through `HealthAlertsScope`; existing resource fixture with a consistent 97.3% memory sample and native critical pressure; full Alert settings shows host, server and profile controls |
 | `recents-{dark,light}.png` | Production `ProfileWorkspaceScreen` Recents destination, with recent messages, one running chat and one needing input across two profiles |
 | `results-{dark,light}.png` | Production `ProfileMessage` with Markdown heading, table, quote, code and an explicit report link; demo callbacks make its supported actions visible without performing I/O |
 | `administration-{dark,light}.png` | Production `HermesAdministrationContent`, using the existing administration-design fixture with authored website observations |
