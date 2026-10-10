@@ -214,6 +214,7 @@ void main() {
       );
       final matches = browser.project('needle').entries;
       expect(matches, hasLength(2));
+      expect(browser.state.searchError, isNull);
       expect(matches.every((entry) => entry.archived), isTrue);
       expect(
         matches.map((entry) => entry.profile),
@@ -221,6 +222,17 @@ void main() {
       );
       for (final profile in ['personal', 'work']) {
         expect(browser.state.profiles[profile]!.searchMatches, {'beyond-list'});
+        expect(
+          host.reads
+              .where(
+                (read) =>
+                    read.$1 == 'sessions/beyond-list' &&
+                    read.$2['profile'] == profile,
+              )
+              .single
+              .$2,
+          {'profile': profile},
+        );
         expect(
           host.reads
               .where(
