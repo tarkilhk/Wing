@@ -5528,6 +5528,31 @@ class ProfileWorkspaceController extends ChangeNotifier {
     })();
   }
 
+  /// Rescan Hermes first; a failed reload leaves Wing's confirmed catalog intact.
+  Future<void> refreshCommandCatalog(ProfileChat chat) async {
+    final resource = _owned(chat);
+    final runtimeId = chat.runtime.runtimeId;
+    void requireCaptured() {
+      if (_closed ||
+          !identical(_owned(chat), resource) ||
+          chat.runtime.runtimeId != runtimeId) {
+        throw StateError('The command refresh owner is no longer current');
+      }
+    }
+
+    requireCaptured();
+    final result = await resource.gateway.call('skills.reload', {
+      'session_id': runtimeId,
+    });
+    requireCaptured();
+    if (result['output'] is! String || result['result'] is! Map) {
+      throw const FormatException('Invalid skills reload response');
+    }
+    resource._commandCatalog = null;
+    await commandCatalog(chat);
+    requireCaptured();
+  }
+
   Future<SlashCompletion> completeCommand(ProfileChat chat, String text) async {
     final resource = _owned(chat);
     final runtimeId = chat.runtime.runtimeId;

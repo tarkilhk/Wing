@@ -1975,6 +1975,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   key: ValueKey(chat.key),
                   loadCompletion: (query) =>
                       controller.completeCommand(chat, query),
+                  refreshCommands: () => controller.refreshCommandCatalog(chat),
                   saveDraft: (text) => controller.updateDraft(chat, text),
                   inspectSkill: (skill) => _inspectSkill(chat, skill),
                   composer: _composer,

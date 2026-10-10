@@ -114,6 +114,13 @@ class CommandHost extends Host {
           if (error != null) throw error;
         }
         if (method == 'commands.catalog') return catalog(scope.profileName);
+        if (method == 'skills.reload') {
+          return await respond?.call(method, params) ??
+              {
+                'output': 'Skills reloaded',
+                'result': {'total': 1, 'commands': 1},
+              };
+        }
         if (method == 'config.set' && params['key'] == 'yolo') {
           yolo = params['value']!.toString();
           return {'value': yoloSetResult ?? yolo};
@@ -213,6 +220,7 @@ void main() {
   late AppPreferences appPreferences;
   late ProfileChat chat;
   late _HeldPromptDraftStore draftStore;
+  var controllerDisposed = false;
   setUpAll(() async {
     final fonts = Platform.environment['CAPTURE_SKILL_COMPOSER_FONTS'];
     if (fonts == null) return;
@@ -230,6 +238,7 @@ void main() {
     }
   });
   setUp(() async {
+    controllerDisposed = false;
     SharedPreferences.setMockInitialValues({});
     host = CommandHost();
     final preferences = await SharedPreferences.getInstance();
@@ -259,8 +268,184 @@ void main() {
     chat = await controller.createChat(canDispatch: () => true);
   });
   tearDown(() {
-    controller.dispose();
+    if (!controllerDisposed) controller.dispose();
     appPreferences.dispose();
+  });
+
+  test(
+    'skill refresh reloads Hermes before replacing the cached catalog',
+    () async {
+      expect(
+        (await controller.completeCommand(chat, '/writing-for')).items,
+        isEmpty,
+      );
+      final reload = Completer<Map<String, dynamic>>();
+      host.respond = (_, _) => reload.future;
+      host.commandCalls.clear();
+      final refreshing = controller.refreshCommandCatalog(chat);
+      await Future<void>.delayed(Duration.zero);
+      expect(host.commandCalls.single.$1, 'skills.reload');
+      expect(host.commandCalls.single.$2, {
+        'session_id': chat.runtime.runtimeId,
+        'profile': 'a',
+      });
+      host.extraSkillNames.add('/writing-for-agents');
+      expect(
+        (await controller.completeCommand(chat, '/writing-for')).items,
+        isEmpty,
+      );
+      reload.complete({
+        'output': 'Skills reloaded',
+        'result': {'total': 2, 'commands': 2},
+      });
+      await refreshing;
+      expect(host.commandCalls.map((c) => c.$1), [
+        'skills.reload',
+        'commands.catalog',
+      ]);
+      expect(
+        (await controller.completeCommand(
+          chat,
+          '/writing-for',
+        )).items.single.text,
+        '/writing-for-agents',
+      );
+    },
+  );
+
+  test(
+    'failed backend reload preserves Wing catalog and permits retry',
+    () async {
+      await controller.commandCatalog(chat);
+      host.extraSkillNames.add('/writing-for-agents');
+      host.commandCalls.clear();
+      host.respond = (_, _) async => throw StateError('Reload failed');
+      await expectLater(
+        controller.refreshCommandCatalog(chat),
+        throwsStateError,
+      );
+      expect(
+        (await controller.completeCommand(chat, '/writing-for')).items,
+        isEmpty,
+      );
+      expect(host.commandCalls.map((c) => c.$1), ['skills.reload']);
+      host.respond = null;
+      await controller.refreshCommandCatalog(chat);
+      expect(
+        (await controller.completeCommand(
+          chat,
+          '/writing-for',
+        )).items.single.text,
+        '/writing-for-agents',
+      );
+    },
+  );
+
+  test('malformed backend reload does not invalidate Wing catalog', () async {
+    await controller.commandCatalog(chat);
+    host.extraSkillNames.add('/writing-for-agents');
+    host.commandCalls.clear();
+    host.respond = (_, _) async => {'output': 'not a reload result'};
+    await expectLater(
+      controller.refreshCommandCatalog(chat),
+      throwsFormatException,
+    );
+    expect(
+      (await controller.completeCommand(chat, '/writing-for')).items,
+      isEmpty,
+    );
+    expect(host.commandCalls.map((c) => c.$1), ['skills.reload']);
+  });
+
+  test('late backend reload cannot fetch after workspace disposal', () async {
+    final reload = Completer<Map<String, dynamic>>();
+    host.respond = (_, _) => reload.future;
+    host.commandCalls.clear();
+    final refreshing = controller.refreshCommandCatalog(chat);
+    final rejected = expectLater(refreshing, throwsStateError);
+    controller.dispose();
+    controllerDisposed = true;
+    reload.complete({
+      'output': 'Skills reloaded',
+      'result': {'total': 1, 'commands': 1},
+    });
+    await rejected;
+    expect(host.commandCalls.map((c) => c.$1), ['skills.reload']);
+  });
+
+  testWidgets('refresh completes the latest query without changing its draft', (
+    tester,
+  ) async {
+    final input = SkillComposerController(text: '/writing-for');
+    addTearDown(input.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SlashCommandSuggestions(
+            inspectSkill: (_) async {},
+            refreshCommands: () => controller.refreshCommandCatalog(chat),
+            loadCompletion: (query) => controller.completeCommand(chat, query),
+            saveDraft: (text) => controller.updateDraft(chat, text),
+            composer: input,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    final reload = Completer<Map<String, dynamic>>();
+    host.respond = (_, _) => reload.future;
+    await tester.tap(find.byTooltip('Refresh skills'));
+    await tester.pump();
+    input.text = '/pstack';
+    await tester.pump(const Duration(milliseconds: 200));
+    host.extraSkillNames.addAll(['/writing-for-agents', '/pstack-unslop']);
+    reload.complete({
+      'output': 'Skills reloaded',
+      'result': {'total': 3, 'commands': 3},
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('/pstack-unslop'), findsOneWidget);
+    expect(find.text('/writing-for-agents'), findsNothing);
+    expect(input.text, '/pstack');
+    expect(host.commandCalls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('refresh cannot paint a picker after its profile changes', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    final composer = find.byKey(const Key('profile-message-composer'));
+    await tester.enterText(composer, '/writing-for');
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    final reload = Completer<Map<String, dynamic>>();
+    host.respond = (_, _) => reload.future;
+    await tester.tap(find.byTooltip('Refresh skills'));
+    await tester.pump();
+    await controller.switchProfile('b');
+    await controller.createChat(canDispatch: () => true);
+    await tester.pump();
+    host.extraSkillNames.add('/writing-for-agents');
+    reload.complete({
+      'output': 'Skills reloaded',
+      'result': {'total': 2, 'commands': 2},
+    });
+    await tester.pumpAndSettle();
+    expect(controller.current!.scope.profileName, 'b');
+    expect(tester.widget<TextField>(composer).controller!.text, isEmpty);
+    expect(find.text('/writing-for-agents'), findsNothing);
+    expect(
+      host.commandCalls
+          .singleWhere((c) => c.$1 == 'skills.reload')
+          .$2['profile'],
+      'a',
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   test('catalog includes custom skills, aliases and no fixed size limit', () {
@@ -1164,6 +1349,7 @@ void main() {
               children: [
                 SlashCommandSuggestions(
                   inspectSkill: (_) async {},
+                  refreshCommands: () => controller.refreshCommandCatalog(chat),
                   loadCompletion: (query) =>
                       controller.completeCommand(chat, query),
                   saveDraft: (text) => controller.updateDraft(chat, text),
@@ -1196,6 +1382,7 @@ void main() {
               children: [
                 SlashCommandSuggestions(
                   inspectSkill: (_) async {},
+                  refreshCommands: () => controller.refreshCommandCatalog(chat),
                   loadCompletion: (query) =>
                       controller.completeCommand(chat, query),
                   saveDraft: (text) => controller.updateDraft(chat, text),
@@ -1262,6 +1449,7 @@ void main() {
         home: Scaffold(
           body: SlashCommandSuggestions(
             inspectSkill: (_) async {},
+            refreshCommands: () => controller.refreshCommandCatalog(chat),
             loadCompletion: (query) => controller.completeCommand(chat, query),
             saveDraft: (text) => controller.updateDraft(chat, text),
             composer: input,
@@ -1443,6 +1631,116 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('manual skill refresh ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final captureKey = GlobalKey();
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: captureKey,
+            child: MaterialApp(
+              theme: wingTheme(brightness),
+              debugShowCheckedModeBanner: false,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  viewInsets: const EdgeInsets.only(bottom: 280),
+                ),
+                child: child!,
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          ),
+        );
+        final composer = find.byKey(const Key('profile-message-composer'));
+        await tester.enterText(composer, '/writing-for');
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pumpAndSettle();
+        final refresh = find.byTooltip('Refresh skills');
+        expect(refresh.hitTestable(), findsOneWidget);
+        expect(tester.getSize(refresh), const Size(48, 48));
+        expect(find.text('No matching commands.'), findsOneWidget);
+        final input = tester.widget<TextField>(composer).controller!;
+        final before = input.value;
+        final editable = tester.widget<EditableText>(
+          find.descendant(of: composer, matching: find.byType(EditableText)),
+        );
+        expect(editable.focusNode.hasFocus, isTrue);
+        Future<void> capture(String state) async {
+          if (!Platform.environment.containsKey('CAPTURE_SKILL_COMPOSER')) {
+            return;
+          }
+          await tester.runAsync(() async {
+            final render =
+                captureKey.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary;
+            final image = await render.toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final file = File(
+              'build/skill-composer/${brightness.name}-$scale-refresh-$state.png',
+            );
+            await file.parent.create(recursive: true);
+            await file.writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+
+        await capture('empty');
+        final reload = Completer<Map<String, dynamic>>();
+        host.respond = (_, _) => reload.future;
+        host.commandCalls.clear();
+        await tester.tap(refresh);
+        await tester.pump();
+        await tester.tap(refresh);
+        await tester.pump();
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'skills.reload'),
+          hasLength(1),
+        );
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'commands.catalog'),
+          isEmpty,
+        );
+        expect(input.value, before);
+        expect(editable.focusNode.hasFocus, isTrue);
+        await capture('loading');
+        host.extraSkillNames.add('/writing-for-agents');
+        reload.complete({
+          'output': 'Skills reloaded',
+          'result': {'total': 2, 'commands': 2},
+        });
+        await tester.pumpAndSettle();
+        expect(find.text('/writing-for-agents'), findsOneWidget);
+        expect(input.value, before);
+        expect(chat.composer.observation.text, '/writing-for');
+        expect(editable.focusNode.hasFocus, isTrue);
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'prompt.submit'),
+          isEmpty,
+        );
+        await capture('loaded');
+        host.respond = (_, _) async => throw StateError('Offline');
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(find.text('Could not refresh skills.'), findsOneWidget);
+        expect(refresh.hitTestable(), findsOneWidget);
+        expect(input.value, before);
+        expect(editable.focusNode.hasFocus, isTrue);
+        await capture('error');
+        host.respond = null;
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(find.text('/writing-for-agents'), findsOneWidget);
+        expect(find.text('Could not refresh skills.'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+
       testWidgets('mobile inline skill composer ${brightness.name} $scale', (
         tester,
       ) async {
@@ -1643,6 +1941,7 @@ void main() {
         home: Scaffold(
           body: SlashCommandSuggestions(
             inspectSkill: (_) async {},
+            refreshCommands: () => controller.refreshCommandCatalog(chat),
             loadCompletion: (query) => controller.completeCommand(chat, query),
             saveDraft: (text) => controller.updateDraft(chat, text),
             composer: input,
@@ -1658,7 +1957,7 @@ void main() {
 
     expect(input.text, '/approvals ');
     expect(chat.composer.observation.text, '/approvals ');
-    expect(find.text('Could not load commands. Tap to retry.'), findsNothing);
+    expect(find.text('Could not load commands.'), findsNothing);
     expect(find.text('manual'), findsOneWidget);
     expect(host.commandCalls.singleWhere((c) => c.$1 == 'complete.slash').$2, {
       'session_id': 'a-runtime',
@@ -1689,6 +1988,7 @@ void main() {
           home: Scaffold(
             body: SlashCommandSuggestions(
               inspectSkill: (_) async {},
+              refreshCommands: () => controller.refreshCommandCatalog(chat),
               loadCompletion: (query) =>
                   controller.completeCommand(chat, query),
               saveDraft: (text) => controller.updateDraft(chat, text),
@@ -1741,6 +2041,7 @@ void main() {
         home: Scaffold(
           body: SlashCommandSuggestions(
             inspectSkill: (_) async {},
+            refreshCommands: () => controller.refreshCommandCatalog(chat),
             loadCompletion: (query) => controller.completeCommand(chat, query),
             saveDraft: (text) => controller.updateDraft(chat, text),
             composer: input,
