@@ -779,12 +779,22 @@ and exact received source, retaining a server-supplied truncation notice.
 Profile activity keeps recorded `use_count`, `patch_count` and valid last-change
 dates distinct from **Read requests · 90 days**. Missing records stay unknown;
 charts retain counts, profile labels and coverage instead of inferring zero or
-summing unlike counters. Geometry and action scope remain owned by
+summing unlike counters. A captured reader reserves the Activity summary from
+the first frame using static count placeholders and a loading status. Both count
+slots and the date/status line remain allocated after settlement, including
+confirmed zero, partial records and unavailable activity. Missing counts stay
+unknown; the disclosure requires received activity. Geometry and action scope
+remain owned by
 [the shared design contract](DESIGN_SYSTEM.md#user-value-first-activity).
 
 `test/skill_reader_session_test.dart` covers captured reads and received
 observations; `test/skill_document_viewer_test.dart` exercises the production
 reader, Contents, reference documents and raw/formatted scope.
+Its `activity keeps its space while loading` regression holds stock-contract
+profile discovery, then verifies unchanged card and document positions through
+nonempty, zero, partial, date-only, request-only, missing and failed observations
+in both themes at 390 dp/100% and 320 dp/200%. This is a behavioral guard:
+static inspection cannot establish rendered geometry across asynchronous arrival.
 
 ## Plugin skill document envelope, 9 October 2026
 

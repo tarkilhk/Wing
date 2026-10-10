@@ -16,7 +16,12 @@ import 'package:wing/core/widgets/activity/skill_document_viewer.dart';
 
 const demo =
     '---\ndescription: Use when reviewing evidence.\nversion: 1.0\nauthor: Example\nlicense: MIT\n---\n# Review\n\n## First\nRead **original** evidence.\n\n## Second\nCheck the outcome.\n';
-SkillReaderSession reader(SkillDocument document, Map? captured) {
+SkillReaderSession reader(
+  SkillDocument document,
+  Map? captured, {
+  Future<void>? activityReady,
+  bool failActivity = false,
+}) {
   final counters =
       captured?['telemetry']?['byProfile'] as List? ??
       [
@@ -40,6 +45,8 @@ SkillReaderSession reader(SkillDocument document, Map? captured) {
   final repository = SkillReaderRepository((endpoint, query) async {
     final profile = query['profile'];
     if (endpoint == 'profiles') {
+      await activityReady;
+      if (failActivity) throw StateError('Activity read failed');
       return {
         'profiles': [
           for (final record in counters)
@@ -224,6 +231,166 @@ void main() {
   });
   for (final theme in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'activity keeps its space while loading ${theme.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final semantics = tester.ensureSemantics();
+          try {
+            final document = SkillDocument.fromReceived(
+              name: 'review',
+              content: '# Review\n\n## First\nRead the evidence.',
+              sourcePath: '/skills/review/SKILL.md',
+              category: 'productivity',
+            );
+            final cases = <String, List<Map<String, Object?>>>{
+              'populated': [
+                {
+                  'profile': 'one',
+                  'useCount': 40,
+                  'patchCount': 27,
+                  'lastPatchedAt': '2026-10-10T12:00:00Z',
+                },
+              ],
+              'zero': [
+                {'profile': 'one', 'useCount': 0, 'patchCount': 0},
+              ],
+              'partial': [
+                {'profile': 'one', 'useCount': 7},
+              ],
+              'date-only': [
+                {'profile': 'one', 'lastPatchedAt': '2026-10-10T12:00:00Z'},
+              ],
+              'requests-only': [
+                {'profile': 'one'},
+              ],
+              'missing': [],
+              'failed': [],
+            };
+            for (final entry in cases.entries) {
+              final ready = Completer<void>(), boundary = GlobalKey();
+              final session = reader(
+                document,
+                {
+                  'telemetry': {'byProfile': entry.value},
+                  'activity': {
+                    'byProfile': [
+                      if (entry.key == 'requests-only')
+                        {'profile': 'one', 'view_count': 9},
+                    ],
+                  },
+                },
+                activityReady: ready.future,
+                failActivity: entry.key == 'failed',
+              );
+              await tester.pumpWidget(
+                RepaintBoundary(
+                  key: boundary,
+                  child: MaterialApp(
+                    theme: wingTheme(theme),
+                    debugShowCheckedModeBanner: false,
+                    builder: (context, child) => MediaQuery(
+                      data: MediaQuery.of(context).copyWith(
+                        textScaler: TextScaler.linear(scale),
+                        disableAnimations: true,
+                      ),
+                      child: child!,
+                    ),
+                    home: SkillDocumentViewer(
+                      document: document,
+                      createReader: () => session,
+                    ),
+                  ),
+                ),
+              );
+              await tester.pumpAndSettle();
+              expect(find.text('Activity'), findsOneWidget);
+              expect(find.text('Loading activity…'), findsOneWidget);
+              expect(
+                find.bySemanticsLabel('recorded uses: loading'),
+                findsOneWidget,
+              );
+              expect(find.text('0'), findsNothing);
+              final card = find
+                  .ancestor(
+                    of: find.text('Activity'),
+                    matching: find.byType(InkWell),
+                  )
+                  .first;
+              final loadingRect = tester.getRect(card);
+              final contentTop = tester
+                  .getRect(find.byTooltip('Show raw content'))
+                  .top;
+              await capture(
+                tester,
+                boundary,
+                'activity-loading-${theme.name}-${scale.toInt()}',
+              );
+              await tester.tap(find.text('Activity'));
+              await tester.pumpAndSettle();
+              expect(find.byType(Dialog), findsNothing);
+              ready.complete();
+              await tester.pumpAndSettle();
+              expect(find.text('Loading activity…'), findsNothing);
+              expect(tester.getRect(card), loadingRect);
+              expect(
+                tester.getRect(find.byTooltip('Show raw content')).top,
+                contentTop,
+              );
+              expect(find.text('recorded uses'), findsOneWidget);
+              expect(find.text('patches / edits'), findsOneWidget);
+              if (entry.key == 'populated') {
+                expect(find.text('40'), findsOneWidget);
+                expect(find.text('27'), findsOneWidget);
+                expect(find.textContaining('Last change'), findsOneWidget);
+              } else if (entry.key == 'zero') {
+                expect(find.text('0'), findsNWidgets(2));
+              } else if (entry.key == 'partial') {
+                expect(find.text('7'), findsOneWidget);
+                expect(find.text('—'), findsOneWidget);
+                expect(
+                  find.bySemanticsLabel('patches / edits: unavailable'),
+                  findsOneWidget,
+                );
+              } else if (entry.key == 'date-only' ||
+                  entry.key == 'requests-only') {
+                expect(find.text('—'), findsNWidgets(2));
+              } else {
+                expect(find.text('Activity unavailable'), findsOneWidget);
+                expect(find.text('0'), findsNothing);
+                await tester.tap(find.text('Activity'));
+                await tester.pumpAndSettle();
+                expect(find.byType(Dialog), findsNothing);
+              }
+              expect(tester.takeException(), isNull);
+              await capture(
+                tester,
+                boundary,
+                'activity-${entry.key}-${theme.name}-${scale.toInt()}',
+              );
+              if (entry.key != 'missing' && entry.key != 'failed') {
+                await tester.tap(find.text('Activity'));
+                await tester.pumpAndSettle();
+                expect(find.byType(Dialog), findsOneWidget);
+                if (entry.key == 'date-only') {
+                  expect(find.text('Last updated'), findsOneWidget);
+                }
+                if (entry.key == 'requests-only') {
+                  expect(find.text('Read requests · 90 days'), findsOneWidget);
+                }
+                await tester.tap(find.byTooltip('Close activity'));
+                await tester.pumpAndSettle();
+              }
+              await tester.pumpWidget(const SizedBox.shrink());
+              await tester.pumpAndSettle();
+            }
+          } finally {
+            semantics.dispose();
+          }
+        },
+      );
       testWidgets('shared reader layout and activity ${theme.name} $scale', (
         tester,
       ) async {

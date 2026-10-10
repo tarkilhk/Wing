@@ -304,8 +304,7 @@ class _SkillDocumentViewerState extends State<SkillDocumentViewer> {
                 opening: _openingReference,
                 onOpen: _reference,
               ),
-            if (observation != null &&
-                (observation.uses != null || observation.patches != null))
+            if (_reader != null)
               _SkillActivitySummary(observation: observation),
             _SkillSurface(
               child: Column(

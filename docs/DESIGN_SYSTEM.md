@@ -1038,8 +1038,14 @@ the breakdown. Omit selectors for absent or unhelpful metrics.
 Skill activity groups use and change observations behind one disclosure. Give
 the reader a compact summary of recorded use, patches/edits and the latest valid
 change date; keep per-profile charts, exact dates and scope explanations inside
-it. A separate Audit card must earn its place with a distinct user task and
-useful information beyond this summary. Comparative charts share a stable
+it. When a captured reader is available, reserve this summary immediately with
+static placeholders in both count slots and **Loading activity…** in the
+date/status line. Keep its geometry through arrival, including confirmed zeros
+and a missing date. Missing counts use a dash; if no activity observations arrive,
+retain the card with **Activity unavailable**. Enable the disclosure only for
+received activity. Previews and reference documents without a captured activity
+reader do not invent activity. A separate Audit card must earn its place with a
+distinct user task and useful information beyond this summary. Comparative charts share a stable
 profile-colour mapping; each chart retains its own metric total. Display each
 count once within the disclosure: when donuts show counts, the shared legend
 identifies profiles, without a repeated count table. Secondary read requests use

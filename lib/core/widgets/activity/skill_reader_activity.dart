@@ -9,28 +9,77 @@ String _skillDate(BuildContext context, DateTime date, {bool exact = false}) {
 
 class _SkillActivitySummary extends StatelessWidget {
   const _SkillActivitySummary({required this.observation});
-  final SkillReaderObservation observation;
+  final SkillReaderObservation? observation;
   @override
   Widget build(BuildContext context) {
     final colors = WingTokens.of(context);
-    Widget metric(int? count, String label) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(count.toString(), style: colors.typography.title),
-        Text(
-          label,
-          style: colors.typography.label.copyWith(color: colors.muted),
-        ),
-      ],
+    final received = observation;
+    final loading = received == null;
+    final available =
+        received != null &&
+        (received.uses != null ||
+            received.patches != null ||
+            received.readRequests != null ||
+            received.lastPatched != null);
+    final date = received?.lastPatched;
+    Widget metric(int? count, String label) => Semantics(
+      container: true,
+      label: '$label: ${loading ? 'loading' : count ?? 'unavailable'}',
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              // The real number's line box also owns the placeholder's height.
+              Visibility(
+                visible: !loading,
+                maintainSize: true,
+                maintainAnimation: true,
+                maintainState: true,
+                child: Text(
+                  count?.toString() ?? '—',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: colors.typography.title,
+                ),
+              ),
+              if (loading)
+                Container(
+                  width: MediaQuery.textScalerOf(context).scale(40),
+                  height: MediaQuery.textScalerOf(context).scale(18),
+                  decoration: BoxDecoration(
+                    color: colors.border,
+                    borderRadius: WingRadius.control,
+                  ),
+                ),
+            ],
+          ),
+          Text(
+            label,
+            style: colors.typography.label.copyWith(color: colors.muted),
+          ),
+        ],
+      ),
     );
+    final status = loading
+        ? 'Loading activity…'
+        : !available
+        ? 'Activity unavailable'
+        : date != null
+        ? 'Last change ${_skillDate(context, date)}'
+        : '';
     return _SkillSurface(
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => showDialog<void>(
-            context: context,
-            builder: (_) => _SkillActivityDialog(observation: observation),
-          ),
+          onTap: available
+              ? () => showDialog<void>(
+                  context: context,
+                  builder: (_) => _SkillActivityDialog(observation: received),
+                )
+              : null,
           child: Padding(
             padding: const EdgeInsets.all(8),
             child: Column(
@@ -47,46 +96,55 @@ class _SkillActivitySummary extends StatelessWidget {
                     Expanded(
                       child: Text('Activity', style: colors.typography.label),
                     ),
-                    Icon(Icons.chevron_right, size: 16, color: colors.muted),
+                    Visibility(
+                      visible: available,
+                      maintainSize: true,
+                      maintainAnimation: true,
+                      maintainState: true,
+                      child: Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: colors.muted,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (observation.uses != null)
-                      Expanded(
-                        child: metric(observation.uses, 'recorded uses'),
-                      ),
-                    if (observation.patches != null)
-                      Expanded(
-                        child: metric(observation.patches, 'patches / edits'),
-                      ),
+                    Expanded(child: metric(received?.uses, 'recorded uses')),
+                    Expanded(
+                      child: metric(received?.patches, 'patches / edits'),
+                    ),
                   ],
                 ),
-                if (observation.lastPatched case final date?)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.schedule, size: 12, color: colors.muted),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              'Last change ${_skillDate(context, date)}',
-                              textAlign: TextAlign.right,
-                              style: colors.typography.label.copyWith(
-                                color: colors.muted,
-                              ),
-                            ),
+                const SizedBox(height: 8),
+                // Keep the date/status line even when no date was supplied.
+                // Loading, confirmed zero and unavailable data share geometry.
+                Semantics(
+                  liveRegion: true,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (date != null) ...[
+                        Icon(Icons.schedule, size: 12, color: colors.muted),
+                        const SizedBox(width: 4),
+                      ],
+                      Flexible(
+                        child: Text(
+                          status.isEmpty ? '\u00a0' : status,
+                          textAlign: TextAlign.right,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: colors.typography.label.copyWith(
+                            color: colors.muted,
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
+                ),
               ],
             ),
           ),
@@ -110,7 +168,11 @@ class _SkillActivityDialogState extends State<_SkillActivityDialog> {
     final observation = widget.observation, colors = WingTokens.of(context);
     final profiles = observation.activity
         .where(
-          (p) => p.uses != null || p.patches != null || p.readRequests != null,
+          (p) =>
+              p.uses != null ||
+              p.patches != null ||
+              p.readRequests != null ||
+              p.lastPatched != null,
         )
         .toList();
     final palette = <Color>[
