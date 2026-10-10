@@ -18,7 +18,7 @@ server instructions.
 | --- | --- |
 | `workspaces.html` | `FEATURES.md`: profiles, projects and Chats filters |
 | `bots.html` | `BOTS.md`: continuing bot chats, appearance, hosted discussions and read-only screen previews |
-| `recents.html` | `FEATURES.md`: recent and ongoing chats, status filters and launcher shortcut |
+| `recents.html` | `FEATURES.md`: recent and ongoing chats, status filters, conversation gestures and retained navigation state |
 | `live-work.html` | `FEATURES.md` and `TOOL_ACTIVITY.md`: live activity, steering, draft preservation and tool details |
 | `results.html` | `FEATURES.md`, production `ProfileMessage`, `MarkdownMessageContent` and resource viewers |
 | `health.html` | `ADMINISTRATION.md`: Host, Server and Profile checks, device alert policy, incident details, thresholds and monitoring limits |
