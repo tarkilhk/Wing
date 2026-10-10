@@ -436,17 +436,20 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
       case 'new-project':
         unawaited(
           _run(() async {
-            if (await _chooseOwner()) await widget.newProject(_data);
+            final name = await _chooseOwner();
+            if (name != null && await _data.chooseCreationProfile(name)) {
+              await widget.newProject(_data);
+            }
           }),
         );
     }
   }
 
-  Future<bool> _chooseOwner() async {
+  Future<String?> _chooseOwner() async {
     final profiles = _data.creationProfiles;
     String? name = _data.suggestedCreationProfile;
     if (name != null) {
-      return _data.chooseCreationProfile(name);
+      return name;
     } else {
       await showChatListMenu(
         _optionsKey.currentContext!,
@@ -459,7 +462,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
         onSelected: (id) => name = id,
       );
     }
-    return name != null && mounted && await _data.chooseCreationProfile(name!);
+    return mounted ? name : null;
   }
 
   String _age(ChatListEntry entry) {
@@ -1287,7 +1290,8 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
           onPressed: !enabled || workspace.offline || workspace.recovering
               ? null
               : () => _run(() async {
-                  if (await _chooseOwner()) await _data.newChat();
+                  final name = await _chooseOwner();
+                  if (name != null) await _data.newChat(name);
                 }),
           child: const Icon(WingIcons.newChat),
         ),

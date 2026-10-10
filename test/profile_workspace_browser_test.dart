@@ -81,6 +81,40 @@ void main() {
     );
   }
 
+  testWidgets('New chat replaces the browser while profile reads are held', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    fixture.pageDelays[('work', 0)] = gate;
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    await show(tester);
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+    await tester.pump();
+    final connectionGate = Completer<void>();
+    fixture.connectDelay = connectionGate;
+    addTearDown(() {
+      if (!connectionGate.isCompleted) connectionGate.complete();
+    });
+    await tester.tap(find.byKey(const ValueKey('workspace-new-chat')));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    connectionGate.complete();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    expect(gate.isCompleted, isFalse);
+    expect(find.byKey(const ValueKey('conversation-composer')), findsOneWidget);
+    expect(controller.current?.chat?.key.workspace.profileName, 'work');
+    expect(find.byKey(const ValueKey('workspace-new-chat')), findsNothing);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('conversation-composer')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final leaveChat in [false, true]) {
     testWidgets(
       leaveChat

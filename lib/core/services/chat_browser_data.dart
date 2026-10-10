@@ -650,8 +650,13 @@ final class ChatBrowserData extends ChangeNotifier {
     await _controller.createProject(name.trim(), path, canDispatch: active);
   }
 
-  Future<void> newChat() async {
-    if (!_disposed) await _controller.createChat(canDispatch: () => !_disposed);
+  Future<void> newChat(String profileName) async {
+    if (!_disposed) {
+      await _controller.createBrowserChat(
+        profileName: profileName,
+        canDispatch: () => !_disposed,
+      );
+    }
   }
 
   Future<void> retryConnection() async {

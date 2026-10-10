@@ -141,6 +141,91 @@ void main() {
   }
 
   testWidgets(
+    'one New chat tap opens the selected profile while its list is refreshing',
+    (tester) async {
+      final gate = Completer<void>();
+      host.pageDelays[('work', 0)] = gate;
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      await show(tester);
+      await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('workspace-new-chat')));
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      expect(gate.isCompleted, isFalse);
+      expect(
+        controller.current?.chat?.key.workspace.profileName,
+        'work',
+        reason: 'a single tap must open the chat before list reads finish',
+      );
+      expect(controller.current?.chat?.key.sessionId, 'new-chat');
+      expect(
+        host.calls.where((call) => call.$2 == 'session.create'),
+        hasLength(1),
+      );
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(controller.current?.chat?.key.sessionId, 'new-chat');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('New chat supersedes an older refresh of the current profile', (
+    tester,
+  ) async {
+    await show(tester);
+    final gate = Completer<void>();
+    host.pageDelays[('personal', 0)] = gate;
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    final refresh = controller.refresh();
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('workspace-new-chat')));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    expect(gate.isCompleted, isFalse);
+    expect(controller.current?.chat?.key.sessionId, 'new-chat');
+    gate.complete();
+    await refresh;
+    await tester.pumpAndSettle();
+    expect(controller.current?.chat?.key.sessionId, 'new-chat');
+    expect(controller.error, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('repeated New chat taps create one chat in the chosen profile', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+    await tester.pump();
+    final gate = Completer<void>();
+    host.rpcDelays['session.create'] = gate;
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    final fab = find.byKey(const ValueKey('workspace-new-chat'));
+    await tester.tap(fab);
+    await tester.tap(fab);
+    await tester.pump();
+    expect(
+      host.wireCalls.where((call) => call == 'session.create'),
+      hasLength(1),
+    );
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(controller.current?.chat?.key.workspace.profileName, 'work');
+    expect(
+      host.calls.where((call) => call.$2 == 'session.create'),
+      hasLength(1),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
     'confirmed action releases controls before the list refresh finishes',
     (tester) async {
       await show(tester);

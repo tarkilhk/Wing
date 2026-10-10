@@ -3084,6 +3084,30 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return _current!;
   }
 
+  /// New chat needs a validated profile and live transport, not its chat list
+  /// or project tree. Those reads remain owned by the connection-wide browser.
+  Future<ProfileChat> createBrowserChat({
+    required String profileName,
+    required bool Function() canDispatch,
+  }) {
+    if (_closed || !canDispatch()) {
+      throw StateError('Chat creation was cancelled.');
+    }
+    final resource = browserResource(profileName);
+    // This explicit destination supersedes unfinished profile navigation and
+    // refresh publication, including a refresh of the same profile.
+    final generation = ++_generation;
+    _cancelOlderLoads();
+    if (_current != null) _invalidateSessionLoad(_current!);
+    if (_current != resource) _invalidateSessionLoad(resource);
+    _pendingProfile = null;
+    return _createChat(
+      resource,
+      browserGeneration: generation,
+      canDispatch: canDispatch,
+    );
+  }
+
   Future<ProfileChat> createChat({
     required bool Function() canDispatch,
     Map<String, dynamic>? inProject,
@@ -3118,12 +3142,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileWorkspaceData resource, {
     Map<String, dynamic>? project,
     String? initialDraft,
+    int? browserGeneration,
     required bool Function() canDispatch,
   }) => _retainWorkspaceOperation(
     () => _createOwnedChat(
       resource,
       project: project,
       initialDraft: initialDraft,
+      browserGeneration: browserGeneration,
       canDispatch: canDispatch,
     ),
   );
@@ -3132,6 +3158,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileWorkspaceData resource, {
     Map<String, dynamic>? project,
     String? initialDraft,
+    int? browserGeneration,
     required bool Function() canDispatch,
   }) async {
     final navigation = ++_navigationGeneration;
@@ -3144,7 +3171,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
       cwd: projectPath as String?,
       cwdExplicit: project != null,
       canDispatch: () =>
-          !_closed && identical(current, resource) && canDispatch(),
+          !_closed &&
+          (browserGeneration == null
+              ? identical(current, resource)
+              : browserGeneration == _generation && !switching) &&
+          canDispatch(),
     );
     if (_closed) {
       throw StateError(
@@ -3172,7 +3203,32 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _applyTodoSnapshot(chat, response['todo_state']);
     await _restoreDraft(chat);
     if (initialDraft != null) await updateDraft(chat, initialDraft);
-    if (_current == resource &&
+    if (browserGeneration != null &&
+        browserGeneration == _generation &&
+        navigation == _navigationGeneration &&
+        !switching &&
+        canDispatch()) {
+      // Publish the profile and its confirmed new chat together. Publishing
+      // the profile earlier would replace the browser and revoke its request
+      // while discovery or connection preparation is still in flight.
+      _current = resource;
+      resource._selectedSession = id;
+      resource._offlineSnapshot = false;
+      resource._selectedProject = null;
+      resource._projectSessions = _readonlyWorkspaceRows([]);
+      resource._projectSessionsError = null;
+      resource._projectGeneration++;
+      resource._projectSessionsLoading = false;
+      _error = null;
+      _failedSwitchProfile = null;
+      _failedSwitchError = null;
+      appPreferences.admitProfileSelection(
+        connectionIdentity,
+        resource.scope.profileName,
+      );
+      unawaited(appPreferences.settleProfileSelection(connectionIdentity));
+    } else if (browserGeneration == null &&
+        _current == resource &&
         !switching &&
         navigation == _navigationGeneration) {
       resource._selectedSession = id;
