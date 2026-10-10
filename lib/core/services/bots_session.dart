@@ -73,36 +73,54 @@ class BotsSession extends ChangeNotifier {
   /// polling. Exact stock root/tip identity admits appearance; lookup failure
   /// leaves the conversation available with its ordinary title.
   Future<BotRecord?> botForConversation(ProfileSessionKey key) async {
+    return (await appearancesForConversations([key]))[key];
+  }
+
+  /// One roster read per matching instance, enriching only exact conversations.
+  /// No polling, presence reads, group reads or mutations are admitted here.
+  Future<Map<ProfileSessionKey, BotRecord>> appearancesForConversations(
+    Iterable<ProfileSessionKey> conversations,
+  ) async {
+    final keys = conversations.toSet();
+    final appearances = <ProfileSessionKey, BotRecord>{};
     bool current() => !_closed;
-    if (!current()) return null;
+    if (!current() || keys.isEmpty) return const {};
     try {
       final sources = await _sources(current);
-      if (!current()) return null;
-      final source = sources
-          .where(
-            (repository) =>
-                repository.scope.connectionId == key.workspace.connectionId &&
-                repository.scope.connectionIdentity ==
-                    key.workspace.connectionIdentity,
-          )
-          .firstOrNull;
-      if (source == null) return null;
-      source.retain();
-      try {
-        final roster = await source.bots();
-        if (!current()) return null;
-        final bot = roster
-            .where((bot) => bot.describesConversation(key))
-            .firstOrNull;
-        if (bot == null) return null;
-        final appearance = await source.enrich(bot);
-        return current() ? appearance : null;
-      } finally {
-        source.release();
+      if (!current()) return const {};
+      for (final source in sources) {
+        final matching = keys
+            .where(
+              (key) =>
+                  source.scope.connectionId == key.workspace.connectionId &&
+                  source.scope.connectionIdentity ==
+                      key.workspace.connectionIdentity,
+            )
+            .toSet();
+        if (matching.isEmpty) continue;
+        source.retain();
+        try {
+          final roster = await source.bots();
+          if (!current()) return const {};
+          for (final bot in roster) {
+            final owned = matching.where(bot.describesConversation).toList();
+            if (owned.isEmpty) continue;
+            final appearance = await source.enrich(bot);
+            if (!current()) return const {};
+            for (final key in owned) {
+              appearances[key] = appearance;
+            }
+          }
+        } catch (_) {
+          // Appearance reads cannot prevent browsing another instance's chats.
+        } finally {
+          source.release();
+        }
       }
     } catch (_) {
-      return null;
+      // Keep browsing available when saved authority cannot be read.
     }
+    return current() ? Map.unmodifiable(appearances) : const {};
   }
 
   Future<void> refresh() async {

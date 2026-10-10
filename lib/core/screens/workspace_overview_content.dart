@@ -1,4 +1,9 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import '../models/bots.dart';
+import '../models/profile_session_key.dart';
+import '../services/bots_session.dart';
+import '../widgets/bot_avatar.dart';
 import '../widgets/studio_error.dart';
 import 'package:flutter/material.dart';
 
@@ -34,12 +39,14 @@ class WorkspaceActivityContent extends StatefulWidget {
   const WorkspaceActivityContent({
     super.key,
     required this.controller,
+    required this.bots,
     required this.onOpen,
     this.filter = WorkspaceActivityFilter.all,
     this.onFilterChanged,
   });
 
   final ProfileWorkspaceController controller;
+  final BotsSession bots;
   final WorkspaceActivityFilter filter;
   final ValueChanged<WorkspaceActivityFilter>? onFilterChanged;
   final void Function(ProfileRecentChat, List<ProfileRecentChat>) onOpen;
@@ -52,10 +59,47 @@ class WorkspaceActivityContent extends StatefulWidget {
 class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
   late WorkspaceActivityFilter _filter = widget.filter;
   Timer? _expiryTimer;
+  Set<ProfileSessionKey> _appearanceKeys = {};
+  Map<ProfileSessionKey, BotRecord> _appearances = const {};
+  int _appearanceGeneration = 0;
+  bool _wasRefreshing = false;
+
+  void _readAppearances() {
+    final controller = widget.controller;
+    final refreshing = controller.recentsLoading;
+    final refreshed = _wasRefreshing && !refreshing;
+    _wasRefreshing = refreshing;
+    final keys = controller.recentChats().map((item) => item.key).toSet();
+    if (!refreshed && setEquals(keys, _appearanceKeys)) return;
+    _appearanceKeys = keys;
+    final generation = ++_appearanceGeneration;
+    unawaited(
+      widget.bots.appearancesForConversations(keys).then((appearances) {
+        if (!mounted || generation != _appearanceGeneration) return;
+        setState(() => _appearances = appearances);
+      }),
+    );
+  }
+
+  @override
+  void didUpdateWidget(WorkspaceActivityContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.bots != widget.bots) {
+      oldWidget.controller.removeListener(_readAppearances);
+      widget.controller.addListener(_readAppearances);
+      _appearanceKeys = {};
+      _appearances = const {};
+      _appearanceGeneration++;
+      _readAppearances();
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    widget.controller.addListener(_readAppearances);
+    _readAppearances();
     _expiryTimer = Timer.periodic(
       const Duration(minutes: 1),
       (_) => setState(() {}),
@@ -65,6 +109,7 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
   @override
   void dispose() {
     _expiryTimer?.cancel();
+    widget.controller.removeListener(_readAppearances);
     super.dispose();
   }
 
@@ -213,6 +258,7 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
       'activity-${item.key.workspace.profileName}-${item.key.sessionId}',
     ),
     item: item,
+    bot: _appearances[item.key],
     now: now,
     ongoing: ongoing,
     isDefault:
@@ -268,6 +314,7 @@ class _RecentChatRow extends StatelessWidget {
   const _RecentChatRow({
     super.key,
     required this.item,
+    required this.bot,
     required this.now,
     required this.ongoing,
     required this.isDefault,
@@ -275,6 +322,7 @@ class _RecentChatRow extends StatelessWidget {
   });
 
   final ProfileRecentChat item;
+  final BotRecord? bot;
   final DateTime now;
   final bool ongoing;
   final bool isDefault;
@@ -314,12 +362,29 @@ class _RecentChatRow extends StatelessWidget {
               ),
       ),
     );
+    final titleStyle = theme.textTheme.bodyMedium!;
     final title = Text(
       item.title,
-      style: theme.textTheme.bodyMedium,
+      style: titleStyle,
       maxLines: largeText ? null : 2,
       overflow: largeText ? TextOverflow.visible : TextOverflow.ellipsis,
     );
+    final appearance = bot;
+    final botAvatar = appearance == null
+        ? null
+        : Semantics(
+            label: '${appearance.title} bot',
+            image: true,
+            child: ExcludeSemantics(
+              child: BotAvatar(
+                name: appearance.title,
+                shape: appearance.shape,
+                color: appearance.color,
+                image: appearance.avatar,
+                size: 40,
+              ),
+            ),
+          );
     final age = formatRelativeTime(now, item.lastActive);
     final timestamp = Semantics(
       label: age == 'now' ? 'Updated now' : 'Updated $age ago',
@@ -340,9 +405,14 @@ class _RecentChatRow extends StatelessWidget {
           vertical: 14,
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: botAvatar == null
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.center,
           children: [
-            if (ongoing) ...[
+            if (botAvatar != null) ...[
+              botAvatar,
+              const SizedBox(width: 12),
+            ] else if (ongoing) ...[
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: profileIcon,
@@ -374,7 +444,7 @@ class _RecentChatRow extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (!ongoing) ...[
+                          if (!ongoing && botAvatar == null) ...[
                             profileIcon,
                             const SizedBox(width: 6),
                           ],

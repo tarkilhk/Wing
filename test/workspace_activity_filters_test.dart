@@ -1,3 +1,7 @@
+import 'package:wing/core/services/bots_repository.dart';
+import 'package:wing/core/widgets/bot_avatar.dart';
+import 'support/bots_fixture.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
@@ -135,8 +139,10 @@ void main() {
   late _ActivityHost host;
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
+  late BotsSession bots;
 
   setUp(() async {
+    bots = BotsSession((_) async => []);
     SharedPreferences.setMockInitialValues({});
     host = _ActivityHost();
     final preferences = await SharedPreferences.getInstance();
@@ -190,6 +196,7 @@ void main() {
   });
 
   tearDown(() {
+    bots.dispose();
     controller.dispose();
     appPreferences.dispose();
   });
@@ -206,6 +213,34 @@ void main() {
         }
         await controller.refreshRecents();
         expect(controller.recentChats(), hasLength(4));
+        final fixture = BotsFixture();
+        fixture.profiles
+          ..clear()
+          ..add(
+            BotsFixture.profile('main', 'Pace')
+              ..['canonical_session'] = {
+                'id': 'running',
+                'resolved_id': 'recent',
+                'preview': '',
+              },
+          );
+        final botReads = <String>[];
+        fixture.readHook = (_, method, _) async {
+          botReads.add(method);
+          return null;
+        };
+        bots.dispose();
+        bots = BotsSession(
+          (_) async => [
+            BotsRepository(
+              scope: controller.current!.scope,
+              instance: 'Host',
+              read: fixture.read,
+              command: fixture.command,
+              ownership: fixture.ownership,
+            ),
+          ],
+        );
         tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
@@ -223,6 +258,7 @@ void main() {
             home: Scaffold(
               appBar: AppBar(title: const Text('Recents')),
               body: WorkspaceActivityContent(
+                bots: bots,
                 controller: controller,
                 onOpen: (_, displayed) {},
               ),
@@ -262,6 +298,46 @@ void main() {
           });
         }
 
+        final botIcon = find.descendant(
+          of: find.byKey(const ValueKey('activity-main-running')),
+          matching: find.byType(BotAvatar),
+        );
+        expect(botIcon, findsOneWidget);
+        final savedBot = tester.widget<BotAvatar>(botIcon);
+        expect(savedBot.name, 'Pace');
+        expect(savedBot.shape, 'squircle');
+        expect(savedBot.color, '#65c7bc');
+        expect(tester.getSize(botIcon), const Size(40, 40));
+        final botRow = find.byKey(const ValueKey('activity-main-running'));
+        expect(
+          tester.getCenter(botIcon).dy,
+          closeTo(tester.getCenter(botRow).dy, 0.01),
+        );
+        final botProfile = find.descendant(
+          of: botRow,
+          matching: find.text('main'),
+        );
+        expect(
+          tester.getTopLeft(botProfile).dx,
+          tester.getTopLeft(find.text('Running job')).dx,
+        );
+        expect(
+          find.descendant(of: botRow, matching: find.text('M')),
+          findsNothing,
+        );
+        expect(
+          tester.getRect(botIcon).right,
+          lessThan(tester.getRect(find.text('Running job')).left),
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('activity-main-needs-input')),
+            matching: find.byType(BotAvatar),
+          ),
+          findsNothing,
+        );
+        expect(botReads, ['profiles.list']);
+        expect(fixture.commands, isEmpty);
         await capture('top');
         await tester.scrollUntilVisible(
           find.text('Draft the setup guide'),
@@ -271,7 +347,50 @@ void main() {
         expect(find.text('Last 24 hours'), findsOneWidget);
         expect(find.text('Recent'), findsNothing);
         expect(tester.takeException(), isNull);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('activity-main-recent')),
+            matching: find.byType(BotAvatar),
+          ),
+          findsOneWidget,
+        );
+        final historyRow = find.byKey(const ValueKey('activity-main-recent'));
+        final historyAvatar = find.descendant(
+          of: historyRow,
+          matching: find.byType(BotAvatar),
+        );
+        expect(tester.getSize(historyAvatar), const Size(40, 40));
+        expect(
+          tester.getCenter(historyAvatar).dy,
+          closeTo(tester.getCenter(historyRow).dy, 0.01),
+        );
+        expect(
+          tester
+              .getTopLeft(
+                find.descendant(of: historyRow, matching: find.text('main')),
+              )
+              .dx,
+          tester.getTopLeft(find.text('Draft the setup guide')).dx,
+        );
+        expect(
+          find.descendant(of: historyRow, matching: find.text('M')),
+          findsNothing,
+        );
+        expect(botReads, ['profiles.list']);
+        await tester.ensureVisible(historyRow);
+        await tester.pumpAndSettle();
         await capture('history');
+        final metadata = fixture.profiles.first['ui_meta']['hermes-bots'];
+        metadata['shape'] = 'triangle';
+        await controller.refreshRecents();
+        await tester.pumpAndSettle();
+        final refreshedIcon = find.descendant(
+          of: find.byKey(const ValueKey('activity-main-recent')),
+          matching: find.byType(BotAvatar),
+        );
+        expect(tester.widget<BotAvatar>(refreshedIcon).shape, 'triangle');
+        expect(botReads, ['profiles.list', 'profiles.list']);
+        expect(fixture.commands, isEmpty);
       });
     }
   }
@@ -289,6 +408,7 @@ void main() {
             width: 320,
             child: Scaffold(
               body: WorkspaceActivityContent(
+                bots: bots,
                 controller: controller,
                 onOpen: (item, displayed) {
                   opened = item;
@@ -334,6 +454,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: WorkspaceActivityContent(
+            bots: bots,
             controller: controller,
             onOpen: (_, displayed) {},
           ),

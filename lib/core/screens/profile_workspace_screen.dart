@@ -2973,6 +2973,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               ),
               AppDestination.activity => WorkspaceActivityContent(
                 controller: controller,
+                bots: _bots,
                 filter: _recentFilter,
                 onFilterChanged: (filter) => _recentFilter = filter,
                 onOpen: (item, displayed) => unawaited(

@@ -301,6 +301,19 @@ void main() {
         );
         expect(methods, ['profiles.list', 'profiles.get_asset']);
       }
+      methods.clear();
+      final root = ProfileSessionKey(scope, 'atlas-chat');
+      final tip = ProfileSessionKey(scope, 'atlas-tip');
+      final unrelated = ProfileSessionKey(scope, 'atlas-cron');
+      final appearances = await session.appearancesForConversations([
+        root,
+        tip,
+        unrelated,
+      ]);
+      expect(appearances.keys, unorderedEquals([root, tip]));
+      expect(identical(appearances[root], appearances[tip]), true);
+      expect(appearances[root]!.avatar, base64Decode(png));
+      expect(methods, ['profiles.list', 'profiles.get_asset']);
       for (final key in [
         ProfileSessionKey(scope, 'atlas-cron'),
         ProfileSessionKey(

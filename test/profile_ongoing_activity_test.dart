@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -20,8 +21,10 @@ void main() {
   late ProfileWorkspaceController controller;
   late ProfileChat chat;
   late AppPreferences appPreferences;
+  late BotsSession bots;
 
   setUp(() async {
+    bots = BotsSession((_) async => []);
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(preferences);
@@ -53,6 +56,7 @@ void main() {
   });
 
   tearDown(() {
+    bots.dispose();
     controller.dispose();
     appPreferences.dispose();
   });
@@ -73,6 +77,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: WorkspaceActivityContent(
+            bots: bots,
             controller: controller,
             onOpen: (_, displayed) {},
           ),
@@ -119,6 +124,7 @@ void main() {
                   ProfileChatIndicator(chat: chat),
                   Expanded(
                     child: WorkspaceActivityContent(
+                      bots: bots,
                       controller: controller,
                       onOpen: (_, displayed) {},
                     ),
