@@ -1175,6 +1175,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
                   ),
                 ),
               ),
+              const SizedBox(width: 16),
             ],
           ),
           actions: [

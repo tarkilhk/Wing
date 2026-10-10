@@ -74,6 +74,8 @@ Other profiles retain their initials. This is independent of the desktop's local
 The Chats profile viewport is right-aligned and capped at five 24 dp tap targets
 (120 dp). Additional profiles remain available by horizontal scrolling; narrower
 headers can show fewer than five at once.
+Inset the viewport by an additional 16 dp from the context row's right edge so
+the profile squares balance the connection icon's visible left inset.
 
 Working chat rows show desktop's travelling rectangular arc: a flush 1.25 dp
 border, 160-degree gradient with a fading tail, and a 2.23-second linear loop.
