@@ -40,7 +40,6 @@ void main() {
                 ComposerAction.steer: steerReason,
                 ComposerAction.stop: null,
                 ComposerAction.queue: null,
-                ComposerAction.fork: 'Wait for a saved answer',
               },
               onSelected: selected.add,
             ),
@@ -381,7 +380,7 @@ void main() {
       final gesture = await hold(tester);
       final button = tester.getRect(find.byTooltip('Steer'));
       final choices = [
-        for (final name in ['stop', 'fork', 'queue', 'steer'])
+        for (final name in ['stop', 'queue', 'steer'])
           tester.getRect(find.byKey(ValueKey('composer-choice-$name'))),
       ];
       for (var i = 0; i < choices.length; i++) {
@@ -438,20 +437,6 @@ void main() {
       find.byKey(const ValueKey('composer-action-selector')),
       findsNothing,
     );
-  });
-
-  testWidgets('disabled action shows its reason and does nothing on release', (
-    tester,
-  ) async {
-    await show(tester);
-    final gesture = await hold(tester);
-    await gesture.moveTo(
-      tester.getCenter(find.byKey(const ValueKey('composer-choice-fork'))),
-    );
-    await tester.pump();
-    expect(find.text('Wait for a saved answer'), findsOneWidget);
-    await gesture.up();
-    expect(selected, isEmpty);
   });
 
   testWidgets('empty steer still allows holding and sliding to stop', (

@@ -65,12 +65,7 @@ void main() {
                   child: ColoredBox(
                     color: Theme.of(context).scaffoldBackgroundColor,
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        16,
-                        role == 'user' ? 0 : 16,
-                        16,
-                      ),
+                      padding: EdgeInsets.fromLTRB(16, 16, 4, 16),
                       child: ProfileMessage(
                         showEditAction: showEditAction,
                         onEdit: onEdit,
@@ -113,25 +108,23 @@ void main() {
         );
         final copy = tester.getRect(find.byTooltip('Copy message'));
         final edit = tester.getRect(find.byTooltip('Edit message'));
-        expect(edit.right, lessThanOrEqualTo(copy.left));
-        final time = tester.getRect(find.text('14:07'));
+        final time = tester.getRect(find.text('15 Sep, 14:07'));
         final bubble = tester.getRect(
           find.byKey(
             const ValueKey<(String, Object?)>(('user-message-bubble', 4)),
           ),
         );
-        final editIcon = tester.getRect(find.byIcon(Icons.edit_outlined));
-        final copyIcon = tester.getRect(find.byIcon(Icons.copy_outlined));
-        final iconCenter = (editIcon.center.dx + copyIcon.center.dx) / 2;
-        expect(time.top - bubble.top, closeTo(4, .01));
-        expect(bubble.bottom - editIcon.bottom, closeTo(4, .01));
-        expect(copyIcon.bottom, editIcon.bottom);
-        expect(time.center.dx, closeTo(iconCenter, .01));
-        expect(iconCenter, closeTo((bubble.right + 320) / 2, .01));
-        expect(copy.right, lessThanOrEqualTo(320));
-        expect(editIcon.left, greaterThan(bubble.right));
+        expect(copy.left, closeTo(bubble.right, .01));
+        expect(copy.top, closeTo(bubble.top, .01));
+        expect(time.top, greaterThanOrEqualTo(bubble.bottom));
+        expect(time.overlaps(edit), isFalse);
+        if (time.bottom > edit.top) {
+          expect(time.right, lessThanOrEqualTo(edit.left));
+        }
+        expect(edit.right, closeTo(304, .01));
+        expect(copy.right, closeTo(316, .01));
         expect(edit.size, const Size(48, 48));
-        expect(copy.size, const Size(48, 48));
+        expect(copy.size, const Size(44, 48));
         expect(find.text('Edit message'), findsNothing);
         expect(find.text('Copy message'), findsNothing);
         await tester.ensureVisible(find.byTooltip('Edit message'));
@@ -195,7 +188,7 @@ void main() {
           final editTarget = tester.getRect(edit);
           final copyTarget = tester.getRect(copy);
           final body = tester.getRect(find.byType(SelectableText));
-          final time = tester.getRect(find.text('14:07'));
+          final time = tester.getRect(find.text('15 Sep, 14:07'));
           expect(
             tester
                 .widget<IconButton>(
@@ -205,10 +198,9 @@ void main() {
             isNull,
           );
           expect(editTarget.size, const Size(48, 48));
-          expect(copyTarget.size, const Size(48, 48));
-          expect(editTarget.right, lessThanOrEqualTo(copyTarget.left));
-          expect(body.right, lessThanOrEqualTo(editTarget.left));
-          expect(time.bottom, lessThanOrEqualTo(copyTarget.top));
+          expect(copyTarget.size, const Size(44, 48));
+          expect(body.right, lessThanOrEqualTo(copyTarget.left));
+          expect(time.top, greaterThanOrEqualTo(copyTarget.bottom));
           await tester.tapAt(
             Offset(copyTarget.right - 2, copyTarget.bottom - 2),
           );
@@ -248,11 +240,11 @@ void main() {
               content: content,
               timestamp: _date.millisecondsSinceEpoch / 1000,
             );
-            expect(find.text('14:07'), findsOneWidget);
+            expect(find.text('15 Sep, 14:07'), findsOneWidget);
             expect(tester.getSize(find.byType(ProfileMessage)), size);
             expect(tester.getRect(find.byType(IconButton)), copy);
             expect(tester.getRect(find.byType(SelectableText).first), body);
-            expect(copy.width, greaterThanOrEqualTo(48));
+            expect(copy.width, greaterThanOrEqualTo(44));
             expect(copy.height, greaterThanOrEqualTo(48));
           }
           if (_capture) {
@@ -314,7 +306,7 @@ void main() {
         );
         const full = 'Tuesday, September 15, 2026, 2:07 PM';
         expect(find.bySemanticsLabel(RegExp(full)), findsWidgets);
-        await tester.longPress(find.text('14:07'));
+        await tester.longPress(find.text('15 Sep, 14:07'));
         await tester.pumpAndSettle();
         expect(find.text(full), findsOneWidget);
         await tester.tap(find.byIcon(Icons.copy_outlined));
@@ -330,7 +322,7 @@ void main() {
   ) async {
     for (final value in [null, 'unknown', double.nan, double.infinity, 1e20]) {
       await pump(tester, role: 'user', timestamp: value);
-      expect(find.text('14:07'), findsNothing);
+      expect(find.text('15 Sep, 14:07'), findsNothing);
       expect(find.byType(Tooltip), findsOneWidget); // Copy only.
     }
   });

@@ -14,6 +14,7 @@ import '../widgets/deleted_chat_recovery_notice.dart';
 import '../services/chat_browser_data.dart';
 import '../services/completion_diagnostics.dart';
 import '../models/transcript_timeline.dart';
+import '../models/transcript_message.dart';
 import 'package:wing/core/services/chat_outputs_session.dart';
 import '../models/profile_session_key.dart';
 import 'package:wing/core/models/model_choice.dart';
@@ -1248,7 +1249,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     ProfileChat chat,
     TranscriptTimelineEntry entry, {
     required List<Map<String, dynamic>> capturedRows,
-    BotRecord? bot,
+    bool showCopyHeader = true,
     bool allowSavedActions = true,
   }) {
     if (entry.suppressed) return const SizedBox.shrink();
@@ -1273,7 +1274,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           ProfileMessage(
             key: ValueKey(entry.presentationId),
             message: entry.message,
-            bot: bot,
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
             onShareRemoteFile: (output) => _shareToolResource(chat, output),
@@ -1306,12 +1306,17 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         ProfileMessage(
           key: ValueKey(entry.presentationId),
           message: entry.message,
-          bot: bot,
           streaming: streaming,
+          showCopyHeader: showCopyHeader,
           onReadAloud: entry.message.role == 'assistant'
               ? () => _run(() => _requestReadAloud(chat, message))
               : null,
           showEditAction: savedPrompt,
+          showRestoreAction: savedPrompt,
+          onRestore:
+              savedPrompt && controller.canRestoreSavedPrompt(chat, message)
+              ? () => _restoreSavedMessage(chat, message)
+              : null,
           onEdit: savedPrompt && controller.canEditSavedPrompt(chat, message)
               ? () => _editSavedMessage(chat, message)
               : null,
@@ -1350,6 +1355,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     return AnswerActions(
       key: ValueKey('answer-actions-$messageId'),
       busy: chat.runtime.changingAnswer,
+      onReadAloud: () => _run(() => _requestReadAloud(chat, message)),
+      readingAloud:
+          _voiceOutput.owner == controller.voiceReplyKey(chat, message),
       onBranch: enabled
           ? () => _run(() async {
               await controller.branchAnswer(
@@ -1368,6 +1376,46 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             })
           : null,
     );
+  }
+
+  Future<void> _restoreSavedMessage(
+    ProfileChat chat,
+    Map<String, dynamic> message,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) => AlertDialog(
+          insetPadding: const EdgeInsets.all(WingSpacing.lg),
+          titleTextStyle: Theme.of(context).textTheme.titleMedium,
+          title: const Text('Restore to this checkpoint?'),
+          scrollable: true,
+          content: const Text(
+            'Everything after this prompt is removed from the conversation, and the prompt runs again from here.',
+          ),
+          actions: [
+            IconButton(
+              key: const ValueKey('restore-message-cancel'),
+              tooltip: 'Cancel restore',
+              onPressed: () => Navigator.pop(context, false),
+              icon: const Icon(Icons.close),
+            ),
+            IconButton(
+              key: const ValueKey('restore-message-confirm'),
+              tooltip: 'Restore and rerun',
+              onPressed: controller.canRestoreSavedPrompt(chat, message)
+                  ? () => Navigator.pop(context, true)
+                  : null,
+              icon: const Icon(Icons.undo),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _run(() => controller.restoreSavedPrompt(chat, message));
+    }
   }
 
   Future<void> _editSavedMessage(
@@ -1553,6 +1601,22 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       presentationId: chat.reading.messagePresentationId,
       liveMessageIndex: live == null ? null : capturedRows.length - 1,
     );
+    // Put the following reply's Copy beside its own Activity disclosure. The
+    // immutable section identity keeps normal, paged and Find views consistent.
+    final activityReplies = <Object, TranscriptTimelineEntry>{};
+    for (var i = 0; i + 1 < timeline.sections.length; i++) {
+      final section = timeline.sections[i];
+      final next = timeline.sections[i + 1];
+      final reply = next.messages.last;
+      if (section.isActivity &&
+          !section.hasLatestReview &&
+          !next.isActivity &&
+          reply.role == 'assistant' &&
+          reply.interAgentSender == null &&
+          reply.message.kind == TranscriptMessageKind.dialogue) {
+        activityReplies[section.presentationIds.last] = reply;
+      }
+    }
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.finish(
         'transcript.group_sync',
@@ -1597,11 +1661,20 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   controller: controller,
                   onLoadOlder: () => controller.loadOlderMessages(chat),
                   timeline: timeline,
+                  activityTrailingBuilder: (section) {
+                    final reply = activityReplies[section.presentationIds.last];
+                    if (reply == null) return null;
+                    return reply.streaming
+                        ? const SizedBox(width: 44, height: 48)
+                        : ProfileMessage.copyAction(context, reply.message);
+                  },
                   messageBuilder: (entry) => _answer(
                     chat,
                     entry,
                     capturedRows: capturedRows,
-                    bot: bot,
+                    showCopyHeader: !activityReplies.values.any(
+                      (reply) => reply.presentationId == entry.presentationId,
+                    ),
                     allowSavedActions: nearby == null,
                   ),
                   focusedMessageId: focus?.rowId,
@@ -2356,8 +2429,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
   }
 
-  bool _canForkDraft(ProfileChat chat) => chat.composer.actions().canFork;
-
   Map<ComposerAction, String?> _composerActionLabels(ProfileChat chat) {
     return _voiceInput
         .composerAvailability(chat.composer.actions())
@@ -2389,8 +2460,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               'Wait for the current message to finish sending',
             ComposerUnavailableReason.queueDuringTurn =>
               'Queue a draft during a running turn',
-            ComposerUnavailableReason.savedAnswerRequired =>
-              'Fork needs a completed saved answer and text',
           }),
         );
   }
@@ -2452,10 +2521,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         await _run(() => controller.stop(chat));
       case ComposerAction.queue:
         await _run(() => controller.queuePrompt(chat, text));
-      case ComposerAction.fork:
-        await _run(() async {
-          await controller.forkPrompt(chat, text);
-        });
       case ComposerAction.steer:
         final accepted = await _runValue(() => controller.steer(chat, text));
         if (accepted == false && mounted) {
@@ -2612,15 +2677,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             height: MediaQuery.sizeOf(sheetContext).height * .55,
             child: ListView(
               children: [
-                if (_canForkDraft(chat))
-                  ListTile(
-                    leading: const Icon(Icons.fork_right),
-                    title: const Text('Fork into a new chat'),
-                    subtitle: const Text(
-                      'Branch at the latest saved answer and send this message',
-                    ),
-                    onTap: () => Navigator.pop(sheetContext, 'fork'),
-                  ),
                 if (chat.composer.actions().offered.contains(
                   ComposerAction.steer,
                 )) ...[

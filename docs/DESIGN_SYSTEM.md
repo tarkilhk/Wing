@@ -11,12 +11,12 @@ This charter owns the appearance of new and existing UI. [Feature guides](FEATUR
 - Activity information follows [USER-VALUE-FIRST](#user-value-first-activity): curate the requested intent, reported achievement and useful payloads within Studio framing.
 - Activity details follow the [accepted activity family](#accepted-activity-detail-family). Extend its shared components and verify the family together.
 - Use the compact context ring beside the model selector, confirmed by the owner after comparing it with the fuse. Do not allocate a row to token-count text or retain the fuse alongside it. The owner's 7 October refinement selects option A: show the percentage inside a 32 dp ring (up to 40 dp at enlarged text), in a 48 dp target, and open a 320 dp anchored popover above it. Center the digits and percent sign together using Roboto's cap-height baseline on the ring's canvas. Keep used/max tokens, percentage full, a 6 dp composition bar, aligned estimated category counts and supplied compression count compact. The bar represents category estimates; it never replaces measured occupancy. At enlarged text, put each category count below its full-width label and scroll the panel when needed. Preserve composer focus/keyboard, outside-tap dismissal and keyboard access; a chat change retires its open panel. Unknown occupancy uses a centered dash and broken neutral ring. The design exploration and owner selection are archived on local branch `prototype/context-window-studio` at `c655aa4`, under `plans/prototypes/context-window-studio`. Do not repeat the model or introduce a large duplicate gauge/account-limit card.
-- Keep familiar model/reasoning selection and Queue, Steer and Fork flows.
+- Keep familiar model/reasoning selection and Queue/Steer flows. Fork belongs to the selected answer, never the composer.
 - Canonical bot conversations stay in Chats. Replace the generic Bot Chat heading
-  with the bot's name in the existing title position. Assistant message headers
-  use the bot's 24 dp avatar and name in place of the Hermes portrait and label,
-  for both saved and streaming replies. Keep project controls in the context row
-  and preserve Back to the Bots roster. Ordinary conversations retain their titles.
+  with the bot's name in the existing title position. Conversation replies omit
+  repeated author names and avatars; bot identity stays in chat chrome. Keep
+  project controls in the context row and preserve Back to the Bots roster.
+  Ordinary conversations retain their titles.
 - Design dark mode fully and use coherent accents throughout.
 - Administration opens directly on Profile without tabs. A pharmacy-cross action in the top bar opens the dedicated Health route. Keep the selected connection visible and classify each operation by its actual ownership. See the [administration handoff](design/2026-09-14-administration-handoff.md) for navigation and unsupported memory/MCP writes.
 - Provider accounts and keys belong to the selected profile, including `default`. The global menu has a larger portrait aligned with Wing and a low, borderless split footer: saved connection icon, name and status LED on the left; server version and conditional update icon on the right. Connection identity opens details; server version opens Versions & updates. Client identity stays in App settings; upstream update checks and the circular-arrows indicator apply only to the server. Manage profiles is its own pill after the last profile in the horizontally scrolling selector. Follow the [administration ownership contract](design/2026-09-14-administration-handoff.md) for credential-source distinctions and pending editor corrections.
@@ -489,22 +489,41 @@ The selection audit covers App settings and composer preferences; Activity filte
 
 ## Conversation preservation
 
-The owner's 9 October selected slim message rail keeps controls beside the sent
-user bubble, with a wider rectangular bubble and no extra leading inset. Center
-local `HH:mm` above icon-only Edit → Copy across the space from the bubble edge
-to the screen edge. Align the time at the top and the icon pair at the bottom,
-with a small 4 dp inset at both ends. Keep the two icons visually close rather
-than spreading them to the centers of their touch boxes. The selected paired
-controls and standalone Copy use 48 × 48 dp targets. The paired rail reserves
-88 dp including the outer gutter; its targets extend 8 dp into the bubble’s
-12 dp padding without covering message text. Full-date accessibility,
-text scaling, disabled Edit and attachment/copy behavior remain intact. The
-message renderer owns this geometry; the workspace passes edit visibility and
-intent. The transcript gives user rows the trailing viewport gutter so the full
-Copy target receives taps rather than merely painting outside a padded row.
-Other transcript content retains the ordinary 16 dp gutters.
-Keep Fork and Regenerate on answers;
-do not add another Edit there or enable editing in Find's reading window.
+The owner's 10 October **Target** replaces the earlier slim message rail.
+User text occupies a broad rectangular tinted bubble, with 10 dp horizontal and
+12 dp vertical padding. A separate 44-by-48 dp Copy target touches its right edge,
+with no extra gap; the transcript ends this shared Copy column 4 dp from the
+viewport edge. Assistant replies omit the repeated Hermes/bot author header,
+keep full-width readable prose, and put Copy in that same upper-right column.
+When a reply follows Activity, its Copy shares the disclosure's header rather
+than adding another row. Activity uses “Used N tools” from received calls, while
+retaining its existing Timeline/Tasks/Agents/Work contents and expansion state.
+
+Each message's lower-right footer begins with local `dd Mmm, HH:mm`, followed
+by conversation actions. Prompts have Edit and Restore; replies have Fork,
+Read aloud and Regenerate. Footers wrap at enlarged text, stay right-aligned,
+and omit unavailable timestamps rather than inventing one. Full-date tooltips
+and accessibility, native selection, exact copy and attachment behavior remain
+intact. Footer actions use 48 dp targets; Copy's compact width is the approved
+exception. Controls are always available on touch, without hover.
+
+Restore confirms its destructive scope in-app, reruns the selected saved prompt
+in the same conversation and removes its later history. It interrupts a running
+turn first, preserves the separate composer draft and pauses queued follow-ups.
+The controller validates a durable saved row against full stock history before
+sending the cut; a stock busy refusal triggers bounded interrupt-and-retry of
+the same cut. Definite refusal restores retained history, while uncertain
+transport delivery requests readback without automatic resend. Find and passive
+previews expose no editing or Restore authority. Fork remains on saved answers;
+its composer icon, eligibility, runtime fact and send dispatch are removed.
+
+Verified against upstream main `dce1e9b37581dd62e480a9064dc04a709c2940d3`
+(10 October 2026): desktop `use-prompt-actions/rewind.ts`,
+`session-tile-actions.ts` and `i18n/en.ts`; gateway `tui_gateway/methods_prompt.py`.
+The stock request is `prompt.submit` with `truncate_before_row_id`,
+`confirm_truncate` and `confirm_empty_truncate`, after `session.interrupt` when
+needed. No backend changes or legacy-address fallback are introduced.
+
 The saved-message editor uses a compact Studio header with icon-only close,
 one scrollable message/warning area and a fixed Replace and resend footer.
 Use the shared surfaces, borders, typography, spacing and control corners;
@@ -573,7 +592,7 @@ Model catalog choices use the shared chooser in Chat, profile defaults, helper a
 
 Tool model lists put the current or pending selection first, with an explicit Selected label for the saved model and Pending selection for a choice awaiting Use model. Tool setup provider lists put selected providers first with an accent border, tinted card, and visible Selected label; this border is an explicit exception to the general selection rule. Web names search and extraction selections separately. Keep the image/video provider controls and speech provider dropdown otherwise unchanged.
 
-Preserve the current Send/Steer/Queue/Stop and Enter behavior. Preserve the message-actions entry points present in the implementation baseline, including long-press. Do not restore controls removed by later approved UX work. Fork, Steer and Queue remain one-shot choices with current eligibility rules, never persistent composer modes. Preserve queued-message review, edit, delete and pause/resume behavior. Do not show unavailable actions as usable in a running chat.
+Preserve the current Send/Steer/Queue/Stop and Enter behavior. Preserve the message-actions entry points present in the implementation baseline, including long-press. Do not restore controls removed by later approved UX work. Steer and Queue remain one-shot composer choices with current eligibility rules, never persistent modes. Fork is only a saved-answer action. Preserve queued-message review, edit, delete and pause/resume behavior. Do not show unavailable actions as usable in a running chat.
 
 The later owner-approved [held-slide composer actions](COMPOSER_ACTION_GESTURE.md) supersede the earlier busy-button interaction. The owner's 8 October refinement shows a tappable Stop without a held column while a connected turn is working with no draft. Typing the first character or adding an attachment restores the arrow and configured action column. Use the brief vertical glide and settling bounce for both transitions, plus the column's staggered upward reveal; reduced motion switches immediately. Preserve held-action selection, cancellation, accessibility and the device default-action preference. Its existing geometry is an explicit exception to the general control-corner tokens. Preserve the Markdown scrollbar gutters and subtle thumb styling added alongside this work.
 

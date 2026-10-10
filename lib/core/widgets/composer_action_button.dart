@@ -11,7 +11,6 @@ IconData composerActionIcon(ComposerAction action) => switch (action) {
   ComposerAction.steer => Icons.explore_outlined,
   ComposerAction.stop => Icons.stop,
   ComposerAction.queue => Icons.queue,
-  ComposerAction.fork => Icons.fork_right,
 };
 
 /// A held pointer chooses an action; lifting commits it, leaving cancels it.
@@ -174,7 +173,6 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
         anchorBox.size;
     _actions = [
       ComposerAction.stop,
-      ComposerAction.fork,
       ComposerAction.queue,
       widget.primary == ComposerAction.send
           ? ComposerAction.send

@@ -1468,7 +1468,11 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
-    await tester.tap(find.text('Activity'));
+    await tester.tap(
+      find.textContaining(
+        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+      ),
+    );
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
     final first = find.byWidgetPredicate(
@@ -1542,6 +1546,7 @@ void main() {
                   padding: const EdgeInsets.all(16),
                   children: [
                     ProfileActivitySection(
+                      label: 'Activity',
                       initiallyExpanded: true,
                       detailsBuilder: (_) => ProfileActivityTabs(
                         tabs: [

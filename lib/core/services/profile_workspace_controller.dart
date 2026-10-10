@@ -4532,12 +4532,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
       changingAnswer: chat.runtime.changingAnswer,
       commandRunning: chat.runtime.commandRunning,
       changingIntelligence: chat._changingIntelligence,
-      canForkSavedAnswer: chat.reading.messages.any(
-        (row) =>
-            row['role'] == 'assistant' &&
-            answerMessageId(row) != null &&
-            isBranchMessage(row),
-      ),
       failedOrCancelled: {
         ChatExecution.failed,
         ChatExecution.cancelled,
@@ -4871,11 +4865,25 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   /// Admission for the durable prompt edit command, shared by its UI entry points.
   bool canEditSavedPrompt(ProfileChat chat, Map<String, dynamic> selected) =>
+      _canReplaceSavedPrompt(chat, selected, restore: false);
+
+  bool canRestoreSavedPrompt(ProfileChat chat, Map<String, dynamic> selected) =>
+      _canReplaceSavedPrompt(chat, selected, restore: true) &&
+      answerMessageDisplayText(selected).trim().isNotEmpty;
+
+  bool _canReplaceSavedPrompt(
+    ProfileChat chat,
+    Map<String, dynamic> selected, {
+    required bool restore,
+  }) =>
       !_closed &&
       !chat.runtime.opening &&
       !chat.runtime.offline &&
       !recovering &&
-      !chat.runtime.blocksTurnAdmission &&
+      (restore
+          ? !chat.runtime.reconnecting &&
+                chat.runtime.execution != ChatExecution.submitting
+          : !chat.runtime.blocksTurnAdmission) &&
       !chat.runtime.changingAnswer &&
       !chat._changingIntelligence &&
       !chat.runtime.commandRunning &&
@@ -4889,17 +4897,45 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat,
     Map<String, dynamic> selected,
     String rawText,
-  ) async {
+  ) => _replaceSavedPrompt(chat, selected, rawText, restore: false);
+
+  /// Desktop checkpoint restore: cut this prompt and its tail, then rerun it.
+  Future<bool> restoreSavedPrompt(
+    ProfileChat chat,
+    Map<String, dynamic> selected,
+  ) => _replaceSavedPrompt(
+    chat,
+    selected,
+    answerMessageDisplayText(selected),
+    restore: true,
+  );
+
+  Future<bool> _replaceSavedPrompt(
+    ProfileChat chat,
+    Map<String, dynamic> selected,
+    String rawText, {
+    required bool restore,
+  }) async {
     final resource = _commandOwner(chat);
+    final runtimeId = chat.runtime.runtimeId;
+    void requireOwner() {
+      _commandOwner(chat);
+      if (chat.runtime.runtimeId != runtimeId) {
+        throw StateError('The conversation changed during the request');
+      }
+    }
+
     final text = rawText.trim();
     final selectedId = answerMessageId(selected);
-    if (text.isEmpty || text == answerMessageDisplayText(selected).trim()) {
+    if (text.isEmpty ||
+        (!restore && text == answerMessageDisplayText(selected).trim())) {
       return false;
     }
     if (!isHumanAnswerPrompt(selected) || selectedId == null) {
       throw StateError('Wait for this message to be saved');
     }
-    if (!canEditSavedPrompt(chat, selected)) return false;
+    if (!_canReplaceSavedPrompt(chat, selected, restore: restore)) return false;
+    final interruptFirst = restore && chat.runtime.blocksTurnAdmission;
     final originalReading = chat.reading.captureBranch();
     final runtimeChange = chat._runtime.beginAnswerChange(submitting: true);
     _changed();
@@ -4908,11 +4944,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
     var acknowledged = false;
     try {
       queuePause = await chat.composer.pauseForAnswerEdit();
-      _commandOwner(chat);
+      requireOwner();
       await resource.gateway.requireProfile();
-      final history = await resource.gateway.fullHistory(
-        chat.runtime.runtimeId,
-      );
+      if (interruptFirst) {
+        requireOwner();
+        await resource.gateway.call('session.interrupt', {
+          'session_id': runtimeId,
+        });
+      }
+      final history = await resource.gateway.fullHistory(runtimeId);
       final targetIndex = history.indexWhere(
         (message) => answerMessageId(message) == selectedId,
       );
@@ -4921,7 +4961,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           answerMessageText(history[targetIndex]) !=
               answerMessageText(selected)) {
         throw StateError(
-          'History changed. Reconnect to reload before editing.',
+          'History changed. Reconnect to reload before replacing this prompt.',
         );
       }
       final rowId = history[targetIndex]['row_id'];
@@ -4933,15 +4973,40 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat.reading.stageSavedPromptEdit(history, targetIndex, text);
       chat._runtime.acceptTurn();
       _changed();
-      _commandOwner(chat);
+      requireOwner();
       submitted = true;
-      await resource.gateway.call('prompt.submit', {
-        'session_id': chat.runtime.runtimeId,
+      final params = <String, dynamic>{
+        'session_id': runtimeId,
         'text': text,
         'truncate_before_row_id': rowId,
         'confirm_truncate': true,
         'confirm_empty_truncate': true,
-      });
+      };
+      var interruptedBusySession = false;
+      for (var attempt = 0; ; attempt++) {
+        requireOwner();
+        try {
+          await resource.gateway.call('prompt.submit', params);
+          break;
+        } on JsonRpcError catch (error) {
+          // Stock rewind refuses busy sessions before cutting history. A live
+          // interrupted tool can take time to settle; keep the same durable cut.
+          if (!restore ||
+              error.code != 4009 ||
+              !_isDestructiveMutationRefusal(error) ||
+              attempt >= 29) {
+            rethrow;
+          }
+          if (!interruptedBusySession) {
+            requireOwner();
+            await resource.gateway.call('session.interrupt', {
+              'session_id': runtimeId,
+            });
+            interruptedBusySession = true;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+      }
       acknowledged = true;
     } catch (e) {
       if (!submitted || _isDestructiveMutationRefusal(e)) {
@@ -4966,12 +5031,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
           runtimeChange,
           dispatched: submitted,
           error: queueRestored
-              ? 'Hermes did not accept the edited message.'
-              : 'The edited message was not sent. Local queue recovery could not be saved.',
+              ? restore
+                    ? 'Hermes did not accept the restore. The conversation is unchanged.'
+                    : 'Hermes did not accept the edited message.'
+              : 'The message was not sent. Local queue recovery could not be saved.',
         );
       } else {
         chat._runtime.deliveryUncertain(
-          'Edit status is uncertain. Reconnect to check history.',
+          '${restore ? 'Restore' : 'Edit'} status is uncertain. Reconnect to check history.',
         );
         _scheduleReconnect(resource);
       }
@@ -4987,46 +5054,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _changed();
     }
     return acknowledged;
-  }
-
-  /// Branches at the latest saved answer and sends one composer message there.
-  Future<ProfileChat?> forkPrompt(ProfileChat source, String rawText) async {
-    _commandOwner(source);
-    final text = rawText.trim();
-    if (text.isEmpty ||
-        text.startsWith('/') ||
-        source.composer.observation.attachments.isNotEmpty ||
-        source.runtime.blocksTurnAdmission ||
-        source.runtime.changingAnswer ||
-        source._changingIntelligence ||
-        source.runtime.commandRunning ||
-        source.composer.observation.draining ||
-        switching) {
-      return null;
-    }
-    final boundary = source.reading.messages.lastIndexWhere(
-      (message) =>
-          message['role'] == 'assistant' &&
-          answerMessageId(message) != null &&
-          isBranchMessage(message),
-    );
-    if (boundary < 0) {
-      throw StateError('Wait for a saved answer before forking');
-    }
-    final draftAtFork = source.composer.observation.revision;
-    final child = await branchAnswer(source, boundary);
-    if (child == null) return null;
-    final accepted = await _sendPrompt(child, prompt: text);
-    if (!accepted) {
-      source._runtime.reportError(
-        'Fork delivery is uncertain. Check the child chat before reusing this draft.',
-      );
-      _changed();
-    } else {
-      await source.composer.finishCommand(draftAtFork);
-      _changed();
-    }
-    return child;
   }
 
   void _hydrateIntelligence(ProfileChat chat, Map<String, dynamic> response) {

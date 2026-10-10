@@ -1216,6 +1216,7 @@ void main() {
               return Scaffold(
                 body: SingleChildScrollView(
                   child: ProfileActivitySection(
+                    label: 'Activity',
                     initiallyExpanded: true,
                     detailsBuilder: (_) => ProfileActivityTabs(
                       tabs: [

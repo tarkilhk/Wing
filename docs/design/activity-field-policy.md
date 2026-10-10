@@ -222,3 +222,19 @@ non-tool families in light/dark at 390 dp/100% and 320 dp/200%, with short/long,
 empty, failed and partial variants. Inspect those actual renders together and
 check useful-only icon eligibility, exact clipboard scopes, neutral completion,
 all four visible insets and bounded scrolling before declaring the family ready.
+
+## Conversation Target header, 10 October 2026
+
+| Received field or action | User value | Placement and eligibility |
+| --- | --- | --- |
+| Saved call count | Understand how much tool work preceded this reply | Quiet “Used N tools”; omit zero/unknown counts, retain review count when supplied |
+| Current call count | Understand ongoing tool work | “Using N tools” while live; retain existing Activity tabs and payloads |
+| Reply Copy | Reuse this reply's exact text | Shared 44-by-48 dp upper-right header, beside the preceding disclosure when present; one Copy per reply |
+| Tool Copy and resource actions | Reuse reported payloads | Existing detail family, exact scope and eligibility unchanged |
+| Repeated author avatar/name | Already known from the open conversation | Omitted from replies; chat chrome owns identity |
+
+Expansion stays lazy and preserves selected tabs/nested rows. No generic
+finished status, guessed elapsed time or unsupported summary is added. Header
+label/copy placement has behavioral guards in the conversation and Activity
+widget suites; static source checks cannot establish real tap routing, scrolling
+or enlarged-text wrapping.

@@ -70,6 +70,24 @@ CI runs independently. GitHub CI completion is not a prerequisite for phone
 installation. Report its status separately; published-release gates apply to
 publication.
 
+## Conversation Target layout and Restore
+
+Run `flutter test --no-pub test/message_timestamp_test.dart
+ test/saved_message_actions_test.dart test/composer_action_button_test.dart
+ test/profile_composer_actions_test.dart test/answer_versions_test.dart` for
+copy targets, dated right footers, unchanged edits versus explicit Restore,
+confirmation/cancellation, durable cuts, draft/queue preservation, refusal and
+transport uncertainty. Restore must never degrade into a plain appended prompt;
+composer Fork is absent while selected-answer branching remains available.
+Use `STUDIO_REVIEW=true` with the existing Studio fonts to inspect actual Flutter
+message and confirmation renders in both themes at 320 dp/200% text.
+
+Activity header/copy sharing preserves lazy section/scroll identities. Include
+`profile_transcript_test.dart`, `profile_activity_tabs_test.dart`,
+`profile_combined_activity_test.dart` and `bots_view_test.dart` when changing that
+composition. Native/live server journeys remain separate evidence; fixture RPC
+receipts do not establish live provider execution.
+
 ## Source code highlighting
 
 Source coloring's focused matrix is `test/source_highlighting_test.dart`, plus

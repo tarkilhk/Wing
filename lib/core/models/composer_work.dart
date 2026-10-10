@@ -55,7 +55,6 @@ enum ComposerUnavailableReason {
   textRequired,
   sending,
   queueDuringTurn,
-  savedAnswerRequired,
 }
 
 /// Runtime facts are read-only input. They never transfer runtime ownership.
@@ -70,7 +69,6 @@ final class ComposerRuntimeObservation {
     required this.changingAnswer,
     required this.commandRunning,
     required this.changingIntelligence,
-    required this.canForkSavedAnswer,
     required this.failedOrCancelled,
     required this.historyAvailable,
   });
@@ -88,7 +86,6 @@ final class ComposerRuntimeObservation {
   final bool changingAnswer;
   final bool commandRunning;
   final bool changingIntelligence;
-  final bool canForkSavedAnswer;
   final bool failedOrCancelled;
   final bool historyAvailable;
 }
@@ -184,7 +181,6 @@ final class ComposerUpload {
 final class ComposerActions {
   ComposerActions(
     Map<ComposerAction, ComposerUnavailableReason?> reasons, {
-    required this.canFork,
     required this.canEditQueue,
     required this.canSaveQueueEdit,
     required this.canSteerQueueEdit,
@@ -199,7 +195,6 @@ final class ComposerActions {
        offered = Set.unmodifiable(offered);
 
   final Map<ComposerAction, ComposerUnavailableReason?> unavailable;
-  final bool canFork;
   final bool canEditQueue;
   final bool canSaveQueueEdit;
   final bool canSteerQueueEdit;

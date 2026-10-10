@@ -82,12 +82,27 @@ void main() {
     expect(reasoning.height, closeTo(titleHeight + previewHeight, 0.1));
     expect(reasoning.top, closeTo(activity.bottom, 0.1));
     expect(
-      tester.getCenter(find.text('2 tool calls')).dy,
-      closeTo(tester.getCenter(find.text('Activity')).dy, 0.1),
+      tester.getCenter(find.text('Used 2 tools')).dy,
+      closeTo(
+        tester
+            .getCenter(
+              find.textContaining(
+                RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+              ),
+            )
+            .dy,
+        0.1,
+      ),
     );
     expect(
-      tester.getTopLeft(find.text('Activity')).dx,
-      tester.getTopLeft(reasoningHeader).dx,
+      tester
+          .getTopLeft(
+            find.textContaining(
+              RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+            ),
+          )
+          .dx,
+      tester.getTopLeft(reasoningHeader).dx - 24,
     );
     expect(tester.takeException(), isNull);
   });
@@ -107,12 +122,16 @@ void main() {
       tester,
     ) async {
       await show(tester, scale);
-      expect(find.text('2 tool calls'), findsOneWidget);
+      expect(find.text('Used 2 tools'), findsOneWidget);
       expect(find.text('First result'), findsNothing);
       expect(find.text('Checked the available options.'), findsOneWidget);
       expect(reasoningBody, findsNothing);
       expect(find.byTooltip('Copy Reasoning'), findsNothing);
-      await tester.tap(find.text('Activity'));
+      await tester.tap(
+        find.textContaining(
+          RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('First tool'));
       await tester.pumpAndSettle();

@@ -366,7 +366,7 @@ void main() {
       final live = find.byKey(ValueKey(('activity', chat.key)));
       expect(live, findsOneWidget);
       await tester.tap(
-        find.descendant(of: live, matching: find.text('Activity')),
+        find.descendant(of: live, matching: find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'))),
       );
       await tester.pumpAndSettle();
       expect(
@@ -449,17 +449,17 @@ void main() {
       });
 
       await show(tester);
-      expect(find.text('Activity'), findsNWidgets(2));
+      expect(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')), findsNWidgets(2));
       expect(find.text('Running command'), findsNothing);
       expect(find.text('Current private reasoning'), findsNothing);
-      expect(find.text('Activity'), findsNWidgets(2));
+      expect(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')), findsNWidgets(2));
       expect(find.text('Visible saved reply'), findsOneWidget);
       expect(
-        tester.getTopLeft(find.text('Activity').first).dx,
-        closeTo(tester.getTopLeft(find.text('Activity').last).dx, 0.1),
+        tester.getTopLeft(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')).first).dx,
+        closeTo(tester.getTopLeft(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')).last).dx, 0.1),
       );
 
-      await tester.tap(find.text('Activity').first);
+      await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')).first);
       await tester.pumpAndSettle();
       expect(find.text('Running command'), findsOneWidget);
       expect(find.text('Reasoning'), findsOneWidget);
@@ -472,10 +472,10 @@ void main() {
       await tester.pump();
       expect(find.text('Running command'), findsOneWidget);
 
-      await tester.tap(find.text('Activity').first);
+      await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')).first);
       await tester.pumpAndSettle();
       expect(find.text('Running command'), findsNothing);
-      expect(find.text('Activity'), findsNWidgets(2));
+      expect(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')), findsNWidgets(2));
       expect(find.text('Visible saved reply'), findsOneWidget);
     },
   );
@@ -504,11 +504,11 @@ void main() {
         ],
       ]);
       await show(tester);
-      expect(find.text('Activity'), findsOneWidget);
+      expect(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')), findsOneWidget);
       expect(find.text('Read'), findsNothing);
       expect(find.text('Private tool detail A'), findsNothing);
       expect(find.text('Here is the answer.'), findsOneWidget);
-      await tester.tap(find.text('Activity'));
+      await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
       await tester.pumpAndSettle();
       expect(find.text('Read'), findsOneWidget);
       expect(find.text('Private tool detail A'), findsNothing);

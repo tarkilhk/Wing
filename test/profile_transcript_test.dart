@@ -705,7 +705,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ),
     );
     await show(tester);
-    await tester.tap(find.text('Activity'));
+    await tester.tap(
+      find.textContaining(
+        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+      ),
+    );
     await tester.pumpAndSettle();
     await Scrollable.ensureVisible(
       tester.element(find.text('Tool 1')),
@@ -796,7 +800,15 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             await tester.settleMarkdown();
             for (
               var attempt = 0;
-              find.text('Activity').evaluate().isEmpty && attempt < 50;
+              find
+                      .textContaining(
+                        RegExp(
+                          r'^(Activity|Used \d+ tools?|Using \d+ tools?)$',
+                        ),
+                      )
+                      .evaluate()
+                      .isEmpty &&
+                  attempt < 50;
               attempt++
             ) {
               await tester.drag(list, const Offset(0, 600));
@@ -804,11 +816,19 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
               await tester.pumpAndSettle();
             }
             await Scrollable.ensureVisible(
-              tester.element(find.text('Activity')),
+              tester.element(
+                find.textContaining(
+                  RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+                ),
+              ),
               alignment: 0.1,
             );
             await tester.pumpAndSettle();
-            await tester.tap(find.text('Activity'));
+            await tester.tap(
+              find.textContaining(
+                RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+              ),
+            );
             await tester.pumpAndSettle();
             final agents = find.byKey(
               const ValueKey(('activity-tab', 'agents')),
@@ -913,7 +933,9 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           }
           await show(tester, brightness: brightness, scale: scale);
           await tester.settleMarkdown();
-          final activity = find.text('Activity');
+          final activity = find.textContaining(
+            RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+          );
           final before = tester.getBottomLeft(activity).dy;
           final scroll = tester.widget<ListView>(list).controller!;
           for (var attempt = 0; attempt < 2; attempt++) {
@@ -966,7 +988,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ),
     );
     await show(tester);
-    await toggleInPlace(tester, find.text('Activity'));
+    await toggleInPlace(
+      tester,
+      find.textContaining(
+        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+      ),
+    );
     final header = find.text('Scrollable output');
     await tester.ensureVisible(header);
     await tester.pumpAndSettle();
@@ -1012,7 +1039,9 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ),
     );
     await show(tester);
-    final activity = find.text('Activity');
+    final activity = find.textContaining(
+      RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+    );
     await toggleInPlace(tester, activity);
     final header = find.text('Long output');
     await tester.ensureVisible(header);
@@ -1058,7 +1087,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ];
       extraTail = [ProfileReasoningDisclosure(text: 'Reasoning line\n' * 100)];
       await show(tester);
-      await toggleInPlace(tester, find.text('Activity'));
+      await toggleInPlace(
+        tester,
+        find.textContaining(
+          RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+        ),
+      );
       final tool = find.text('Delegated tasks');
       await tester.ensureVisible(tool);
       await tester.pumpAndSettle();
@@ -1132,13 +1166,22 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ),
     );
     await show(tester);
-    expect(find.text('Activity'), findsOneWidget);
-    expect(find.text('3 tool calls'), findsOneWidget);
+    expect(
+      find.textContaining(
+        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Used 3 tools'), findsOneWidget);
     expect(find.text('Read file'), findsNothing);
     expect(find.text('Tool 1'), findsNothing);
     expect(find.text('Message 5'), findsOneWidget);
 
-    await tester.tap(find.text('Activity'));
+    await tester.tap(
+      find.textContaining(
+        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Read file'), findsOneWidget);
     expect(find.text('Patched file'), findsOneWidget);
@@ -1152,18 +1195,31 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await tester.pumpAndSettle();
     expect(find.text('Read output'), findsOneWidget);
     expect(find.text('Patch output'), findsNothing);
-    await tester.tap(find.text('Activity'));
+    await tester.tap(
+      find.textContaining(
+        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Read output'), findsNothing);
     expect(find.text('Message 5'), findsOneWidget);
 
-    await tester.tap(find.text('Activity'));
+    await tester.tap(
+      find.textContaining(
+        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Read output'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     chat.reading.recordScrollOffset(0);
     await show(tester);
-    expect(find.text('Activity'), findsOneWidget);
+    expect(
+      find.textContaining(
+        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Read file'), findsNothing);
   });
 
@@ -1186,9 +1242,14 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ),
     );
     await show(tester);
-    expect(find.text('Activity'), findsNWidgets(2));
-    expect(find.text('30 tool calls'), findsOneWidget);
-    expect(find.text('1 tool call'), findsOneWidget);
+    expect(
+      find.textContaining(
+        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+      ),
+      findsNWidgets(2),
+    );
+    expect(find.text('Used 30 tools'), findsOneWidget);
+    expect(find.text('Used 1 tool'), findsOneWidget);
     expect(find.text('Tool result'), findsNothing);
     expect(find.text('Message 60').hitTestable(), findsOneWidget);
     expect(find.text('Message 62').hitTestable(), findsOneWidget);
@@ -1210,7 +1271,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
 
     await show(tester);
 
-    expect(find.text('Activity'), findsOneWidget);
+    expect(
+      find.textContaining(
+        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Unsaved tool output'), findsNothing);
   });
 

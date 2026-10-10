@@ -1,8 +1,8 @@
 # ARCH_SAVED_PROMPT_JOURNAL_ADMISSION
 
-A workspace can close while `_regenerate` or `editSavedPrompt` awaits its durable
+A workspace can close while `_regenerate` or `_replaceSavedPrompt` awaits its durable
 pending-owner journal. The old sequence then staged reading history and accepted
-a turn before rechecking the captured command owner. Both owner methods now call
+a turn before rechecking the captured command owner. The shared replacement transaction serves Edit and Restore. Both owner methods call
 `_commandOwner(chat)` immediately after the awaited journal and before those
 local mutations. Controlled journal/close behavior cases protect the real refusal,
 definitely-unsent settlement and retained reading outcomes.

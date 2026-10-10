@@ -127,13 +127,13 @@ class ConversationPreview extends StatelessWidget {
                   return Padding(
                     padding: EdgeInsets.only(
                       left: WingSpacing.lg,
-                      right: message.role == 'user' ? 0 : WingSpacing.lg,
+                      right: WingSpacing.xs,
                     ),
                     child: ProfileMessage(
                       message: message,
-                      bot: bot,
                       loadImages: false,
                       showEditAction: message.role == 'user',
+                      showRestoreAction: message.role == 'user',
                     ),
                   );
                 },

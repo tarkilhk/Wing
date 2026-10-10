@@ -77,6 +77,7 @@ void main() {
                   padding: const EdgeInsets.all(16),
                   children: [
                     ProfileActivitySection(
+                      label: 'Activity',
                       initiallyExpanded: true,
                       detailsBuilder: (_) => const ProfileActivityTabs(
                         tabs: [

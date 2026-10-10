@@ -342,14 +342,6 @@ class ComposerSession {
         _editing != null;
     final hasDraft = text.isNotEmpty || _files.isNotEmpty,
         slash = text.startsWith('/');
-    final canFork =
-        !runtime.working &&
-        _preparing == 0 &&
-        !_draining &&
-        text.isNotEmpty &&
-        !slash &&
-        _files.isEmpty &&
-        runtime.canForkSavedAnswer;
     final item = _editing?.value, editedText = _editText.trim();
     final validEdit =
         item != null &&
@@ -398,13 +390,9 @@ class ComposerSession {
                       !_draining
                 ? null
                 : ComposerUnavailableReason.queueDuringTurn,
-            ComposerAction.fork: !blocked && canFork
-                ? null
-                : ComposerUnavailableReason.savedAnswerRequired,
           };
     return ComposerActions(
       reasons,
-      canFork: canFork,
       prefersStopAction:
           runtime.connected &&
           runtime.working &&
@@ -422,11 +410,8 @@ class ComposerSession {
           !runtime.changingAnswer &&
           !runtime.changingIntelligence &&
           !_saving &&
-          (canFork ||
-              _queue.isNotEmpty ||
-              (runtime.working && hasDraft && !slash)),
+          (_queue.isNotEmpty || (runtime.working && hasDraft && !slash)),
       offered: {
-        if (canFork) ComposerAction.fork,
         if (text.isNotEmpty && !slash && runtime.working && _files.isEmpty)
           ComposerAction.steer,
         if (hasDraft && !slash && runtime.working) ComposerAction.queue,

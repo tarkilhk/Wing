@@ -232,8 +232,8 @@ void main() {
           final next = tester.getRect(find.byTooltip('Next section'));
           expect(next.bottom, greaterThan(800));
           await capture(tester, boundary, key);
-          await tester.ensureVisible(find.text('Activity'));
-          await tester.tap(find.text('Activity'));
+          await tester.ensureVisible(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
+          await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
           await tester.pumpAndSettle();
           expect(find.text('Uses'), findsOneWidget);
           expect(find.text('Patches / edits'), findsOneWidget);
@@ -525,7 +525,7 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          await tester.tap(find.text('Activity'));
+          await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
           await tester.pumpAndSettle();
           expect(
             find.bySemanticsLabel(RegExp(r'^Uses: 1044\.')),

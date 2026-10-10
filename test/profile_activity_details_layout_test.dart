@@ -137,7 +137,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         await show(
           ProfileToolActivitySection(section: timeline.sections.single),
         );
-        await tester.tap(find.text('Activity'));
+        await tester.tap(
+          find.textContaining(
+            RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+          ),
+        );
         await tester.pumpAndSettle();
         final toolRows = [
           for (var index = 0; index < rows.length; index++)
@@ -285,6 +289,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
               padding: const EdgeInsets.all(16),
               children: [
                 ProfileActivitySection(
+                  label: 'Activity',
                   initiallyExpanded: true,
                   detailsBuilder: (_) => ProfileActivityTabs(
                     tabs: [

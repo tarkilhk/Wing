@@ -13,15 +13,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/answer_versions.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/models/queued_prompt_draft.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'answer_versions_test.dart' show AnswerHost;
+import 'helpers/pump_markdown_widget.dart';
 
 const _capture = bool.fromEnvironment('STUDIO_REVIEW');
 const _reviewFrame = ValueKey('saved-edit-review-frame');
@@ -115,6 +118,7 @@ void main() {
     expect(reading.select(reading.observation.matches.single), isTrue);
     await tester.pumpAndSettle();
     expect(find.byTooltip('Edit message'), findsNothing);
+    expect(find.byTooltip('Restore checkpoint'), findsNothing);
     expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
   });
 
@@ -187,7 +191,13 @@ void main() {
           code: 4009,
         );
         await tester.tap(submit);
-        for (var i = 0; i < 100 && original.runtime.changingAnswer; i++) {
+        for (
+          var i = 0;
+          i < 100 &&
+              (original.runtime.changingAnswer ||
+                  !host.calls.any((call) => call.$1 == 'prompt.submit'));
+          i++
+        ) {
           await tester.pump(const Duration(milliseconds: 1));
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 1)),
@@ -215,6 +225,348 @@ void main() {
       });
     }
   }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('${brightness.name} Target chat and Restore at $scale', (
+        tester,
+      ) async {
+        await tester.binding.setSurfaceSize(Size(scale == 1 ? 390 : 320, 844));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final timestamp =
+            DateTime(2026, 10, 10, 16, 38).millisecondsSinceEpoch / 1000;
+        host.history('a', 'original')
+          ..clear()
+          ..addAll([
+            {
+              'role': 'user',
+              'text': 'is this an upstream issue?',
+              'row_id': 1,
+              'timestamp': timestamp,
+            },
+            {
+              'role': 'tool',
+              'text': 'Checked upstream issue and pull request.',
+              'tool_name': 'terminal',
+              'row_id': 2,
+            },
+            {
+              'role': 'assistant',
+              'text':
+                  'Yes—and it is **already reported upstream with the same symptoms**.\n\nThe fix is still open. Updating alone will not resolve this yet.',
+              'row_id': 3,
+              'timestamp': timestamp + 60,
+            },
+          ]);
+        await controller.refreshHistory(original);
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: _reviewFrame,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          ),
+        );
+        await tester.settleMarkdown();
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('Yes—and', findRichText: true),
+          findsOneWidget,
+        );
+        expect(find.text('10 Oct, 16:39'), findsOneWidget);
+        final scrollable = find
+            .descendant(
+              of: find.byType(ProfileTranscript),
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is Scrollable &&
+                    widget.axisDirection == AxisDirection.up,
+              ),
+            )
+            .first;
+        await tester.scrollUntilVisible(
+          find.text('Used 1 tool'),
+          200,
+          scrollable: scrollable,
+        );
+        final answerCopy = find.descendant(
+          of: find.byType(ProfileToolActivitySection),
+          matching: find.byTooltip('Copy message'),
+        );
+        expect(answerCopy, findsOneWidget);
+        expect(
+          find.byTooltip('Copy message'),
+          scale == 1 ? findsNWidgets(2) : findsWidgets,
+        );
+        await tester.ensureVisible(answerCopy);
+        await tester.tap(answerCopy);
+        await tester.pump();
+        expect(copied, contains('already reported upstream'));
+        expect(
+          find.text('Checked upstream issue and pull request.'),
+          findsNothing,
+        );
+        final answerRight = tester.getRect(answerCopy).right;
+        ScaffoldMessenger.of(tester.element(answerCopy)).hideCurrentSnackBar();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await capture(tester, 'target-answer-${brightness.name}-$scale');
+        final restore = find.byKey(const ValueKey('restore-message-1'));
+        await tester.scrollUntilVisible(restore, 200, scrollable: scrollable);
+        final userMessage = find.ancestor(
+          of: find.byKey(
+            const ValueKey<(String, Object?)>(('user-message-bubble', 1)),
+          ),
+          matching: find.byType(ProfileMessage),
+        );
+        final userCopy = find.descendant(
+          of: userMessage,
+          matching: find.byTooltip('Copy message'),
+        );
+        expect(tester.getRect(userCopy).right, closeTo(answerRight, .1));
+        expect(find.text('10 Oct, 16:38'), findsOneWidget);
+        await tester.pump();
+        await capture(tester, 'target-${brightness.name}-$scale');
+        await tester.tap(restore);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('restore-message-confirm')).hitTestable(),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await capture(tester, 'restore-${brightness.name}-$scale');
+        await tester.tap(find.byKey(const ValueKey('restore-message-cancel')));
+        await tester.pumpAndSettle();
+        expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+      });
+    }
+  }
+
+  test(
+    'restore reruns the selected saved prompt, retaining draft and paused queue',
+    () async {
+      await controller.updateDraft(original, 'Keep this separate draft');
+      await restoreComposerFixture(
+        chat: original,
+        preferences: controller.preferences,
+        appendQueued: [QueuedPromptDraft(text: 'Queued followup')],
+      );
+      final prompt = original.reading.messages.first;
+      expect(await controller.restoreSavedPrompt(original, prompt), isTrue);
+      expect(host.calls.lastWhere((call) => call.$1 == 'prompt.submit').$2, {
+        'session_id': 'runtime-original',
+        'profile': 'a',
+        'text': 'Original prompt',
+        'truncate_before_row_id': 1,
+        'confirm_truncate': true,
+        'confirm_empty_truncate': true,
+      });
+      expect(host.history('a', 'original').first['text'], 'Original prompt');
+      expect(
+        host
+            .history('a', 'original')
+            .any((row) => row['text'] == 'Later answer'),
+        isFalse,
+      );
+      expect(original.composer.observation.text, 'Keep this separate draft');
+      expect(original.composer.observation.paused, isTrue);
+      expect(
+        original.composer.observation.queue.single.text,
+        'Queued followup',
+      );
+      expect(host.calls.where((call) => call.$1 == 'session.branch'), isEmpty);
+    },
+  );
+
+  test(
+    'restore refusal retains history and never resubmits as a new prompt',
+    () async {
+      final before = original.reading.messages.toList();
+      host.submitError = JsonRpcError(
+        'prompt.submit',
+        'Target no longer exists',
+        code: 4018,
+      );
+      expect(
+        await controller.restoreSavedPrompt(original, before.first),
+        isFalse,
+      );
+      expect(original.reading.messages, before);
+      expect(original.runtime.error, contains('did not accept the restore'));
+      expect(
+        host.calls.where((call) => call.$1 == 'prompt.submit'),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'restore transport uncertainty is not retried or rolled back as unsent',
+    () async {
+      host.submitError = JsonRpcError(
+        'prompt.submit',
+        'Disconnected',
+        reason: 'connection_closed',
+      );
+      host.submitErrorAfterAcceptance = true;
+      expect(
+        await controller.restoreSavedPrompt(
+          original,
+          original.reading.messages.first,
+        ),
+        isFalse,
+      );
+      expect(original.runtime.error, contains('Restore status is uncertain'));
+      expect(
+        host.calls.where((call) => call.$1 == 'prompt.submit'),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('restore interrupts a live turn before its durable rewind', () async {
+    emitChatEvent(controller, original, 'message.start');
+    final prompt = original.reading.messages.first;
+    expect(controller.canRestoreSavedPrompt(original, prompt), isTrue);
+    expect(await controller.restoreSavedPrompt(original, prompt), isTrue);
+    final interrupt = host.calls.indexWhere(
+      (call) => call.$1 == 'session.interrupt',
+    );
+    final submit = host.calls.indexWhere((call) => call.$1 == 'prompt.submit');
+    expect(interrupt, greaterThanOrEqualTo(0));
+    expect(submit, greaterThan(interrupt));
+  });
+
+  test(
+    'restore retries only the refused durable cut while interruption settles',
+    () async {
+      emitChatEvent(controller, original, 'message.start');
+      final prompt = original.reading.messages.first;
+      host.busySubmissions = 2;
+      expect(await controller.restoreSavedPrompt(original, prompt), isTrue);
+      final submits = host.calls
+          .where((call) => call.$1 == 'prompt.submit')
+          .toList();
+      expect(submits, hasLength(3));
+      expect(submits.map((call) => call.$2), everyElement(submits.first.$2));
+      expect(
+        host.history('a', 'original').where((row) => row['role'] == 'user'),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'restore interrupts a gateway-busy session even before its live event arrives',
+    () async {
+      final prompt = original.reading.messages.first;
+      host.busySubmissions = 1;
+      expect(await controller.restoreSavedPrompt(original, prompt), isTrue);
+      final methods = host.calls.map((call) => call.$1).toList();
+      final firstSubmit = methods.indexOf('prompt.submit');
+      final interrupt = methods.indexOf('session.interrupt');
+      final finalSubmit = methods.lastIndexOf('prompt.submit');
+      expect(interrupt, greaterThan(firstSubmit));
+      expect(finalSubmit, greaterThan(interrupt));
+      final submits = host.calls.where((call) => call.$1 == 'prompt.submit');
+      expect(submits, hasLength(2));
+      expect(submits.last.$2, submits.first.$2);
+    },
+  );
+
+  test('restore requires a human prompt with a durable address', () async {
+    for (final row in [
+      {'role': 'user', 'text': 'Unpersisted'},
+      {'role': 'assistant', 'text': 'Answer', 'row_id': 3},
+      {'role': 'user', 'text': '', 'row_id': 4},
+    ]) {
+      expect(controller.canRestoreSavedPrompt(original, row), isFalse);
+    }
+    host.omitRowIds = true;
+    expect(
+      await controller.restoreSavedPrompt(
+        original,
+        original.reading.messages.first,
+      ),
+      isFalse,
+    );
+    expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+    expect(original.reading.messages, hasLength(5));
+  });
+
+  testWidgets(
+    'restore is confirmed on the selected prompt; cancellation sends nothing',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+      final restore = find.byKey(const ValueKey('restore-message-4'));
+      await tester.ensureVisible(restore);
+      await tester.tap(restore);
+      await tester.pumpAndSettle();
+      expect(find.text('Restore to this checkpoint?'), findsOneWidget);
+      expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+      await tester.tap(find.byTooltip('Cancel restore'));
+      await tester.pumpAndSettle();
+      expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+      await tester.tap(restore);
+      await tester.pumpAndSettle();
+      final confirm = find.byKey(const ValueKey('restore-message-confirm'));
+      expect(tester.widget<IconButton>(confirm).onPressed, isNotNull);
+      await tester.tap(confirm);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Restore to this checkpoint?'), findsNothing);
+      for (var i = 0; i < 100 && original.runtime.changingAnswer; i++) {
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 1)),
+        );
+      }
+      expect(
+        host.calls.where((call) => call.$1 == 'prompt.submit'),
+        isNotEmpty,
+        reason:
+            'Restore error: ${original.runtime.error}; calls: ${host.calls.map((call) => call.$1).join(', ')}',
+      );
+      expect(
+        host.calls
+            .lastWhere((call) => call.$1 == 'prompt.submit')
+            .$2['truncate_before_row_id'],
+        4,
+      );
+      expect(
+        host.calls.lastWhere((call) => call.$1 == 'prompt.submit').$2['text'],
+        'Follow-up',
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   test('unchanged and empty edits do not rewind or pause the queue', () async {
     await restoreComposerFixture(
@@ -385,54 +737,6 @@ void main() {
     );
   }
 
-  test('fork sends once after the latest saved answer', () async {
-    await controller.updateDraft(original, 'Continue in a fork');
-
-    final child = await controller.forkPrompt(
-      original,
-      original.composer.observation.text,
-    );
-
-    expect(child, isNotNull);
-    final forked = child!;
-    expect(host.calls.lastWhere((call) => call.$1 == 'session.branch').$2, {
-      'session_id': 'runtime-original',
-      'profile': 'a',
-      'count': 4,
-    });
-    expect(host.calls.lastWhere((call) => call.$1 == 'prompt.submit').$2, {
-      'session_id': forked.runtime.runtimeId,
-      'profile': 'a',
-      'text': 'Continue in a fork',
-    });
-    expect(original.composer.observation.text, isEmpty);
-    expect(forked.runtime.execution, ChatExecution.running);
-  });
-
-  test('failed fork send leaves the source draft intact', () async {
-    await controller.updateDraft(original, 'Do not lose this');
-    host.submitError = JsonRpcError(
-      'prompt.submit',
-      'Session busy',
-      code: 4009,
-    );
-
-    final child = await controller.forkPrompt(
-      original,
-      original.composer.observation.text,
-    );
-
-    expect(child, isNotNull);
-    final forked = child!;
-    expect(original.composer.observation.text, 'Do not lose this');
-    expect(forked.runtime.reconnecting, isTrue);
-    expect(original.runtime.error, contains('Check the child chat'));
-    expect(
-      host.calls.where((call) => call.$1 == 'prompt.submit'),
-      hasLength(1),
-    );
-  });
-
   testWidgets('saved user edit requires explicit history replacement', (
     tester,
   ) async {
@@ -471,7 +775,7 @@ void main() {
       matching: find.byTooltip('Copy message'),
     );
     final copyTarget = tester.getRect(copy);
-    expect(copyTarget.size, const Size(48, 48));
+    expect(copyTarget.size, const Size(44, 48));
     await tester.tapAt(Offset(copyTarget.right - 2, copyTarget.bottom - 2));
     await tester.pumpAndSettle();
     expect(copied, 'Follow-up');
@@ -523,7 +827,13 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Replace and resend'));
     await tester.runAsync(() async {
-      for (var i = 0; i < 100 && original.runtime.changingAnswer; i++) {
+      for (
+        var i = 0;
+        i < 100 &&
+            (original.runtime.changingAnswer ||
+                !host.calls.any((call) => call.$1 == 'prompt.submit'));
+        i++
+      ) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
     });
@@ -594,7 +904,13 @@ void main() {
           findsOneWidget,
         );
         host.submitDelay!.complete();
-        for (var i = 0; i < 100 && original.runtime.changingAnswer; i++) {
+        for (
+          var i = 0;
+          i < 100 &&
+              (original.runtime.changingAnswer ||
+                  !host.calls.any((call) => call.$1 == 'prompt.submit'));
+          i++
+        ) {
           await tester.pump(const Duration(milliseconds: 1));
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 1)),
@@ -631,7 +947,7 @@ void main() {
     );
   }
 
-  testWidgets('idle composer offers one-shot fork at the saved boundary', (
+  testWidgets('composer never offers fork; answer branching stays available', (
     tester,
   ) async {
     await controller.updateDraft(original, 'Composer followup');
@@ -639,38 +955,14 @@ void main() {
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
     await tester.pumpAndSettle();
-
     final gesture = await tester.startGesture(
       tester.getCenter(find.byTooltip('Send')),
     );
     await tester.pump(const Duration(milliseconds: 600));
-    expect(find.byKey(const ValueKey('composer-choice-fork')), findsOneWidget);
-    await gesture.moveTo(
-      tester.getCenter(find.byKey(const ValueKey('composer-choice-fork'))),
-    );
-    await tester.pump();
-    expect(find.text('Fork'), findsOneWidget);
-    expect(host.calls.where((call) => call.$1 == 'session.branch'), isEmpty);
+    expect(find.byKey(const ValueKey('composer-choice-fork')), findsNothing);
+    expect(find.byTooltip('Branch in new session'), findsWidgets);
     await gesture.up();
-    await tester.runAsync(() async {
-      for (
-        var i = 0;
-        i < 100 && original.composer.observation.text.isNotEmpty;
-        i++
-      ) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
-    });
-    await tester.pump();
-    expect(
-      host.calls.where((call) => call.$1 == 'session.branch'),
-      hasLength(1),
-    );
-    expect(
-      host.calls.where((call) => call.$1 == 'prompt.submit'),
-      hasLength(1),
-    );
-    expect(original.composer.observation.text, isEmpty);
+    expect(host.calls.where((call) => call.$1 == 'session.branch'), isEmpty);
     await tester.pumpWidget(const SizedBox());
   });
 }

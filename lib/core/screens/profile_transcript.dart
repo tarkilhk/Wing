@@ -24,6 +24,8 @@ class ProfileTranscript extends StatefulWidget {
   final ProfileChat chat;
   final ProfileWorkspaceController controller;
   final Widget Function(timeline_facts.TranscriptTimelineEntry) messageBuilder;
+  final Widget? Function(timeline_facts.TranscriptTimelineSection)?
+  activityTrailingBuilder;
   final List<Widget> tail;
   final Future<void> Function() onLoadOlder;
   final List<Widget> currentActivity;
@@ -42,6 +44,7 @@ class ProfileTranscript extends StatefulWidget {
     required this.controller,
     required this.onLoadOlder,
     required this.messageBuilder,
+    this.activityTrailingBuilder,
     required this.timeline,
     required this.tail,
     this.currentActivity = const [],
@@ -439,12 +442,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final hasCurrentActivity =
         widget.currentActivity.isNotEmpty || widget.activityTabs.isNotEmpty;
     Widget currentActivity() => ProfileActivitySection(
+      label: widget.liveToolCount > 0
+          ? 'Using ${widget.liveToolCount} ${widget.liveToolCount == 1 ? 'tool' : 'tools'}'
+          : 'Activity',
       key: ValueKey(('activity', chat.key)),
-      subtitle: widget.liveToolCount > 0
-          ? Text(
-              '${widget.liveToolCount} tool ${widget.liveToolCount == 1 ? 'call' : 'calls'}',
-            )
-          : null,
       detailsBuilder: (_) => ProfileActivityTabs(
         tabs: [
           if (widget.currentActivity.isNotEmpty)
@@ -630,13 +631,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     child: Padding(
                       padding: EdgeInsets.only(
                         left: WingSpacing.lg,
-                        right: !section.isActivity && row.role == 'user'
-                            ? 0
-                            : WingSpacing.lg,
+                        right: WingSpacing.xs,
                       ),
                       child: section.isActivity
                           ? ProfileToolActivitySection(
                               section: section,
+                              trailing: widget.activityTrailingBuilder?.call(
+                                section,
+                              ),
                               loadImage: widget.loadImage,
                               onOpenResource: widget.onOpenResource,
                               onShareResource: widget.onShareResource,
@@ -887,15 +889,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                   Padding(
                     padding: EdgeInsets.only(
                       left: WingSpacing.lg,
-                      right:
-                          !section.isActivity &&
-                              section.messages.last.role == 'user'
-                          ? 0
-                          : WingSpacing.lg,
+                      right: WingSpacing.xs,
                     ),
                     child: section.isActivity
                         ? ProfileToolActivitySection(
                             section: section,
+                            trailing: widget.activityTrailingBuilder?.call(
+                              section,
+                            ),
                             loadImage: widget.loadImage,
                             onOpenResource: widget.onOpenResource,
                             onShareResource: widget.onShareResource,

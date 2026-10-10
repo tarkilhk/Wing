@@ -32,6 +32,7 @@ class AnswerHost {
   Completer<void>? resumeDelay;
   Object? submitError;
   bool submitErrorAfterAcceptance = false;
+  int busySubmissions = 0;
   bool omitRowIds = false;
   bool omitSessionParent = false;
   bool clearSessionParent = false;
@@ -104,6 +105,7 @@ class AnswerHost {
                 {
                   'id': 'original',
                   'title': 'Original chat',
+                  'unread': false,
                   'profile': scope.profileName,
                 },
                 for (final entry in parents.entries)
@@ -178,6 +180,14 @@ class AnswerHost {
               if (branchReplyMessages != null) 'messages': branchReplyMessages,
             };
           case 'prompt.submit':
+            if (busySubmissions > 0) {
+              busySubmissions--;
+              throw JsonRpcError(
+                'prompt.submit',
+                'Session is busy',
+                code: 4009,
+              );
+            }
             await submitDelay?.future;
             if (submitError != null && !submitErrorAfterAcceptance) {
               throw submitError!;

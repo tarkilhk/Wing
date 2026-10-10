@@ -52,7 +52,7 @@ class ProfileWorkspaceController $owner {
     await _journal();
     return true;
   }
-  Future<bool> editSavedPrompt(ProfileChat chat, Object selected, String text) async {
+  Future<bool> _replaceSavedPrompt(ProfileChat chat, Object selected, String text) async {
     await _journal();
     $edit
     chat.reading.stageSavedPromptEdit(history, 0, text);
@@ -211,7 +211,7 @@ Future<void> _proofMain() async {
     _Case('malformed source', 'class ProfileWorkspaceController {', 2),
     _Case(
       'unrelated classes and top-level method homonyms',
-      '$good\nclass Other { void _regenerate(ProfileChat chat) { chat.reading.stageRegeneration(history, 0); } } void editSavedPrompt(ProfileChat chat) {}',
+      '$good\nclass Other { void _regenerate(ProfileChat chat) { chat.reading.stageRegeneration(history, 0); } } void _replaceSavedPrompt(ProfileChat chat) {}',
       0,
     ),
     _Case(

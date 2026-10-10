@@ -410,7 +410,7 @@ out of media pause and connects it to foreground retirement. Run
 setup. Its [finite contract and shared fixture driver](native_voice/README.md#permission-lifecycle-ownership)
 retain the real Android denial/grant/Home fixture as the lifecycle-order check.
 
-`ARCH_SAVED_PROMPT_JOURNAL_ADMISSION` protects the two canonical saved-prompt journal → owner admission → reading stage → acceptance sequences. [Finite scope and behavior limits](rules/saved_prompt_journal_admission.md). Fixtures: `dart run tools/architecture/tests/saved_prompt_journal_admission_test.dart`.
+`ARCH_SAVED_PROMPT_JOURNAL_ADMISSION` protects the canonical regeneration/shared Edit-and-Restore journal → owner admission → reading stage → acceptance sequences. [Finite scope and behavior limits](rules/saved_prompt_journal_admission.md). Fixtures: `dart run tools/architecture/tests/saved_prompt_journal_admission_test.dart`.
 
 `ARCH_RETIRED_ANSWER_VERSIONS_NAMESPACE` rejects the exact retired answer-version preference prefix in the canonical workspace library. [Finite literal/part scope](rules/retired_answer_versions_namespace.md). Fixtures: `dart run tools/architecture/tests/retired_answer_versions_namespace_test.dart`.
 

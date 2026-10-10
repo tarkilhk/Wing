@@ -27,7 +27,7 @@ an empty composer while a turn is working.
   down, slide to a choice, and release to run that action once. Holding in
   place keeps the primary action selected. Slide outside to cancel.
 - The default sits at the bottom of the stack, closest to the button. With
-  Steer as the default, sliding upward visits Steer, Queue, Fork, then Stop.
+  Steer as the default, sliding upward visits Steer, Queue, then Stop.
   Send replaces Steer while idle. Selecting an alternative never changes the
   saved default.
 - Unavailable choices stay visible and dimmed. Moving onto one shows why it
@@ -36,8 +36,8 @@ an empty composer while a turn is working.
   direct tap when the running composer is empty.
 - Queue waits for the current send to finish submitting before moving the draft
   or attachments. The unavailable reason explains the wait; typing remains possible.
-- Fork requires text and a completed saved answer. It branches at that answer
-  and submits the draft in the child chat. It is unavailable during a turn.
+- Fork is a saved-answer action. The composer has no Fork icon, availability
+  observation or draft-to-child dispatch.
 - Pointer cancellation, navigation, app backgrounding, geometry changes, and
   changed action availability dismiss the selector without acting.
 - Screen readers have named actions on the button, so dragging is optional.
@@ -60,7 +60,7 @@ Android client.
 
 Tests cover held movement and release, cancellation, disabled choices, default
 preference persistence, keyboard and large text layouts, screen reader actions,
-accepted and rejected steering, queue attachment preservation, and fork delivery.
+accepted and rejected steering, queue attachment preservation, and message-level fork isolation.
 `test/composer_action_button_test.dart` covers both animated and reduced-motion
 Stop/typing transitions, the Stop-only state, restored column order and
 cancellation when the resting state changes.

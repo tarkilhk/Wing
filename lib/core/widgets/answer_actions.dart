@@ -4,12 +4,16 @@ class AnswerActions extends StatelessWidget {
   final VoidCallback? onBranch;
   final VoidCallback? onRegenerate;
   final bool busy;
+  final VoidCallback? onReadAloud;
+  final bool readingAloud;
 
   const AnswerActions({
     super.key,
     this.onBranch,
     this.onRegenerate,
     this.busy = false,
+    this.onReadAloud,
+    this.readingAloud = false,
   });
 
   @override
@@ -30,6 +34,15 @@ class AnswerActions extends StatelessWidget {
         onPressed: onBranch,
         icon: const Icon(Icons.fork_right),
       ),
+      if (onReadAloud != null)
+        IconButton(
+          tooltip: readingAloud ? 'Stop reading aloud' : 'Read aloud',
+          onPressed: onReadAloud,
+          icon: Icon(
+            readingAloud ? Icons.stop : Icons.volume_up_outlined,
+            size: 18,
+          ),
+        ),
       IconButton(
         tooltip: 'Regenerate response',
         onPressed: onRegenerate,
