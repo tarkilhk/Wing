@@ -11,7 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/gateway_activity.dart';
-import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/models/app_preferences.dart' show AppThemePreference;
 import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
@@ -38,6 +38,7 @@ import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 
 import '../../test/helpers/pump_markdown_widget.dart';
+import '../../test/source_highlighting_test.dart' show settleSource;
 import '../../test/support/profile_browser_fixture.dart';
 import '../../test/support/administration_design_fixture.dart';
 import '../../test/support/host_resources_fixture.dart';
@@ -108,7 +109,7 @@ class _WebsiteFixture extends ProfileBrowserFixture {
           {
             'id': 1,
             'role': 'user',
-            'timestamp': now - 7200,
+            'timestamp': now - 684,
             'content':
                 'Check the options and turn the research into a short recommendation.',
           },
@@ -189,6 +190,7 @@ class _ActivityFixture extends _WebsiteFixture {
     {
       'id': 21,
       'role': 'user',
+      'timestamp': now - 684,
       'content': 'Check the source dates and save the comparison.',
     },
     {
@@ -252,6 +254,7 @@ class _ActivityFixture extends _WebsiteFixture {
     {
       'id': 25,
       'role': 'assistant',
+      'timestamp': now - 600,
       'content':
           'The seven records are checked. The comparison is saved in `comparison.md`.',
     },
@@ -393,8 +396,13 @@ void main() {
     }
   });
 
-  Future<void> capture(WidgetTester tester, String name) async {
+  Future<void> capture(
+    WidgetTester tester,
+    String name, {
+    String directory = 'website/assets/screenshots',
+  }) async {
     await tester.settleMarkdown();
+    await settleSource(tester);
     await tester.runAsync(() async {
       final context = tester.element(find.byKey(frame));
       for (final image in tester.widgetList<Image>(find.byType(Image))) {
@@ -409,7 +417,7 @@ void main() {
     await tester.runAsync(() async {
       final image = await boundary.toImage(pixelRatio: 2);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-      final file = File('website/assets/screenshots/$name.png');
+      final file = File('$directory/$name.png');
       await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes!.buffer.asUint8List());
       image.dispose();
@@ -806,6 +814,7 @@ void main() {
       final appPreferences = AppPreferences(preferences);
       addTearDown(appPreferences.dispose);
       final fixture = _WebsiteFixture();
+      final administration = _WebsiteAdministration();
       final controller = ProfileWorkspaceController(
         access: ConnectionAccess(
           connection: SavedConnection(
@@ -823,6 +832,7 @@ void main() {
         gatewayFactory: fixture.gateway,
       );
       addTearDown(controller.dispose);
+      controller.healthSession(repository: administration.server);
       await controller.initialize();
       await tester.pumpWidget(
         RepaintBoundary(
@@ -963,11 +973,10 @@ void main() {
           ),
         ),
       );
-      final chat = (await controller.openSession(
-        ProfileSessionKey(controller.current!.scope, 'newest'),
-      ))!;
+      await tester.tap(find.text('The research, ready to use').first);
       await tester.pump(const Duration(milliseconds: 250));
       await tester.settleMarkdown();
+      final chat = controller.current!.chat!;
       controller.current!.gateway.onEvent!(
         StreamEvent(
           type: 'session.usage',
@@ -1008,7 +1017,6 @@ void main() {
       await capture(tester, 'steer-${brightness.name}');
       await gesture.cancel();
 
-      final administration = _WebsiteAdministration();
       administration.jobs.add({
         'id': 'morning-brief',
         'name': 'Morning research brief',
@@ -1042,6 +1050,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 250));
       }
       await capture(tester, 'administration-${brightness.name}');
+      expect(find.text('Research model'), findsWidgets);
+      expect(find.text('Information unavailable'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
 
       tester.view.physicalSize = const Size(390, 800);
@@ -1131,11 +1141,10 @@ void main() {
           ),
         ),
       );
-      await activityController.openSession(
-        ProfileSessionKey(activityController.current!.scope, 'newest'),
-      );
       await tester.pump(const Duration(milliseconds: 250));
-      await tester.tap(find.text('Activity'));
+      await tester.tap(find.text('The research, ready to use').first);
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.tap(find.textContaining('Used 3 tools'));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Timeline'), findsOneWidget);
       expect(find.text('Tasks 3'), findsOneWidget);
@@ -1202,6 +1211,25 @@ void main() {
           ),
         );
         await capture(tester, '${detail.name}-${brightness.name}');
+      }
+      if (brightness == Brightness.dark) {
+        tester.view.physicalSize = const Size(390, 844);
+        await appPreferences.setTheme(AppThemePreference.dark);
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: frame,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              home: ProfileWorkspaceScreen(
+                key: const ValueKey('appearance-capture'),
+                controller: controller,
+                initialDestination: AppDestination.settings,
+              ),
+            ),
+          ),
+        );
+        await capture(tester, 'appearance-dark', directory: 'docs/screenshots');
       }
       await tester.pumpWidget(const SizedBox.shrink());
     });

@@ -46,38 +46,77 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 - Use Hermes' model catalog for subscription API-equivalent estimates and share
   the models.dev API price catalog between Analytics and model selection.
 
-### Other fixes
+### Conversations, models and files
 
-- Recover retained tool durations from earlier runtimes when reopening a saved
-  conversation, including after Hermes retires the original runtime.
+- Place sent messages on the right with timestamps, Copy, Edit and Restore in a
+  compact footer. Restore confirms removal of later history and reruns the saved
+  prompt, preserving the separate draft and pausing queued follow-ups for review.
+- Keep Fork on selected saved answers, with Regenerate available in the current
+  chat; remove Fork from the held composer menu.
+- Show saved bot avatars in canonical chat rows, Recents and conversation titles.
+  Use the bot's saved name in its conversation and show the assigned project's
+  saved icon and color beside its name.
+- Color Python, shell commands and other identified source languages in replies,
+  Activity and file previews. Keep exact selection/copy, default line wrapping and
+  a wrap toggle, including in full Activity code viewers. Prepare coloring away
+  from the UI thread and lay out visible source lazily; live code stays plain
+  until completion, and unsupported source remains readable without coloring.
+- Put icon-only download and preview actions beside output filenames.
+- Use a compact provider-filtered model picker with model cards for supplied
+  prices and account usage. Open on the selected provider and model, retain each
+  account's reported usage windows, and apply choices explicitly.
+- Keep composer model controls compact. Tap the model name to choose a model,
+  toggle supported fast mode, or hold the thinking control and slide to a
+  reasoning level. Center the context percentage in its ring and show a compact
+  breakdown when tapped.
+- Accept Samsung screenshots whose discarded image metadata previously caused
+  preparation to fail.
 
-- Retain measured timings independently of the recent-message and recent-chat
-  preview caches, so loading older saved rows can still show received durations.
-- Recover measured tool-call durations missed while disconnected when loading
-  chat history, while their completion events remain in Hermes' event buffer.
+### Activity and skill reading
 
-- Make tool activity rows compact and remove expansion arrows from saved agents
-  that have no output to show.
+- Rework Timeline, Tasks, Agents and Work into compact rows with shared detail
+  panels for requests, code, output, file changes, search matches and other
+  receipts. Keep copy, preview, share and full-view actions next to their content.
+- Interleave supplied reasoning with Timeline calls, retain saved task snapshots,
+  and show agent goals, lifecycle status and available output without repeating
+  status or offering empty disclosures.
+- Show approximate reply time from the original prompt and final saved answer's
+  timestamps, including thinking and tool work. Keep it separate from measured
+  tool durations and omit it when the required timestamps are unavailable.
+- Recover measured tool durations across reopened runtimes and locally retained
+  history. Recover missed completion timings while Hermes still retains their
+  events, without guessing measurements from message timestamps.
+- Open captured skill instructions in a shared reader with formatted/raw modes,
+  Contents, previous/next navigation and supplied reference files. Use the same
+  reader for installed skills in Administration, with instructions accessible
+  beside the skill toggle.
+- Fix blank skill-management results, read stock plugin skill envelopes, and
+  reserve activity-card space while instructions load.
+- Show "Summarizing conversation…" above the composer while Hermes compresses
+  history, and retain Activity tabs and expanded details during lazy loading.
 
+### Recovery and other fixes
+
+- Keep Chats interactive after confirmed chat and project changes. Refresh in the
+  background with progress and retry feedback, preserving totals, search results
+  and scroll position. Dismissing an action menu no longer reloads the list.
+- Fix chat menus turning the screen pale when a live update replaces their row.
+- Scope Project filter choices to the selected profiles and retain project icons.
+- Keep saved-chat connection recovery alive when its chat-list screen is replaced.
+  Retry connections on foreground return before showing manual recovery notices.
+- Apply Once, Session and Deny directly from command notifications. Keep Always
+  behind review, require review for truncated or changed commands, and reload
+  cold or cached chats before deciding. Recover stopped/finished monitoring state
+  from refreshed history without duplicate alerts.
+- Preserve prepared attachments and Android shared-file offers through their
+  owning operations; retain configuration-export destinations and unique file
+  offers through navigation and cleanup.
 - Restore Fork by registering the new chat before observing its model controls.
   Keep task status labels accessible and profile repair choices reachable with
   enlarged text.
-
-- Outline the continuous selected analytics date span, including days with zero
-  usage, instead of leaving holes between recorded days.
-
-- Apply Once, Session and Deny directly from command notifications without a
-  second approval prompt. Keep Always behind review, and show Review and Deny
-  when the command is truncated. Reload cold or cached chats before deciding,
-  and require review if the command has changed.
-
-- Keep Chats interactive after chat and project changes are confirmed. Refresh
-  the list in the background with fixed progress and retry feedback, preserving
-  token totals, search results and scroll position. Dismissing an action menu
-  no longer reloads the list.
-
-- Fix chat action menus turning the screen pale when a live chat-list update
-  replaces the row while its menu is opening or repositioning.
+- Outline the continuous selected analytics date span, including zero-usage days.
+- Retain completed Doctor and security-audit observations through refresh and
+  show diagnostic progress separately from completed findings.
 
 ## [1.2.0] - 2026-10-02
 

@@ -50,7 +50,7 @@ Find bots across your saved connections and return to each bot's continuing chat
 
 ## Live work
 
-Inspect tool calls, tasks and delegated agents, then steer or stop a run, queue a follow-up, or fork from a selected saved answer. Choose a skill while composing a message to send its instructions with your request.
+Inspect tool calls, reasoning, tasks and delegated agents, then steer or stop a run, queue a follow-up, or fork from a selected saved answer. Choose a skill while composing a message. Open skills in the chat to read their instructions.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/live-work.html">
@@ -62,7 +62,7 @@ Inspect tool calls, tasks and delegated agents, then steer or stop a run, queue 
 
 ## Answers and files
 
-Read formatted Markdown and wide tables, copy code or whole replies, listen to answers, and preview, save or share output files. Edit an earlier sent message, or restore its checkpoint to remove later history and rerun that prompt.
+Read formatted Markdown, wide tables and highlighted source code. Copy code or whole replies, listen to answers, and preview, save or share output files. Edit an earlier sent message, or restore its checkpoint to remove later history and rerun that prompt.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/results.html">
@@ -86,7 +86,7 @@ Manage models, instructions, skills, connectors and scheduled tasks for each pro
 
 ## Health
 
-Check host resources, backend diagnostics and profiles. Set alerts for resource pressure, backend connection failures or profile problems, then inspect notifications from any screen. Checks run while Wing is open or monitoring ongoing work.
+Check host resources, backend diagnostics and profiles. Set alerts for resource pressure or profile problems, then inspect notifications from any screen. Checks run while Wing is open or monitoring ongoing work.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/health.html">
