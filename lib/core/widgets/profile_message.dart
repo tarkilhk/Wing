@@ -75,7 +75,11 @@ class ProfileMessage extends StatelessWidget {
         onPressed: () => _copyMessage(context, message.copyText),
       );
 
-  Widget _userBubble(BuildContext context, String content, Widget? timestamp) {
+  Widget _userBubble(
+    BuildContext context,
+    String content,
+    ({Widget widget, double width})? timestamp,
+  ) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final footerColor = Color.lerp(
@@ -87,6 +91,7 @@ class ProfileMessage extends StatelessWidget {
       builder: (context, bounds) {
         final enlarged = MediaQuery.textScalerOf(context).scale(12) > 18;
         final inset = enlarged ? 20.0 : bounds.maxWidth * .17;
+        final bubbleWidth = math.max(1.0, bounds.maxWidth - 44 - inset);
         return Align(
           alignment: Alignment.centerRight,
           child: Row(
@@ -95,9 +100,7 @@ class ProfileMessage extends StatelessWidget {
             children: [
               Flexible(
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: math.max(1, bounds.maxWidth - 44 - inset),
-                  ),
+                  constraints: BoxConstraints(maxWidth: bubbleWidth),
                   child: IntrinsicWidth(
                     child: ClipRRect(
                       key: ValueKey(('user-message-bubble', message.id)),
@@ -145,7 +148,12 @@ class ProfileMessage extends StatelessWidget {
                                   left: 10,
                                   right: 2,
                                 ),
-                                child: _footer(context, timestamp, true),
+                                child: _footer(
+                                  context,
+                                  timestamp,
+                                  true,
+                                  userWidth: bubbleWidth - 12,
+                                ),
                               ),
                             ),
                           ],
@@ -174,7 +182,12 @@ class ProfileMessage extends StatelessWidget {
         loadImage: loadAttachmentImage,
       );
 
-  Widget _footer(BuildContext context, Widget? timestamp, bool user) {
+  Widget _footer(
+    BuildContext context,
+    ({Widget widget, double width})? timestamp,
+    bool user, {
+    double userWidth = 0,
+  }) {
     final compactActionStyle = IconButton.styleFrom(
       minimumSize: const Size(48, 32),
       maximumSize: const Size(48, 32),
@@ -213,27 +226,43 @@ class ProfileMessage extends StatelessWidget {
     ];
     final date = timestamp == null
         ? null
-        : Padding(padding: const EdgeInsets.only(right: 4), child: timestamp);
+        : Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: timestamp.widget,
+          );
     final enlarged = MediaQuery.textScalerOf(context).scale(12) > 18;
-    final content = user && enlarged && controls.isNotEmpty
+    final stacked =
+        user &&
+        controls.isNotEmpty &&
+        (enlarged ||
+            (timestamp?.width ?? 0) + 4 + controls.length * 48 > userWidth);
+    final content = stacked
         ? Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ?date,
-              Row(mainAxisSize: MainAxisSize.min, children: controls),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Row(mainAxisSize: MainAxisSize.min, children: controls),
+              ),
+            ],
+          )
+        : user && controls.isEmpty
+        ? Align(alignment: Alignment.centerLeft, child: date)
+        : user
+        ? Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              date ?? const SizedBox.shrink(),
+              if (controls.isNotEmpty)
+                Row(mainAxisSize: MainAxisSize.min, children: controls),
             ],
           )
         : Wrap(
             alignment: WrapAlignment.end,
             crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ?date,
-              if (user)
-                Row(mainAxisSize: MainAxisSize.min, children: controls)
-              else
-                ...controls,
-            ],
+            children: [?date, ...controls],
           );
     final footer = ConstrainedBox(
       constraints: BoxConstraints(minHeight: user ? 32 : 48),
@@ -415,7 +444,10 @@ class ProfileMessage extends StatelessWidget {
     );
   }
 
-  Widget? _timestamp(BuildContext context, {Color? color}) {
+  ({Widget widget, double width})? _timestamp(
+    BuildContext context, {
+    Color? color,
+  }) {
     final date = message.timestamp;
     if (date == null) return null;
     final localizations = MaterialLocalizations.of(context);
@@ -439,21 +471,25 @@ class ProfileMessage extends StatelessWidget {
     final full =
         '${localizations.formatFullDate(date)}, '
         '${localizations.formatTimeOfDay(time, alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context))}';
-    return Tooltip(
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
+      fontSize: 12,
+      height: 1,
+      fontFeatures: const [FontFeature.tabularFigures()],
+      color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    final painter = TextPainter(
+      text: TextSpan(text: compact, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    final widget = Tooltip(
       message: full,
       excludeFromSemantics: true,
-      child: Text(
-        compact,
-        semanticsLabel: full,
-        maxLines: 1,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          fontSize: 12,
-          height: 1,
-          fontFeatures: const [FontFeature.tabularFigures()],
-          color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
+      child: Text(compact, semanticsLabel: full, maxLines: 1, style: style),
     );
+    return (widget: widget, width: width);
   }
 }
 

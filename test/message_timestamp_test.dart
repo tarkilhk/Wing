@@ -130,6 +130,7 @@ void main() {
         expect(bubble.contains(time.topLeft), isTrue);
         expect(bubble.contains(time.bottomRight), isTrue);
         expect(bubble.left, greaterThan(16));
+        expect(time.left, closeTo(bubble.left + 10, .01));
         expect(time.overlaps(edit), isFalse);
         expect(time.overlaps(restore), isFalse);
         if (time.bottom > edit.top) {
@@ -232,6 +233,7 @@ void main() {
           );
           expect(bubble.contains(time.topLeft), isTrue);
           expect(bubble.contains(time.bottomRight), isTrue);
+          expect(time.left, closeTo(bubble.left + 10, .01));
           await tester.tapAt(
             Offset(copyTarget.right - 2, copyTarget.bottom - 2),
           );

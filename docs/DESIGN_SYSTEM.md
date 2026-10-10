@@ -498,12 +498,14 @@ The message area uses the theme-adjusted `primaryContainer`, with 10 dp horizont
 and top padding and 4 dp below the text. User attachments stay inside the same
 bubble and retain their original preview/open/copy behavior.
 
-Time, Edit and Restore sit in the bubble's compact lower-right footer. Its fill
+Time sits at the left of the bubble's compact footer; Edit and Restore sit at
+the right. Its fill
 is exactly `Color.lerp(surface, primaryContainer, .5)`: equal parts ambient chat
 background and the actual displayed bubble color, including light-theme
 softening. There is no divider. The footer adds no vertical padding; Edit and
 Restore use the owner's selected 48-by-32 dp compact targets. At enlarged text,
-the date occupies a separate right-aligned line above the pair of actions.
+or when the date and controls cannot fit side by side, the date occupies a
+separate left-aligned line above the right-aligned pair of actions.
 Assistant controls and Copy retain their 48 dp height. The design exploration
 is archived on local branch `prototype/chat-visible-footer` at `1787e518`,
 under `plans/prototypes/chat-visible-footer`.

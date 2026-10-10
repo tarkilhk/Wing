@@ -83,7 +83,8 @@ composer Fork is absent while selected-answer branching remains available.
 Include `user_message_attachment_test.dart` for mixed and image-only prompts,
 preview/open/selection/copy retention and `answer_notice_layout_test.dart` for the
 shared desktop fork glyph and notice-header alignment. `message_timestamp_test`
-checks footer containment, compact action-edge taps, enlarged date/action layout,
+checks footer containment, left-aligned user time with right-aligned actions,
+compact action-edge taps, enlarged date/action layout,
 external Copy alignment and unchanged timestamp semantics; render checks establish
 color and density that static construction checks cannot prove. Use
 `--dart-define=STUDIO_REVIEW=true` with the existing Studio fonts and WingIcons to
