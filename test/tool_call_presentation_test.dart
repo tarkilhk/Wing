@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/models/transcript_message.dart';
@@ -19,6 +21,120 @@ ToolCallPresentation completed(
 );
 
 void main() {
+  const loopWarning =
+      '[Tool loop warning: idempotent_no_progress_warning; count=2; '
+      'skill_view returned the same result 2 times. Use the result already '
+      'provided or change the query instead of repeating it unchanged.]';
+  const loopStop =
+      '[Tool loop hard stop: idempotent_no_progress_halt; count=3; '
+      'Stop repeating the same call.]';
+  const identicalNotice =
+      '[hermes note: this is the 3rd consecutive identical call to '
+      'skill_view with identical arguments returning the same result. '
+      'Do not repeat it — change arguments, use a different tool, or '
+      'proceed with what you have.]';
+  const cycleNotice =
+      '[hermes note: the last 3 rounds repeated the same cycle of 2 tool calls '
+      '(ending with skill_view) with identical arguments and identical results. '
+      'Do not repeat the batch — change arguments, use a different tool, or '
+      'proceed with what you have.]';
+
+  test('Hermes advisory trailers restore recorded live and saved skills', () {
+    const content =
+        '---\nname: example\ndescription: Recorded purpose\n---\n'
+        '# Instructions\n\nUse the recorded instructions.\n';
+    final receipt = {
+      'success': true,
+      'name': 'example',
+      'description': 'Recorded purpose',
+      'content': content,
+    };
+    final raw = '${jsonEncode(receipt)}\n\n$loopWarning';
+    for (final call in [
+      completed('skill_view', raw, args: {'name': 'example'}),
+      ToolCallPresentation.saved(
+        TranscriptToolResult.fromRow({
+          'tool_name': 'skill_view',
+          'args': {'name': 'example'},
+          'content': raw,
+        }),
+      ),
+    ]) {
+      expect(call.result, raw);
+      final document = call.activityDetails.skill!.document;
+      expect(document.name, 'example');
+      expect(document.description, 'Recorded purpose');
+      expect(document.rawContent, content);
+      expect(call.activityDetails.response.single.exactCopyText, content);
+    }
+  });
+
+  test('Hermes advisory trailers restore the received reference file', () {
+    const content = '# Reference\n\n  Recorded spacing.\n';
+    final raw =
+        '${jsonEncode({'success': true, 'name': 'example', 'file': 'references/notes.md', 'content': content})}\n\n$identicalNotice\n\n$cycleNotice';
+    final call = completed(
+      'skill_view',
+      raw,
+      args: {'name': 'example', 'file_path': 'references/notes.md'},
+    );
+    expect(call.result, raw);
+    expect(call.activityDetails.skill, isNull);
+    expect(call.activityDetails.response.single.markdown, isTrue);
+    expect(call.activityDetails.response.single.text, content);
+    expect(call.activityDetails.response.single.exactCopyText, content);
+  });
+
+  test('Hermes advisory recovery keeps JSON values and actual errors', () {
+    final receipt = {
+      'error': 'Permission denied',
+      'nested': [true, null, 42],
+    };
+    for (final trailer in [
+      loopWarning,
+      loopStop,
+      identicalNotice,
+      cycleNotice,
+      '$loopWarning\n\n$identicalNotice',
+    ]) {
+      final raw = '${jsonEncode(receipt)}\n\n$trailer';
+      expect(decodeToolPayload(raw), receipt);
+      final call = completed('read_file', raw);
+      expect(call.outcome, ToolCallOutcome.error);
+      expect(call.result, raw);
+      expect(call.activityDetails.response.single.text, 'Permission denied');
+    }
+    expect(decodeToolPayload('{"success":true}\r\n\r\n$loopWarning'), {
+      'success': true,
+    });
+    const wrapped =
+        '<untrusted_tool_result source="web_extract">\nExternal data.\n\n'
+        '{"success":true}\n\n$loopWarning\n</untrusted_tool_result>';
+    expect(decodeToolPayload(wrapped), {'success': true});
+    expect(completed('web_extract', wrapped).result, wrapped);
+  });
+
+  test('Hermes advisory recovery leaves unsupported or damaged output raw', () {
+    for (final raw in [
+      '{"success":true}\n\nUnrecognized trailing text',
+      '{"success":true}\n\n[hermes note: an unknown notice.]',
+      '{"success":true}\n\n$loopWarning\n\nUnknown trailing text',
+      '{"success":true}\n\nUnknown trailing text\n\n$loopWarning',
+      '{"success":true}{"another":true}\n\n$loopWarning',
+      '{"content":"truncated\n\n$loopWarning',
+      '[1,2]\n\n$loopWarning',
+      'ordinary text\n\n$loopWarning',
+    ]) {
+      expect(decodeToolPayload(raw), raw);
+    }
+    final valid = {
+      'content': '# Instructions\n\n$loopWarning',
+      'guardrail': {'code': 'idempotent_no_progress_warning', 'count': 2},
+    };
+    expect(decodeToolPayload(jsonEncode(valid)), valid);
+    expect(decodeToolPayload('[1,2]'), [1, 2]);
+  });
+
   test('activity requests and receipts preserve current stock tool facts', () {
     const diff = '--- a/report.py\n+++ b/report.py\n@@ -1 +1 @@\n-old\n+new';
     final patch = completed(

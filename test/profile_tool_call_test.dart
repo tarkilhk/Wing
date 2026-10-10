@@ -655,86 +655,97 @@ void main() {
     }
   }
 
-  testWidgets('long prose scrolls as Markdown without a Preview row', (
-    tester,
-  ) async {
-    final text =
-        '# Findings\n\n${List.generate(20, (i) => '- Record $i').join('\n')}';
-    final call = ToolCallPresentation.live(
-      GatewayToolActivity.fromGatewayEvent('tool.complete', {
-        'tool_id': 'long',
-        'name': 'skill_view',
-        'args': {'name': 'record-review'},
-        'result': {'content': text},
-      })!,
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: wingTheme(Brightness.light),
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: ProfileToolCall(call: call, initiallyExpanded: true),
+  for (final advisory in [false, true]) {
+    testWidgets(
+      'long prose scrolls as Markdown without a Preview row advisory=$advisory',
+      (tester) async {
+        final text =
+            '# Findings\n\n${List.generate(20, (i) => '- Record $i').join('\n')}';
+        final call = ToolCallPresentation.live(
+          GatewayToolActivity.fromGatewayEvent('tool.complete', {
+            'tool_id': 'long',
+            'name': 'skill_view',
+            'args': {'name': 'record-review'},
+            'result': advisory
+                ? '${jsonEncode({'content': text})}\n\n'
+                      '[Tool loop warning: idempotent_no_progress_warning; count=2; '
+                      'skill_view returned the same result 2 times. Use the result '
+                      'already provided or change the query instead of repeating '
+                      'it unchanged.]'
+                : {'content': text},
+          })!,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(Brightness.light),
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: ProfileToolCall(call: call, initiallyExpanded: true),
+              ),
+            ),
           ),
-        ),
-      ),
-    );
-    await tester.settleMarkdown();
-    expect(find.text('Preview'), findsNothing);
-    expect(find.text('Full text'), findsNothing);
-    expect(find.byTooltip('Expand Result'), findsNothing);
-    expect(find.byType(MarkdownMessageContent), findsOneWidget);
-    expect(
-      tester
-          .widget<MarkdownMessageContent>(find.byType(MarkdownMessageContent))
-          .data,
-      text,
-    );
-    final region = find.descendant(
-      of: find
-          .ancestor(
-            of: find.byType(MarkdownMessageContent),
-            matching: find.byType(ActivityDetailSection),
-          )
-          .first,
-      matching: find.byKey(const ValueKey('activity-content-scroll')),
-    );
-    expect(tester.getSize(region).height, lessThanOrEqualTo(160));
-    await tester.drag(region, const Offset(0, -100));
-    await tester.pumpAndSettle();
-    expect(
-      tester.widget<SingleChildScrollView>(region).controller!.offset,
-      greaterThan(0),
-    );
-    String? copied;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.setData') {
-          copied = (call.arguments as Map)['text'] as String;
-        }
-        return null;
+        );
+        await tester.settleMarkdown();
+        expect(find.text('Preview'), findsNothing);
+        expect(find.text('Full text'), findsNothing);
+        expect(find.byTooltip('Expand Result'), findsNothing);
+        expect(find.byType(MarkdownMessageContent), findsOneWidget);
+        expect(
+          tester
+              .widget<MarkdownMessageContent>(
+                find.byType(MarkdownMessageContent),
+              )
+              .data,
+          text,
+        );
+        final region = find.descendant(
+          of: find
+              .ancestor(
+                of: find.byType(MarkdownMessageContent),
+                matching: find.byType(ActivityDetailSection),
+              )
+              .first,
+          matching: find.byKey(const ValueKey('activity-content-scroll')),
+        );
+        expect(tester.getSize(region).height, lessThanOrEqualTo(160));
+        await tester.drag(region, const Offset(0, -100));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<SingleChildScrollView>(region).controller!.offset,
+          greaterThan(0),
+        );
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        await tester.ensureVisible(find.byTooltip('Copy skill instructions'));
+        await tester.tap(find.byTooltip('Copy skill instructions'));
+        await tester.pump();
+        expect(copied, text);
+        await tester.pump(const Duration(seconds: 2));
+        await tester.ensureVisible(find.byTooltip('Open skill instructions'));
+        await tester.tap(find.byTooltip('Open skill instructions'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(MarkdownMessageContent).evaluate().length,
+          greaterThanOrEqualTo(1),
+        );
+        expect(tester.takeException(), isNull);
       },
     );
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        null,
-      ),
-    );
-    await tester.ensureVisible(find.byTooltip('Copy skill instructions'));
-    await tester.tap(find.byTooltip('Copy skill instructions'));
-    await tester.pump();
-    expect(copied, text);
-    await tester.pump(const Duration(seconds: 2));
-    await tester.ensureVisible(find.byTooltip('Open skill instructions'));
-    await tester.tap(find.byTooltip('Open skill instructions'));
-    await tester.pumpAndSettle();
-    expect(
-      find.byType(MarkdownMessageContent).evaluate().length,
-      greaterThanOrEqualTo(1),
-    );
-    expect(tester.takeException(), isNull);
-  });
+  }
   testWidgets(
     'tool icons describe the activity instead of defaulting to commands',
     (tester) async {

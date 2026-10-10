@@ -68,6 +68,9 @@ reference documents. Formatted viewing focuses on the instructions; Raw retains
 the complete received content, including declarations and any bundle context.
 The reader preserves the received instructions rather than replacing them with
 a newer version. Optional metadata or activity failures do not prevent reading.
+When Hermes appends a recognized loop notice to a recorded skill result, Wing
+still opens the received instructions. Raw details retains the complete result
+and notice.
 
 Reference documents appear when Hermes provides a valid file listing. Their
 content may carry a truncation notice. Available profile activity counts and
