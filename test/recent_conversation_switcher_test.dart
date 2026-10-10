@@ -793,6 +793,9 @@ void main() {
     testWidgets('dragging keeps snapshots and starts no preview work', (
       tester,
     ) async {
+      final delayedKey = source.entries[1].key;
+      final delayedPreview = Completer<RecentConversationPreview>();
+      source.waitingPreviews[delayedKey] = delayedPreview;
       await session.select(source.selected);
       tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1;
@@ -850,7 +853,27 @@ void main() {
       await _finishFrames(tester);
       switcher.currentState!.openStack();
       await _finishFrames(tester);
-      expect(find.byType(RawImage), findsNWidgets(3));
+      expect(find.byKey(ValueKey((delayedKey, 'snapshot'))), findsNothing);
+      delayedPreview.complete(source._readyPreview(source.entries[1]));
+      final snapshots = find.byWidgetPredicate(
+        (widget) =>
+            widget is RawImage &&
+            source.entries.any(
+              (entry) => widget.key == ValueKey((entry.key, 'snapshot')),
+            ),
+      );
+      // Raster capture and Markdown preparation complete outside fake time.
+      // Wait for the actual owned pixels before starting the drag contract.
+      final preparationWait = Stopwatch()..start();
+      while (snapshots.evaluate().length != source.entries.length &&
+          preparationWait.elapsed < const Duration(seconds: 5)) {
+        await tester.pump(const Duration(milliseconds: 16));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+      await tester.pump();
+      expect(snapshots, findsNWidgets(source.entries.length));
       expect(find.byType(_MountedCard), findsNothing);
       final before = previewsBuilt;
       final readsBefore = source.previewReads;
@@ -859,7 +882,7 @@ void main() {
         await drag.moveTo(Offset(180 + step * 8, 400));
         await tester.pump(const Duration(milliseconds: 16));
         expect(find.byType(_MountedCard), findsNothing);
-        expect(find.byType(RawImage), findsNWidgets(3));
+        expect(snapshots, findsNWidgets(source.entries.length));
       }
       expect(
         previewsBuilt,
