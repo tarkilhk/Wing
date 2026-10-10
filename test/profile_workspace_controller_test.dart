@@ -35,8 +35,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _captureAttachments = bool.fromEnvironment('CAPTURE_ATTACHMENTS');
 const _attachmentFrame = ValueKey('attachment-review-frame');
 
-Future<void> _captureAttachmentFrame(WidgetTester tester, String name) async {
-  if (!_captureAttachments) return;
+Future<void> _waitForAttachmentImages(WidgetTester tester) async {
   final context = tester.element(find.byKey(_attachmentFrame));
   var loaded = false;
   final pending = Future.wait([
@@ -52,10 +51,15 @@ Future<void> _captureAttachmentFrame(WidgetTester tester, String name) async {
   expect(
     loaded,
     isTrue,
-    reason: 'Attachment images must finish before capture',
+    reason: 'Attachment images must finish before interaction or capture',
   );
   await pending;
   await tester.pumpAndSettle();
+}
+
+Future<void> _captureAttachmentFrame(WidgetTester tester, String name) async {
+  if (!_captureAttachments) return;
+  await _waitForAttachmentImages(tester);
   final boundary = tester.renderObject<RenderRepaintBoundary>(
     find.byKey(_attachmentFrame),
   );
@@ -2365,7 +2369,12 @@ void main() {
             configuration.width,
           );
           await _captureAttachmentFrame(tester, 'preview-$reviewName');
+          // A mounted preview can still have no decoded image or hit-test area.
+          await _waitForAttachmentImages(tester);
           final viewer = find.byType(InteractiveViewer);
+          final viewerSize = tester.getSize(viewer);
+          expect(viewerSize.width, greaterThan(80));
+          expect(viewerSize.height, greaterThan(0));
           final center = tester.getCenter(viewer);
           final left = await tester.createGesture(pointer: 1);
           final right = await tester.createGesture(pointer: 2);
