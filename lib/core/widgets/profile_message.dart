@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 
 import '../models/chat_output.dart';
 import '../models/transcript_message.dart';
-import '../models/user_message_content.dart';
 import 'markdown_message_content.dart';
 import 'profile_tool_activity.dart';
 import 'profile_review_notice_card.dart';
@@ -22,6 +21,7 @@ class ProfileMessage extends StatelessWidget {
 
   /// Passive snapshots render resource labels without acquiring image bytes.
   final bool loadImages;
+  final bool attachmentImagesAvailable;
   final Future<void> Function(ChatOutput output)? onOpenRemoteFile;
   final Future<void> Function(ChatOutput output)? onShareRemoteFile;
   final Future<bool> Function(ChatOutput output)? onDownloadRemoteFile;
@@ -39,6 +39,7 @@ class ProfileMessage extends StatelessWidget {
     this.streaming = false,
     this.showCopyHeader = true,
     this.loadImages = true,
+    this.attachmentImagesAvailable = true,
     this.onOpenRemoteFile,
     this.onShareRemoteFile,
     this.onDownloadRemoteFile,
@@ -127,7 +128,7 @@ class ProfileMessage extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                            for (final attachment in message.attachments)
+                            if (message.attachments.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(
                                   10,
@@ -135,7 +136,14 @@ class ProfileMessage extends StatelessWidget {
                                   10,
                                   8,
                                 ),
-                                child: _attachment(attachment),
+                                child: UserMessageAttachments(
+                                  attachments: message.attachments,
+                                  width: math.min(320, bubbleWidth - 20),
+                                  loadImages: loadImages,
+                                  loadImage: loadAttachmentImage,
+                                  imageServerAvailable:
+                                      attachmentImagesAvailable,
+                                ),
                               ),
                             Material(
                               key: ValueKey((
@@ -173,14 +181,6 @@ class ProfileMessage extends StatelessWidget {
       },
     );
   }
-
-  Widget _attachment(UserMessageAttachment attachment) =>
-      UserMessageAttachmentTile(
-        key: ValueKey(attachment.target),
-        attachment: attachment,
-        loadImages: loadImages,
-        loadImage: loadAttachmentImage,
-      );
 
   Widget _footer(
     BuildContext context,
@@ -433,7 +433,13 @@ class ProfileMessage extends StatelessWidget {
           for (final attachment in message.attachments)
             Padding(
               padding: const EdgeInsets.only(right: 12, top: 8),
-              child: _attachment(attachment),
+              child: UserMessageAttachmentTile(
+                key: ValueKey(attachment.target),
+                attachment: attachment,
+                loadImages: loadImages,
+                loadImage: loadAttachmentImage,
+                imageServerAvailable: attachmentImagesAvailable,
+              ),
             ),
           Padding(
             padding: const EdgeInsets.only(right: 12),

@@ -115,6 +115,7 @@ class UserMessageContent {
     });
     // Gateway file uploads prepend one reference per line. Only those complete
     // lines become cards; references quoted or discussed in prose stay intact.
+    var imageReferences = 0;
     text = text.replaceAllMapped(_referenceLine, (match) {
       var target = match.group(2)!;
       if (target.startsWith('"') ||
@@ -123,8 +124,20 @@ class UserMessageContent {
         target = target.substring(1, target.length - 1);
       }
       add(target, match.group(1) == 'image');
+      if (match.group(1) == 'image') imageReferences++;
       return '';
     }).trim();
+    // The stock store appends one stand-in per image when flattening a row.
+    // Only remove a complete matching suffix backed by explicit image refs.
+    final lines = text.split('\n');
+    var placeholders = 0;
+    while (lines.isNotEmpty && lines.last == '[screenshot]') {
+      lines.removeLast();
+      placeholders++;
+    }
+    if (imageReferences > 0 && placeholders == imageReferences) {
+      text = lines.join('\n').trimRight();
+    }
     return UserMessageContent(text, List.unmodifiable(attachments));
   }
 }

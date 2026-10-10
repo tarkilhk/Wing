@@ -38,6 +38,7 @@ import '../services/background_monitoring_service.dart';
 import 'package:flutter/services.dart';
 
 import '../services/profile_workspace_controller.dart';
+import '../services/server_connection_status.dart';
 import '../models/chat_reading.dart';
 import '../services/image_clipboard.dart';
 import '../widgets/image_paste_menu.dart';
@@ -1316,6 +1317,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             key: ValueKey(entry.presentationId),
             message: entry.message,
             loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
+            attachmentImagesAvailable:
+                controller.connectionStatus.access ==
+                    ConnectionAvailability.available &&
+                controller.connectionStatus.phase !=
+                    ServerConnectionPhase.reconnecting,
             onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
             onShareRemoteFile: (output) => _shareToolResource(chat, output),
             onDownloadRemoteFile: (output) =>
@@ -1379,6 +1385,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           readingAloud:
               _voiceOutput.owner == controller.voiceReplyKey(chat, message),
           loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
+          attachmentImagesAvailable:
+              controller.connectionStatus.access ==
+                  ConnectionAvailability.available &&
+              controller.connectionStatus.phase !=
+                  ServerConnectionPhase.reconnecting,
           onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
           onShareRemoteFile: (output) => _shareToolResource(chat, output),
           onDownloadRemoteFile: (output) => _downloadAnswerOutput(chat, output),
