@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/services/profile_supervision_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -311,7 +312,14 @@ void main() {
     expect(find.byTooltip('Copy Raw details'), findsNothing);
     expect(find.byTooltip('Open Raw details'), findsNothing);
     expect(find.byTooltip('Wrap Raw details'), findsNothing);
-    expect(find.textContaining('Agent ID: child-1'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SourceCodeText &&
+            widget.text.contains('Agent ID: child-1'),
+      ),
+      findsOneWidget,
+    );
     expect(find.byTooltip('Copy Task'), findsOneWidget);
     expect(find.byTooltip('Copy Live output'), findsOneWidget);
     Navigator.of(tester.element(find.text('Raw details'))).pop();
@@ -388,7 +396,10 @@ void main() {
       await openDetails(tester);
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('latest child output'),
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SourceCodeText && widget.text == 'latest child output',
+        ),
         160,
         scrollable: find
             .descendant(
@@ -397,11 +408,23 @@ void main() {
             )
             .first,
       );
-      expect(find.text('latest child output'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SourceCodeText && widget.text == 'latest child output',
+        ),
+        findsOneWidget,
+      );
       fixture.tailAvailable = false;
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
-      expect(find.text('latest child output'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SourceCodeText && widget.text == 'latest child output',
+        ),
+        findsOneWidget,
+      );
       Navigator.of(tester.element(find.text('Live output'))).pop();
       await tester.pumpAndSettle();
     },
@@ -414,7 +437,10 @@ void main() {
 
     expect(fixture.tailCalls, 1);
     await tester.scrollUntilVisible(
-      find.text('latest child output'),
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SourceCodeText && widget.text == 'latest child output',
+      ),
       160,
       scrollable: find
           .descendant(
@@ -423,8 +449,14 @@ void main() {
           )
           .first,
     );
-    expect(find.text('latest child output'), findsOneWidget);
-    expect(find.byType(SelectableText), findsWidgets);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SourceCodeText && widget.text == 'latest child output',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(SourceCodeText), findsWidgets);
     expect(find.byTooltip('Steer'), findsOneWidget);
     expect(find.byTooltip('Interrupt'), findsOneWidget);
 
@@ -535,7 +567,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.scrollUntilVisible(
-      find.text('latest child output'),
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SourceCodeText && widget.text == 'latest child output',
+      ),
       160,
       scrollable: find
           .descendant(
@@ -544,7 +579,13 @@ void main() {
           )
           .first,
     );
-    expect(find.text('latest child output'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SourceCodeText && widget.text == 'latest child output',
+      ),
+      findsOneWidget,
+    );
 
     Navigator.of(tester.element(find.text('Live output'))).pop();
     await tester.pumpAndSettle();

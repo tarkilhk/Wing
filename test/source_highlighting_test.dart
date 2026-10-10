@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:re_editor/re_editor.dart';
 import 'package:wing/core/presentation/source_highlighting.dart';
 import 'package:wing/core/presentation/source_language.dart';
 import 'package:wing/core/presentation/tool_activity_details.dart';
@@ -34,11 +35,31 @@ List<SourceToken> tokens(
   bool numbered = false,
 }) => highlightSource(SourceHighlightRequest(text, language, numbered));
 
-String selected(SelectableText text) =>
-    text.textSpan?.toPlainText() ?? text.data!;
+String selected(CodeEditor editor) => editor.controller!.text;
+
+TextSpan renderedSpan(WidgetTester tester, [Finder? finder]) {
+  final target = finder ?? find.byType(CodeEditor).first;
+  final editor = tester.widget<CodeEditor>(target);
+  final controller = editor.controller!;
+  return TextSpan(
+    children: [
+      for (var i = 0; i < controller.codeLines.length; ++i) ...[
+        if (i > 0) const TextSpan(text: '\n'),
+        ...controller
+            .buildTextSpan(
+              context: tester.element(target),
+              index: i,
+              textSpan: TextSpan(text: controller.codeLines[i].text),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
+            )
+            .children!,
+      ],
+    ],
+  );
+}
 
 Future<void> settleSource(WidgetTester tester) async {
-  for (var attempt = 0; attempt < 200; ++attempt) {
+  for (var attempt = 0; attempt < 500; ++attempt) {
     final views = tester.widgetList<SourceCodeText>(
       find.byType(SourceCodeText),
     );
@@ -53,13 +74,14 @@ Future<void> settleSource(WidgetTester tester) async {
           )) {
         return false;
       }
-      final text = tester.widget<SelectableText>(
-        find.descendant(
-          of: find.byWidget(view),
-          matching: find.byType(SelectableText),
-        ),
+      final finder = find.descendant(
+        of: find.byWidget(view),
+        matching: find.byType(CodeEditor),
       );
-      return text.textSpan?.children == null;
+      final span = renderedSpan(tester, finder);
+      return !span.children!.any(
+        (span) => (span as TextSpan).style?.color != null,
+      );
     });
     if (!pending) return;
     await tester.runAsync(
@@ -71,6 +93,21 @@ Future<void> settleSource(WidgetTester tester) async {
 }
 
 void main() {
+  test('display segments preserve complete Unicode grapheme clusters', () {
+    const cluster = '👨‍👩‍👧‍👦';
+    final document = SourceDocument.literal(
+      '${'a' * 10}$cluster'
+      'éé\n',
+    );
+    final lines = document.displayLines(segmentLength: 12);
+    expect(lines.map((line) => document.text.substring(line.start, line.end)), [
+      'a' * 10,
+      cluster,
+      'éé',
+      '',
+    ]);
+  });
+
   setUpAll(() async {
     if (!const bool.fromEnvironment('CAPTURE_SOURCE')) return;
     for (final entry in {
@@ -109,59 +146,216 @@ void main() {
       final result = tokens(python, language);
       expect(result, [(text: python, scope: null)]);
     }
-    final huge = python * 5000;
-    expect(tokens(huge, 'python'), [(text: huge, scope: null)]);
   });
 
   test(
-    'large and dense source retains every byte without costly styled runs',
+    'large and dense source retains bytes and syntax without admission caps',
     () {
-      final largePython = python * 400;
-      final denseJson =
-          '[${List.generate(1000, (i) => '{"id":$i,"name":"Wing"}').join(',')}]';
-      for (final sample in [(largePython, 'python'), (denseJson, 'json')]) {
-        expect(tokens(sample.$1, sample.$2), [(text: sample.$1, scope: null)]);
+      for (final sample in [
+        (python * 400, 'python'),
+        (
+          '[${List.generate(2000, (i) => '{"id":$i,"name":"Wing"}').join(',')}]',
+          'json',
+        ),
+        (List.generate(3002, (i) => '$i|x=42').join('\n'), 'python'),
+      ]) {
+        final request = SourceHighlightRequest(sample.$1, sample.$2, false);
+        expect(sourceHighlightEligible(request), isTrue);
+        final result = highlightSource(request);
+        expect(result.map((token) => token.text).join(), sample.$1);
+        expect(result.where((token) => token.scope != null), isNotEmpty);
       }
-      final denseSource = List.generate(400, (i) => 'x=$i').join(';');
-      expect(denseSource.length, lessThan(8 * 1024));
       expect(
         sourceHighlightEligible(
-          SourceHighlightRequest(denseSource, 'python', false),
+          const SourceHighlightRequest(python, null, false),
         ),
-        isTrue,
+        isFalse,
       );
-      expect(tokens(denseSource, 'python'), [(text: denseSource, scope: null)]);
-      final manyNumberedLines = List.generate(200, (i) => '$i|x=42').join('\n');
-      expect(tokens(manyNumberedLines, 'python', numbered: true), [
-        (text: manyNumberedLines, scope: null),
-      ]);
     },
   );
 
-  test('admission bounds characters and lines before worker preparation', () {
-    for (final text in ['x' * (8 * 1024 + 1), 'x\n' * 200]) {
-      final request = SourceHighlightRequest(text, 'python', false);
-      expect(sourceHighlightEligible(request), isFalse);
-      expect(highlightSource(request), [(text: text, scope: null)]);
-    }
-    expect(
-      sourceHighlightEligible(
-        SourceHighlightRequest('x' * (8 * 1024), 'python', false),
+  testWidgets(
+    'a large document lays out the viewport and selects offscreen bytes',
+    (tester) async {
+      final source = List.generate(
+        3002,
+        (i) => '$i|{"id": $i, "ready": true}',
+      ).join('\n');
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: SourceCodeText(
+              text: source,
+              language: 'json',
+              numberedLines: true,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ),
+      );
+      await settleSource(tester);
+      final editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
+      expect(editor.readOnly, isTrue);
+      // Inspect the package's actual laid-out paragraphs, not our token model.
+      final dynamic render = tester.allRenderObjects.firstWhere(
+        (render) => render.runtimeType.toString() == '_CodeFieldRender',
+      );
+      expect((render.displayParagraphs as List).length, lessThan(20));
+      final controller = editor.controller!;
+      controller.selectAll();
+      expect(controller.selectedText, source);
+      controller.selection = const CodeLineSelection(
+        baseIndex: 10,
+        baseOffset: 3,
+        extentIndex: 2999,
+        extentOffset: 7,
+      );
+      final lines = source.split('\n');
+      expect(
+        controller.selectedText,
+        [
+          lines[10].substring(3),
+          ...lines.sublist(11, 2999),
+          lines[2999].substring(0, 7),
+        ].join('\n'),
+      );
+      final scroll = editor.scrollController!.verticalScroller;
+      scroll.jumpTo(scroll.position.maxScrollExtent);
+      await tester.pump();
+      expect((render.displayParagraphs as List).last.index, 3001);
+      expect((render.displayParagraphs as List).length, lessThan(20));
+      expect(
+        controller.selectedText.startsWith(lines[10].substring(3)),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'long wrapped JSON segments copy and rewrap without invented newlines',
+    (tester) async {
+      final source =
+          '{"unicode": "${'café 👨‍👩‍👧‍👦 🦋 ' * 1200}", "ready": true}\r\n';
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      Widget app(bool wrap) => MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            child: SourceCodeText(
+              key: const ValueKey('source'),
+              text: source,
+              language: 'json',
+              wrap: wrap,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(app(true));
+      await settleSource(tester);
+      final semanticsHandle = tester.ensureSemantics();
+      var editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
+      final controller = editor.controller!;
+      expect(controller.codeLines.length, greaterThan(10));
+      controller.selectAll();
+      expect(controller.selectedText, source);
+      await controller.copy();
+      expect(copied, source);
+      await tester.pump();
+      final semantics = tester.getSemantics(
+        find.bySemanticsLabel('Source text'),
+      );
+      expect(semantics.getSemanticsData().value, source);
+      expect(
+        semantics.getSemanticsData().textSelection,
+        TextSelection(baseOffset: 0, extentOffset: source.length),
+      );
+      semantics.owner!.performAction(
+        semantics.id,
+        ui.SemanticsAction.setSelection,
+        {'base': 200, 'extent': 1100},
+      );
+      expect(controller.selectedText, source.substring(200, 1100));
+      controller.selection = const CodeLineSelection(
+        baseIndex: 1,
+        baseOffset: 3,
+        extentIndex: 3,
+        extentOffset: 7,
+      );
+      final selection = controller.selectedText;
+      expect(selection.contains('\n'), isFalse);
+      await tester.pumpWidget(app(false));
+      editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
+      expect(editor.controller, same(controller));
+      expect(controller.selectedText, selection);
+      expect(controller.codeLines.length, 2);
+      expect(
+        controller
+            .buildTextSpan(
+              context: tester.element(find.byType(CodeEditor)),
+              index: 0,
+              textSpan: const TextSpan(),
+              style: const TextStyle(),
+            )
+            .toPlainText(),
+        source.substring(0, source.length - 1),
+      );
+      await tester.pumpWidget(const SizedBox());
+      semanticsHandle.dispose();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('long chat fences use a wrapped lazy viewport by default', (
+    tester,
+  ) async {
+    final source = '[${'{"ready":true,"count":42},' * 2000}{"ready":false}]';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MarkdownCodeBlock(
+            code: source,
+            language: 'json',
+            highlightingEnabled: false,
+          ),
+        ),
       ),
-      isTrue,
     );
-    expect(
-      sourceHighlightEligible(
-        SourceHighlightRequest('x\n' * 199 + 'x', 'python', false),
-      ),
-      isTrue,
-    );
-    expect(
-      sourceHighlightEligible(
-        const SourceHighlightRequest(python, null, false),
-      ),
-      isFalse,
-    );
+    final view = tester.widget<SourceCodeText>(find.byType(SourceCodeText));
+    final editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
+    expect(view.wrap, isTrue);
+    expect(editor.wordWrap, isTrue);
+    expect(editor.controller!.codeLines.length, greaterThan(10));
+    expect(editor.controller!.text, source);
+    editor.controller!.selectAll();
+    expect(editor.controller!.selectedText, source);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('live fences stay literal until the response completes', (
@@ -189,27 +383,20 @@ void main() {
       final view = tester.widget<SourceCodeText>(find.byType(SourceCodeText));
       expect(view.highlightingEnabled, isFalse);
       expect(
-        tester
-            .widget<SelectableText>(find.byType(SelectableText))
-            .textSpan!
-            .children,
-        isNull,
+        renderedSpan(
+          tester,
+        ).children!.where((span) => (span as TextSpan).style?.color != null),
+        isEmpty,
       );
-      expect(selected(tester.widget(find.byType(SelectableText))), view.text);
+      expect(selected(tester.widget(find.byType(CodeEditor))), view.text);
       expect(find.byTooltip('Copy code'), findsOneWidget);
-      expect(find.byTooltip('Wrap lines'), findsOneWidget);
+      expect(find.byTooltip('Scroll horizontally'), findsOneWidget);
     }
     final before = tester.state(find.byType(SourceCodeText));
     await tester.pumpMarkdownWidget(app('$python# latest', streaming: false));
     await settleSource(tester);
     expect(tester.state(find.byType(SourceCodeText)), same(before));
-    expect(
-      tester
-          .widget<SelectableText>(find.byType(SelectableText))
-          .textSpan!
-          .children,
-      isNotEmpty,
-    );
+    expect(renderedSpan(tester).children, isNotEmpty);
     await tester.pumpMarkdownWidget(
       app(python, streaming: false, closed: false),
     );
@@ -220,11 +407,10 @@ void main() {
       isFalse,
     );
     expect(
-      tester
-          .widget<SelectableText>(find.byType(SelectableText))
-          .textSpan!
-          .children,
-      isNull,
+      renderedSpan(
+        tester,
+      ).children!.where((span) => (span as TextSpan).style?.color != null),
+      isEmpty,
     );
     for (final streaming in [true, false]) {
       final blocks = splitMarkdownCodeBlocks(
@@ -255,22 +441,14 @@ void main() {
     );
     await tester.pumpWidget(app());
     await settleSource(tester);
-    final original = tester
-        .widget<SelectableText>(find.byType(SelectableText))
-        .textSpan;
+    final original = renderedSpan(tester);
     final state = tester.state(find.byType(SourceCodeText));
     await tester.pumpWidget(app());
-    expect(
-      tester.widget<SelectableText>(find.byType(SelectableText)).textSpan,
-      same(original),
-    );
-    await tester.tap(find.byTooltip('Wrap lines'));
+    expect(renderedSpan(tester), equals(original));
+    await tester.tap(find.byTooltip('Scroll horizontally'));
     await tester.pump();
     expect(tester.state(find.byType(SourceCodeText)), same(state));
-    expect(
-      tester.widget<SelectableText>(find.byType(SelectableText)).textSpan,
-      same(original),
-    );
+    expect(renderedSpan(tester), equals(original));
     expect(tester.takeException(), isNull);
   });
 
@@ -444,10 +622,8 @@ void main() {
       await tester.pumpWidget(app('print("new")', Brightness.dark));
       await tester.pumpWidget(app(python, Brightness.dark));
       await settleSource(tester);
-      expect(selected(tester.widget(find.byType(SelectableText))), python);
-      final darkSpan = tester
-          .widget<SelectableText>(find.byType(SelectableText))
-          .textSpan!;
+      expect(selected(tester.widget(find.byType(CodeEditor))), python);
+      final darkSpan = renderedSpan(tester);
       expect(
         darkSpan.children!.any(
           (span) => (span as TextSpan).style?.color != null,
@@ -456,9 +632,7 @@ void main() {
       );
       await tester.pumpWidget(app(python, Brightness.light));
       await tester.pumpAndSettle();
-      final lightSpan = tester
-          .widget<SelectableText>(find.byType(SelectableText))
-          .textSpan!;
+      final lightSpan = renderedSpan(tester);
       expect(lightSpan.toPlainText(), python);
       expect(
         lightSpan.children!.map((span) => (span as TextSpan).style?.color),
@@ -466,10 +640,10 @@ void main() {
           darkSpan.children!.map((span) => (span as TextSpan).style?.color),
         ),
       );
-      await tester.tap(find.byTooltip('Wrap lines'));
+      await tester.tap(find.byTooltip('Scroll horizontally'));
       await tester.pump();
       await settleSource(tester);
-      expect(selected(tester.widget(find.byType(SelectableText))), python);
+      expect(selected(tester.widget(find.byType(CodeEditor))), python);
       await tester.tap(find.byTooltip('Copy code'));
       await tester.pump();
       expect(copied, python);
@@ -480,13 +654,13 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 50)),
       );
       await tester.pump();
-      expect(selected(tester.widget(find.byType(SelectableText))), largeSource);
+      expect(selected(tester.widget(find.byType(CodeEditor))), largeSource);
+      await settleSource(tester);
       expect(
-        tester
-            .widget<SelectableText>(find.byType(SelectableText))
-            .textSpan!
-            .children,
-        isNull,
+        renderedSpan(
+          tester,
+        ).children!.where((span) => (span as TextSpan).style?.color != null),
+        isNotEmpty,
       );
       await tester.tap(find.byTooltip('Copy code'));
       await tester.pump();
@@ -574,13 +748,11 @@ void main() {
             await tester.pumpAndSettle();
             await settleSource(tester);
             final state = tester.state(find.byType(SourceCodeText));
-            final span = tester
-                .widget<SelectableText>(find.byType(SelectableText))
-                .textSpan;
+            final span = renderedSpan(tester);
             final horizontal = find.byWidgetPredicate(
               (widget) =>
-                  widget is SingleChildScrollView &&
-                  widget.scrollDirection == Axis.horizontal,
+                  widget is Scrollable &&
+                  widget.axisDirection == AxisDirection.right,
             );
             final wrappedWidth = tester
                 .getSize(find.byType(SourceCodeText))
@@ -598,16 +770,14 @@ void main() {
                 label,
               );
               expect(find.text(label), findsNothing);
-              expect(horizontal, wrap ? findsNothing : findsOneWidget);
-              expect(tester.state(find.byType(SourceCodeText)), same(state));
               expect(
-                tester
-                    .widget<SelectableText>(find.byType(SelectableText))
-                    .textSpan,
-                same(span),
+                tester.widget<CodeEditor>(find.byType(CodeEditor)).wordWrap,
+                wrap,
               );
+              expect(tester.state(find.byType(SourceCodeText)), same(state));
+              expect(renderedSpan(tester), equals(span));
               expect(
-                selected(tester.widget(find.byType(SelectableText))),
+                selected(tester.widget(find.byType(CodeEditor))),
                 block.text,
               );
               expect(
@@ -619,8 +789,12 @@ void main() {
               if (!wrap && block.label == 'Code') {
                 expect(
                   tester.getSize(find.byType(SourceCodeText)).width,
-                  greaterThan(wrappedWidth),
+                  wrappedWidth,
                 );
+                final position = tester
+                    .state<ScrollableState>(horizontal)
+                    .position;
+                expect(position.maxScrollExtent, greaterThan(0));
                 await tester.drag(horizontal, const Offset(-100, 0));
                 await tester.pumpAndSettle();
               }
@@ -761,10 +935,10 @@ void main() {
           for (final element in tester.widgetList<SourceCodeText>(
             find.byType(SourceCodeText),
           )) {
-            final rendered = tester.widget<SelectableText>(
+            final rendered = tester.widget<CodeEditor>(
               find.descendant(
                 of: find.byWidget(element),
-                matching: find.byType(SelectableText),
+                matching: find.byType(CodeEditor),
               ),
             );
             expect(selected(rendered), element.text);

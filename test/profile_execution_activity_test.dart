@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'dart:async';
 import 'dart:io';
@@ -1172,8 +1173,19 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Raw details'));
     await tester.pumpAndSettle();
-    expect(find.text('{"query":"gateway"}'), findsOneWidget);
-    expect(find.text('{"matches":2}'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SourceCodeText && widget.text == '{"query":"gateway"}',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SourceCodeText && widget.text == '{"matches":2}',
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Raw details'));
     await tester.pumpAndSettle();
     expect(find.text('Inspect contract'), findsNothing);
@@ -1658,8 +1670,12 @@ void main() {
         await tester.tap(find.byTooltip('Show raw content'));
         await tester.pumpAndSettle();
         expect(
-          find.text(
-            (owner.observation.activityEntries[2] as ChatReasoningEntry).text,
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is SourceCodeText &&
+                widget.text ==
+                    (owner.observation.activityEntries[2] as ChatReasoningEntry)
+                        .text,
           ),
           findsOneWidget,
         );

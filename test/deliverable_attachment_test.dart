@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'dart:async';
 import 'dart:io';
@@ -245,7 +246,14 @@ void main() {
         tester.widget<ChatInlineImage>(find.byType(ChatInlineImage)).title,
         'Image',
       );
-      expect(find.textContaining('MEDIA:/srv/example.md'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SourceCodeText &&
+              widget.text.contains('MEDIA:/srv/example.md'),
+        ),
+        findsOneWidget,
+      );
       expect(find.textContaining('MEDIA:unsupported:value'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },

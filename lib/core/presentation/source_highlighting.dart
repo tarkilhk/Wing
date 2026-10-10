@@ -1,3 +1,4 @@
+import 'package:characters/characters.dart';
 import 'package:re_highlight/languages/all.dart';
 import 'package:re_highlight/re_highlight.dart';
 
@@ -12,29 +13,22 @@ final class SourceHighlightRequest {
 }
 
 final _highlight = Highlight()..registerLanguages(builtinAllLanguages);
-const _maxSourceTokens = 768;
 
-/// Reject oversized snapshots before launching a worker or loading grammars.
-/// Count only as far as the admission limit, including numbered receipts.
-bool sourceHighlightEligible(SourceHighlightRequest request) {
-  if (request.text.isEmpty ||
-      request.text.length > 8 * 1024 ||
-      (request.language == null && !request.numberedLines)) {
-    return false;
-  }
-  var offset = -1;
-  for (var lines = 1; lines <= 200; ++lines) {
-    offset = request.text.indexOf('\n', offset + 1);
-    if (offset < 0) return true;
-  }
-  return false;
-}
+/// Admit identified source; viewport rendering bounds UI work independently
+/// of document length. Unlabelled prose never guesses a grammar.
+bool sourceHighlightEligible(SourceHighlightRequest request) =>
+    request.text.isNotEmpty &&
+    (request.language != null || request.numberedLines);
+
+/// Worker preparation also indexes scopes, so scrolling never scans the tokens.
+SourceDocument prepareSourceDocument(SourceHighlightRequest request) =>
+    SourceDocument(request.text, highlightSource(request));
 
 final _linePrefix = RegExp(r'^\d+\|');
 
 /// Tokenize a complete source snapshot, retaining multiline grammar context.
-/// Unknown/unlabelled text has no guessed grammar. Work on very large receipts
-/// is bounded; their complete literal text remains selectable and copyable.
+/// Unknown/unlabelled text has no guessed grammar. The renderer lays out only
+/// viewport ranges; the complete document retains multiline grammar context.
 List<SourceToken> highlightSource(SourceHighlightRequest request) {
   final literal = <SourceToken>[(text: request.text, scope: null)];
   // Stock /api/fs/read-text calls shell source "shell". The library's
@@ -64,7 +58,6 @@ List<SourceToken> highlightSource(SourceHighlightRequest request) {
       tokens = renderer.tokens;
     }
   }
-  if (tokens.length > _maxSourceTokens) return literal;
   if (!request.numberedLines) return tokens;
 
   // Insert the original receipt decoration after parsing, so `12|` cannot
@@ -91,7 +84,7 @@ List<SourceToken> highlightSource(SourceHighlightRequest request) {
       }
     }
   }
-  return result.length > _maxSourceTokens ? literal : result;
+  return result;
 }
 
 final class _SourceTokenRenderer implements HighlightRenderer {
@@ -126,5 +119,89 @@ final class _SourceTokenRenderer implements HighlightRenderer {
       _scope = scope;
       _text.write(text);
     }
+  }
+}
+
+/// Exact source offsets survive display segmentation, scrolling and selection.
+typedef SourceDisplayLine = ({int start, int end});
+
+final class SourceDocument {
+  SourceDocument(this.text, List<SourceToken> sourceTokens)
+    : tokens = List.unmodifiable(sourceTokens) {
+    final tokenOffsets = <int>[];
+    final sourceLines = <int>[];
+    var offset = 0;
+    for (final token in tokens) {
+      tokenOffsets.add(offset);
+      offset += token.text.length;
+    }
+    assert(offset == text.length);
+    sourceLines.add(0);
+    for (
+      var at = text.indexOf('\n');
+      at >= 0;
+      at = text.indexOf('\n', at + 1)
+    ) {
+      sourceLines.add(at + 1);
+    }
+    tokenStarts = List.unmodifiable(tokenOffsets);
+    lineStarts = List.unmodifiable(sourceLines);
+  }
+
+  factory SourceDocument.literal(String text) =>
+      SourceDocument(text, [(text: text, scope: null)]);
+
+  final String text;
+  final List<SourceToken> tokens;
+  late final List<int> tokenStarts;
+  late final List<int> lineStarts;
+
+  /// Wrapped long lines become viewport-sized segments, without inserting bytes
+  /// in the source. Grapheme clusters stay together at display boundaries.
+  List<SourceDisplayLine> displayLines({int? segmentLength}) {
+    assert(segmentLength == null || segmentLength > 1);
+    final result = <SourceDisplayLine>[];
+    for (var i = 0; i < lineStarts.length; ++i) {
+      var start = lineStarts[i];
+      final end = i + 1 == lineStarts.length
+          ? text.length
+          : lineStarts[i + 1] - 1;
+      while (segmentLength != null && end - start > segmentLength) {
+        var next = start + segmentLength;
+        final range = CharacterRange.at(text, next);
+        next = range.stringBeforeLength;
+        if (next == start) next = text.length - range.stringAfterLength;
+        next = next.clamp(start + 1, end);
+        result.add((start: start, end: next));
+        start = next;
+      }
+      result.add((start: start, end: end));
+    }
+    return result;
+  }
+
+  /// Binary lookup plus just the intersecting runs, regardless of file length.
+  List<SourceToken> rangeTokens(int start, int end) {
+    if (start == end) return const [];
+    var low = 0;
+    var high = tokenStarts.length;
+    while (low < high) {
+      final mid = (low + high) ~/ 2;
+      if (tokenStarts[mid] <= start) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    final result = <SourceToken>[];
+    for (var i = low - 1; i < tokens.length && tokenStarts[i] < end; ++i) {
+      final token = tokens[i];
+      final from = start > tokenStarts[i] ? start - tokenStarts[i] : 0;
+      final to = end < tokenStarts[i] + token.text.length
+          ? end - tokenStarts[i]
+          : token.text.length;
+      result.add((text: token.text.substring(from, to), scope: token.scope));
+    }
+    return result;
   }
 }

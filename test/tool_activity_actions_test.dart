@@ -1,5 +1,6 @@
 import 'package:wing/core/widgets/activity/activity_detail_actions.dart';
 import 'dart:async';
+import 'package:wing/core/widgets/source_code_text.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -58,9 +59,7 @@ void main() {
       ]) {
         await pump(tester, ActivityDetailSection(block: block));
         final horizontal = find.byWidgetPredicate(
-          (widget) =>
-              widget is SingleChildScrollView &&
-              widget.scrollDirection == Axis.horizontal,
+          (widget) => widget is SourceCodeText && !widget.wrap,
         );
         if (block.label == 'Code') {
           await tester.tap(find.byTooltip('Scroll Code horizontally'));

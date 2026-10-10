@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/source_code_text.dart';
 import 'dart:async';
 import 'package:wing/core/models/chat_output.dart';
 import 'package:wing/core/widgets/studio_error.dart';
@@ -509,9 +510,7 @@ void main() {
               expect(find.byTooltip('Copy content'), findsOneWidget);
               expect(find.text('Raw content'), findsNothing);
               expect(find.byTooltip('Open Raw content'), findsNothing);
-              final viewport = find.byKey(
-                const ValueKey('activity-content-scroll'),
-              );
+              final viewport = find.byType(SourceCodeText);
               expect(tester.getSize(viewport).height, lessThanOrEqualTo(160));
               continue;
             }
@@ -563,8 +562,10 @@ void main() {
                   )
                 : find.byWidgetPredicate(
                     (widget) =>
-                        widget is SelectableText &&
-                        widget.textSpan?.toPlainText() == block.text,
+                        (widget is SourceCodeText &&
+                            widget.text == block.text) ||
+                        (widget is SelectableText &&
+                            widget.textSpan?.toPlainText() == block.text),
                   );
             expect(tester.getTopLeft(body).dx, cardLeft + 9);
             final contentSurface = find
@@ -574,14 +575,16 @@ void main() {
               tester.getTopLeft(body).dy,
               tester.getTopLeft(contentSurface).dy + 8,
             );
-            final visibleBody = find
-                .ancestor(
-                  of: body,
-                  matching: find.byKey(
-                    const ValueKey('activity-content-scroll'),
-                  ),
-                )
-                .first;
+            final visibleBody = tester.widget(body) is SourceCodeText
+                ? body
+                : find
+                      .ancestor(
+                        of: body,
+                        matching: find.byKey(
+                          const ValueKey('activity-content-scroll'),
+                        ),
+                      )
+                      .first;
             expect(
               tester.getBottomLeft(visibleBody).dy,
               tester.getBottomLeft(contentSurface).dy - 8,
@@ -1034,14 +1037,25 @@ void main() {
             expect(call.activityDetails.request, hasLength(8));
             for (final detail in call.activityDetails.request) {
               expect(detail.copyable, isTrue);
-              expect(find.text(detail.text), findsOneWidget);
+              expect(
+                find.byWidgetPredicate(
+                  (widget) =>
+                      widget is SourceCodeText && widget.text == detail.text,
+                ),
+                findsOneWidget,
+              );
               expect(
                 detail.label == 'business-trip-policy-research' ||
                     detail.facts.contains('business-trip-policy-research'),
                 isTrue,
               );
               expect(detail.facts, contains('patch'));
-              final size = tester.getSize(find.text(detail.text));
+              final size = tester.getSize(
+                find.byWidgetPredicate(
+                  (widget) =>
+                      widget is SourceCodeText && widget.text == detail.text,
+                ),
+              );
               expect(size.width, greaterThan(0));
               expect(size.height, greaterThan(0));
             }
@@ -1276,10 +1290,24 @@ void main() {
       expect(find.text('Raw details'), findsOneWidget);
       update(() => complete = true);
       await tester.pumpAndSettle();
-      expect(find.text('Readable file content'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SourceCodeText &&
+              widget.text == 'Readable file content',
+        ),
+        findsOneWidget,
+      );
       update(() => saved = true);
       await tester.pumpAndSettle();
-      expect(find.text('Readable file content'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SourceCodeText &&
+              widget.text == 'Readable file content',
+        ),
+        findsOneWidget,
+      );
       expect(find.text('420 ms'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },

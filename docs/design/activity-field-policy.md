@@ -91,16 +91,24 @@ No extra language heading or selector is introduced. Unidentified source stays
 literal. Live Markdown fences stay literal until the response finishes and the
 fence closes, avoiding grammar work and color churn during streaming.
 Tokenization runs off-thread, coalesces changing receipts and discards stale
-results. Sources over 8 Ki UTF-16 code units or 200 lines, or producing more than
-768 spans, retain full literal content without rich syntax layout. Character
-and line budgets reject work before spawning an isolate; adjacent equivalent
-tokens are coalesced. The mounted renderer reuses tokens and span trees across
-unchanged parent/selection rebuilds, refreshes colors for palette changes, and
-retains its state across wrap toggles. There is no persistent source cache. Nonempty source, commands, diffs and literal output expose wrap controls even when their lines are short. Full Activity text viewers place wrap immediately before exact Copy; raw Markdown enables it while formatted prose omits it. Empty payloads omit wrap. Partial/failure qualifiers and copy scopes stay attached to the received payload.
+results. The read-only shared viewport lays out visible source ranges. It measures
+one glyph to size the viewport, never the complete document. Full-document grammar
+context and an indexed token snapshot are prepared off-thread; viewport-sized segments
+bound layout of long wrapped lines without changing the original source bytes.
+Source viewers wrap by default so dense single lines use bounded display ranges;
+the horizontal-scrolling action is available when needed. Document selection and copy map display positions to original offsets, including
+receipt prefixes, CRLF and Unicode grapheme clusters. Screen-reader semantics expose
+the complete document and selection in those original offsets. There are no character, line or token admission
+cutoffs. Activity retains its 160 dp inline reading viewport; chat source blocks
+use at most half the screen height; the expanded viewer uses the available reading
+height. Wrap and copy remain icon-only. Offscreen paragraph caches retire when
+scrolling settles, preserving the visible source position; active scrolling is
+never stopped to publish colors. Parsed tokens remain owned by the mounted view,
+and are retired with it. No persistent source cache is introduced. Nonempty source, commands, diffs and literal output expose wrap controls even when their lines are short. Full Activity text viewers place wrap immediately before exact Copy; raw Markdown enables it while formatted prose omits it. Empty payloads omit wrap. Partial/failure qualifiers and copy scopes stay attached to the received payload.
 Palette contrast is checked against both Studio content surfaces; source colors do not replace warnings, errors or diffs.
 
 `test/source_highlighting_test.dart` covers language evidence, exact receipt bytes,
-multiline grammars, completion-only live coloring, admission/span bounds,
+multiline grammars, completion-only live coloring, viewport layout bounds, accessibility selection,
 streamed replacement/disposal, span reuse, theme/wrap/copy, contrast and
 chat/execution/file renders at 390 dp/100% and 320 dp/200% in both themes.
 Existing file/action/Markdown/output-viewer tests cover scoped resource controls

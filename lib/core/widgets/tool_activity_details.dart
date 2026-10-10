@@ -749,7 +749,9 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
           onOpenRemoteFile: widget.onOpenRemoteFile,
         );
       } else {
-        final lines = text.split('\n');
+        final lines = block.format == ToolDetailFormat.source
+            ? const <String>[]
+            : text.split('\n');
         final content = block.format == ToolDetailFormat.source
             ? SourceCodeText(
                 key: _sourceKey,
@@ -757,6 +759,18 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
                 language: block.language,
                 numberedLines: block.numberedLines,
                 style: style,
+                wrap: wrap,
+                maxHeight: widget.full
+                    ? MediaQuery.sizeOf(context).height -
+                          MediaQuery.paddingOf(context).vertical -
+                          kToolbarHeight -
+                          48
+                    : 160,
+                onOverflowChanged: (overflow) {
+                  if (mounted && overflow != _contentOverflows) {
+                    setState(() => _contentOverflows = overflow);
+                  }
+                },
               )
             : SelectableText.rich(
                 TextSpan(
@@ -767,14 +781,14 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
                 ),
                 style: style,
               );
-        body = wrap
+        body = wrap || block.format == ToolDetailFormat.source
             ? content
             : SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: content,
               );
       }
-      if (!widget.full) {
+      if (!widget.full && block.format != ToolDetailFormat.source) {
         body = ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 160),
           child: Scrollbar(

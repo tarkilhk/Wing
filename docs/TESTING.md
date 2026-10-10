@@ -95,8 +95,10 @@ Source coloring's focused matrix is `test/source_highlighting_test.dart`, plus
 `tool_activity_actions_test.dart`, `markdown_phone_content_test.dart`,
 `markdown_fence_scanner_test.dart` and `chat_outputs_screen_test.dart`.
 It checks exact selection/copy, shell/Python and supplied file languages,
-numbered multiline receipts, completion-only live coloring, worker admission and
-span bounds, unchanged span reuse/wrap retention, streamed replacement/disposal,
+numbered multiline receipts, completion-only live coloring, uncapped full-document grammar context,
+viewport-only paragraph layout, exact selection across offscreen and segmented
+lines, default wrapping of long fenced lines, grapheme-safe segmentation, accessibility text/selection, wrap retention,
+streamed replacement/disposal,
 full Activity viewer wrap/copy controls and horizontal scrolling,
 both theme palettes and 390 dp/100% versus 320 dp/200% layouts. Optional
 `--dart-define=CAPTURE_SOURCE=true` writes actual renders beneath ignored

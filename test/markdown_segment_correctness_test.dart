@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/source_code_text.dart';
 import 'helpers/pump_markdown_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -115,14 +116,14 @@ void main() {
         const MarkdownMessageContent(data: '${prefix}Tail', streaming: true),
       ),
     );
-    await tester.tap(find.byTooltip('Wrap lines'));
+    await tester.tap(find.byTooltip('Scroll horizontally'));
     await tester.pump();
     for (final tail in ['Tail grows', 'Tail grows\n\nA second paragraph']) {
       await tester.pumpMarkdownWidget(
         _host(MarkdownMessageContent(data: '$prefix$tail', streaming: true)),
       );
-      expect(find.byTooltip('Scroll horizontally'), findsOneWidget);
-      expect(find.byTooltip('Wrap lines'), findsNothing);
+      expect(find.byTooltip('Wrap lines'), findsOneWidget);
+      expect(find.byTooltip('Scroll horizontally'), findsNothing);
     }
     expect(tester.takeException(), isNull);
   });
@@ -212,13 +213,13 @@ void main() {
       isNot(lightColor),
     );
     expect(tester.getSize(prose).height, greaterThan(normalHeight));
-    final codeText = tester.widget<SelectableText>(
+    final codeText = tester.widget<SourceCodeText>(
       find.descendant(
         of: find.byType(SourceCodeBlock),
-        matching: find.byType(SelectableText),
+        matching: find.byType(SourceCodeText),
       ),
     );
-    expect(codeText.style!.color, ThemeData.dark().colorScheme.onSurface);
+    expect(codeText.style.color, ThemeData.dark().colorScheme.onSurface);
     expect(tester.takeException(), isNull);
   });
 

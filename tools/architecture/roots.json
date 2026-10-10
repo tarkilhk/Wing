@@ -16460,6 +16460,24 @@
       ],
       "status": "retain",
       "dynamic_evidence": "Source tokenization via re_highlight/languages/all.dart and re_highlight/re_highlight.dart; shared SourceCodeText off-thread renderer"
+    },
+    "re_editor": {
+      "kind": "dependencies",
+      "import_consumers": [
+        "lib/core/widgets/source_code_text.dart",
+        "test/chat_outputs_screen_test.dart",
+        "test/source_highlighting_test.dart"
+      ],
+      "status": "retain",
+      "dynamic_evidence": "Read-only CodeEditor lazy paragraph viewport and document selection, with Wing-owned indexed syntax spans and original-byte selection/copy mapping"
+    },
+    "characters": {
+      "kind": "dependencies",
+      "import_consumers": [
+        "lib/core/presentation/source_highlighting.dart"
+      ],
+      "status": "retain",
+      "dynamic_evidence": "Preserve Unicode grapheme boundaries when splitting wrapped source into viewport-sized display ranges"
     }
   }
 }

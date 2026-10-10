@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/source_code_text.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -253,17 +254,33 @@ void main() {
           expect(find.text('Preview'), findsNothing);
           expect(find.text('Full text'), findsNothing);
           expect(find.byTooltip('Expand Content'), findsNothing);
-          final region = find.byKey(const ValueKey('activity-content-scroll'));
+          final sourceRegion = find.byType(SourceCodeText);
+          final region = sourceRegion.evaluate().isNotEmpty
+              ? sourceRegion
+              : find.byKey(const ValueKey('activity-content-scroll'));
           expect(tester.getSize(region).height, 160);
           final inline = tester
-              .widget<SingleChildScrollView>(region)
-              .controller!;
+              .state<ScrollableState>(
+                find
+                    .descendant(
+                      of: region,
+                      matching: find.byWidgetPredicate(
+                        (widget) =>
+                            widget is Scrollable &&
+                            widget.axisDirection == AxisDirection.down,
+                      ),
+                    )
+                    .first,
+              )
+              .position;
           final source = markdown
               ? tester
                     .widget<MarkdownMessageContent>(
                       find.byType(MarkdownMessageContent),
                     )
                     .data
+              : sourceRegion.evaluate().isNotEmpty
+              ? tester.widget<SourceCodeText>(sourceRegion).text
               : tester
                     .widget<SelectableText>(find.byType(SelectableText))
                     .textSpan!
@@ -271,11 +288,11 @@ void main() {
           expect(source, text);
           await tester.drag(region, const Offset(0, -100));
           await tester.pumpAndSettle();
-          expect(inline.offset, greaterThan(0));
+          expect(inline.pixels, greaterThan(0));
           expect(outer.offset, 0);
-          inline.jumpTo(inline.position.maxScrollExtent);
+          inline.jumpTo(inline.maxScrollExtent);
           await tester.pump();
-          expect(inline.offset, inline.position.maxScrollExtent);
+          expect(inline.pixels, inline.maxScrollExtent);
           await tester.tap(find.byTooltip('Copy Content'));
           await tester.pump();
           expect(copied, text);
@@ -622,10 +639,18 @@ void main() {
               matching: find.byType(ActivityDetailContent),
             );
             for (final content in contents.evaluate()) {
-              final pane = find.descendant(
+              final sourcePane = find.descendant(
                 of: find.byWidget(content.widget),
-                matching: find.byKey(const ValueKey('activity-content-scroll')),
+                matching: find.byType(SourceCodeText),
               );
+              final pane = sourcePane.evaluate().isNotEmpty
+                  ? sourcePane
+                  : find.descendant(
+                      of: find.byWidget(content.widget),
+                      matching: find.byKey(
+                        const ValueKey('activity-content-scroll'),
+                      ),
+                    );
               expect(pane, findsOneWidget, reason: entry.key);
               expect(
                 tester.getSize(pane).height,

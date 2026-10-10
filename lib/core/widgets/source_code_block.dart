@@ -28,7 +28,7 @@ class SourceCodeBlock extends StatefulWidget {
 }
 
 class _SourceCodeBlockState extends State<SourceCodeBlock> {
-  bool _wrap = false;
+  bool _wrap = true;
   final _sourceKey = GlobalKey();
 
   @override
@@ -99,16 +99,12 @@ class _SourceCodeBlockState extends State<SourceCodeBlock> {
       highlightingEnabled: widget.highlightingEnabled,
       text: widget.code,
       language: widget.language,
+      wrap: _wrap,
+      maxHeight: MediaQuery.sizeOf(context).height / 2,
       style: WingTokens.of(
         context,
       ).typography.mono.copyWith(height: 1.45, color: foreground),
     );
-    final body = _wrap
-        ? content
-        : SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: content,
-          );
 
     final result = Container(
       key: const Key('markdown-code-block'),
@@ -172,7 +168,7 @@ class _SourceCodeBlockState extends State<SourceCodeBlock> {
               ],
             ),
           ),
-          Padding(padding: const EdgeInsets.all(12), child: body),
+          Padding(padding: const EdgeInsets.all(12), child: content),
         ],
       ),
     );

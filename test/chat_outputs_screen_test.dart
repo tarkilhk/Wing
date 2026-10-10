@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:re_editor/re_editor.dart';
 import 'package:image/image.dart' as img;
 import 'package:wing/core/models/chat_output.dart';
 import 'package:wing/core/screens/chat_outputs_screen.dart';
@@ -1301,7 +1302,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(readPaths, ['/srv/current/notes.md', '/srv/current/report.txt']);
-      expect(find.text('Scoped report contents'), findsOneWidget);
+      expect(
+        tester.widget<CodeEditor>(find.byType(CodeEditor)).controller!.text,
+        'Scoped report contents',
+      );
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();

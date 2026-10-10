@@ -92,7 +92,7 @@ void main() {
           .toList();
       expect(
         horizontal.where((state) => state.position.maxScrollExtent > 0),
-        hasLength(2),
+        hasLength(1),
       );
       final markdown = find.bySubtype<MarkdownBody>();
       final table = find.descendant(of: markdown, matching: find.byType(Table));
@@ -125,10 +125,20 @@ void main() {
       await tester.pumpAndSettle();
       expect(tableScroll.position.pixels, greaterThan(0));
       expect(tester.takeException(), isNull);
-      await tester.ensureVisible(find.byTooltip('Wrap lines'));
-      await tester.tap(find.byTooltip('Wrap lines'));
+      await tester.ensureVisible(find.byTooltip('Scroll horizontally'));
+      await tester.tap(find.byTooltip('Scroll horizontally'));
       await tester.pumpAndSettle();
-      expect(find.byTooltip('Scroll horizontally'), findsOneWidget);
+      expect(find.byTooltip('Wrap lines'), findsOneWidget);
+      expect(
+        tester
+            .stateList<ScrollableState>(find.byType(Scrollable))
+            .where(
+              (state) =>
+                  state.axisDirection == AxisDirection.right &&
+                  state.position.maxScrollExtent > 0,
+            ),
+        hasLength(2),
+      );
       expect(
         tester.getSize(find.byTooltip('Copy code')).height,
         greaterThanOrEqualTo(48),

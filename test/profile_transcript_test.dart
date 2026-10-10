@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/services/chat_runtime.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'dart:async';
@@ -1185,7 +1186,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await tester.pumpAndSettle();
     expect(find.text('Read file'), findsOneWidget);
     expect(find.text('Patched file'), findsOneWidget);
-    expect(find.text('Read output'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SourceCodeText && widget.text == 'Read output',
+      ),
+      findsNothing,
+    );
     await Scrollable.ensureVisible(
       tester.element(find.text('Read file')),
       alignment: 0.3,
@@ -1193,15 +1199,30 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Read file'));
     await tester.pumpAndSettle();
-    expect(find.text('Read output'), findsOneWidget);
-    expect(find.text('Patch output'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SourceCodeText && widget.text == 'Read output',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SourceCodeText && widget.text == 'Patch output',
+      ),
+      findsNothing,
+    );
     await tester.tap(
       find.textContaining(
         RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Read output'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SourceCodeText && widget.text == 'Read output',
+      ),
+      findsNothing,
+    );
     expect(find.text('Message 5'), findsOneWidget);
 
     await tester.tap(
@@ -1210,7 +1231,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Read output'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SourceCodeText && widget.text == 'Read output',
+      ),
+      findsOneWidget,
+    );
     await tester.pumpWidget(const SizedBox.shrink());
     chat.reading.recordScrollOffset(0);
     await show(tester);
@@ -1400,7 +1426,16 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       expect(find.text('Search result'), findsOneWidget);
       expect(find.text('Nearby messages'), findsOneWidget);
       expect(find.text('Back to latest'), findsOneWidget);
-      expect(find.text('Matched tool output').hitTestable(), findsOneWidget);
+      expect(
+        find
+            .byWidgetPredicate(
+              (widget) =>
+                  widget is SourceCodeText &&
+                  widget.text == 'Matched tool output',
+            )
+            .hitTestable(),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
       expect(chat.reading.messages, originalMessages);
       expect(chat.reading.historyScrollOffset, 84);
