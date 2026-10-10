@@ -33,6 +33,7 @@ void main() {
                   body: SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
                     child: ProfileActivitySection(
+                      label: 'Activity',
                       initiallyExpanded: true,
                       detailsBuilder: (_) => ProfileActivityTabs(
                         tabs: [

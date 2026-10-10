@@ -9,7 +9,7 @@ const library = 'lib/core/services/profile_workspace_controller.dart';
 const ownerClass = 'ProfileWorkspaceController';
 const stages = {
   '_regenerate': 'stageRegeneration',
-  'editSavedPrompt': 'stageSavedPromptEdit',
+  '_replaceSavedPrompt': 'stageSavedPromptEdit',
 };
 
 List<Source> _namespace(Snapshot snapshot) {

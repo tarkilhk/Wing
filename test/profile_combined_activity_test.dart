@@ -86,7 +86,7 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Activity'));
+      await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
       await tester.pumpAndSettle();
       final tab = find.byKey(ValueKey(('activity-tab', category)));
       expect(tab, findsOneWidget);
@@ -157,11 +157,11 @@ void main() {
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Activity'), findsOneWidget);
+    expect(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')), findsOneWidget);
     expect(find.text('Tool activity'), findsNothing);
-    expect(find.text('68 tool calls'), findsOneWidget);
+    expect(find.text('Used 68 tools'), findsOneWidget);
     expect(find.text('Search'), findsNothing);
-    await tester.tap(find.text('Activity'));
+    await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
     await tester.pumpAndSettle();
     expect(find.text('Search'), findsNWidgets(67));
     expect(find.text('Running command'), findsOneWidget);

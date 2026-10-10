@@ -115,6 +115,29 @@ class WingTypography {
 /// The Wing design tokens, carried on [ThemeData.extensions].
 @immutable
 class WingTokens extends ThemeExtension<WingTokens> {
+  /// Studio source palette. Grammar colors never replace diagnostic/diff colors.
+  Color? sourceColor(String? scope) {
+    final dark = brightness == Brightness.dark;
+    return switch (scope?.split('.').first) {
+      'keyword' ||
+      'selector-tag' ||
+      'meta' => dark ? const Color(0xFFD3ACF5) : const Color(0xFF7040A0),
+      'string' || 'regexp' || 'attribute' || 'selector-attr' =>
+        dark ? const Color(0xFFA6D8A8) : const Color(0xFF316B36),
+      'number' ||
+      'literal' ||
+      'symbol' ||
+      'bullet' => dark ? const Color(0xFFF0BD87) : const Color(0xFF8A4A13),
+      'title' || 'built_in' || 'type' || 'name' || 'selector-class' =>
+        dark ? const Color(0xFF91C9F5) : const Color(0xFF285E91),
+      'variable' ||
+      'attr' ||
+      'params' => dark ? const Color(0xFF7DD4C8) : const Color(0xFF226A60),
+      'comment' || 'doctag' || 'wing-line-number' => muted,
+      _ => null,
+    };
+  }
+
   final Brightness brightness;
   final Color surface;
   final Color raised;

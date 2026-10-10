@@ -128,14 +128,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('40 tool calls'), findsOneWidget);
+    expect(find.text('Used 40 tools'), findsOneWidget);
     expect(arguments.every((args) => args.reads == 0), isTrue);
-    await tester.tap(find.text('Activity'));
+    await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
     await tester.pumpAndSettle();
     expect(arguments.every((args) => args.reads > 0), isTrue);
-    await tester.tap(find.text('Activity'));
+    await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Activity'));
+    await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
     await tester.pumpAndSettle();
     expect(find.text('Timeline'), findsOneWidget);
     expect(tester.takeException(), isNull);

@@ -350,6 +350,7 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
               code: segment.code,
               language: segment.language,
               previewEnabled: segment.closed && !widget.streaming,
+              highlightingEnabled: segment.closed && !widget.streaming,
             ),
           },
       ];
@@ -474,7 +475,8 @@ bool _sameMarkdownSegment(Object previous, Object current) =>
           current is MarkdownCodeBlock &&
           previous.code == current.code &&
           previous.language == current.language &&
-          previous.previewEnabled == current.previewEnabled;
+          previous.previewEnabled == current.previewEnabled &&
+          previous.highlightingEnabled == current.highlightingEnabled;
 
 class _DeliverableBuilder extends MarkdownElementBuilder {
   _DeliverableBuilder(

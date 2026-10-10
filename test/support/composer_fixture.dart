@@ -61,7 +61,6 @@ ProfileChat composeChat({
       changingAnswer: chat.runtime.changingAnswer,
       commandRunning: chat.runtime.commandRunning,
       changingIntelligence: chat.changingIntelligence,
-      canForkSavedAnswer: false,
       failedOrCancelled: {
         ChatExecution.failed,
         ChatExecution.cancelled,

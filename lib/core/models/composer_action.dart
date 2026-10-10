@@ -2,8 +2,7 @@ enum ComposerAction {
   send('Send'),
   steer('Steer'),
   stop('Stop'),
-  queue('Queue'),
-  fork('Fork');
+  queue('Queue');
 
   const ComposerAction(this.label);
   final String label;

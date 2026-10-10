@@ -19,11 +19,15 @@ class ProfileActivitySection extends StatefulWidget {
   const ProfileActivitySection({
     super.key,
     required this.detailsBuilder,
+    required this.label,
     this.subtitle,
+    this.trailing,
     this.initiallyExpanded = false,
   });
 
   final WidgetBuilder detailsBuilder;
+  final String label;
+  final Widget? trailing;
   final Widget? subtitle;
   final bool initiallyExpanded;
 
@@ -38,8 +42,9 @@ class _ProfileActivitySectionState extends State<ProfileActivitySection> {
   Widget build(BuildContext context) => ConversationGestureBoundary(
     blocked: true,
     child: ProfileTranscriptDisclosure(
-      label: 'Activity',
-      icon: Icons.bolt_rounded,
+      label: widget.label,
+      icon: null,
+      trailing: widget.trailing,
       summary: widget.subtitle,
       initiallyExpanded: widget.initiallyExpanded,
       // Initially absent. First expansion admits the body; later collapse
@@ -48,7 +53,12 @@ class _ProfileActivitySectionState extends State<ProfileActivitySection> {
       onExpansionChanged: (expanded) {
         if (expanded && !_visited) setState(() => _visited = true);
       },
-      children: [Builder(builder: widget.detailsBuilder)],
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: Builder(builder: widget.detailsBuilder),
+        ),
+      ],
     ),
   );
 }
@@ -61,6 +71,7 @@ class ProfileToolActivitySection extends StatelessWidget {
     this.expandedMessageId,
     this.focusedMessageKey,
     this.showLatestReview = false,
+    this.trailing,
     this.currentActivity = const [],
     this.tabs = const [],
     this.liveToolCount = 0,
@@ -72,6 +83,7 @@ class ProfileToolActivitySection extends StatelessWidget {
   final int? expandedMessageId;
   final GlobalKey? focusedMessageKey;
   final bool showLatestReview;
+  final Widget? trailing;
   final List<Widget> currentActivity;
   final List<ProfileActivityTab> tabs;
   final int liveToolCount;
@@ -104,13 +116,14 @@ class ProfileToolActivitySection extends StatelessWidget {
         expandedMessageId != null &&
         section.containsMessage(expandedMessageId!);
     return ProfileActivitySection(
+      label: total > 0
+          ? 'Used $total ${total == 1 ? 'tool' : 'tools'}'
+          : 'Activity',
+      trailing: trailing,
       initiallyExpanded: expanded,
-      subtitle: Text(
-        [
-          if (total > 0) '$total tool ${total == 1 ? 'call' : 'calls'}',
-          if (reviews > 0) '$reviews ${reviews == 1 ? 'review' : 'reviews'}',
-        ].join(' · '),
-      ),
+      subtitle: reviews > 0
+          ? Text('$reviews ${reviews == 1 ? 'review' : 'reviews'}')
+          : null,
       detailsBuilder: _details,
     );
   }

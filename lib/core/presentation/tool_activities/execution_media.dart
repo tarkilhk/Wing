@@ -6,6 +6,7 @@ void _terminal(_ToolProjection p) {
     p.args['command'] ?? p.data['command'],
     format: ToolDetailFormat.source,
     role: ToolDetailRole.command,
+    language: 'bash',
     copyable: true,
   );
   p.options(p.args, {'workdir': 'Directory', 'timeout': 'Timeout'});
@@ -129,6 +130,7 @@ void _executeCode(_ToolProjection p) {
     p.args['code'],
     format: ToolDetailFormat.source,
     role: ToolDetailRole.code,
+    language: 'python',
     copyable: true,
   );
   if (p.args['reset'] == true) p.headerFacts.add('Reset requested');
@@ -195,6 +197,7 @@ void _browserExec(_ToolProjection p) {
     p.args['code'],
     format: ToolDetailFormat.source,
     role: ToolDetailRole.code,
+    language: 'python',
     copyable: true,
   );
   p.options(p.args, {'session': 'Session', 'timeout_s': 'Timeout'});

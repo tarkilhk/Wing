@@ -9,6 +9,7 @@ class ProfileTranscriptDisclosure extends StatefulWidget {
     required this.icon,
     required this.children,
     this.summary,
+    this.trailing,
     this.initiallyExpanded = false,
     this.loading = false,
     this.isError = false,
@@ -18,7 +19,8 @@ class ProfileTranscriptDisclosure extends StatefulWidget {
   });
 
   final String label;
-  final IconData icon;
+  final IconData? icon;
+  final Widget? trailing;
   final Widget? summary;
   final List<Widget> children;
   final bool initiallyExpanded;
@@ -46,13 +48,13 @@ class _ProfileTranscriptDisclosureState
       child: AnchoredExpansionTile(
         initiallyExpanded: widget.initiallyExpanded,
         maintainState: widget.maintainState,
-        minTileHeight: 28,
+        minTileHeight: widget.trailing == null ? 28 : 48,
         tilePadding: EdgeInsets.zero,
         childrenPadding: widget.childrenPadding,
         expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
         shape: const Border(),
         collapsedShape: const Border(),
-        trailing: const SizedBox.shrink(),
+        showTrailingIcon: false,
         onExpansionChanged: (expanded) {
           setState(() => _expanded = expanded);
           widget.onExpansionChanged?.call(expanded);
@@ -76,7 +78,7 @@ class _ProfileTranscriptDisclosureState
                     semanticsLabel: 'Refreshing ${widget.label}',
                   ),
                 )
-              else
+              else if (widget.icon != null)
                 Icon(
                   widget.icon,
                   size: 16,
@@ -84,8 +86,9 @@ class _ProfileTranscriptDisclosureState
                       ? Theme.of(context).colorScheme.error
                       : color,
                 ),
-              const SizedBox(width: 8),
-              Flexible(
+              if (widget.loading || widget.icon != null)
+                const SizedBox(width: 8),
+              Expanded(
                 child: Wrap(
                   spacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -94,14 +97,15 @@ class _ProfileTranscriptDisclosureState
                     ?widget.summary,
                     Icon(
                       _expanded
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_down_rounded,
+                          ? Icons.keyboard_arrow_down_rounded
+                          : Icons.keyboard_arrow_right_rounded,
                       size: 16,
                       color: color,
                     ),
                   ],
                 ),
               ),
+              ?widget.trailing,
             ],
           ),
         ),

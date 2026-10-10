@@ -117,7 +117,7 @@ void main() {
 
       expect(find.text('Hermes review'), findsNothing);
       expect(find.textContaining('Changes await approval.'), findsNothing);
-      final activity = find.text('Activity');
+      final activity = find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'));
       expect(activity, findsOneWidget);
       expect(
         tester.getTopLeft(activity).dy,

@@ -396,7 +396,7 @@ void main() {
       tester.getCenter(find.byTooltip('Steer')),
     );
     await tester.pump(const Duration(milliseconds: 600));
-    for (final action in ['steer', 'stop', 'queue', 'fork']) {
+    for (final action in ['steer', 'stop', 'queue']) {
       expect(find.byKey(ValueKey('composer-choice-$action')), findsOneWidget);
     }
     if (const bool.fromEnvironment('CAPTURE_COMPOSER')) {

@@ -6190,6 +6190,15 @@
       "source": "docs/MODEL_CATALOG.md; test/models_dev_pricing_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-test/source_highlighting_test.dart",
+      "kind": "host-test",
+      "path": "test/source_highlighting_test.dart",
+      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
+      "source": "docs/TESTING.md; test/source_highlighting_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -14757,6 +14766,26 @@
       "path": "tools/architecture/rules/recent_capture_release_safe.md",
       "area": "tools",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/source_highlighting.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/source_language.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/source_code_text.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/source_highlighting_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {
@@ -15020,6 +15049,7 @@
         "lib/core/widgets/side_question_delivery_card.dart",
         "lib/core/widgets/slash_command_suggestions.dart",
         "lib/core/widgets/source_code_block.dart",
+        "lib/core/widgets/source_code_text.dart",
         "lib/core/widgets/status_transition.dart",
         "lib/core/widgets/studio_action_label.dart",
         "lib/core/widgets/studio_error.dart",
@@ -15223,6 +15253,7 @@
         "test/shared_draft_review_test.dart",
         "test/side_question_delivery_card_test.dart",
         "test/slash_commands_test.dart",
+        "test/source_highlighting_test.dart",
         "test/startup_notification_permission_test.dart",
         "test/streaming_markdown_host_benchmark_test.dart",
         "test/streaming_segment_reuse_test.dart",
@@ -16304,6 +16335,7 @@
         "test/slash_commands_test.dart",
         "test/slash_completion_view_dependency_guard_test.dart",
         "test/slash_profile_live_contract_test.dart",
+        "test/source_highlighting_test.dart",
         "test/speech_synthesis_view_dependency_guard_test.dart",
         "test/startup_notification_permission_test.dart",
         "test/streaming_markdown_host_benchmark_test.dart",
@@ -16420,6 +16452,14 @@
       ],
       "status": "retain",
       "dynamic_evidence": "Current authored header import/export directive consumers; SDK/build registration where applicable"
+    },
+    "re_highlight": {
+      "kind": "dependencies",
+      "import_consumers": [
+        "lib/core/presentation/source_highlighting.dart"
+      ],
+      "status": "retain",
+      "dynamic_evidence": "Source tokenization via re_highlight/languages/all.dart and re_highlight/re_highlight.dart; shared SourceCodeText off-thread renderer"
     }
   }
 }

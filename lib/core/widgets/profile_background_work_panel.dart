@@ -352,6 +352,7 @@ class _ProcessTile extends StatelessWidget {
               block: ToolDetailBlock(
                 label: 'Command',
                 role: ToolDetailRole.command,
+                language: 'bash',
                 text: command,
                 copyable: true,
                 format: ToolDetailFormat.source,

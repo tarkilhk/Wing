@@ -19,6 +19,7 @@ class AnchoredExpansionTile extends StatelessWidget {
     this.subtitle,
     this.leading,
     this.trailing,
+    this.showTrailingIcon = true,
     this.children = const [],
     this.initiallyExpanded = false,
     this.maintainState = false,
@@ -35,6 +36,7 @@ class AnchoredExpansionTile extends StatelessWidget {
   final Widget? subtitle;
   final Widget? leading;
   final Widget? trailing;
+  final bool showTrailingIcon;
   final List<Widget> children;
   final bool initiallyExpanded;
   final bool maintainState;
@@ -53,6 +55,7 @@ class AnchoredExpansionTile extends StatelessWidget {
       subtitle: subtitle,
       leading: leading,
       trailing: trailing,
+      showTrailingIcon: showTrailingIcon,
       initiallyExpanded: initiallyExpanded,
       maintainState: maintainState,
       minTileHeight: minTileHeight,

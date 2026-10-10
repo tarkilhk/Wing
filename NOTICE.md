@@ -15,3 +15,5 @@ The vendored Flutter setup action retains [its MIT license](.github/actions/setu
 The New chat icon uses Lucide's `square-pen` from `lucide-static` 0.468.0, under the [ISC license](assets/fonts/LUCIDE-LICENSE). The app includes a single-glyph font subset and the matching Android shortcut vector; see [icon provenance](assets/fonts/README.md).
 
 The website self-hosts Latin subsets of Manrope and Source Sans 3, distributed under the SIL Open Font License 1.1. Their copyright and license notices are retained in [Manrope's OFL notice](website/assets/fonts/MANROPE-OFL.txt) and [Source Sans 3's OFL notice](website/assets/fonts/SOURCE-SANS-3-OFL.txt). These web fonts are not bundled in the Android app. See [website maintenance](docs/WEBSITE.md) for design and asset provenance.
+
+Syntax highlighting uses [re_highlight](https://pub.dev/packages/re_highlight) 0.0.3 by Reqable, distributed under the MIT license. Its dependency license is retained in Flutter's bundled notices.

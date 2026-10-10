@@ -20,6 +20,7 @@ List<Object> splitMarkdownCodeBlocks(String content, {bool streaming = false}) {
           code: segment.code,
           language: segment.language,
           previewEnabled: segment.closed && !streaming,
+          highlightingEnabled: segment.closed && !streaming,
         ),
       },
   ];
@@ -30,12 +31,14 @@ class MarkdownCodeBlock extends StatelessWidget {
   final String code;
   final String? language;
   final bool previewEnabled;
+  final bool highlightingEnabled;
 
   const MarkdownCodeBlock({
     super.key,
     required this.code,
     this.language,
     this.previewEnabled = true,
+    this.highlightingEnabled = true,
   });
 
   @override
@@ -49,6 +52,7 @@ class MarkdownCodeBlock extends StatelessWidget {
         ? WebOutputPreview.maxSvgSourceLength
         : WebOutputPreview.maxMermaidSourceLength;
     return SourceCodeBlock(
+      highlightingEnabled: highlightingEnabled,
       code: code,
       language: language,
       headerAction:

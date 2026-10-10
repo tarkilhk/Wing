@@ -13,6 +13,7 @@ import '../services/file_open_error_message.dart';
 import '../theme/wing_theme.dart';
 import 'chat_inline_image.dart';
 import 'markdown_message_content.dart';
+import 'source_code_text.dart';
 import 'resource_filename.dart';
 import 'studio_error.dart';
 
@@ -752,15 +753,22 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
         );
       } else {
         final lines = text.split('\n');
-        final content = SelectableText.rich(
-          TextSpan(
-            children: [
-              for (var i = 0; i < lines.length; i++)
-                _lineSpan(lines[i], i == 0, block, colors),
-            ],
-          ),
-          style: style,
-        );
+        final content = block.format == ToolDetailFormat.source
+            ? SourceCodeText(
+                text: text,
+                language: block.language,
+                numberedLines: block.numberedLines,
+                style: style,
+              )
+            : SelectableText.rich(
+                TextSpan(
+                  children: [
+                    for (var i = 0; i < lines.length; i++)
+                      _lineSpan(lines[i], i == 0, block, colors),
+                  ],
+                ),
+                style: style,
+              );
         body = _wrap
             ? content
             : SingleChildScrollView(
@@ -954,28 +962,13 @@ class _ActivityBodyRender extends RenderProxyBox {
   }
 }
 
-// Only numbers present in the backend's file receipt receive a gutter style.
-// The spans preserve the literal prefix for selection and exact copying.
+// Diff markers retain their semantic colors independently of syntax grammars.
 TextSpan _lineSpan(
   String line,
   bool first,
   ToolDetailBlock block,
   WingTokens colors,
 ) {
-  final prefix = block.numberedLines
-      ? RegExp(r'^\d+\|').firstMatch(line)
-      : null;
-  if (prefix != null) {
-    return TextSpan(
-      children: [
-        TextSpan(
-          text: '${first ? '' : '\n'}${prefix.group(0)}',
-          style: TextStyle(color: colors.muted),
-        ),
-        TextSpan(text: line.substring(prefix.end)),
-      ],
-    );
-  }
   return TextSpan(
     text: '${first ? '' : '\n'}$line',
     style: block.format == ToolDetailFormat.diff
