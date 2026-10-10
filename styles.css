@@ -241,9 +241,6 @@ summary:active { color: var(--teal); }
 .guide-shot { display: block; inline-size: min(100%, 20rem); margin-inline: auto; }
 .guide-shot .app-frame img { inline-size: 100%; }
 .guide-shot .app-frame { border-color: var(--rule); }
-.control-features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4rem; }
-.control-features article { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 2.5rem; }
-.control-copy > p { color: var(--muted); margin-block: 1rem .5rem; max-inline-size: 29rem; }
 .topic-nav { display: flex; flex-wrap: wrap; gap: .5rem 1.75rem; padding-block: 1.25rem; border-block-end: 1px solid var(--rule); }
 .topic-nav a { color: var(--muted); font-size: 1rem; text-decoration: none; padding-block: .5rem; min-block-size: 2.75rem; }
 .topic-nav a[aria-current="page"] { color: var(--teal); font-weight: 650; text-decoration: underline; }
@@ -280,18 +277,14 @@ summary:active { color: var(--teal); }
 @media (width < 65rem) {
   .guide-layout { gap: 2.5rem; }
   .guide-hero h1 { font-size: clamp(3rem, 1.75rem + 2vw, 4rem); }
-  .control-features { gap: 2.5rem; }
 }
 @media (width < 49rem) {
   .guide-hero { padding-block: 3rem; }
   .guide-layout { grid-template-columns: minmax(0, 1fr); padding-block-start: 2rem; }
   .guide-toc { position: static; max-inline-size: none; flex-direction: row; flex-wrap: wrap; gap: .25rem 1.5rem; padding-block-end: 1.5rem; border-block-end: 1px solid var(--rule); }
   .guide-copy { max-inline-size: none; }
-  .control-copy h3 { font-size: 1.5rem; }
-  .control-features .guide-shot { inline-size: min(100%, 18rem); }
 }
 @media (width < 35rem) {
-  .control-features { grid-template-columns: minmax(0, 1fr); gap: 4rem; }
   .topic-nav { gap: .25rem 1.25rem; }
   .topic-nav a { font-size: .9375rem; }
   .guide-hero h1 br { display: none; }
@@ -305,7 +298,6 @@ summary:active { color: var(--teal); }
 .feature-stories > .feature-story { display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 1.5rem; }
 .feature-pair > .feature-story { grid-row: span 2; }
 .feature-copy { display: grid; gap: 1.5rem; }
-.control-features > article { grid-row: span 3; grid-template-rows: subgrid; align-items: start; }
 .feature-story h3 { font-size: 1.5rem; }
 .feature-story p { color: var(--muted); max-inline-size: 38rem; }
 .feature-story .guide-shot { margin-block: .5rem 0; }
@@ -319,7 +311,6 @@ summary:active { color: var(--teal); }
 .craft-section .section-more .text-link { color: var(--mint); }
 .panel-image { inline-size: min(100%, 20rem); margin-inline: auto; }
 .work-panel > .text-link { color: var(--teal); justify-self: start; }
-.control-features > article > .text-link { color: var(--teal); }
 .analytics-section { border-block-start: 1px solid var(--rule); }
 /* Leave room for this taller capture to grow in the full-viewport viewer. */
 .analytics-shot { inline-size: min(100%, 20rem, calc((100svh - 8rem) * 780 / 2080)); }

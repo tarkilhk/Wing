@@ -48,76 +48,46 @@
 <main id="main">
 <section class="guide-hero page-width" aria-labelledby="guide-title">
 <div>
-<h1 id="guide-title">Check your<br> Hermes setup</h1>
+<h1 id="guide-title">Monitor your<br> Hermes health</h1>
 </div>
 </section>
 <div class="guide-layout page-width" id="guide-content">
 <aside>
-<nav class="guide-toc" aria-label="On this page">
-<a href="#host">Check CPU, memory and disk</a>
-<a href="#server">Run diagnostics and read logs</a>
-<a href="#profile">Check the selected profile</a>
-<a href="#alerts">Inspect health alerts</a>
-<a href="#thresholds">Set warning and recovery thresholds</a>
-<a href="#monitoring">When monitoring is active</a>
-<a href="#limits">What the checks establish</a>
+<nav class="guide-toc" aria-label="Page contents">
+<a href="#checks">Check your setup</a>
+<a href="#thresholds">Choose your alerts</a>
+<a href="#alerts">Inspect a notification</a>
 </nav>
 </aside>
 <div class="guide-copy">
-<section id="host" aria-labelledby="host-title">
-<h2 id="host-title">Check CPU, memory and disk</h2>
-<p>Host shows available CPU, memory and disk readings, uptime and load. Open the machine details for more information or refresh the readings.</p>
-<p>Missing measurements stay unavailable. If a refresh fails, the last reading keeps its timestamp.</p>
-<figure class="guide-shot guide-inline-shot ">
-<div class="app-frame">
-<a class="screenshot-link" data-screenshot href="assets/screenshots/health-light.png" aria-label="Enlarge screenshot: Wing Hermes health with Alert settings, host readings, server diagnostics and profile checks"><img src="assets/screenshots/health-light.png" width="780" height="1688" alt="Wing Hermes health with Alert settings, host readings, server diagnostics and profile checks" loading="lazy"></a>
-</div>
-</figure>
-</section>
-<section id="server" aria-labelledby="server-title">
-<h2 id="server-title">Run diagnostics and read logs</h2>
-<p>Run Doctor or a security audit, then open the result to read the findings. Filter server logs by category and severity, or search for a particular error.</p>
-</section>
-<section id="profile" aria-labelledby="profile-title">
-<h2 id="profile-title">Check the selected profile</h2>
-<p>Profile checks cover model access, tool setup, MCP connectors and scheduled tasks. Switch profiles in the header to check another agent.</p>
-<p>Use <strong>Fix access</strong> to open the account editor when credentials are missing. Retry incomplete checks from Health.</p>
+<section id="checks" aria-labelledby="checks-title">
+<h2 id="checks-title">Check your setup</h2>
+<p>See CPU, memory and disk usage, run Doctor or a security audit, and read backend logs. Switch profiles to check model access, tools, connectors and scheduled tasks.</p>
 <figure class="guide-shot guide-inline-shot">
 <div class="app-frame">
-<a class="screenshot-link" data-screenshot href="assets/screenshots/health-profile-dark.png" aria-label="Enlarge screenshot: Wing profile health with model access, tool setup, connectors and scheduled task counts"><img src="assets/screenshots/health-profile-dark.png" width="780" height="1120" alt="Wing profile health with model access, tool setup, connectors and scheduled task counts" loading="lazy"></a>
+<a class="screenshot-link" data-screenshot href="assets/screenshots/health-light.png" aria-label="Enlarge screenshot: Wing Health with Alert settings, host readings, backend diagnostics and profile checks"><img src="assets/screenshots/health-light.png" width="780" height="1688" alt="Wing Health with Alert settings, host readings, backend diagnostics and profile checks" loading="lazy"></a>
 </div>
 </figure>
-</section>
-<section id="alerts" aria-labelledby="alerts-title">
-<h2 id="alerts-title">Inspect an issue from any screen</h2>
-<p>A bell appears when Wing has a current health issue. Tap it to see the affected connection, the finding and the reading that triggered it. Browse multiple issues in severity order, then open Hermes health to investigate.</p>
-<p>Closing the details or dismissing a brief notice leaves the issue in the bell. Recovery removes it; a recurrence can alert you again.</p>
-<figure class="guide-shot guide-inline-shot">
-<div class="app-frame">
-<a class="screenshot-link" data-screenshot href="assets/screenshots/health-alerts-light.png" aria-label="Enlarge screenshot: Wing health alert showing critical memory pressure, the triggering reading and a link to Hermes health"><img src="assets/screenshots/health-alerts-light.png" width="780" height="1688" alt="Wing health alert showing critical memory pressure, the triggering reading and a link to Hermes health" loading="lazy"></a>
-</div>
-</figure>
+<p>Each result shows when it was checked. Open <strong>What's checked?</strong> for the scope of each check.</p>
 </section>
 <section id="thresholds" aria-labelledby="thresholds-title">
-<h2 id="thresholds-title">Choose when resource usage needs attention</h2>
-<p>Open <strong>Hermes health → Alert settings</strong>. Set separate warning and recovery percentages and durations for memory, disk and CPU. Valid edits save automatically on this device.</p>
-<p>Memory and disk warnings start above 90% for two minutes and clear below 85% for two minutes. CPU warnings are off initially. Native Hermes critical-pressure alerts have separate toggles and can alert immediately.</p>
+<h2 id="thresholds-title">Choose your alerts</h2>
+<p>Open <strong>Alert settings</strong> in Health. Enable alerts for host resources, backend connection failures or profile problems. Set memory, disk and CPU warning and recovery thresholds, with separate durations. Valid edits save automatically on this device.</p>
 <figure class="guide-shot guide-inline-shot">
 <div class="app-frame">
-<a class="screenshot-link" data-screenshot href="assets/screenshots/alert-thresholds-light.png" aria-label="Enlarge screenshot: Wing memory alert editor with independent warning, recovery and native critical-pressure controls"><img src="assets/screenshots/alert-thresholds-light.png" width="780" height="1688" alt="Wing memory alert editor with independent warning, recovery and native critical-pressure controls" loading="lazy"></a>
+<a class="screenshot-link" data-screenshot href="assets/screenshots/alert-settings-light.png" aria-label="Enlarge screenshot: Wing Alert settings with host thresholds, backend and profile alerts, and notification controls"><img src="assets/screenshots/alert-settings-light.png" width="780" height="1688" alt="Wing Alert settings with host thresholds, backend and profile alerts, and notification controls" loading="lazy"></a>
 </div>
 </figure>
+<p>Checks run while Wing is open or monitoring ongoing work. If fresh readings are unavailable, existing issues are marked as last known.</p>
 </section>
-<section id="monitoring" aria-labelledby="monitoring-title">
-<h2 id="monitoring-title">Know when Wing is checking</h2>
-<p>Checks run while Wing is open, or while its existing background task monitor is active for ongoing work on that connection. Alerts do not keep a separate monitoring service alive.</p>
-<p>Wing also surfaces observed profile access, connector and task problems. A connection notice appears when automatic recovery has failed and needs your help. Doctor and security-audit findings stay in Health rather than generating alerts.</p>
-<p>If readings become unavailable, an unresolved issue stays marked as last known. Open Health for a fresh check. These are in-app alerts, not an always-on server monitoring service or Android push notifications.</p>
-</section>
-<section id="limits" aria-labelledby="limits-title">
-<h2 id="limits-title">What the checks establish</h2>
-<p>Model access checks whether credentials are available; it does not send a model request or check remaining quota. Tool setup checks configuration. Connector checks test a connection, not every tool action. Schedule checks report recorded problems without running the tasks.</p>
-<p>Each check reports its own result. Open <strong>What's checked?</strong> in Health for the details.</p>
+<section id="alerts" aria-labelledby="alerts-title">
+<h2 id="alerts-title">Inspect a notification</h2>
+<p>Tap the bell on any screen to see the affected connection and what triggered the issue. Open Health to investigate. The issue leaves the bell when it resolves.</p>
+<figure class="guide-shot guide-inline-shot">
+<div class="app-frame">
+<a class="screenshot-link" data-screenshot href="assets/screenshots/health-alerts-light.png" aria-label="Enlarge screenshot: Wing health notification showing critical memory pressure, its triggering reading and an action to open Health"><img src="assets/screenshots/health-alerts-light.png" width="780" height="1688" alt="Wing health notification showing critical memory pressure, its triggering reading and an action to open Health" loading="lazy"></a>
+</div>
+</figure>
 </section>
 </div>
 </div>
