@@ -6,6 +6,12 @@ Wing helps you return to the right conversation and keep it moving from your pho
 
 Open **Chats** to search, pin and group conversations. Filter by profile, project or status; use **Recents** to find recent conversations and work that is running or needs input. The selected connection and profile determine what you see in Wing without changing another client's selection.
 
+Hidden conversations stay out of Chats by default, including a bot's continuing
+**Bot Chat**, even after opening it from Bots. Tick **Show automated chats** in
+Chat list options to include automated conversations and each profile's canonical
+Bot Chat. A displayed canonical Bot Chat has the bot icon before its name.
+Search follows the same visibility choice.
+
 ## Send the next idea
 
 Create a chat, choose a profile and send a message. Replies stream into the conversation with code, tables and available tool activity. Your draft and attached files stay in place if you navigate away.

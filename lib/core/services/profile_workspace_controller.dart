@@ -135,6 +135,7 @@ class ProfileChat {
   bool _notificationInputsQuiet = false;
   bool _notificationTargetRestored = false;
   bool _archived = false;
+  bool? _hidden;
   bool _replaceableUnsubmittedRuntime = false;
   bool _replacingExpiredRuntime = false;
   Completer<void>? _replacementCompletion;
@@ -181,6 +182,7 @@ class ProfileChat {
   List<SideQuestionDelivery> get sideQuestionDeliveries =>
       List.unmodifiable(_sideQuestionDeliveries);
   bool get archived => _archived;
+  bool? get hidden => _hidden;
 
   ProfileChat({
     required ProfileSessionKey key,
@@ -524,6 +526,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           ?.sessionId];
   Timer? _notificationRetry;
   Future<void>? _notificationOpening;
+  Future<void>? _notificationResume;
   int _notificationAttempts = 0;
   int _notificationGeneration = 0;
   bool Function()? _notificationIsCurrent;
@@ -730,8 +733,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   SessionVisibility? get sessionVisibility => visibilityControl.selected;
   AppPreferenceControl<SessionVisibility> get visibilityControl =>
       appPreferences.visibilityFor(connection.id);
-  bool includesSessionSource(String? source) =>
-      sessionVisibility?.includes(source) == true;
+  bool includesSession(String? source, {bool hidden = false}) =>
+      sessionVisibility?.includes(source, hidden: hidden) == true;
   SessionVisibility _requiredSessionVisibility() =>
       sessionVisibility ??
       (throw StateError('Repair the saved chat filter before loading chats.'));
@@ -1462,6 +1465,33 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return _retryNotification();
   }
 
+  Future<void> _resumeNotification() {
+    if (_notificationResume case final pending?) return pending;
+    final generation = _notificationGeneration;
+    // Foreground admission must stay active while an older opening settles and
+    // the fresh attempt starts. Its failure cannot publish a stale global alert.
+    connectionStatus.beginRecovery('notification-resume');
+    return _notificationResume = _resumeNotificationAfterOpening(generation)
+        .whenComplete(() {
+          if (generation == _notificationGeneration) {
+            _notificationResume = null;
+            connectionStatus.endRecovery('notification-resume');
+          }
+        });
+  }
+
+  Future<void> _resumeNotificationAfterOpening(int generation) async {
+    await _notificationOpening;
+    if (_closed ||
+        generation != _notificationGeneration ||
+        _notificationTarget == null) {
+      return;
+    }
+    _notificationAttempts = 0;
+    notificationChat?._runtime.beginOpening();
+    await _retryNotification();
+  }
+
   Future<void> _retryNotification() {
     if (_notificationOpening != null) return _notificationOpening!;
     _notificationRetry?.cancel();
@@ -1554,8 +1584,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _notificationGeneration++;
     _notificationRetry?.cancel();
     _notificationOpening = null;
+    _notificationResume = null;
     _navigationGeneration++;
     connectionStatus.endRecovery('notification');
+    connectionStatus.endRecovery('notification-resume');
   }
 
   /// Read access for the connection-wide browser; this never changes navigation.
@@ -1882,14 +1914,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
     }
     if (_notificationTarget != null) {
-      final target = _notificationTarget;
-      // Screen entry must get a fresh attempt if the opening it joined fails.
-      // A successful opening already clears the target; navigation may replace it.
-      await _notificationOpening;
-      if (_closed || _notificationTarget != target) return;
-      _notificationAttempts = 0;
-      notificationChat?._runtime.beginOpening();
-      await _retryNotification();
+      await _resumeNotification();
     } else if (!_initialized) {
       _initializationAttempt = 0;
       await initialize();
@@ -3131,13 +3156,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (id is! String || id.isEmpty) {
       throw const FormatException('Missing durable session identity');
     }
-    final chat = _createChatRecord(
-      key: ProfileSessionKey(resource.scope, id),
-      runtimeId: response['session_id'] as String,
-      title: 'New chat',
-      source: 'desktop',
-      projectId: project?['id'] as String?,
-    ).._replaceableUnsubmittedRuntime = true;
+    final chat =
+        _createChatRecord(
+            key: ProfileSessionKey(resource.scope, id),
+            runtimeId: response['session_id'] as String,
+            title: 'New chat',
+            source: 'desktop',
+            projectId: project?['id'] as String?,
+          )
+          .._replaceableUnsubmittedRuntime = true
+          .._hidden = false;
     resource._chats[id] = chat;
     _hydrateIntelligence(chat, response);
     unawaited(_observeModelControls(chat));
@@ -3364,11 +3392,24 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (concurrent != null) {
         chat = concurrent;
       } else {
-        final sessionRow = <Map<String, dynamic>>[
+        var sessionRow = <Map<String, dynamic>>[
           ?_recentSessionRows[key],
           ...resource.visibleSessions,
           ...resource._sessions,
         ].where((row) => row['id'] == key.sessionId).firstOrNull;
+        if (sessionRow == null) {
+          try {
+            sessionRow = await resource.gateway.sessionMetadata(key.sessionId);
+          } catch (_) {
+            // Keep the conversation readable; unverified local membership
+            // cannot reveal a potentially hidden chat in the default list.
+          }
+          if (_closed ||
+              resource.blocksSession(key.sessionId) ||
+              !identical(_resources[key.workspace], resource)) {
+            return null;
+          }
+        }
         if (response.containsKey('parent_session_id')) {
           _applyServerParentRows(
             resource,
@@ -3389,8 +3430,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
           ),
         );
         resource._chats[key.sessionId] = chat;
+        chat._hidden = sessionRow == null
+            ? null
+            : sessionRow['hidden'] == true || sessionRow['hidden'] == 1;
         chat._archived =
-            sessionRow?['archived'] == true || resource._archivedOnly;
+            sessionRow?['archived'] == true ||
+            sessionRow?['archived'] == 1 ||
+            resource._archivedOnly;
         if (resource.blocksSession(key.sessionId)) {
           _cancelImagePreparation(chat);
           resource._chats.remove(key.sessionId);

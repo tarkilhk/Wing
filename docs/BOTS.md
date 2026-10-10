@@ -24,6 +24,11 @@ and to its current compression tip. Project controls remain below the title.
 Other conversations retain their saved titles. While appearance is loading or
 unavailable, the saved chat title remains.
 
+As on desktop, hidden Bot Chats stay out of the default Chats list. Opening a bot
+does not change that visibility. **Show automated chats** in Chat list options
+reveals canonical Bot Chats across profiles; their rows prefix **Bot Chat** with
+the bot icon. Bots remains the direct route to a continuing conversation.
+
 ## Profile options
 
 The row menu offers View screen, Pin to top/Unpin, Hide bot/Show bot and
@@ -91,6 +96,20 @@ group creation is currently within one instance. These are client scope limits,
 not missing custom backend endpoints.
 
 ## Ownership and verified upstream
+
+Chat-list visibility was verified against stock upstream main
+`a62979dc3601c9eae455bff5b35ba8f9bed0df30`:
+[`methods_session.py`](https://github.com/NousResearch/hermes-agent/blob/a62979dc3601c9eae455bff5b35ba8f9bed0df30/tui_gateway/methods_session.py)
+provides the exact `session.list` lookup with `title: "Bot Chat"` and
+`include_hidden: true`, returning the canonical root and current `resolved_id`.
+[`sessions.py`](https://github.com/NousResearch/hermes-agent/blob/a62979dc3601c9eae455bff5b35ba8f9bed0df30/hermes_cli/web_routers/sessions.py)
+excludes hidden rows from paged listings, exposes exact hidden-inclusive metadata,
+and omits hidden flags from search results. `ProfileGateway` reads root visibility
+and current-tip accounting; `ChatBrowserData` supplements the canonical row only
+when automated chats are enabled, deduplicates a retained tip, and verifies
+search visibility through exact metadata when the paged list cannot establish it.
+The list view receives a scalar canonical-bot marker rather than inferring identity
+from a title. See [the regressions](TESTING.md#hidden-bot-chats).
 
 The conversation header was verified against stock upstream main
 `3637c512fc3211bdccb61b7140d09ac1018508ba` on 10 October 2026:

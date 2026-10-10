@@ -58,6 +58,8 @@ class ProfileSessionPage {
   int? get nextOffset => offset + limit < total ? offset + limit : null;
 }
 
+typedef ProfileCanonicalBotChat = ({String tipId, Map<String, dynamic> row});
+
 class ProfileHistoryPage {
   final String sessionId;
   final List<Map<String, dynamic>> rows;
@@ -635,6 +637,53 @@ class ProfileGateway {
 
   static const sessionPageSize = 50;
   static const projectSessionScanLimit = 5000;
+
+  /// The stock exact-title registry lookup includes hidden canonical chats.
+  /// Metadata supplies visibility and accounting absent from its summary.
+  Future<ProfileCanonicalBotChat?> canonicalBotChat() async {
+    final result = await call('session.list', {
+      'title': 'Bot Chat',
+      'include_hidden': true,
+    });
+    final summaries = records(result['sessions']);
+    if (summaries.isEmpty) return null;
+    if (summaries.length != 1) {
+      throw const FormatException('Ambiguous canonical Bot Chat');
+    }
+    final summary = summaries.single;
+    final id = summary['id'];
+    final tipId = summary['resolved_id'];
+    if (id is! String ||
+        id.isEmpty ||
+        tipId is! String ||
+        tipId.isEmpty ||
+        summary['title'] != 'Bot Chat') {
+      throw const FormatException('Invalid canonical Bot Chat');
+    }
+    final root = await sessionMetadata(id);
+    if (root == null) return null;
+    final tip = id == tipId ? root : await sessionMetadata(tipId);
+    if (tip == null) {
+      throw const FormatException('Canonical Bot Chat tip is unavailable');
+    }
+    bool flag(String name) => root[name] == true || root[name] == 1;
+    return (
+      tipId: tipId,
+      row: Map<String, dynamic>.unmodifiable({
+        ...root,
+        ...tip,
+        'id': id,
+        'profile': scope.profileName,
+        'title': 'Bot Chat',
+        'preview': summary['preview'],
+        'hidden': flag('hidden'),
+        'archived': flag('archived'),
+        'pinned': flag('pinned'),
+        'last_active':
+            tip['last_activity_at'] ?? tip['last_active'] ?? tip['started_at'],
+      }),
+    );
+  }
 
   Future<ProfileSessionPage> sessions({
     SessionVisibility visibility = SessionVisibility.chats,

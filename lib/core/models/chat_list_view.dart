@@ -127,6 +127,8 @@ final class ChatListEntry {
     this.pinned = false,
     this.archived = false,
     this.unread = false,
+    this.hidden = false,
+    this.isBotChat = false,
     this.startedAt = 0,
     this.updatedAt = 0,
     this.tokens = 0,
@@ -143,6 +145,7 @@ final class ChatListEntry {
     required ChatListStatus status,
     BrowserProject? project,
     String? runtimeLabel,
+    bool isBotChat = false,
   }) => ChatListEntry(
     scope: scope,
     id: row['id'] as String,
@@ -155,6 +158,8 @@ final class ChatListEntry {
     pinned: row['pinned'] == true,
     archived: row['archived'] == true,
     unread: row['unread'] == true,
+    hidden: row['hidden'] == true || row['hidden'] == 1,
+    isBotChat: isBotChat,
     startedAt: (row['started_at'] as num?) ?? 0,
     updatedAt: _chatUpdated(row),
     tokens: _chatTokens(row),
@@ -168,7 +173,7 @@ final class ChatListEntry {
   final WorkspaceScope scope;
   final String id, title, preview;
   final String? snippet, source, cwd, runtimeLabel;
-  final bool pinned, archived, unread;
+  final bool pinned, archived, unread, hidden, isBotChat;
   final num startedAt, updatedAt, tokens, inputTokens, outputTokens, cost;
   final int? messageCount;
   final ChatListStatus status;
@@ -190,6 +195,8 @@ final class ChatListEntry {
         pinned: pinned,
         archived: archived,
         unread: unread,
+        hidden: hidden,
+        isBotChat: isBotChat,
         startedAt: startedAt,
         updatedAt: updatedAt,
         tokens: tokens,
@@ -213,6 +220,8 @@ final class ChatListEntry {
       pinned == other.pinned &&
       archived == other.archived &&
       unread == other.unread &&
+      hidden == other.hidden &&
+      isBotChat == other.isBotChat &&
       startedAt == other.startedAt &&
       updatedAt == other.updatedAt &&
       tokens == other.tokens &&
@@ -235,6 +244,8 @@ final class ChatListEntry {
     pinned,
     archived,
     unread,
+    hidden,
+    isBotChat,
     startedAt,
     updatedAt,
     tokens,

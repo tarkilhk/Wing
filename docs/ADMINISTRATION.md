@@ -597,6 +597,10 @@ Application foreground entry starts a fresh connection recovery before admitting
 health alerts, including while global Alert settings covers the workspace. Android
 can block idle background connections; exhausted retries during that suspension
 do not justify a new manual-refresh notice before foreground recovery runs.
+Chat-opening recovery admits its foreground retry synchronously, including while
+joining an older pending attempt. A late failure from that attempt cannot publish
+a connection incident during successful recovery. Concurrent entries join the
+same recovery; cancellation retires its admission without clearing a replacement.
 Starting another recovery burst or restoring connection availability removes the
 incident. A chat-only failure on a healthy connection does not create a global
 connection notice or turn a later transient interruption into one.
@@ -654,8 +658,9 @@ after correction; static checks cannot establish this input/error/save journey.
 and `profile_workspace_controller_test.dart` cover multiple recovery owners,
 stale chat failures, exhausted startup/live retries and refresh recovery.
 `app_notification_routing_test.dart` covers app foreground recovery beneath global
-Alert settings, admission before notices, preserved drafts and genuine continuing
-outages. These
+Alert settings, admission before notices, stopped and still-pending chat openings,
+preserved drafts, genuine continuing outages, joined entries and cancellation
+followed by a replacement opening. These
 are behavioral guards: a static source rule cannot establish retry completion or
 the ordering of transport loss, foreground return and recovery publication.
 Layout depends on rendered metrics,

@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/chat_browser_preferences.dart';
 import 'package:wing/core/models/chat_list_view.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/models/session_visibility.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -109,6 +111,209 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+  test(
+    'hidden Bot Chats obey visibility before and after opening and re-entry',
+    () async {
+      for (final profile in ['personal', 'work']) {
+        fixture.hiddenSessions[profile] = [
+          {
+            'id': 'bot-chat',
+            'title': 'Bot Chat',
+            'profile': profile,
+            'source': 'tui',
+            'hidden': 1,
+            'archived': 0,
+            'last_active': fixture.now,
+            'input_tokens': 15000,
+            'output_tokens': 500,
+            'message_count': 4,
+          },
+        ];
+      }
+      List<ChatListEntry> bots() => data
+          .project('')
+          .entries
+          .where((row) => row.id == 'bot-chat')
+          .toList();
+      await data.refresh(archivedOnly: false);
+      expect(bots(), isEmpty);
+      await controller.openSession(
+        ProfileSessionKey(
+          controller.browserResource('personal').scope,
+          'bot-chat',
+        ),
+      );
+      await data.refresh(archivedOnly: false);
+      expect(
+        bots(),
+        isEmpty,
+        reason: 'Opening a hidden canonical chat must not admit it to Chats',
+      );
+      await data.chooseVisibility(SessionVisibility.all);
+      expect(bots().map((row) => row.profile).toSet(), {'personal', 'work'});
+      expect(bots().every((row) => row.isBotChat), isTrue);
+      expect(bots().every((row) => row.tokens == 15500), isTrue);
+      await controller.openSession(
+        ProfileSessionKey(controller.browserResource('work').scope, 'bot-chat'),
+      );
+      await data.refresh(archivedOnly: false);
+      expect(bots(), hasLength(2));
+      await data.chooseVisibility(SessionVisibility.chats);
+      expect(bots(), isEmpty);
+      data.dispose();
+      data = ChatBrowserData(controller);
+      await data.refresh(archivedOnly: false);
+      expect(bots(), isEmpty);
+    },
+  );
+
+  test(
+    'a later desktop hide wins over an already opened canonical runtime',
+    () async {
+      fixture.rowUpdates[('personal', 'chat-0')] = {'title': 'Bot Chat'};
+      await controller.refresh();
+      await data.refresh(archivedOnly: false);
+      final key = ProfileSessionKey(controller.current!.scope, 'chat-0');
+      await controller.openSession(key);
+      expect(controller.current!.chats[key.sessionId]!.title, 'Bot Chat');
+      expect(
+        data
+            .project('')
+            .entries
+            .singleWhere((row) => row.sessionKey == key)
+            .isBotChat,
+        isTrue,
+      );
+      fixture.omittedRows.add(('personal', 'chat-0'));
+      fixture.hiddenSessions['personal'] = [
+        {
+          'id': 'chat-0',
+          'title': 'Bot Chat',
+          'profile': 'personal',
+          'source': 'tui',
+          'hidden': 1,
+          'last_active': fixture.now,
+        },
+      ];
+      await data.refresh(archivedOnly: false);
+      expect(
+        data.project('').entries.where((row) => row.sessionKey == key),
+        isEmpty,
+      );
+      await data.chooseVisibility(SessionVisibility.all);
+      expect(
+        data
+            .project('')
+            .entries
+            .singleWhere((row) => row.sessionKey == key)
+            .hidden,
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'canonical Bot Chat uses tip accounting without duplicating an open tip',
+    () async {
+      fixture.hiddenSessions['personal'] = [
+        {
+          'id': 'bot-root',
+          'title': 'Bot Chat',
+          'profile': 'personal',
+          'source': 'tui',
+          'hidden': 1,
+          'input_tokens': 10,
+          'last_active': fixture.now - 3600,
+        },
+        {
+          'id': 'bot-tip',
+          'title': 'Compressed conversation',
+          'profile': 'personal',
+          'source': 'tui',
+          'hidden': 1,
+          'input_tokens': 23000,
+          'output_tokens': 700,
+          'last_active': fixture.now,
+        },
+      ];
+      fixture.compressionTips['bot-root'] = 'bot-tip';
+      await controller.openSession(
+        ProfileSessionKey(controller.current!.scope, 'bot-tip'),
+      );
+      await data.chooseVisibility(SessionVisibility.all);
+      final bots = data.project('').entries.where((row) => row.isBotChat);
+      expect(bots, hasLength(1));
+      expect(bots.single.id, 'bot-root');
+      expect(bots.single.tokens, 23700);
+      expect(bots.single.updatedAt, fixture.now);
+      expect(
+        data.project('').entries.where((row) => row.id == 'bot-tip'),
+        isEmpty,
+      );
+      await data.search('compressed');
+      expect(data.project('compressed').entries.map((row) => row.id), [
+        'bot-root',
+      ]);
+      await data.chooseVisibility(SessionVisibility.chats);
+      expect(data.project('').entries.where((row) => row.isBotChat), isEmpty);
+    },
+  );
+
+  test(
+    'an opened hidden ordinary chat remains hidden without a bot marker',
+    () async {
+      fixture.hiddenSessions['personal'] = [
+        {
+          'id': 'hidden-chat',
+          'title': 'Private conversation',
+          'profile': 'personal',
+          'source': 'tui',
+          'hidden': true,
+          'last_active': fixture.now,
+        },
+      ];
+      await controller.openSession(
+        ProfileSessionKey(controller.current!.scope, 'hidden-chat'),
+      );
+      await data.refresh(archivedOnly: false);
+      expect(
+        data.project('').entries.where((row) => row.id == 'hidden-chat'),
+        isEmpty,
+      );
+      await controller.setSessionVisibility(SessionVisibility.all);
+      await data.refresh(archivedOnly: false);
+      final row = data
+          .project('')
+          .entries
+          .singleWhere((row) => row.id == 'hidden-chat');
+      expect(row.isBotChat, isFalse);
+    },
+  );
+
+  test(
+    'search cannot bypass hidden visibility when its wire result omits the flag',
+    () async {
+      fixture.hiddenSessions['personal'] = [
+        {
+          'id': 'hidden-search',
+          'title': 'Secret result',
+          'profile': 'personal',
+          'source': 'tui',
+          'hidden': 1,
+          'last_active': fixture.now,
+        },
+      ];
+      await data.refresh(archivedOnly: false);
+      await data.search('secret');
+      expect(data.project('secret').entries, isEmpty);
+      await data.chooseVisibility(SessionVisibility.all);
+      expect(data.project('secret').entries.map((row) => row.id), [
+        'hidden-search',
+      ]);
+      await data.chooseVisibility(SessionVisibility.chats);
+      expect(data.project('secret').entries, isEmpty);
+    },
+  );
   test(
     'retirement from pending observation starts no browser page read',
     () async {

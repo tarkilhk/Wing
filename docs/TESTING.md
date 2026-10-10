@@ -70,6 +70,30 @@ CI runs independently. GitHub CI completion is not a prerequisite for phone
 installation. Report its status separately; published-release gates apply to
 publication.
 
+## Hidden Bot Chats
+
+Run `flutter test --no-pub test/chat_browser_data_test.dart
+test/session_visibility_test.dart test/chat_list_target_test.dart
+test/chat_browser_transport_test.dart test/chat_browser_mutations_test.dart
+test/profile_workspace_browser_test.dart test/profile_workspace_controller_test.dart`
+when changing chat membership. The `hidden Bot Chats obey visibility` regression
+must exclude both profiles before and after opening either bot, reveal both when
+Show automated chats is selected, and hide them again after switching back or
+re-entering Chats. Additional regressions cover a later desktop hide winning over
+an already open runtime, current-tip accounting and search without duplicate
+rows, hidden ordinary chats without bot markers, and search results
+whose stock wire shape omits hidden flags. Render tests exercise the actual
+checkbox and bot-icon prefix in both themes at 390 dp/100% and 320 dp/200%.
+Use `--dart-define=CHAT_LIST_REVIEW=true` and the existing Studio capture fonts
+to inspect the renders under ignored `build/chat-list-review/`.
+
+This is a behavioral guard: static analysis cannot establish remote hidden state,
+which local runtimes have been opened, or ordering across refresh and filter
+changes. The original local-runtime merge admitted a hidden Bot Chat after
+opening it; the first regression fails at that boundary without the fix.
+The [Bots contract](BOTS.md#ownership-and-verified-upstream) records the inspected
+stock API. Widget captures do not establish a live phone installation.
+
 ## Conversation visible-actions layout and Restore
 
 Run `flutter test --no-pub test/message_timestamp_test.dart
@@ -280,7 +304,10 @@ memory/disk editor renders in both themes at normal and enlarged text.
 Open global Alert settings over a saved conversation. Switch away long enough
 for Android to block background access and exhaust connection retries, then return
 with the server reachable: recovery starts without leaving settings, the saved
-draft remains, and no connection health notice or bell issue should appear.
+draft remains, and no connection health notice or bell issue should appear. Repeat
+while the saved chat itself is still opening, both after its retries exhaust and
+while the last background attempt is pending. Successful foreground recovery must
+remain quiet even when that older attempt fails after return.
 Switch away and return while the network wakes or automatic retries are active:
 no connection health notice or bell issue should appear. Exhaust the recovery
 burst with the connection still unavailable: Wing should show “Connection needs

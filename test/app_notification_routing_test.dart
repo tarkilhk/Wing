@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/screens/health_alert_settings_screen.dart';
 import 'package:wing/core/widgets/health_alerts/health_alerts_scope.dart';
 import 'support/host_resources_fixture.dart';
@@ -165,9 +166,16 @@ Future<void> _pumpNavigation(WidgetTester tester) async {
 const _nativeNotifications = MethodChannel(NativeNotificationSink.channelName);
 
 void main() {
-  for (final serverRecovers in [true, false]) {
+  for (final scenario in [
+    (serverRecovers: true, opening: false, held: false),
+    (serverRecovers: false, opening: false, held: false),
+    (serverRecovers: true, opening: true, held: false),
+    (serverRecovers: false, opening: true, held: false),
+    (serverRecovers: true, opening: true, held: true),
+  ]) {
+    final serverRecovers = scenario.serverRecovers;
     testWidgets(
-      'app foreground recovers beneath global alert settings: serverRecovers=$serverRecovers',
+      'app foreground recovers beneath global alert settings: serverRecovers=$serverRecovers, opening=${scenario.opening}, held=${scenario.held}',
       (tester) async {
         final harness = await _harness();
         harness.host.running = false;
@@ -190,9 +198,16 @@ void main() {
         harness.controller.hostResources(repository: repository);
         addTearDown(resources.server.close);
         final app = await _pumpApp(tester, harness);
+        if (scenario.opening) {
+          harness.host.connectError = const SocketException(
+            'Android APP_BACKGROUND',
+          );
+        }
         await app.currentState!.openProfileNotification(_payload(harness, 'a'));
         await _pumpNavigation(tester);
-        final chat = harness.controller.current!.chat!;
+        final chat =
+            harness.controller.notificationChat ??
+            harness.controller.current!.chat!;
         await harness.controller.updateDraft(chat, 'Keep the unsent follow-up');
         final context = tester.element(find.byType(ProfileWorkspaceScreen));
         final alerts = HealthAlertsScope.maybeOf(context)!.alerts;
@@ -210,14 +225,16 @@ void main() {
         await _pumpNavigation(tester);
         expect(find.byType(HealthAlertSettingsScreen), findsOneWidget);
         final healthyDisconnects = harness.host.disconnectCalls;
-        tester.binding.handleAppLifecycleStateChanged(
-          AppLifecycleState.inactive,
-        );
-        tester.binding.handleAppLifecycleStateChanged(
-          AppLifecycleState.resumed,
-        );
-        await tester.pump();
-        expect(harness.host.disconnectCalls, healthyDisconnects);
+        if (!scenario.opening) {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+          await tester.pump();
+          expect(harness.host.disconnectCalls, healthyDisconnects);
+        }
         tester.binding.handleAppLifecycleStateChanged(
           AppLifecycleState.inactive,
         );
@@ -226,22 +243,26 @@ void main() {
         harness.host.connectError = const SocketException(
           'Android APP_BACKGROUND',
         );
-        harness.host.gateways['a']!.onConnectionChanged!(false);
+        if (!scenario.opening) {
+          harness.host.gateways['a']!.onConnectionChanged!(false);
+        }
+        final gate = Completer<void>();
+        addTearDown(() {
+          if (!gate.isCompleted) gate.complete();
+        });
         for (final seconds in [1, 2, 4, 8, 16]) {
+          if (scenario.held && seconds == 16) harness.host.connectDelay = gate;
           await tester.pump(Duration(seconds: seconds));
         }
         expect(
           harness.controller.connectionStatus.requiresManualRefresh,
-          isTrue,
+          !scenario.held,
         );
         expect(alerts.alerts, isEmpty);
         final attempts = harness.host.connectCalls;
-        final gate = Completer<void>();
         harness.host.connectDelay = gate;
         if (serverRecovers) harness.host.connectError = null;
-        addTearDown(() {
-          if (!gate.isCompleted) gate.complete();
-        });
+        if (scenario.held) harness.host.connectFailures = 1;
         final notices = <String>[];
         void observe() =>
             notices.addAll(alerts.alerts.map((alert) => alert.title));
@@ -256,16 +277,22 @@ void main() {
         );
         await tester.pump();
         expect(notices, isNot(contains('Connection needs refresh')));
-        expect(harness.host.connectCalls, attempts + 1);
+        expect(harness.host.connectCalls, attempts + (scenario.held ? 0 : 1));
         expect(
           harness.controller.connectionStatus.requiresManualRefresh,
           isFalse,
         );
+        final joinedRecovery = scenario.held
+            ? harness.controller.resumeConnection()
+            : null;
         gate.complete();
         await tester.pump();
         for (
           var i = 0;
-          i < 100 && serverRecovers && harness.controller.recovering;
+          i < 100 &&
+              serverRecovers &&
+              (harness.controller.recovering ||
+                  harness.controller.notificationChat != null);
           i++
         ) {
           await tester.runAsync(
@@ -274,6 +301,10 @@ void main() {
           await tester.pump(const Duration(milliseconds: 20));
         }
         if (serverRecovers) {
+          if (joinedRecovery != null) await joinedRecovery;
+          if (scenario.held) expect(harness.host.connectCalls, attempts + 1);
+          expect(notices, isNot(contains('Connection needs refresh')));
+          expect(harness.controller.notificationChat, isNull);
           expect(harness.controller.recovering, isFalse);
           expect(
             harness.controller.connectionStatus.liveAvailable('a'),
@@ -300,6 +331,70 @@ void main() {
       },
     );
   }
+
+  test(
+    'retired opening recovery cannot clear its replacement admission',
+    () async {
+      final harness = await _harness();
+      harness.host.running = false;
+      final firstGate = Completer<void>();
+      final replacementGate = Completer<void>();
+      addTearDown(() {
+        if (!firstGate.isCompleted) firstGate.complete();
+        if (!replacementGate.isCompleted) replacementGate.complete();
+      });
+      ProfileSessionKey target(String profile) => ProfileSessionKey(
+        WorkspaceScope(
+          connectionId: harness.connection.id,
+          connectionIdentity: harness.identity,
+          profileName: profile,
+        ),
+        'same',
+      );
+      final initialCalls = harness.host.connectCalls;
+      harness.host.connectDelay = firstGate;
+      final firstOpening = harness.controller.openNotification(target('a'));
+      for (
+        var i = 0;
+        i < 100 && harness.host.connectCalls == initialCalls;
+        i++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(harness.host.connectCalls, initialCalls + 1);
+      final firstResume = harness.controller.resumeConnection();
+      harness.controller.cancelNotificationOpen();
+      harness.host.connectDelay = replacementGate;
+      final replacementOpening = harness.controller.openNotification(
+        target('b'),
+      );
+      final replacementResume = harness.controller.resumeConnection();
+      for (
+        var i = 0;
+        i < 100 && harness.host.connectCalls < initialCalls + 2;
+        i++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(harness.host.connectCalls, initialCalls + 2);
+      firstGate.complete();
+      await Future.wait([firstOpening, firstResume]);
+      expect(harness.controller.notificationChat!.key, target('b'));
+      expect(
+        harness.controller.connectionStatus.phase,
+        ServerConnectionPhase.reconnecting,
+      );
+      expect(
+        harness.controller.connectionStatus.requiresManualRefresh,
+        isFalse,
+      );
+      replacementGate.complete();
+      await Future.wait([replacementOpening, replacementResume]);
+      expect(harness.controller.notificationChat, isNull);
+      expect(harness.controller.current!.scope.profileName, 'b');
+      expect(harness.controller.connectionStatus.liveAvailable('b'), isTrue);
+    },
+  );
 
   for (final scenario in [
     'once',

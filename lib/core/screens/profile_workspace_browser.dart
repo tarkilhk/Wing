@@ -532,7 +532,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
           textAlign: TextAlign.right,
         ),
     ];
-    final title = Text(
+    final titleText = Text(
       e.title.trim().isNotEmpty ? e.title : 'Untitled chat',
       maxLines: largeText ? 2 : 1,
       overflow: TextOverflow.ellipsis,
@@ -541,6 +541,21 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
         fontWeight: e.unread ? FontWeight.w600 : FontWeight.w400,
       ),
     );
+    final title = e.isBotChat
+        ? Row(
+            children: [
+              Icon(
+                Icons.smart_toy_outlined,
+                key: ValueKey('bot-chat-icon-${e.profile}-${e.id}'),
+                size: 16,
+                color: WingTokens.of(context).muted,
+                semanticLabel: 'Bot chat',
+              ),
+              const SizedBox(width: 6),
+              Expanded(child: titleText),
+            ],
+          )
+        : titleText;
     final detail = [
       if (e.archived) 'Archived',
       if (e.snippet != null) e.snippet!,

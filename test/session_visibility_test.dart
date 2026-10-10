@@ -52,6 +52,7 @@ class FilterHost extends Host {
       },
       close: base.close,
       rpc: (method, params) async {
+        if (method == 'session.list') return {'sessions': []};
         final result = await base.call(method, params);
         if (method == 'session.resume') {
           result['stored_session_id'] = params['session_id'];
@@ -63,6 +64,15 @@ class FilterHost extends Host {
         return result;
       },
       get: (path, params) async {
+        if (path != 'sessions/search' &&
+            RegExp(r'^sessions/[^/]+$').hasMatch(path)) {
+          final id = Uri.decodeComponent(path.split('/')[1]);
+          return {
+            ...rows.singleWhere((row) => row['id'] == id),
+            'profile': scope.profileName,
+            'hidden': false,
+          };
+        }
         if (path != 'sessions' && path != 'sessions/search') {
           return base.read(path, params);
         }

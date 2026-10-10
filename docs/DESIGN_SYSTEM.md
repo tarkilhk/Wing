@@ -12,7 +12,10 @@ This charter owns the appearance of new and existing UI. [Feature guides](FEATUR
 - Activity details follow the [accepted activity family](#accepted-activity-detail-family). Extend its shared components and verify the family together.
 - Use the compact context ring beside the model selector, confirmed by the owner after comparing it with the fuse. Do not allocate a row to token-count text or retain the fuse alongside it. The owner's 7 October refinement selects option A: show the percentage inside a 32 dp ring (up to 40 dp at enlarged text), in a 48 dp target, and open a 320 dp anchored popover above it. Center the digits and percent sign together using Roboto's cap-height baseline on the ring's canvas. Keep used/max tokens, percentage full, a 6 dp composition bar, aligned estimated category counts and supplied compression count compact. The bar represents category estimates; it never replaces measured occupancy. At enlarged text, put each category count below its full-width label and scroll the panel when needed. Preserve composer focus/keyboard, outside-tap dismissal and keyboard access; a chat change retires its open panel. Unknown occupancy uses a centered dash and broken neutral ring. The design exploration and owner selection are archived on local branch `prototype/context-window-studio` at `c655aa4`, under `plans/prototypes/context-window-studio`. Do not repeat the model or introduce a large duplicate gauge/account-limit card.
 - Keep familiar model/reasoning selection and Queue/Steer flows. Fork belongs to the selected answer, never the composer.
-- Canonical bot conversations stay in Chats. Replace the generic Bot Chat heading
+- Canonical bot conversations use the Chats conversation route. Hidden chats stay
+  out of the list unless Show automated chats is selected; displayed canonical
+  Bot Chat rows prefix their name with the drawer's bot icon, retaining the status
+  dot and existing metrics. Replace the generic Bot Chat conversation heading
   with the bot's name in the existing title position. Conversation replies omit
   repeated author names and avatars; bot identity stays in chat chrome. Keep
   project controls in the context row and preserve Back to the Bots roster.

@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/chat_list_view.dart';
+import 'package:wing/core/models/session_visibility.dart';
 import 'package:wing/core/models/profile_live_activity.dart';
 import 'package:wing/core/screens/profile_workspace_browser.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
@@ -276,6 +277,57 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(ValueKey('chat-menu-$id')));
     await tester.pumpAndSettle();
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('canonical Bot Chat icon ${brightness.name} $scale', (
+        tester,
+      ) async {
+        fixture.hiddenSessions['personal'] = [
+          {
+            'id': 'bot-chat',
+            'title': 'Bot Chat',
+            'profile': 'personal',
+            'source': 'tui',
+            'hidden': 1,
+            'archived': 0,
+            'last_active': fixture.now,
+            'input_tokens': 15000,
+            'output_tokens': 500,
+          },
+        ];
+        await controller.setSessionVisibility(SessionVisibility.all);
+        await show(tester, brightness: brightness, scale: scale);
+        await tester.tap(find.byKey(const ValueKey('chat-profile-personal')));
+        await tester.pumpAndSettle();
+        final row = find.byKey(const ValueKey('chat-personal-bot-chat'));
+        final icon = find.byKey(
+          const ValueKey('bot-chat-icon-personal-bot-chat'),
+        );
+        final title = find.descendant(of: row, matching: find.text('Bot Chat'));
+        expect(row, findsOneWidget);
+        expect(icon, findsOneWidget);
+        expect(tester.widget<Icon>(icon).icon, Icons.smart_toy_outlined);
+        expect(
+          tester.getRect(icon).right,
+          lessThan(tester.getRect(title).left),
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('chat-personal-session-0')),
+            matching: find.byIcon(Icons.smart_toy_outlined),
+          ),
+          findsNothing,
+        );
+        await screenshot(tester, 'bot-chat-${brightness.name}-$scale');
+        await openViewMenu(tester, 'include-automated');
+        expect(find.text('Bot Chat'), findsNothing);
+        expect(icon, findsNothing);
+        expect(controller.sessionVisibility, SessionVisibility.chats);
+        expect(tester.takeException(), isNull);
+      });
+    }
   }
 
   testWidgets('chat ellipsis menu survives a live regroup during opening', (

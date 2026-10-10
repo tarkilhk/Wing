@@ -21,12 +21,16 @@ class ProfileBrowserFixture {
   final searchDelays = <String, Completer<void>>{};
   final sessionMetadataDelays = <(String, String), Completer<void>>{};
   final liveSessions = <String, List<Map<String, dynamic>>>{};
+  final hiddenSessions = <String, List<Map<String, dynamic>>>{};
+  final compressionTips = <String, String>{};
   List<Map<String, dynamic>> historyRows(String profile, String id) => [];
   List<Map<String, dynamic>> searchRows(String profile, String query) => [
-    for (final row in sessions(
-      profile,
-    ).where((r) => r['title'].toString().toLowerCase().contains(query)))
-      {...row, 'session_id': row['id']},
+    for (final row in [
+      ...sessions(profile),
+      ...?hiddenSessions[profile],
+    ].where((r) => r['title'].toString().toLowerCase().contains(query)))
+      (Map<String, dynamic>.from({...row, 'session_id': row['id']})
+        ..remove('hidden')),
   ];
   List<Map<String, dynamic>> projectSessions(String profile, String id) =>
       sessions(profile)
@@ -169,9 +173,10 @@ class ProfileBrowserFixture {
       if (RegExp(r'^sessions/[^/]+$').hasMatch(path)) {
         final id = Uri.decodeComponent(path.split('/')[1]);
         await sessionMetadataDelays[(scope.profileName, id)]?.future;
-        final rows = sessions(
-          scope.profileName,
-        ).where((row) => row['id'] == id).toList();
+        final rows = [
+          ...sessions(scope.profileName),
+          ...?hiddenSessions[scope.profileName],
+        ].where((row) => row['id'] == id).toList();
         if (rows.isEmpty) throw DashboardSessionNotFound(path);
         return rows.single;
       }
@@ -216,6 +221,18 @@ class ProfileBrowserFixture {
       if (method == 'session.active_list') {
         return {
           'sessions': liveSessions.values.expand((rows) => rows).toList(),
+        };
+      }
+      if (method == 'session.list') {
+        final rows = [
+          ...sessions(scope.profileName),
+          ...?hiddenSessions[scope.profileName],
+        ].where((row) => row['title'] == params['title']).toList();
+        return {
+          'sessions': [
+            for (final row in rows.take(1))
+              {...row, 'resolved_id': compressionTips[row['id']] ?? row['id']},
+          ],
         };
       }
       if (method == 'projects.tree') {
@@ -270,6 +287,10 @@ class ProfileBrowserFixture {
         };
       }
       if (method == 'session.resume' || method == 'session.create') {
+        final stored = [
+          ...sessions(scope.profileName),
+          ...?hiddenSessions[scope.profileName],
+        ].where((row) => row['id'] == params['session_id']).firstOrNull;
         return {
           'session_id': method == 'session.create'
               ? 'runtime'
@@ -285,10 +306,8 @@ class ProfileBrowserFixture {
           'messages': [],
           'info': {
             'profile_name': scope.profileName,
-            if (method == 'session.resume')
-              'source': sessions(scope.profileName)
-                  .where((row) => row['id'] == params['session_id'])
-                  .firstOrNull?['source'],
+            if (method == 'session.resume') 'source': stored?['source'],
+            if (method == 'session.resume') 'title': stored?['title'],
             if (method == 'session.create') 'cwd': params['cwd'] ?? '/default',
           },
         };

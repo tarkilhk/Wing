@@ -11,7 +11,8 @@ import '../models/session_visibility.dart';
 import '../models/chat_browser_preferences.dart';
 import '../models/hermes_profile.dart';
 import 'profile_workspace_controller.dart';
-import 'profile_gateway.dart' show ProjectFolderSuggestion;
+import 'profile_gateway.dart'
+    show ProjectFolderSuggestion, ProfileCanonicalBotChat;
 import 'connection_manager.dart' show DashboardRequestNotSentException;
 import 'workspace_connection_failure.dart';
 
@@ -176,7 +177,7 @@ final class ChatBrowserData extends ChangeNotifier {
   }
 
   bool _matchesView(ChatListEntry entry, String query) {
-    if (!_controller.includesSessionSource(entry.source)) {
+    if (!_controller.includesSession(entry.source, hidden: entry.hidden)) {
       return false;
     }
     final view = viewPreferences.display;
@@ -190,7 +191,12 @@ final class ChatBrowserData extends ChangeNotifier {
     }
     return query.isEmpty ||
         '${entry.title} ${entry.preview}'.toLowerCase().contains(query) ||
-        (_searchMatches[entry.profile]?.contains(entry.id) ?? false);
+        (_searchMatches[entry.profile]?.contains(entry.id) ?? false) ||
+        (entry.isBotChat &&
+            (_searchMatches[entry.profile]?.contains(
+                  _canonicalBotChats[entry.profile]?.tipId,
+                ) ??
+                false));
   }
 
   /// The view supplies its transient query; this owner supplies membership,
@@ -211,7 +217,10 @@ final class ChatBrowserData extends ChangeNotifier {
       );
     }
     final sourceVisible = _entries
-        .where((entry) => _controller.includesSessionSource(entry.source))
+        .where(
+          (entry) =>
+              _controller.includesSession(entry.source, hidden: entry.hidden),
+        )
         .toList();
     final empty = <ChatListGroup>[];
     if (view.grouping == ChatGrouping.project &&
@@ -311,7 +320,8 @@ final class ChatBrowserData extends ChangeNotifier {
         final profiles = viewPreferences.display?.profiles ?? const <String>{};
         final recency = <String, num>{};
         for (final entry in _entries.where(
-          (entry) => _controller.includesSessionSource(entry.source),
+          (entry) =>
+              _controller.includesSession(entry.source, hidden: entry.hidden),
         )) {
           final time = entry.updatedAt;
           if (time > (recency[entry.projectKey] ?? 0)) {
@@ -643,11 +653,15 @@ final class ChatBrowserData extends ChangeNotifier {
   }
 
   Future<void> toggleVisibility() async {
-    if (!_disposed) await _controller.toggleSessionVisibility();
+    if (_disposed) return;
+    await _controller.toggleSessionVisibility();
+    if (!_disposed) await refresh(archivedOnly: _archived);
   }
 
   Future<void> chooseVisibility(SessionVisibility visibility) async {
-    if (!_disposed) await _controller.setSessionVisibility(visibility);
+    if (_disposed) return;
+    await _controller.setSessionVisibility(visibility);
+    if (!_disposed) await refresh(archivedOnly: _archived);
   }
 
   int _notifications = 0;
@@ -871,10 +885,11 @@ final class ChatBrowserData extends ChangeNotifier {
     final next = _localEntries.contains(key) && chat != null
         ? ChatListEntry.fromWire(
             scope: before.scope,
-            row: _localRow(chat),
+            row: {..._localRow(chat), 'hidden': before.hidden},
             project: before.project,
             status: status,
             runtimeLabel: _runtimeLabel(chat),
+            isBotChat: before.isBotChat,
           )
         : before.withRuntime(status, _runtimeLabel(chat));
     if (_sameEntry(before, next)) return;
@@ -954,7 +969,9 @@ final class ChatBrowserData extends ChangeNotifier {
     'message_count': chat.reading.messages.length,
     'last_active': chat.lastActive,
     'archived': chat.archived,
+    'hidden': chat.hidden != false,
   };
+  final _canonicalBotChats = <String, ProfileCanonicalBotChat>{};
   final _rows = <String, _BrowserPage>{};
   final _projects = <String, List<Map<String, dynamic>>>{};
   final _errors = <String, String>{};
@@ -978,6 +995,7 @@ final class ChatBrowserData extends ChangeNotifier {
   bool _archived = false;
   Future<void>? _refreshing;
   bool? _refreshingArchived;
+  SessionVisibility? _refreshingVisibility;
 
   void _changed() {
     if (!_disposed) {
@@ -1017,9 +1035,14 @@ final class ChatBrowserData extends ChangeNotifier {
   }) {
     final active = _refreshing;
     if (_disposed) return Future.value();
-    if (active != null && _refreshingArchived == archivedOnly) return active;
+    if (active != null &&
+        _refreshingArchived == archivedOnly &&
+        _refreshingVisibility == _controller.sessionVisibility) {
+      return active;
+    }
     if (_refreshingArchived != archivedOnly) _arrangement.reset();
     _refreshingArchived = archivedOnly;
+    _refreshingVisibility = _controller.sessionVisibility;
     late final Future<void> pending;
     pending = _drainRefresh(archivedOnly: archivedOnly, failedOnly: failedOnly)
         .whenComplete(() {
@@ -1059,6 +1082,7 @@ final class ChatBrowserData extends ChangeNotifier {
     required bool failedOnly,
   }) async {
     final generation = ++_generation;
+    final visibility = _controller.sessionVisibility;
     if (!failedOnly) {
       _searchGeneration++;
       _searching = false;
@@ -1085,7 +1109,10 @@ final class ChatBrowserData extends ChangeNotifier {
     }
     _changed();
     var cursor = 0;
-    bool valid() => !_disposed && generation == _generation;
+    bool valid() =>
+        !_disposed &&
+        generation == _generation &&
+        _controller.sessionVisibility == visibility;
     Future<void> worker() async {
       while (valid() && cursor < profiles.length) {
         final profile = profiles[cursor++].name;
@@ -1127,6 +1154,22 @@ final class ChatBrowserData extends ChangeNotifier {
             }
             offset = page.nextOffset;
           } while (offset != null);
+          final needsCanonical =
+              visibility == SessionVisibility.all ||
+              fetched.values.any((row) => row['title'] == 'Bot Chat') ||
+              resource.chats.values.any((chat) => chat.title == 'Bot Chat');
+          if (needsCanonical) {
+            final canonical = await retryTransientRead(
+              () => resource.gateway.canonicalBotChat(),
+              isActive: active,
+            );
+            if (!active()) return;
+            if (canonical == null) {
+              _canonicalBotChats.remove(profile);
+            } else {
+              _canonicalBotChats[profile] = canonical;
+            }
+          }
           // Ask for enough membership rows for the entire active list, not
           // just the desktop's preview. Archived chats are outside this tree.
           if (!active()) return;
@@ -1227,8 +1270,27 @@ final class ChatBrowserData extends ChangeNotifier {
             visibility: SessionVisibility.all,
           );
           if (!active()) return;
-          _searchRows[profile] = _BrowserPage(matches);
-          _searchMatches[profile] = matches
+          // Stock search can find hidden chats but omits the hidden flag.
+          // A normal list row proves visibility; otherwise read exact metadata.
+          final listed = {
+            for (final row in _rows[profile]?.wire ?? resource.sessions)
+              row['id'] as String: row,
+          };
+          final verified = <Map<String, dynamic>>[];
+          for (final match in matches) {
+            if (!active()) return;
+            final id = match['id'] as String;
+            final metadata =
+                listed[id] ?? await resource.gateway.sessionMetadata(id);
+            if (!active()) return;
+            if (metadata == null) continue;
+            verified.add({
+              ...match,
+              'hidden': metadata['hidden'] == true || metadata['hidden'] == 1,
+            });
+          }
+          _searchRows[profile] = _BrowserPage(verified);
+          _searchMatches[profile] = verified
               .map((r) => r['id'] as String)
               .toSet();
           if (matches.length >= 100) _searchLimited = true;
@@ -1284,6 +1346,12 @@ final class ChatBrowserData extends ChangeNotifier {
                     : <Map<String, dynamic>>[]))
           row['id'] as String: row,
       };
+      final canonical = _canonicalBotChats[profile.name];
+      if (_controller.sessionVisibility == SessionVisibility.all &&
+          canonical != null &&
+          (canonical.row['archived'] == true) == _archived) {
+        merged[canonical.row['id'] as String] = canonical.row;
+      }
       // A confirmed controller mutation or fresh runtime read wins over the
       // index snapshot. Unchanged cached rows cannot overwrite newer REST data.
       for (final row in owner.sessions) {
@@ -1315,6 +1383,25 @@ final class ChatBrowserData extends ChangeNotifier {
         }
         merged.putIfAbsent(chat.key.sessionId, () => _localRow(chat));
       }
+      // One row per canonical conversation, even if its current compression
+      // tip is retained as a separate local runtime.
+      if (canonical != null &&
+          canonical.tipId != canonical.row['id'] &&
+          merged.containsKey(canonical.row['id'])) {
+        final snippet = merged[canonical.tipId]?['snippet'];
+        if (snippet != null) {
+          final rootId = canonical.row['id'] as String;
+          merged[rootId] = {...merged[rootId]!, 'snippet': snippet};
+        }
+        merged.remove(canonical.tipId);
+      }
+      if (canonical != null) {
+        for (final id in {canonical.row['id'] as String, canonical.tipId}) {
+          if (merged.containsKey(id)) {
+            merged[id] = {...merged[id]!, 'hidden': canonical.row['hidden']};
+          }
+        }
+      }
       for (final mutation in _sessionMutations.values) {
         if (mutation.owner != owner.scope) continue;
         if (mutation.deleted) {
@@ -1345,6 +1432,9 @@ final class ChatBrowserData extends ChangeNotifier {
                 ? null
                 : BrowserProject.fromWire(members[id]!),
             runtimeLabel: _runtimeLabel(owner.chats[id]),
+            isBotChat:
+                canonical != null &&
+                (id == canonical.row['id'] || id == canonical.tipId),
             status: chatListStatus(
               row,
               runtime: owner.chats[id]?.listObservation,

@@ -23,8 +23,8 @@ enum SessionVisibility {
     all => const {},
   };
 
-  bool includes(String? source) => switch (this) {
-    chats => !automatedSources.contains(source),
+  bool includes(String? source, {bool hidden = false}) => switch (this) {
+    chats => !hidden && !automatedSources.contains(source),
     all => true,
   };
 }
