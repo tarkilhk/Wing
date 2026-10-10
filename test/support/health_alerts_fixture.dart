@@ -73,9 +73,9 @@ class HealthAlertsFixture {
   late final AlertRegistryFixture registry;
   late final HealthAlertSettingsSession settings;
   late final HealthAlertsCoordinator coordinator;
-  Future<void> critical() async {
+  Future<void> critical({String metric = 'memory'}) async {
     host.pressure = hostPressurePayload();
-    host.pressure['memory']['pressure'] = 'critical';
+    host.pressure[metric]['pressure'] = 'critical';
     await owner.hostResources().refresh();
   }
 

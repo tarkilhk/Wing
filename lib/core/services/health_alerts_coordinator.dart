@@ -55,7 +55,6 @@ class HealthAlertsCoordinator extends ChangeNotifier {
         final session = HealthAlertsSession(
           host: owner.hostResources(),
           health: owner.healthSession().health,
-          connection: owner.connectionStatus,
           settings: settings,
         );
         void changed() => _ownerChanged(owner);

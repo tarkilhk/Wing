@@ -231,7 +231,6 @@ Future<void> _retentionJourney(WidgetTester tester) async {
   await preferences.setTheme(AppThemePreference.dark);
   await HealthAlertSettingsStore(prefs).write(
     HealthAlertSettings(
-      server: false,
       profile: false,
       rules: {
         ...HealthAlertSettings().rules,
@@ -400,7 +399,7 @@ void main() {
       await preferences.setTextSize(AppTextSizePreference.system);
       await HealthAlertSettingsStore(
         prefs,
-      ).write(HealthAlertSettings(server: false, profile: false));
+      ).write(HealthAlertSettings(profile: false));
       final manager = await ConnectionManager.create(
         prefs,
         credentialStore: _Credentials(),

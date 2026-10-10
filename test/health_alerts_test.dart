@@ -154,7 +154,6 @@ void main() {
       fixture.pressure['disk']['pressure'] = 'critical';
       final host = HostResourcesSession(fixture.server, now: () => start);
       final health = AdministrationHealth(fixture.server, now: () => start);
-      final connection = ServerConnectionStatus('Home');
       final store = HealthAlertSettingsStore(
         await SharedPreferences.getInstance(),
       );
@@ -170,7 +169,6 @@ void main() {
       final session = HealthAlertsSession(
         host: host,
         health: health,
-        connection: connection,
         settings: settings,
         now: () => start,
       );
@@ -212,7 +210,6 @@ void main() {
       session.dispose();
       host.dispose();
       health.dispose();
-      connection.dispose();
       settings.dispose();
       fixture.server.close();
     },
@@ -303,7 +300,7 @@ void main() {
     () async {
       final original = HealthAlertSettings(
         enabled: false,
-        server: false,
+        profile: false,
         showNotice: false,
       );
       SharedPreferences.setMockInitialValues({
@@ -313,7 +310,7 @@ void main() {
       final store = _HeldStore(prefs);
       final session = HealthAlertSettingsSession(store);
       expect(session.settings.enabled, isFalse);
-      expect(session.settings.server, isFalse);
+      expect(session.settings.profile, isFalse);
       expect(session.settings.showNotice, isFalse);
       for (final metric in hostAlertMetrics) {
         expect(
@@ -592,7 +589,6 @@ void main() {
       final session = HealthAlertsSession(
         host: host,
         health: health,
-        connection: connection,
         settings: settings,
         now: () => start,
       );
@@ -639,22 +635,22 @@ void main() {
         ),
       );
       expect(session.alerts, isEmpty);
-      // Ignoring diagnostics must not mute genuine connection/host issues.
+      // Connection failures and diagnostics do not alert; host pressure still does.
       connection.liveChanged('chat', false);
       expect(session.alerts, isEmpty);
       connection.beginRecovery('chat');
       connection.failRecovery('chat', 'Connection attempts exhausted');
-      expect(session.alerts.single.title, 'Connection needs refresh');
+      expect(session.alerts, isEmpty);
       connection.liveChanged('chat', true);
       connection.endRecovery('chat');
       fixture.pressure = hostPressurePayload(now: start);
       fixture.pressure['memory']['pressure'] = 'critical';
       await host.refresh();
       expect(session.alerts.single.title, 'Critical memory pressure');
+      connection.dispose();
       session.dispose();
       host.dispose();
       health.dispose();
-      connection.dispose();
       settings.dispose();
       fixture.server.close();
     });
@@ -668,7 +664,6 @@ void main() {
       fixture.stats['memory']['percent'] = 46.2;
       final host = HostResourcesSession(fixture.server, now: () => now);
       final health = AdministrationHealth(fixture.server, now: () => now);
-      final connection = ServerConnectionStatus('Home');
       final settings = HealthAlertSettingsSession(
         HealthAlertSettingsStore(await SharedPreferences.getInstance()),
       );
@@ -684,7 +679,6 @@ void main() {
       final session = HealthAlertsSession(
         host: host,
         health: health,
-        connection: connection,
         settings: settings,
         now: () => now,
       );
@@ -709,7 +703,6 @@ void main() {
         session.dispose();
         host.dispose();
         health.dispose();
-        connection.dispose();
         settings.dispose();
         fixture.server.close();
       }
@@ -727,7 +720,6 @@ void main() {
           fixture.stats['memory']['percent'] = 46.2;
           final host = HostResourcesSession(fixture.server, now: () => now);
           final health = AdministrationHealth(fixture.server, now: () => now);
-          final connection = ServerConnectionStatus('Home');
           final settings = HealthAlertSettingsSession(
             HealthAlertSettingsStore(await SharedPreferences.getInstance()),
           );
@@ -743,7 +735,6 @@ void main() {
           final session = HealthAlertsSession(
             host: host,
             health: health,
-            connection: connection,
             settings: settings,
             now: () => now,
           );
@@ -770,7 +761,7 @@ void main() {
             expect(fixture.requests, hasLength(reads + 2));
             await tester.pump();
             // An unrelated publication must not use the other watch's cache.
-            connection.accessAvailable();
+            health.restore(health.snapshot());
             expect(session.alerts, hasLength(clearing ? 1 : 0));
             fixture.statsGate!.complete();
             await host.refresh();
@@ -788,7 +779,6 @@ void main() {
             session.dispose();
             host.dispose();
             health.dispose();
-            connection.dispose();
             settings.dispose();
             fixture.server.close();
           }
@@ -806,14 +796,12 @@ void main() {
       var now = start;
       final host = HostResourcesSession(fixture.server, now: () => now);
       final health = AdministrationHealth(fixture.server, now: () => now);
-      final connection = ServerConnectionStatus('Home');
       final settings = HealthAlertSettingsSession(
         HealthAlertSettingsStore(prefs),
       );
       final session = HealthAlertsSession(
         host: host,
         health: health,
-        connection: connection,
         settings: settings,
         now: () => now,
       );
@@ -849,7 +837,6 @@ void main() {
       session.dispose();
       host.dispose();
       health.dispose();
-      connection.dispose();
       settings.dispose();
       fixture.server.close();
     },
@@ -865,14 +852,12 @@ void main() {
       fixture.pressure['memory']['pressure'] = 'critical';
       final host = HostResourcesSession(fixture.server, now: () => now);
       final health = AdministrationHealth(fixture.server, now: () => now);
-      final connection = ServerConnectionStatus('Home');
       final settings = HealthAlertSettingsSession(
         HealthAlertSettingsStore(prefs),
       );
       final session = HealthAlertsSession(
         host: host,
         health: health,
-        connection: connection,
         settings: settings,
         now: () => now,
       );
@@ -903,7 +888,6 @@ void main() {
       session.dispose();
       host.dispose();
       health.dispose();
-      connection.dispose();
       settings.dispose();
       fixture.server.close();
     },

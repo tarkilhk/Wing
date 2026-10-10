@@ -2692,7 +2692,7 @@ void main() {
     expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
   });
 
-  testWidgets('startup requires refresh only after its retry burst stops', (
+  testWidgets('startup LED stays recovering until its retry burst stops', (
     tester,
   ) async {
     final access = controller.access;
@@ -2706,18 +2706,32 @@ void main() {
     );
     host.discoveryFailure = const SocketException('Network asleep');
     await controller.initialize();
-    expect(controller.connectionStatus.requiresManualRefresh, isFalse);
+    expect(
+      controller.connectionStatus.phase,
+      isNot(ServerConnectionPhase.disconnected),
+    );
     for (final seconds in [1, 2, 4, 8, 16]) {
       await tester.pump(Duration(seconds: seconds));
-      expect(controller.connectionStatus.requiresManualRefresh, seconds == 16);
+      expect(
+        controller.connectionStatus.phase,
+        seconds == 16
+            ? ServerConnectionPhase.disconnected
+            : ServerConnectionPhase.reconnecting,
+      );
     }
     await tester.pump(const Duration(minutes: 2));
-    expect(controller.connectionStatus.requiresManualRefresh, isTrue);
+    expect(
+      controller.connectionStatus.phase,
+      ServerConnectionPhase.disconnected,
+    );
     host.discoveryFailure = null;
     await controller.resumeConnection();
     await tester.pump();
     expect(controller.initialized, isTrue);
-    expect(controller.connectionStatus.requiresManualRefresh, isFalse);
+    expect(
+      controller.connectionStatus.phase,
+      isNot(ServerConnectionPhase.disconnected),
+    );
     expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
   });
 
@@ -3077,12 +3091,17 @@ void main() {
     (tester) async {
       host.connectFailures = 20;
       host.gateways['a']!.onConnectionChanged!(false);
-      expect(controller.connectionStatus.requiresManualRefresh, isFalse);
+      expect(
+        controller.connectionStatus.phase,
+        isNot(ServerConnectionPhase.disconnected),
+      );
       for (final seconds in [1, 2, 4, 8, 16]) {
         await tester.pump(Duration(seconds: seconds));
         expect(
-          controller.connectionStatus.requiresManualRefresh,
-          seconds == 16,
+          controller.connectionStatus.phase,
+          seconds == 16
+              ? ServerConnectionPhase.disconnected
+              : ServerConnectionPhase.reconnecting,
         );
       }
       final calls = host.connectCalls;
@@ -3096,7 +3115,10 @@ void main() {
       await tester.pump();
       expect(controller.connectionStatus.description, 'Connected');
       expect(controller.current!.reconnectScheduled, isFalse);
-      expect(controller.connectionStatus.requiresManualRefresh, isFalse);
+      expect(
+        controller.connectionStatus.phase,
+        isNot(ServerConnectionPhase.disconnected),
+      );
     },
   );
 

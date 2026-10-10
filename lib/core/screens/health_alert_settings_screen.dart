@@ -86,15 +86,7 @@ class HealthAlertSettingsScreen extends StatelessWidget {
                   ),
                 ),
             ]),
-            _section(context, 'Server & profile', [
-              _toggle(
-                'Server problems',
-                'Connection failures.',
-                settings.server,
-                (value) => session.update(
-                  (current) => current.copyWith(server: value),
-                ),
-              ),
+            _section(context, 'Profile', [
               _toggle(
                 'Profile problems',
                 'Access, connector or task failures.',

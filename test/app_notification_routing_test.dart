@@ -255,8 +255,10 @@ void main() {
           await tester.pump(Duration(seconds: seconds));
         }
         expect(
-          harness.controller.connectionStatus.requiresManualRefresh,
-          !scenario.held,
+          harness.controller.connectionStatus.phase,
+          scenario.held
+              ? ServerConnectionPhase.reconnecting
+              : ServerConnectionPhase.disconnected,
         );
         expect(alerts.alerts, isEmpty);
         final attempts = harness.host.connectCalls;
@@ -276,11 +278,11 @@ void main() {
           AppLifecycleState.resumed,
         );
         await tester.pump();
-        expect(notices, isNot(contains('Connection needs refresh')));
+        expect(notices, isEmpty);
         expect(harness.host.connectCalls, attempts + (scenario.held ? 0 : 1));
         expect(
-          harness.controller.connectionStatus.requiresManualRefresh,
-          isFalse,
+          harness.controller.connectionStatus.phase,
+          ServerConnectionPhase.reconnecting,
         );
         final joinedRecovery = scenario.held
             ? harness.controller.resumeConnection()
@@ -303,7 +305,7 @@ void main() {
         if (serverRecovers) {
           if (joinedRecovery != null) await joinedRecovery;
           if (scenario.held) expect(harness.host.connectCalls, attempts + 1);
-          expect(notices, isNot(contains('Connection needs refresh')));
+          expect(notices, isEmpty);
           expect(harness.controller.notificationChat, isNull);
           expect(harness.controller.recovering, isFalse);
           expect(
@@ -316,10 +318,11 @@ void main() {
             await tester.pump(Duration(seconds: seconds));
           }
           expect(
-            harness.controller.connectionStatus.requiresManualRefresh,
-            isTrue,
+            harness.controller.connectionStatus.phase,
+            ServerConnectionPhase.disconnected,
           );
-          expect(notices, contains('Connection needs refresh'));
+          expect(notices, isEmpty);
+          expect(alerts.alerts, isEmpty);
         }
         expect(chat.composer.observation.text, 'Keep the unsent follow-up');
         expect(
@@ -385,8 +388,8 @@ void main() {
         ServerConnectionPhase.reconnecting,
       );
       expect(
-        harness.controller.connectionStatus.requiresManualRefresh,
-        isFalse,
+        harness.controller.connectionStatus.phase,
+        ServerConnectionPhase.reconnecting,
       );
       replacementGate.complete();
       await Future.wait([replacementOpening, replacementResume]);

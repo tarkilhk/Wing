@@ -2,7 +2,7 @@ import 'host_thresholds.dart';
 
 enum HealthAlertSeverity { warning, critical }
 
-enum HealthAlertScope { host, server, profile }
+enum HealthAlertScope { host, profile }
 
 /// The host reading and policy that admitted an occurrence, retained as later
 /// readings update its detail or qualify it as last known.
@@ -128,7 +128,6 @@ class HealthAlertRule {
 class HealthAlertSettings {
   HealthAlertSettings({
     this.enabled = true,
-    this.server = true,
     this.profile = true,
     this.animateBell = true,
     this.showNotice = true,
@@ -166,18 +165,16 @@ class HealthAlertSettings {
       throw ArgumentError('RAM, disk and CPU rules are required.');
     }
   }
-  final bool enabled, server, profile, animateBell, showNotice;
+  final bool enabled, profile, animateBell, showNotice;
   final Map<HostMetric, HealthAlertRule> rules;
   HealthAlertSettings copyWith({
     bool? enabled,
-    bool? server,
     bool? profile,
     bool? animateBell,
     bool? showNotice,
     Map<HostMetric, HealthAlertRule>? rules,
   }) => HealthAlertSettings(
     enabled: enabled ?? this.enabled,
-    server: server ?? this.server,
     profile: profile ?? this.profile,
     animateBell: animateBell ?? this.animateBell,
     showNotice: showNotice ?? this.showNotice,
@@ -185,7 +182,6 @@ class HealthAlertSettings {
   );
   Map<String, Object> encode() => {
     'enabled': enabled,
-    'server': server,
     'profile': profile,
     'animateBell': animateBell,
     'showNotice': showNotice,
@@ -193,7 +189,6 @@ class HealthAlertSettings {
   };
   factory HealthAlertSettings.decode(Map value) => HealthAlertSettings(
     enabled: value['enabled'] as bool,
-    server: value['server'] as bool,
     profile: value['profile'] as bool,
     animateBell: value['animateBell'] as bool,
     showNotice: value['showNotice'] as bool,

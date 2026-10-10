@@ -9,7 +9,6 @@ import '../models/host_thresholds.dart';
 import 'administration_health.dart';
 import 'health_alert_settings_session.dart';
 import 'host_resources_session.dart';
-import 'server_connection_status.dart';
 
 /// Connection-owned evaluator borrowing canonical observations. Owns only its
 /// watch demand and incidents; never runs diagnostics or duplicates data reads.
@@ -17,7 +16,6 @@ class HealthAlertsSession extends ChangeNotifier {
   HealthAlertsSession({
     required this.host,
     required this.health,
-    required this.connection,
     required this.settings,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now,
@@ -29,12 +27,10 @@ class HealthAlertsSession extends ChangeNotifier {
     _lastSettings = settings.settings;
     host.addListener(_changed);
     health.addListener(_changed);
-    connection.addListener(_changed);
     settings.addListener(_settingsChanged);
   }
   final HostResourcesSession host;
   final AdministrationHealth health;
-  final ServerConnectionStatus connection;
   final HealthAlertSettingsSession settings;
   final DateTime Function() _now;
   final HealthAlertEvaluator _evaluator;
@@ -105,8 +101,7 @@ class HealthAlertsSession extends ChangeNotifier {
     }
     // Disabled scopes remove their incidents even while collection is paused.
     for (final alert in alerts) {
-      if (alert.scope == HealthAlertScope.server && !policy.server ||
-          alert.scope == HealthAlertScope.profile && !policy.profile) {
+      if (alert.scope == HealthAlertScope.profile && !policy.profile) {
         _evaluator.remove(alert.id);
       }
     }
@@ -152,18 +147,6 @@ class HealthAlertsSession extends ChangeNotifier {
           pressureKnown: reported != null && reported != HostPressure.unknown,
         );
       }
-    }
-    if (policy.server) {
-      _evaluator.finding(
-        key: '${host.connectionIdentity}:server:connection',
-        title: 'Connection needs refresh',
-        detail:
-            '${connection.problem ?? connection.description}\n'
-            'Automatic recovery has stopped. Refresh the connection to try again.',
-        scope: HealthAlertScope.server,
-        at: now,
-        failed: connection.requiresManualRefresh,
-      );
     }
     for (final alert in alerts) {
       if (alert.scope == HealthAlertScope.profile &&
@@ -233,7 +216,6 @@ class HealthAlertsSession extends ChangeNotifier {
     _watch.close();
     host.removeListener(_changed);
     health.removeListener(_changed);
-    connection.removeListener(_changed);
     settings.removeListener(_settingsChanged);
     super.dispose();
   }

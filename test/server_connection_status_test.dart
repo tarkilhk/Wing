@@ -5,46 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/server_connection_status.dart';
 
 void main() {
-  test('manual refresh waits for every recovery to stop', () {
-    final status = ServerConnectionStatus('Claw');
-    addTearDown(status.dispose);
-    status.accessAvailable();
-    status.liveChanged('chat', true);
-    status.liveChanged('chat', false);
-    expect(status.requiresManualRefresh, isFalse);
-    status.beginRecovery('chat');
-    status.beginRecovery('background');
-    status.failRecovery('chat', 'Connection attempts exhausted');
-    expect(status.requiresManualRefresh, isFalse);
-    status.endRecovery('background');
-    expect(status.requiresManualRefresh, isTrue);
-    status.beginRecovery('chat');
-    expect(status.requiresManualRefresh, isFalse);
-    status.failRecovery('chat', 'Connection attempts exhausted again');
-    expect(status.requiresManualRefresh, isTrue);
-    status.liveChanged('chat', true);
-    expect(status.requiresManualRefresh, isFalse);
-    status.endRecovery('chat');
-    expect(status.requiresManualRefresh, isFalse);
-  });
-
-  test('chat-only failures cannot promote later transport gaps to notices', () {
-    final status = ServerConnectionStatus('Claw');
-    addTearDown(status.dispose);
-    status.accessAvailable();
-    status.liveChanged('chat', true);
-    status.failRecovery('notification', 'Chat no longer exists');
-    expect(status.requiresManualRefresh, isFalse);
-    status.accessFailed(const SocketException('Network asleep'));
-    status.liveChanged('chat', false);
-    expect(status.requiresManualRefresh, isFalse);
-    status.beginRecovery('chat');
-    status.failRecovery('chat', 'Connection attempts exhausted');
-    expect(status.requiresManualRefresh, isTrue);
-    status.endRecovery('chat');
-    expect(status.requiresManualRefresh, isFalse);
-  });
-
   test('a failed recovery stays visible until its owner retries or leaves', () {
     final status = ServerConnectionStatus('Claw');
     addTearDown(status.dispose);

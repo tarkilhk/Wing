@@ -1468,8 +1468,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> _resumeNotification() {
     if (_notificationResume case final pending?) return pending;
     final generation = _notificationGeneration;
-    // Foreground admission must stay active while an older opening settles and
-    // the fresh attempt starts. Its failure cannot publish a stale global alert.
+    // Keep the connection status recovering while an older opening settles and
+    // the fresh attempt starts. Concurrent resumes share this recovery.
     connectionStatus.beginRecovery('notification-resume');
     return _notificationResume = _resumeNotificationAfterOpening(generation)
         .whenComplete(() {
