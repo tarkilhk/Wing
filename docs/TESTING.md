@@ -116,6 +116,19 @@ MaterialIcons-Regular.otf and DejaVuSansMono.ttf in `build/tool-fonts/`.
 Ordinary tests do not require those review fonts. See the
 [field decisions](design/activity-field-policy.md#source-coloring-10-october-2026).
 
+## Conversation project icon
+
+`profile_workspace_browser_test.dart` checks the assigned project's saved icon
+and color, icon/name alignment and picker taps in both themes at 390 dp/100% and
+320 dp/200% text, plus absence of a borrowed icon on unassigned chats. Capture
+actual Flutter renders with `CAPTURE_CHAT_PROJECT=true` and
+`CAPTURE_FONT_DIR=<Flutter SDK>/bin/cache/artifacts/material_fonts`; images stay
+under ignored `build/chat-project-review/`.
+The existing stock project `icon`/`color` fields were verified against upstream
+`NousResearch/hermes-agent` main `dce1e9b37581dd62e480a9064dc04a709c2940d3`
+on 10 October 2026 in `hermes_cli/projects_db.py` and
+`tui_gateway/methods_projects.py`; no transport change is needed.
+
 ## Recents conversation switching
 
 Prerequisite: at least two chats in the selected Recents filter. Open one from

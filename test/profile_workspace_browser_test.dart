@@ -1,8 +1,13 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'support/chat_browser_interactions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -13,6 +18,24 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'support/profile_browser_fixture.dart';
 
 void main() {
+  const capture = bool.fromEnvironment('CAPTURE_CHAT_PROJECT');
+  const captureKey = ValueKey('chat-project-capture');
+  setUpAll(() async {
+    if (!capture) return;
+    const fontDirectory = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final font in {
+      'Roboto': '$fontDirectory/Roboto-Regular.ttf',
+      'MaterialIcons': '$fontDirectory/MaterialIcons-Regular.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
+    }.entries) {
+      await (FontLoader(font.key)..addFont(
+            Future.value(
+              ByteData.sublistView(await File(font.value).readAsBytes()),
+            ),
+          ))
+          .load();
+    }
+  });
   late ProfileBrowserFixture fixture;
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
@@ -122,6 +145,76 @@ void main() {
     expect(controller.current!.chat!.projectId, 'p2');
   });
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('chat project appearance ${brightness.name} at $scale text', (
+        tester,
+      ) async {
+        await controller.openSession(
+          ProfileSessionKey(controller.current!.scope, 'project-only'),
+        );
+        await tester.binding.setSurfaceSize(
+          Size(scale == 1 ? 390 : 320, scale == 1 ? 844 : 1000),
+        );
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: RepaintBoundary(key: captureKey, child: child),
+            ),
+            home: ProfileWorkspaceScreen(controller: controller),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final picker = find.byKey(const ValueKey('chat-project-picker'));
+        final icon = find.descendant(
+          of: picker,
+          matching: find.byIcon(Icons.rocket_launch_outlined),
+        );
+        expect(icon, findsOneWidget);
+        expect(tester.widget<Icon>(icon).color, const Color(0xff22c55e));
+        final iconRect = tester.getRect(icon);
+        final labelRect = tester.getRect(find.text('Mobile app'));
+        final pickerRect = tester.getRect(picker);
+        expect(iconRect.right, lessThan(labelRect.left));
+        expect(iconRect.center.dy, closeTo(labelRect.center.dy, .1));
+        expect(pickerRect.height, greaterThanOrEqualTo(48));
+        expect(pickerRect.contains(iconRect.center), isTrue);
+        expect(pickerRect.contains(labelRect.center), isTrue);
+        expect(tester.takeException(), isNull);
+        if (capture) {
+          final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find.byKey(captureKey),
+          );
+          await tester.runAsync(() async {
+            final image = await boundary.toImage();
+            try {
+              final bytes = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final directory = Directory('build/chat-project-review');
+              await directory.create(recursive: true);
+              await File(
+                '${directory.path}/${brightness.name}-$scale.png',
+              ).writeAsBytes(bytes!.buffer.asUint8List());
+            } finally {
+              image.dispose();
+            }
+          });
+        }
+        await tester.tap(icon);
+        await tester.pumpAndSettle();
+        expect(find.text('Move to project'), findsOneWidget);
+        expect(controller.current!.chat!.projectId, 'p2');
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
   testWidgets('unassigned chat does not inherit the selected project', (
     tester,
   ) async {
@@ -132,6 +225,13 @@ void main() {
     await show(tester);
     await tester.pumpAndSettle();
     expect(find.text('Unassigned'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('chat-project-picker')),
+        matching: find.byType(Icon),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('project lookup failure keeps the chat accessible', (
@@ -178,6 +278,15 @@ void main() {
 }
 
 class _ProjectFilterFixture extends ProfileBrowserFixture {
+  @override
+  List<Map<String, dynamic>> projects(String profile) => [
+    for (final project in super.projects(profile))
+      {
+        ...project,
+        if (project['id'] == 'p2') ...{'icon': 'rocket', 'color': '#22c55e'},
+      },
+  ];
+
   @override
   List<Map<String, dynamic>> projectSessions(String profile, String id) {
     if (profile == 'work' || id == 'p2') {

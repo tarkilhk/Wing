@@ -34,7 +34,7 @@ equal-width icon slots at both ends, centering each label in its slot. Keep
 Clear all filters fixed at the right gutter. On narrow screens and at enlarged
 text sizes, stack the filters with equal full-width targets and centered labels.
 Project filter choices use the same saved project icon and color as their list
-headings. Profile home groups retain their outlined mixed-shapes icon.
+headings. The conversation context shows that same 20 dp project avatar before the assigned project name, with a 6 dp gap inside the existing project-picker target. Unassigned or unavailable projects have no borrowed project avatar. Profile home groups retain their outlined mixed-shapes icon.
 The owner’s 20 September
 update uses “Show more” to reveal ten additional chats in that group per tap;
 the action disappears when every matching chat in the group is visible.

@@ -75,6 +75,7 @@ import '../widgets/project_folder_picker.dart';
 import '../widgets/slash_command_suggestions.dart';
 import '../widgets/side_question_delivery_card.dart';
 import 'profile_workspace_browser.dart';
+import 'profile_project_actions.dart';
 import 'profile_row_actions.dart';
 import 'profile_transcript.dart';
 import 'chat_outputs_screen.dart';
@@ -929,6 +930,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               final projectLabel = chat.runtime.opening || chat.runtime.offline
                   ? chat.key.workspace.profileName
                   : controller.chatProjectLabel(chat);
+              final projectAppearance =
+                  chat.runtime.opening || chat.runtime.offline
+                  ? null
+                  : controller.chatProject(chat);
               final server = ServerConnectionLabel(
                 alignment: Alignment.centerLeft,
                 label: controller.connection.label,
@@ -958,11 +963,26 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         alignment: Alignment.centerLeft,
                         widthFactor: 1,
                         heightFactor: 1,
-                        child: Text(
-                          projectLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: scopeStyle,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (projectAppearance != null) ...[
+                              projectAvatar(
+                                context,
+                                projectAppearance,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Flexible(
+                              child: Text(
+                                projectLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: scopeStyle,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),

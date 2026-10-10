@@ -21,6 +21,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/deleted_draft_cleanup.dart';
 import '../models/chat_list_status.dart';
+import '../models/chat_list_view.dart';
 import '../models/profile_session_key.dart';
 import '../models/browser_mutation.dart';
 import '../models/context_occupancy.dart';
@@ -3681,6 +3682,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       replacementCompletion.complete();
     }
+  }
+
+  BrowserProject? chatProject(ProfileChat chat) {
+    final project = _owned(chat)._projects
+        .where((project) => project['id'] == chat._projectId)
+        .firstOrNull;
+    return project == null ? null : BrowserProject.fromWire(project);
   }
 
   String chatProjectLabel(ProfileChat chat) {
