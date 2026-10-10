@@ -41,6 +41,7 @@ void main() {
       'Roboto': 'build/studio-roboto.ttf',
       'Ahem': 'build/studio-roboto.ttf',
       'MaterialIcons': 'build/studio-icons.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
     }.entries) {
       await (FontLoader(entry.key)..addFont(
             Future.value(
@@ -60,7 +61,7 @@ void main() {
     await tester.runAsync(() async {
       final image = await boundary.toImage();
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-      final directory = Directory('/tmp/wing-message-edit-review')
+      final directory = Directory('build/chat-footer-review')
         ..createSync(recursive: true);
       await File(
         '${directory.path}/$name.png',
@@ -749,7 +750,7 @@ void main() {
     await tester.ensureVisible(edit);
     final target = tester.getRect(edit);
     expect(target.width, greaterThanOrEqualTo(48));
-    expect(target.height, greaterThanOrEqualTo(48));
+    expect(target.height, 32);
     String? copied;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,

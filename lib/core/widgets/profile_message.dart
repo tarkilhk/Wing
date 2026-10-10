@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 import 'anchored_expansion_tile.dart';
@@ -5,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../models/chat_output.dart';
 import '../models/transcript_message.dart';
+import '../models/user_message_content.dart';
 import 'markdown_message_content.dart';
 import 'profile_tool_activity.dart';
 import 'profile_review_notice_card.dart';
@@ -72,79 +75,172 @@ class ProfileMessage extends StatelessWidget {
         onPressed: () => _copyMessage(context, message.copyText),
       );
 
-  Widget _userBubble(BuildContext context, String content) {
+  Widget _userBubble(BuildContext context, String content, Widget? timestamp) {
     final theme = Theme.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Container(
-            key: ValueKey(('user-message-bubble', message.id)),
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: WingRadius.card,
-            ),
-            child: SelectableText(
-              content,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                height: 1.45,
-                color: theme.colorScheme.onPrimaryContainer,
+    final colors = theme.colorScheme;
+    final footerColor = Color.lerp(
+      colors.surface,
+      colors.primaryContainer,
+      .5,
+    )!;
+    return LayoutBuilder(
+      builder: (context, bounds) {
+        final enlarged = MediaQuery.textScalerOf(context).scale(12) > 18;
+        final inset = enlarged ? 20.0 : bounds.maxWidth * .17;
+        return Align(
+          alignment: Alignment.centerRight,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: math.max(1, bounds.maxWidth - 44 - inset),
+                  ),
+                  child: IntrinsicWidth(
+                    child: ClipRRect(
+                      key: ValueKey(('user-message-bubble', message.id)),
+                      borderRadius: WingRadius.card,
+                      child: ColoredBox(
+                        color: colors.primaryContainer,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (content.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  10,
+                                  10,
+                                  10,
+                                  4,
+                                ),
+                                child: SelectableText(
+                                  content,
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    height: 1.45,
+                                    color: colors.onPrimaryContainer,
+                                  ),
+                                ),
+                              ),
+                            for (final attachment in message.attachments)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  10,
+                                  8,
+                                  10,
+                                  8,
+                                ),
+                                child: _attachment(attachment),
+                              ),
+                            Material(
+                              key: ValueKey((
+                                'user-message-footer',
+                                message.id,
+                              )),
+                              color: footerColor,
+                              child: Padding(
+                                padding: const EdgeInsets.only(
+                                  left: 10,
+                                  right: 2,
+                                ),
+                                child: _footer(context, timestamp, true),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              if (streaming)
+                const SizedBox(width: 44, height: 48)
+              else
+                copyAction(context, message),
+            ],
           ),
-        ),
-        if (streaming)
-          const SizedBox(width: 44)
-        else
-          copyAction(context, message),
-      ],
+        );
+      },
     );
   }
 
-  Widget _footer(BuildContext context, Widget? timestamp, bool user) =>
-      ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 48),
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: Wrap(
+  Widget _attachment(UserMessageAttachment attachment) =>
+      UserMessageAttachmentTile(
+        key: ValueKey(attachment.target),
+        attachment: attachment,
+        loadImages: loadImages,
+        loadImage: loadAttachmentImage,
+      );
+
+  Widget _footer(BuildContext context, Widget? timestamp, bool user) {
+    final compactActionStyle = IconButton.styleFrom(
+      minimumSize: const Size(48, 32),
+      maximumSize: const Size(48, 32),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.standard,
+      foregroundColor: Theme.of(context).colorScheme.onSurface,
+    );
+    final controls = [
+      if (user && showEditAction)
+        IconButton(
+          key: ValueKey('edit-message-${message.id}'),
+          tooltip: 'Edit message',
+          style: compactActionStyle,
+          onPressed: streaming ? null : onEdit,
+          icon: const Icon(Icons.edit_outlined, size: 18),
+        ),
+      if (user && showRestoreAction)
+        IconButton(
+          key: ValueKey('restore-message-${message.id}'),
+          tooltip: 'Restore checkpoint',
+          style: compactActionStyle,
+          onPressed: streaming ? null : onRestore,
+          icon: const Icon(Icons.undo, size: 18),
+        ),
+      if (!user && actions != null) actions!,
+      if (!user && actions == null && onReadAloud != null)
+        IconButton(
+          tooltip: readingAloud ? 'Stop reading aloud' : 'Read aloud',
+          onPressed: streaming ? null : onReadAloud,
+          icon: Icon(
+            readingAloud ? Icons.stop : Icons.volume_up_outlined,
+            size: 18,
+          ),
+        ),
+    ];
+    final date = timestamp == null
+        ? null
+        : Padding(padding: const EdgeInsets.only(right: 4), child: timestamp);
+    final enlarged = MediaQuery.textScalerOf(context).scale(12) > 18;
+    final content = user && enlarged && controls.isNotEmpty
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              ?date,
+              Row(mainAxisSize: MainAxisSize.min, children: controls),
+            ],
+          )
+        : Wrap(
             alignment: WrapAlignment.end,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              if (timestamp != null)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: timestamp,
-                ),
-              if (user && showEditAction)
-                IconButton(
-                  key: ValueKey('edit-message-${message.id}'),
-                  tooltip: 'Edit message',
-                  onPressed: streaming ? null : onEdit,
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                ),
-              if (user && showRestoreAction)
-                IconButton(
-                  key: ValueKey('restore-message-${message.id}'),
-                  tooltip: 'Restore checkpoint',
-                  onPressed: streaming ? null : onRestore,
-                  icon: const Icon(Icons.undo, size: 18),
-                ),
-              if (!user && actions != null) actions!,
-              if (!user && actions == null && onReadAloud != null)
-                IconButton(
-                  tooltip: readingAloud ? 'Stop reading aloud' : 'Read aloud',
-                  onPressed: streaming ? null : onReadAloud,
-                  icon: Icon(
-                    readingAloud ? Icons.stop : Icons.volume_up_outlined,
-                    size: 18,
-                  ),
-                ),
+              ?date,
+              if (user)
+                Row(mainAxisSize: MainAxisSize.min, children: controls)
+              else
+                ...controls,
             ],
-          ),
-        ),
-      );
+          );
+    final footer = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: user ? 32 : 48),
+      child: Align(alignment: Alignment.centerRight, child: content),
+    );
+    return footer;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -269,52 +365,46 @@ class ProfileMessage extends StatelessWidget {
       );
     }
     final user = role == 'user';
-    final timestamp = _timestamp(context);
+    final timestamp = _timestamp(
+      context,
+      color: user ? theme.colorScheme.onSurface : null,
+    );
+    if (user) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: WingSpacing.md),
+        child: _userBubble(context, content, timestamp),
+      );
+    }
+    final answer = MarkdownMessageContent(
+      data: content,
+      loadImages: loadImages,
+      streaming: streaming,
+      onOpenRemoteFile: onOpenRemoteFile,
+      onDownloadRemoteFile: onDownloadRemoteFile,
+      loadImage: loadAttachmentImage,
+      deliverables: true,
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: WingSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!user && showCopyHeader)
-            SizedBox(
-              height: 48,
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: streaming
+          if (showCopyHeader)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: answer),
+                streaming
                     ? const SizedBox(width: 44, height: 48)
                     : copyAction(context, message),
-              ),
+              ],
             ),
-          if (content.isNotEmpty)
-            if (user)
-              _userBubble(context, content)
-            else
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: MarkdownMessageContent(
-                  data: content,
-                  loadImages: loadImages,
-                  streaming: streaming,
-                  onOpenRemoteFile: onOpenRemoteFile,
-                  onDownloadRemoteFile: onDownloadRemoteFile,
-                  loadImage: loadAttachmentImage,
-                  deliverables: true,
-                ),
-              ),
+          if (!showCopyHeader && content.isNotEmpty)
+            Padding(padding: const EdgeInsets.only(right: 12), child: answer),
           for (final attachment in message.attachments)
             Padding(
-              padding: EdgeInsets.only(right: user ? 44 : 12, top: 8),
-              child: UserMessageAttachmentTile(
-                key: ValueKey(attachment.target),
-                attachment: attachment,
-                loadImages: loadImages,
-                loadImage: loadAttachmentImage,
-              ),
-            ),
-          if (user && !streaming && content.isEmpty)
-            Align(
-              alignment: Alignment.centerRight,
-              child: copyAction(context, message),
+              padding: const EdgeInsets.only(right: 12, top: 8),
+              child: _attachment(attachment),
             ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -325,7 +415,7 @@ class ProfileMessage extends StatelessWidget {
     );
   }
 
-  Widget? _timestamp(BuildContext context) {
+  Widget? _timestamp(BuildContext context, {Color? color}) {
     final date = message.timestamp;
     if (date == null) return null;
     final localizations = MaterialLocalizations.of(context);
@@ -360,7 +450,7 @@ class ProfileMessage extends StatelessWidget {
           fontSize: 12,
           height: 1,
           fontFeatures: const [FontFeature.tabularFigures()],
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );

@@ -2,6 +2,7 @@ import 'package:wing/core/models/transcript_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/wing_icons.dart';
 import 'package:wing/core/widgets/answer_actions.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'helpers/pump_markdown_widget.dart';
@@ -48,7 +49,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         final arrow = find.byIcon(Icons.expand_more);
-        final branch = find.byIcon(Icons.fork_right);
+        final branch = find.byIcon(WingIcons.fork);
         final retry = find.byIcon(Icons.refresh);
         final headerCenter = tester.getCenter(arrow).dy;
         void expectAligned() {

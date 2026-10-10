@@ -2060,7 +2060,7 @@
       "id": "font",
       "kind": "flutter-font",
       "path": "assets/fonts/wing-icons.ttf",
-      "purpose": "WingIcons subset font",
+      "purpose": "WingIcons square-pen New chat and desktop git-fork answer action subset font",
       "source": "pubspec.yaml:58; lib/core/theme/wing_icons.dart:6",
       "status": "supported",
       "selector": "WingIcons"

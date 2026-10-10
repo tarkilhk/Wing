@@ -70,17 +70,25 @@ CI runs independently. GitHub CI completion is not a prerequisite for phone
 installation. Report its status separately; published-release gates apply to
 publication.
 
-## Conversation Target layout and Restore
+## Conversation visible-actions layout and Restore
 
 Run `flutter test --no-pub test/message_timestamp_test.dart
  test/saved_message_actions_test.dart test/composer_action_button_test.dart
  test/profile_composer_actions_test.dart test/answer_versions_test.dart` for
-copy targets, dated right footers, unchanged edits versus explicit Restore,
+copy targets, right-aligned bubbles with internal dated 32 dp footers, unchanged
+edits versus explicit Restore,
 confirmation/cancellation, durable cuts, draft/queue preservation, refusal and
 transport uncertainty. Restore must never degrade into a plain appended prompt;
 composer Fork is absent while selected-answer branching remains available.
-Use `STUDIO_REVIEW=true` with the existing Studio fonts to inspect actual Flutter
-message and confirmation renders in both themes at 320 dp/200% text.
+Include `user_message_attachment_test.dart` for mixed and image-only prompts,
+preview/open/selection/copy retention and `answer_notice_layout_test.dart` for the
+shared desktop fork glyph and notice-header alignment. `message_timestamp_test`
+checks footer containment, compact action-edge taps, enlarged date/action layout,
+external Copy alignment and unchanged timestamp semantics; render checks establish
+color and density that static construction checks cannot prove. Use
+`--dart-define=STUDIO_REVIEW=true` with the existing Studio fonts and WingIcons to
+inspect actual Flutter message and confirmation renders in both themes at normal
+phone size and 320 dp/200% text. Captures stay under ignored `build/`.
 
 Activity header/copy sharing preserves lazy section/scroll identities. Include
 `profile_transcript_test.dart`, `profile_activity_tabs_test.dart`,

@@ -4,4 +4,7 @@ import 'package:flutter/widgets.dart';
 abstract final class WingIcons {
   /// The selected Lucide square-pen, used for every New chat action.
   static const newChat = IconData(0xe175, fontFamily: 'WingIcons');
+
+  /// Lucide git-fork, matching the desktop conversation's fork action.
+  static const fork = IconData(0xe28c, fontFamily: 'WingIcons');
 }

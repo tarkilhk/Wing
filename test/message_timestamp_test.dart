@@ -23,6 +23,7 @@ void main() {
       'Roboto': 'build/studio-roboto.ttf',
       'Ahem': 'build/studio-roboto.ttf',
       'MaterialIcons': 'build/studio-icons.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
     }.entries) {
       await (FontLoader(entry.key)..addFont(
             Future.value(
@@ -42,6 +43,8 @@ void main() {
     String content = 'A short message.',
     bool showEditAction = false,
     VoidCallback? onEdit,
+    bool showRestoreAction = false,
+    VoidCallback? onRestore,
   }) async {
     await tester.binding.setSurfaceSize(const Size(320, 640));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -69,6 +72,8 @@ void main() {
                       child: ProfileMessage(
                         showEditAction: showEditAction,
                         onEdit: onEdit,
+                        showRestoreAction: showRestoreAction,
+                        onRestore: onRestore,
                         message: TranscriptMessage.fromRow({
                           'id': 4,
                           'role': role,
@@ -90,11 +95,12 @@ void main() {
   }
 
   for (final brightness in Brightness.values) {
-    for (final scale in [1.0, 2.0]) {
+    for (final scale in [1.0, 1.3, 2.0]) {
       testWidgets('${brightness.name} sent message actions at $scale', (
         tester,
       ) async {
         var edits = 0;
+        var restores = 0;
         await pump(
           tester,
           role: 'user',
@@ -105,9 +111,12 @@ void main() {
               'We actually need to wait to know timing of flight of the next day, to see if we should get a hotel close to airport (early morning flight), or if normal city hotel is OK (flight later during the day!)',
           showEditAction: true,
           onEdit: () => edits++,
+          showRestoreAction: true,
+          onRestore: () => restores++,
         );
         final copy = tester.getRect(find.byTooltip('Copy message'));
         final edit = tester.getRect(find.byTooltip('Edit message'));
+        final restore = tester.getRect(find.byTooltip('Restore checkpoint'));
         final time = tester.getRect(find.text('15 Sep, 14:07'));
         final bubble = tester.getRect(
           find.byKey(
@@ -116,14 +125,21 @@ void main() {
         );
         expect(copy.left, closeTo(bubble.right, .01));
         expect(copy.top, closeTo(bubble.top, .01));
-        expect(time.top, greaterThanOrEqualTo(bubble.bottom));
+        final body = tester.getRect(find.byType(SelectableText));
+        expect(time.top, greaterThanOrEqualTo(body.bottom));
+        expect(bubble.contains(time.topLeft), isTrue);
+        expect(bubble.contains(time.bottomRight), isTrue);
+        expect(bubble.left, greaterThan(16));
         expect(time.overlaps(edit), isFalse);
+        expect(time.overlaps(restore), isFalse);
         if (time.bottom > edit.top) {
           expect(time.right, lessThanOrEqualTo(edit.left));
         }
-        expect(edit.right, closeTo(304, .01));
+        expect(restore.right, closeTo(bubble.right - 2, .01));
+        expect(edit.right, closeTo(restore.left, .01));
         expect(copy.right, closeTo(316, .01));
-        expect(edit.size, const Size(48, 48));
+        expect(edit.size, const Size(48, 32));
+        expect(restore.size, const Size(48, 32));
         expect(copy.size, const Size(44, 48));
         expect(find.text('Edit message'), findsNothing);
         expect(find.text('Copy message'), findsNothing);
@@ -134,6 +150,15 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(edits, 1);
+        await tester.ensureVisible(find.byTooltip('Restore checkpoint'));
+        final visibleRestore = tester.getRect(
+          find.byTooltip('Restore checkpoint'),
+        );
+        await tester.tapAt(
+          Offset(visibleRestore.right - 2, visibleRestore.bottom - 2),
+        );
+        await tester.pumpAndSettle();
+        expect(restores, 1);
         if (_capture) {
           final boundary = tester.renderObject<RenderRepaintBoundary>(
             find.byKey(_messageFrame),
@@ -143,7 +168,7 @@ void main() {
             final bytes = await image.toByteData(
               format: ui.ImageByteFormat.png,
             );
-            final directory = Directory('/tmp/wing-message-edit-review')
+            final directory = Directory('build/chat-footer-review')
               ..createSync(recursive: true);
             await File(
               '${directory.path}/${brightness.name}-$scale.png',
@@ -197,10 +222,16 @@ void main() {
                 .onPressed,
             isNull,
           );
-          expect(editTarget.size, const Size(48, 48));
+          expect(editTarget.size, const Size(48, 32));
           expect(copyTarget.size, const Size(44, 48));
           expect(body.right, lessThanOrEqualTo(copyTarget.left));
-          expect(time.top, greaterThanOrEqualTo(copyTarget.bottom));
+          final bubble = tester.getRect(
+            find.byKey(
+              const ValueKey<(String, Object?)>(('user-message-bubble', 4)),
+            ),
+          );
+          expect(bubble.contains(time.topLeft), isTrue);
+          expect(bubble.contains(time.bottomRight), isTrue);
           await tester.tapAt(
             Offset(copyTarget.right - 2, copyTarget.bottom - 2),
           );
@@ -232,6 +263,9 @@ void main() {
             final size = tester.getSize(find.byType(ProfileMessage));
             final copy = tester.getRect(find.byType(IconButton));
             final body = tester.getRect(find.byType(SelectableText).first);
+            if (role == 'assistant') {
+              expect(copy.top, closeTo(body.top, .01));
+            }
             await pump(
               tester,
               role: role,

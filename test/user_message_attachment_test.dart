@@ -348,7 +348,7 @@ void main() {
         final textRect = tester.getRect(find.text('Look at this.'));
         final imageRect = tester.getRect(find.byType(Image));
         expect(imageRect.top, greaterThan(textRect.bottom));
-        expect(imageRect.right, textRect.right + 10);
+        expect(imageRect.right, textRect.right);
         expect(tester.takeException(), isNull);
         if (const bool.fromEnvironment('CAPTURE_ATTACHMENTS')) {
           await tester.runAsync(() async {

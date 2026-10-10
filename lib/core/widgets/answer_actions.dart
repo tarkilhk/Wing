@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/wing_icons.dart';
 
 class AnswerActions extends StatelessWidget {
   final VoidCallback? onBranch;
@@ -32,7 +33,7 @@ class AnswerActions extends StatelessWidget {
       IconButton(
         tooltip: 'Branch in new session',
         onPressed: onBranch,
-        icon: const Icon(Icons.fork_right),
+        icon: const Icon(WingIcons.fork, size: 18),
       ),
       if (onReadAloud != null)
         IconButton(

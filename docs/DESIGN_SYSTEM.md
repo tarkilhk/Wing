@@ -489,23 +489,38 @@ The selection audit covers App settings and composer preferences; Activity filte
 
 ## Conversation preservation
 
-The owner's 10 October **Target** replaces the earlier slim message rail.
-User text occupies a broad rectangular tinted bubble, with 10 dp horizontal and
-12 dp vertical padding. A separate 44-by-48 dp Copy target touches its right edge,
-with no extra gap; the transcript ends this shared Copy column 4 dp from the
-viewport edge. Assistant replies omit the repeated Hermes/bot author header,
-keep full-width readable prose, and put Copy in that same upper-right column.
-When a reply follows Activity, its Copy shares the disclosure's header rather
-than adding another row. Activity uses “Used N tools” from received calls, while
-retaining its existing Timeline/Tasks/Agents/Work contents and expansion state.
+The owner's 10 October **visible-actions** refinement supersedes the initial
+full-width Target. User messages sit at the right, sized to their text and
+footer, with a 17% leading inset at normal text and a 20 dp inset at enlarged
+text. The available width reserves the separate 44-by-48 dp Copy column;
+Copy touches the bubble's upper-right edge and ends 4 dp from the viewport edge.
+The message area uses the theme-adjusted `primaryContainer`, with 10 dp horizontal
+and top padding and 4 dp below the text. User attachments stay inside the same
+bubble and retain their original preview/open/copy behavior.
 
-Each message's lower-right footer begins with local `dd Mmm, HH:mm`, followed
-by conversation actions. Prompts have Edit and Restore; replies have Fork,
-Read aloud and Regenerate. Footers wrap at enlarged text, stay right-aligned,
-and omit unavailable timestamps rather than inventing one. Full-date tooltips
-and accessibility, native selection, exact copy and attachment behavior remain
-intact. Footer actions use 48 dp targets; Copy's compact width is the approved
-exception. Controls are always available on touch, without hover.
+Time, Edit and Restore sit in the bubble's compact lower-right footer. Its fill
+is exactly `Color.lerp(surface, primaryContainer, .5)`: equal parts ambient chat
+background and the actual displayed bubble color, including light-theme
+softening. There is no divider. The footer adds no vertical padding; Edit and
+Restore use the owner's selected 48-by-32 dp compact targets. At enlarged text,
+the date occupies a separate right-aligned line above the pair of actions.
+Assistant controls and Copy retain their 48 dp height. The design exploration
+is archived on local branch `prototype/chat-visible-footer` at `1787e518`,
+under `plans/prototypes/chat-visible-footer`.
+
+Assistant replies use plain broad prose, omit repeated author names/avatars,
+and share the same Copy column. Standalone Copy aligns with the first line rather
+than occupying an extra header row. When Activity precedes an answer, Copy stays
+in its disclosure header, preserving section/scroll identities and expansion.
+Activity uses “Used N tools” from received calls with its existing
+Timeline/Tasks/Agents/Work contents intact.
+
+Both speakers use local `dd Mmm, HH:mm`; unavailable timestamps are omitted.
+Full-date tooltips/accessibility, native selection, exact copying, attachment
+behavior and streaming/busy action eligibility remain intact. Reply actions
+are Fork, Read aloud and Regenerate, right-aligned below the answer. Fork uses
+`WingIcons.fork`, the same Lucide `git-fork` geometry as upstream desktop's
+`GitForkIcon`. Controls remain visible and available on touch without hover.
 
 Restore confirms its destructive scope in-app, reruns the selected saved prompt
 in the same conversation and removes its later history. It interrupts a running
