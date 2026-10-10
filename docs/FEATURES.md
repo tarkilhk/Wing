@@ -9,7 +9,7 @@
   <img src="screenshots/conversation-dark.png" alt="Wing conversation with streamed reply and tool activity" width="285">
 </p>
 
-- **Find the right chat.** Search, pin and group conversations; filter by profile, project or status. The Project filter lists projects and unassigned-chat groups belonging to the selected profiles; clear the Profile filter to see all profiles' projects. Recents shows chats with messages from the last 24 hours alongside ongoing work, with All, Running and Needs input filters. Inside a chat opened from Recents, swipe sideways with two fingers to switch. Pinch inward to keep a card stack open, swipe through it and tap a card to open. The Chat actions menu offers the same navigation. Soft edge cues indicate replies (white in dark mode, charcoal in light mode) or confirmed requests for input (amber). Back closes the stack, then returns to your Recents filter.
+- **Find the right chat.** Search, pin and group conversations; filter by profile, project or status. The Project filter lists projects and unassigned-chat groups belonging to the selected profiles; clear the Profile filter to see all profiles' projects. Recents shows chats with messages from the last 24 hours alongside ongoing work, with All, Running and Needs input filters. Inside a chat opened from Recents, swipe sideways with two fingers to switch. Pinch inward to keep a card stack open, swipe through it and tap a card to open. Soft edge cues indicate replies (white in dark mode, charcoal in light mode) or confirmed requests for input (amber). Back closes the stack, then returns to your Recents filter.
 - **Keep browsing after changes.** Chat and project actions apply when Hermes confirms them. The list then refreshes in the background, keeping search, token counts and reading position available. Progress and Retry stay above the scrolling list; retrying a refresh does not repeat the action.
 - **Read the whole story.** Follow streamed replies, code, tables, tool activity and available reasoning. Find a message in a chat, open a result, or return to the latest reply.
 - **Understand each action.** Open Activity → Timeline for readable call titles,
@@ -38,7 +38,7 @@
 ## Use what is already on your phone
 
 - **Bring files and ideas.** Attach a photo or file, take a picture inside a chat, or review content shared from another Android app before sending it to Hermes.
-- **Open useful results.** Images appear inline in replies, with a compact download control and tap-to-zoom using the original. Preview PDFs, Markdown, diagrams and supported media. Save or share output files through Android.
+- **Open useful results.** Images appear inline in replies, with a compact download control and tap-to-zoom using the original. Preview PDFs, Markdown, diagrams and supported media. File cards place a download arrow and preview eye beside the filename. Save or share output files through Android.
 - **Talk when typing is awkward.** Dictate into an editable draft and read a reply aloud. Choose on-device or Hermes processing separately for input and output in App settings.
 
 ## Run your Hermes setup

@@ -1,4 +1,5 @@
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -94,7 +95,12 @@ void main() {
       await controller.initialize();
       final chat = await controller.createChat(canDispatch: () => true);
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
+        ),
       );
       final batch = [
         for (var i = 0; i < count; i++) {...questions[i], 'qid': 'q$i'},

@@ -413,20 +413,6 @@ void main() {
             );
           }
 
-          Future<void> menu(String label) async {
-            await _native(
-              tester,
-              '$prefix-menu-$label',
-              actions: [_tap(tester, find.byTooltip('Chat actions'))],
-              capture: false,
-            );
-            await _native(
-              tester,
-              '$prefix-action-$label',
-              actions: [_tap(tester, find.text(label))],
-            );
-          }
-
           Future<void> pinch(String name) async {
             final y = _gestureRow(tester, [.24, .76]);
             await _native(
@@ -740,15 +726,15 @@ void main() {
           presentation(() => accessible = true);
           await tester.pumpAndSettle();
           final beforeAccessibility = controller.current!.chat!.key;
-          await swipe('accessibility-exclusion');
-          expect(controller.current!.chat!.key, beforeAccessibility);
-          await menu('Choose recent conversation');
+          await swipe('accessibility-swipe');
+          expect(controller.current!.chat!.key, isNot(beforeAccessibility));
+          final beforeAccessibleSelection = controller.current!.chat!.key;
+          await pinch('accessibility-stack');
           expect(find.byTooltip('Next conversation'), findsOneWidget);
           expect(
             tester.view.viewInsets.bottom,
             0,
-            reason:
-                'Menu focus restoration must not reopen the hidden composer',
+            reason: 'The hidden composer must not regain focus',
           );
           await _native(
             tester,
@@ -761,7 +747,10 @@ void main() {
             '$prefix-accessible-open',
             actions: [_tap(tester, find.byTooltip('Open conversation'))],
           );
-          expect(controller.current!.chat!.key, isNot(beforeAccessibility));
+          expect(
+            controller.current!.chat!.key,
+            isNot(beforeAccessibleSelection),
+          );
           presentation(() {
             accessible = false;
             reduced = true;
@@ -785,7 +774,7 @@ void main() {
                   controller.current!.chat!.key.workspace,
             );
             Future<void> browseToTarget() async {
-              await menu('Choose recent conversation');
+              await pinch('cross-profile-stack');
               final focusedTarget = find.byWidgetPredicate(
                 (widget) =>
                     widget is Semantics &&

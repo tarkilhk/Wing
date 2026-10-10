@@ -153,9 +153,9 @@ void main() {
     );
     await tester.pumpMarkdownWidget(_host(content('old', 'Tail')));
     await tester.pumpMarkdownWidget(_host(content('new', 'Growing tail')));
-    await tester.tap(find.text('Open preview'));
+    await tester.tap(find.byTooltip('Open preview'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Download'));
+    await tester.tap(find.byTooltip('Download'));
     await tester.pumpAndSettle();
     expect(calls, ['new open /srv/report.md', 'new download']);
     await tester.pumpMarkdownWidget(
@@ -273,7 +273,7 @@ void main() {
         content('[Report](/srv/report.md)\n\n```text\nold code\n```\nTail'),
       ),
     );
-    await tester.tap(find.text('Open preview'));
+    await tester.tap(find.byTooltip('Open preview'));
     await tester.pumpAndSettle();
     expect(opens, 1);
     await tester.pumpMarkdownWidget(_host(content('Replacement paragraph.')));

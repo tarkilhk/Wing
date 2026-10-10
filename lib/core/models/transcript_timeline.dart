@@ -64,7 +64,7 @@ final class TranscriptTimeline {
       final streaming = index == liveMessageIndex;
       final sender = streaming ? null : interAgentReplySender(rows, index);
       final savedId = answerMessageId(row);
-      final message = TranscriptMessage.fromRow(readingRow);
+      final display = row['display_content'] ?? row['content'] ?? '';
       final branchAnswer =
           row['role'] == 'assistant' &&
           savedId != null &&
@@ -74,22 +74,19 @@ final class TranscriptTimeline {
         TranscriptTimelineEntry._(
           sourceIndex: index,
           presentationId: presentationId(row),
-          message: message,
-          tool: row['role'] == 'tool'
-              ? message.tool ?? TranscriptToolResult.fromRow(readingRow)
-              : null,
-          reviewText: reviewMessageText(row),
+          row: readingRow,
+          review:
+              row['role'] == 'system' &&
+              answerMessageText(row).startsWith('review:'),
           suppressed: hidden,
           emptyAssistant:
               row['role'] == 'assistant' &&
-              (row['display_content'] ?? row['content'] ?? '')
-                  .toString()
-                  .isEmpty,
+              display is String &&
+              display.isEmpty,
           streaming: streaming,
-          reasoning: _reasoning(row),
+          hasReasoning: _hasReasoning(row),
           interAgentSender: sender,
           savedMessageId: savedId,
-          editablePrompt: isHumanAnswerPrompt(row) && savedId != null,
           branchAnswer: branchAnswer,
           sharedAnswerMessageId:
               index > 0 &&
@@ -114,7 +111,7 @@ final class TranscriptTimeline {
       !hasLiveMessage &&
       sections.isNotEmpty &&
       sections.last.isActivity &&
-      sections.last.latestReview == null;
+      !sections.last.hasLatestReview;
 
   /// Post-frame visibility targets consult the current owner's rows, not a
   /// preceding frame's timeline. This returns identity only, never raw content.
@@ -138,7 +135,7 @@ final class TranscriptTimeline {
   /// Choose the original nine-row neighborhood before hiding or grouping rows.
   /// Full-source ordinals and delivery context remain captured by the entries.
   TranscriptTimeline? nearby(int messageId) {
-    final index = entries.indexWhere((entry) => entry.message.id == messageId);
+    final index = entries.indexWhere((entry) => entry.id == messageId);
     if (index < 0) return null;
     final start = (index - 4).clamp(0, entries.length).toInt();
     final end = (index + 5).clamp(0, entries.length).toInt();
@@ -153,36 +150,48 @@ final class TranscriptTimeline {
 }
 
 final class TranscriptTimelineEntry {
-  const TranscriptTimelineEntry._({
+  TranscriptTimelineEntry._({
     required this.sourceIndex,
     required this.presentationId,
-    required this.message,
-    required this.tool,
-    required this.reviewText,
+    required Map<String, dynamic> row,
+    required bool review,
     required this.suppressed,
     required this.emptyAssistant,
     required this.streaming,
-    required this.reasoning,
+    required this.hasReasoning,
     required this.interAgentSender,
     required this.savedMessageId,
-    required this.editablePrompt,
     required this.branchAnswer,
     required this.sharedAnswerMessageId,
     required this.followedByResultNotice,
-  });
+  }) : _row = row,
+       isReview = review,
+       role = row['role']?.toString() ?? '',
+       id = row['id'] is int || row['id'] is String ? row['id'] : null;
 
   final int sourceIndex;
   final Object presentationId;
-  final TranscriptMessage message;
-  final TranscriptToolResult? tool;
-  final String? reviewText;
+  // Borrow the existing immutable reading row. Bodies are prepared only when a
+  // viewport row or an opened disclosure asks for them; no rendered tree lives
+  // in this transient index. Identity/grouping must never force these getters.
+  final Map<String, dynamic> _row;
+  final String role;
+  final Object? id;
+  final bool isReview;
+  late final TranscriptMessage message = TranscriptMessage.fromRow(_row);
+  late final TranscriptToolResult? tool = role == 'tool'
+      ? message.tool ?? TranscriptToolResult.fromRow(_row)
+      : null;
+  late final String? reviewText = isReview ? reviewMessageText(_row) : null;
   final bool suppressed;
   final bool emptyAssistant;
   final bool streaming;
-  final String reasoning;
+  final bool hasReasoning;
+  late final String reasoning = _reasoning(_row);
   final String? interAgentSender;
   final int? savedMessageId;
-  final bool editablePrompt;
+  late final bool editablePrompt =
+      savedMessageId != null && isHumanAnswerPrompt(_row);
   final bool branchAnswer;
   final int? sharedAnswerMessageId;
   final bool followedByResultNotice;
@@ -200,13 +209,12 @@ final class TranscriptTimelineGroup {
         ? ('reasoning', entry.presentationId)
         : entry.presentationId,
   );
-  bool get isTool => !isReasoning && messages.last.message.role == 'tool';
+  bool get isTool => !isReasoning && messages.last.role == 'tool';
   String? get reviewText => messages.last.reviewText;
-  bool get isActivity => isReasoning || isTool || reviewText != null;
+  bool get isActivity => isReasoning || isTool || messages.last.isReview;
   List<TranscriptToolResult> get toolResults =>
       List.unmodifiable([for (final message in messages) ?message.tool]);
-  bool containsMessage(int id) =>
-      messages.any((entry) => entry.message.id == id);
+  bool containsMessage(int id) => messages.any((entry) => entry.id == id);
 }
 
 final class TranscriptTimelineSection {
@@ -221,9 +229,9 @@ final class TranscriptTimelineSection {
   bool get isActivity => groups.last.isActivity;
   int get toolCount => groups
       .where((group) => group.isTool)
-      .fold(0, (count, group) => count + group.toolResults.length);
-  int get reviewCount =>
-      messages.where((entry) => entry.reviewText != null).length;
+      .fold(0, (count, group) => count + group.messages.length);
+  int get reviewCount => messages.where((entry) => entry.isReview).length;
+  bool get hasLatestReview => groups.last.messages.last.isReview;
   String? get latestReview => groups.last.reviewText;
   TranscriptTimelineSection? get precedingLatestReview => groups.length <= 1
       ? null
@@ -245,7 +253,7 @@ List<TranscriptTimelineGroup> _groupRows(
 
   for (final entry in entries) {
     if (entry.suppressed) continue;
-    if (entry.reasoning.isNotEmpty && entry.interAgentSender == null) {
+    if (entry.hasReasoning && entry.interAgentSender == null) {
       flushTools();
       groups.add(TranscriptTimelineGroup._([entry], isReasoning: true));
     }
@@ -254,7 +262,7 @@ List<TranscriptTimelineGroup> _groupRows(
       flushTools();
       continue;
     }
-    if (entry.message.role == 'tool') {
+    if (entry.role == 'tool') {
       tools.add(entry);
     } else {
       flushTools();
@@ -286,6 +294,47 @@ bool _branchAnswer(List<Map<String, dynamic>> rows, int index) =>
     answerMessageId(rows[index]) != null &&
     isBranchMessage(rows[index]) &&
     interAgentReplySender(rows, index) == null;
+
+bool _hasReasoning(Map<String, dynamic> row) {
+  for (final key in const [
+    '_gateway_reasoning',
+    'reasoning',
+    'reasoning_content',
+    'reasoning_details',
+  ]) {
+    final value = row[key];
+    if (value is String && value.trim().isNotEmpty) return true;
+  }
+  final details = row['reasoning_details'];
+  if (details is List &&
+      details.any(
+        (detail) =>
+            detail is Map &&
+            ((detail['type'] == 'reasoning.text' &&
+                    detail['text'] is String &&
+                    (detail['text'] as String).trim().isNotEmpty) ||
+                (detail['type'] == 'reasoning.summary' &&
+                    detail['summary'] is String &&
+                    (detail['summary'] as String).trim().isNotEmpty)),
+      )) {
+    return true;
+  }
+  final items = row['codex_reasoning_items'];
+  return items is List &&
+      items.any(
+        (item) =>
+            item is Map &&
+            item['type'] == 'reasoning' &&
+            item['summary'] is List &&
+            (item['summary'] as List).any(
+              (part) =>
+                  part is Map &&
+                  part['type'] == 'summary_text' &&
+                  part['text'] is String &&
+                  (part['text'] as String).trim().isNotEmpty,
+            ),
+      );
+}
 
 String _reasoning(Map<String, dynamic> row) {
   for (final key in const [

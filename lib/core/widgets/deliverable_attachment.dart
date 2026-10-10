@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../models/chat_output.dart';
 import '../services/file_open_error_message.dart';
 import '../theme/wing_theme.dart';
-import 'studio_action_label.dart';
 import 'studio_error.dart';
 import 'chat_inline_image.dart';
 
@@ -134,7 +133,7 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(
                 Icons.insert_drive_file_outlined,
@@ -148,29 +147,37 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
                   style: theme.textTheme.bodyMedium,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: WingSpacing.xs),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: WingSpacing.sm,
-            runSpacing: WingSpacing.xs,
-            children: [
-              OutlinedButton(
+              const SizedBox(width: WingSpacing.xs),
+              IconButton(
+                tooltip: 'Download',
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  foregroundColor: theme.colorScheme.primary,
+                ),
                 onPressed: widget.onDownload == null || _downloading
                     ? null
                     : () => _run(download: true),
-                child: StudioActionLabel.compact(
-                  'Download',
-                  busy: _downloading,
-                  icon: Icons.download_outlined,
-                ),
+                icon: _downloading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          semanticsLabel: 'Saving file',
+                        ),
+                      )
+                    : const Icon(Icons.download_outlined, size: 20),
               ),
-              OutlinedButton(
+              IconButton(
+                tooltip: 'Open preview',
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  foregroundColor: theme.colorScheme.primary,
+                ),
                 onPressed: widget.onOpen == null || _opening
                     ? null
                     : () => _run(download: false),
-                child: const Text('Open preview', textAlign: TextAlign.center),
+                icon: const Icon(Icons.visibility_outlined, size: 20),
               ),
             ],
           ),

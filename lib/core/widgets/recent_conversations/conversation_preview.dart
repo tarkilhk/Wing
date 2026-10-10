@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../models/recent_conversation.dart';
+import '../../models/bots.dart';
 import '../../models/transcript_message.dart';
 import '../../models/connection.dart';
 import '../../services/server_connection_status.dart';
@@ -18,10 +19,12 @@ class ConversationPreview extends StatelessWidget {
     super.key,
     required this.card,
     required this.connectionLabel,
+    this.bot,
     this.connectionIcon,
     this.connectionStatus,
   });
   final RecentConversationCard card;
+  final BotRecord? bot;
   final String connectionLabel;
   final ConnectionIcon? connectionIcon;
   final ServerConnectionStatus? connectionStatus;
@@ -66,7 +69,7 @@ class ConversationPreview extends StatelessWidget {
             tooltip: 'Open navigation menu',
           ),
           title: Text(
-            preview?.entry.title ?? card.entry.title,
+            bot?.title ?? preview?.entry.title ?? card.entry.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -128,6 +131,7 @@ class ConversationPreview extends StatelessWidget {
                     ),
                     child: ProfileMessage(
                       message: message,
+                      bot: bot,
                       loadImages: false,
                       showEditAction: message.role == 'user',
                     ),

@@ -16,6 +16,13 @@ String? steeringMessageText(Map<String, dynamic> message) {
     return text.startsWith('steer:') ? text.substring(6).trim() : null;
   }
   if (message['role'] != 'user') return null;
+  // Classification needs the written envelope, not encoded image bytes. Only
+  // materialize the original projection if it actually contains that envelope.
+  final inspection = _answerInspectionText(message).trim();
+  if (!_steeringEnvelope.hasMatch(inspection) &&
+      message['display_kind'] != 'steer') {
+    return null;
+  }
   final raw = answerMessageText(message).trim();
   final match = _steeringEnvelope.firstMatch(raw);
   if (match != null) return match.group(1)!.trim();
@@ -103,24 +110,27 @@ String _structuredText(Map part, {bool displayImages = false}) {
   return '[structured content]';
 }
 
+String _answerInspectionText(Map<String, dynamic> message) =>
+    _answerText(message['content'] ?? message['text'], displayImages: true);
+
 bool isBranchMessage(Map<String, dynamic> message) =>
     {'user', 'assistant'}.contains(message['role']) &&
-    answerMessageText(message).trim().isNotEmpty;
+    _answerInspectionText(message).trim().isNotEmpty;
 
-bool isHiddenAnswerMessage(Map<String, dynamic> message) =>
-    message['display_kind'] == 'hidden' ||
-    (message['role'] == 'user' &&
-        (message['_todo_snapshot_synthetic'] == true ||
-            answerMessageText(message).trimLeft().startsWith('[System:') ||
-            _isTaskSnapshot(answerMessageDisplayText(message)) ||
-            _isContinuationReminder(answerMessageDisplayText(message)) ||
-            _processHeartbeat.hasMatch(
-              answerMessageDisplayText(message).trim(),
-            ) ||
-            (message['display_kind'] == null &&
-                _asyncDelegationBatch.hasMatch(
-                  answerMessageDisplayText(message).trimLeft(),
-                ))));
+bool isHiddenAnswerMessage(Map<String, dynamic> message) {
+  if (message['display_kind'] == 'hidden') return true;
+  if (message['role'] != 'user') return false;
+  if (message['_todo_snapshot_synthetic'] == true ||
+      _answerInspectionText(message).trimLeft().startsWith('[System:')) {
+    return true;
+  }
+  final display = answerMessageDisplayText(message);
+  return _isTaskSnapshot(display) ||
+      _isContinuationReminder(display) ||
+      _processHeartbeat.hasMatch(display.trim()) ||
+      (message['display_kind'] == null &&
+          _asyncDelegationBatch.hasMatch(display.trimLeft()));
+}
 
 // Stock Hermes format_process_notification, inspected at upstream commit
 // e33fd7e09b42c50e347cd32564a4a83ad5c4a97b. Match the heartbeat header and

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:wing/core/models/chat_output.dart';
 import 'package:wing/core/widgets/studio_error.dart';
+import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -1216,41 +1217,52 @@ void main() {
                 body: SingleChildScrollView(
                   child: ProfileActivitySection(
                     initiallyExpanded: true,
-                    children: [
-                      if (saved)
-                        ProfileToolActivity(
-                          results: [
-                            TranscriptToolResult.fromRow({
-                              'id': 17,
-                              'role': 'tool',
-                              'tool_name': 'read_file',
-                              'tool_call_id': 'file-call',
-                              'content': jsonEncode({
-                                'content': 'Readable file content',
-                              }),
-                              'duration_s': .42,
-                            }),
-                          ],
-                        )
-                      else
-                        ProfileLiveToolActivity(
-                          activities: [
-                            GatewayToolActivity(
-                              toolId: 'file-call',
-                              name: 'read_file',
-                              phase: complete
-                                  ? GatewayToolActivityPhase.completed
-                                  : GatewayToolActivityPhase.running,
-                              result: complete
-                                  ? jsonEncode({
-                                      'content': 'Readable file content',
-                                    })
-                                  : null,
-                              durationSeconds: complete ? .42 : null,
-                            ),
-                          ],
+                    detailsBuilder: (_) => ProfileActivityTabs(
+                      tabs: [
+                        ProfileActivityTab(
+                          id: 'timeline',
+                          label: 'Timeline',
+                          child: Column(
+                            children: [
+                              if (saved)
+                                ProfileToolActivity(
+                                  results: [
+                                    TranscriptToolResult.fromRow({
+                                      'id': 17,
+                                      'role': 'tool',
+                                      'tool_name': 'read_file',
+                                      'tool_call_id': 'file-call',
+                                      'content': jsonEncode({
+                                        'content': 'Readable file content',
+                                      }),
+                                      'duration_s': .42,
+                                    }),
+                                  ],
+                                )
+                              else
+                                ProfileLiveToolActivity(
+                                  activities: [
+                                    GatewayToolActivity(
+                                      toolId: 'file-call',
+                                      name: 'read_file',
+                                      phase: complete
+                                          ? GatewayToolActivityPhase.completed
+                                          : GatewayToolActivityPhase.running,
+                                      result: complete
+                                          ? jsonEncode({
+                                              'content':
+                                                  'Readable file content',
+                                            })
+                                          : null,
+                                      durationSeconds: complete ? .42 : null,
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
                         ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               );

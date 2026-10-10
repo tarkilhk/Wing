@@ -19,6 +19,7 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/widgets/source_code_block.dart';
+import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/recent_conversation_session.dart';
 import 'package:wing/core/services/markdown_parse_worker.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
@@ -225,6 +226,32 @@ Future<void> _twoContacts(
   await first.up();
   await second.up();
   await _finishFrames(tester);
+}
+
+Future<void> _chatGesture(WidgetTester tester, {bool pinch = true}) async {
+  final rect = tester.getRect(find.byType(ProfileTranscript));
+  final fractions = pinch ? [.24, .76] : [.16, .38];
+  for (var y = rect.top + 24; y < rect.bottom - 24; y += 12) {
+    if (!fractions.every(
+      (fraction) => admitsConversationGesture(
+        PointerDownEvent(
+          position: Offset(rect.left + rect.width * fraction, y),
+          viewId: tester.view.viewId,
+        ),
+      ),
+    )) {
+      continue;
+    }
+    await _twoContacts(
+      tester,
+      Offset(rect.left + rect.width * fractions[0], y),
+      Offset(rect.left + rect.width * fractions[1], y),
+      Offset(rect.left + rect.width * (pinch ? .41 : .66), y),
+      Offset(rect.left + rect.width * (pinch ? .59 : .88), y),
+    );
+    return;
+  }
+  throw StateError('No admitted transcript row');
 }
 
 Future<void> _capture(WidgetTester tester, GlobalKey key, String name) async {
@@ -1839,8 +1866,23 @@ void main() {
           await _capture(tester, frame, 'normal-${brightness.name}-$scale');
           await tester.tap(find.byTooltip('Chat actions'));
           await tester.pumpAndSettle();
-          await tester.tap(find.text('Choose recent conversation'));
-          await _finishFrames(tester);
+          for (final label in [
+            'Previous recent conversation',
+            'Next recent conversation',
+            'Choose recent conversation',
+          ]) {
+            expect(find.text(label), findsNothing);
+          }
+          expect(find.text('Outputs'), findsOneWidget);
+          expect(find.text('Refresh workspace'), findsOneWidget);
+          await _captureCurrent(
+            tester,
+            frame,
+            'menu-${brightness.name}-$scale',
+          );
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          await _chatGesture(tester);
           expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
           final composerFocus = tester
               .widget<TextField>(
@@ -1856,7 +1898,7 @@ void main() {
           expect(
             composerFocus.hasFocus,
             isFalse,
-            reason: 'Menu focus restoration cannot focus the hidden chat',
+            reason: 'The hidden chat cannot regain composer focus',
           );
           expect(
             fixture.calls.where((call) => call.$2 == 'session.resume'),
@@ -1891,15 +1933,13 @@ void main() {
           await _finishFrames(tester);
           expect(controller.current!.chat!.key, isNot(first.key));
           expect(find.text('Swipe to browse · tap to open'), findsNothing);
-          await tester.tap(find.byTooltip('Chat actions'));
-          await tester.pumpAndSettle();
           final refreshDelay = Completer<void>();
           heldResume = refreshDelay;
           resumeStarted = Completer<void>();
           addTearDown(() {
             if (!refreshDelay.isCompleted) refreshDelay.complete();
           });
-          await tester.tap(find.text('Previous recent conversation'));
+          await _chatGesture(tester, pinch: false);
           for (var frame = 0; frame < 12; frame++) {
             await tester.pump(const Duration(milliseconds: 120));
             await tester.runAsync(
@@ -1938,19 +1978,13 @@ void main() {
           if (brightness == Brightness.dark && scale == 1) {
             expect(reads, ['answer:3']);
           }
-          await tester.tap(find.byTooltip('Chat actions'));
-          await tester.pumpAndSettle();
-          await tester.tap(find.text('Choose recent conversation'));
-          await _finishFrames(tester);
+          await _chatGesture(tester);
           await tester.binding.handlePopRoute();
           await _finishFrames(tester);
           expect(find.text('Swipe to browse · tap to open'), findsNothing);
           expect(controller.current!.chat!.key, first.key);
           if (brightness == Brightness.dark && scale == 1) {
-            await tester.tap(find.byTooltip('Chat actions'));
-            await tester.pumpAndSettle();
-            await tester.tap(find.text('Choose recent conversation'));
-            await _finishFrames(tester);
+            await _chatGesture(tester);
             expect(controller.visible, isFalse);
             tester
                 .state<ProfileWorkspaceScreenState>(

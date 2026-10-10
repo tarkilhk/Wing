@@ -184,6 +184,12 @@ class BotsRepository {
           chat: canonical == null
               ? null
               : ProfileSessionKey(profileScope, _requiredText(canonical['id'])),
+          resolvedChat: canonical == null || canonical['resolved_id'] == null
+              ? null
+              : ProfileSessionKey(
+                  profileScope,
+                  _requiredText(canonical['resolved_id']),
+                ),
           preview: canonical == null ? '' : _text(canonical['preview']),
         );
       }),
@@ -270,6 +276,7 @@ class BotsRepository {
       revision: bot.revision,
       metadata: bot.metadata,
       chat: bot.chat,
+      resolvedChat: bot.resolvedChat,
       preview: bot.preview,
       presence: presence,
       avatar: avatar,

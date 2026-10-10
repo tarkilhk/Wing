@@ -16,6 +16,15 @@ Back returns to the preserved Bots tab, search and filter. Another saved
 instance opens through Wing's secure workspace-entry flow; an edited or removed
 connection cannot retarget an old row's request.
 
+Bot conversations use the Chats screen and select Chats in the drawer. A
+confirmed canonical conversation shows its bot name in the top bar. Assistant
+messages use the bot's avatar and name in place of the Hermes portrait and label.
+The same identity is used for saved and streaming replies. This also applies
+when opened through Recents or a notification, and to its current compression
+tip. Project controls remain below the title. Other conversations retain their
+titles and Hermes reply identity. While appearance is loading or unavailable,
+the saved title and Hermes reply identity remain.
+
 ## Profile options
 
 The row menu offers View screen, Pin to top/Unpin, Hide bot/Show bot and
@@ -77,6 +86,18 @@ group creation is currently within one instance. These are client scope limits,
 not missing custom backend endpoints.
 
 ## Ownership and verified upstream
+
+The conversation header was verified against stock upstream main
+`3637c512fc3211bdccb61b7140d09ac1018508ba` on 10 October 2026:
+`tui_gateway/methods_profiles.py` supplies `canonical_session.id`, its
+`resolved_id`, profile metadata and `profiles.get_asset`. `BotsSession` owns a
+passive appearance read per displayed conversation; it does not start roster,
+presence or group polling. The view validates the result against the displayed
+conversation and shares it between the top bar and assistant messages, without
+reloading on composer changes. Passive Recents pages borrow only matching
+appearance. Leaving the destination clears the displayed appearance, so reopening
+the same chat adopts newly saved appearance. The stock `Bot Chat` title remains
+unchanged because Hermes uses it to identify the canonical root.
 
 Inspected stock upstream Hermes main
 `5f045f842a60184748dda30acb9fecbd961cc18b` on 9 October 2026:

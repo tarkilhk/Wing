@@ -36,6 +36,6 @@ flutter test --no-pub test/recent_capture_release_safe_guard_test.dart
 flutter test --no-pub test/recent_conversation_switcher_test.dart
 ```
 
-Signed-release acceptance must exercise Choose recent conversation and the
-previous/next actions. A debug-only run cannot close an assertions-disabled
-runtime finding.
+Signed-release acceptance must exercise inward pinch to open the stack and
+two-finger previous/next swipes. A debug-only run cannot close an
+assertions-disabled runtime finding.

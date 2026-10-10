@@ -92,11 +92,11 @@ void main() {
       );
       expect(find.byType(DeliverableAttachment), findsOneWidget);
       expect(find.text('FULL_BANK_ANALYSIS.md'), findsOneWidget);
-      await tester.tap(find.text('Open preview'));
+      await tester.tap(find.byTooltip('Open preview'));
       await tester.pumpAndSettle();
       expect(opened, reportPath);
       expect(downloaded, isNull);
-      await tester.tap(find.text('Download'));
+      await tester.tap(find.byTooltip('Download'));
       await tester.pumpAndSettle();
       expect(downloaded, reportPath);
       expect(find.text('File saved'), findsOneWidget);
@@ -141,7 +141,7 @@ void main() {
     expect(find.text('report.md'), findsOneWidget);
     expect(find.text('case-review.md'), findsOneWidget);
     for (var index = 0; index < 2; index++) {
-      final action = find.text('Open preview').at(index);
+      final action = find.byTooltip('Open preview').at(index);
       await tester.ensureVisible(action);
       await tester.tap(action);
       await tester.pumpAndSettle();
@@ -192,7 +192,7 @@ void main() {
       await tester.pumpMarkdownWidget(
         message(entry.key, open: (output) async => path = output.path),
       );
-      await tester.tap(find.text('Open preview'));
+      await tester.tap(find.byTooltip('Open preview'));
       await tester.pumpAndSettle();
       expect(path, entry.value);
       expect(tester.takeException(), isNull);
@@ -282,27 +282,26 @@ void main() {
         ),
       );
       expect(find.byIcon(Icons.download_outlined), findsOneWidget);
-      final captionBefore = tester.getRect(find.text('Download'));
-      final previewButton = find.widgetWithText(OutlinedButton, 'Open preview');
-      expect(
-        tester.getCenter(find.text('Open preview')).dx,
-        tester.getCenter(previewButton).dx,
+      final downloadBefore = tester.getRect(find.byTooltip('Download'));
+      final previewButton = find.ancestor(
+        of: find.byTooltip('Open preview'),
+        matching: find.byType(IconButton),
       );
-      await tester.tap(find.text('Open preview'));
+      expect(find.text('Download'), findsNothing);
+      expect(find.text('Open preview'), findsNothing);
+      expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+      await tester.tap(find.byTooltip('Open preview'));
       await tester.pump();
       expect(find.byType(CircularProgressIndicator), findsNothing);
-      expect(
-        find.descendant(of: previewButton, matching: find.byType(Icon)),
-        findsNothing,
-      );
+      expect(tester.widget<IconButton>(previewButton).onPressed, isNull);
       previewPending.complete();
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Download'));
+      await tester.tap(find.byTooltip('Download'));
       await tester.pump();
       expect(find.byIcon(Icons.download_outlined), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(tester.getRect(find.text('Download')), captionBefore);
-      await tester.tap(find.text('Download'));
+      expect(tester.getRect(find.byTooltip('Download')), downloadBefore);
+      await tester.tap(find.byTooltip('Download'));
       expect(calls, 1);
       pending.complete(false);
       await tester.pumpAndSettle();
@@ -329,7 +328,7 @@ void main() {
           },
         ),
       );
-      await tester.tap(find.text('Download'));
+      await tester.tap(find.byTooltip('Download'));
       await tester.pumpAndSettle();
       expect(
         find.text(
@@ -337,7 +336,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      await tester.tap(find.text('Download'));
+      await tester.tap(find.byTooltip('Download'));
       await tester.pump();
       await tester.pumpMarkdownWidget(message('MEDIA:/srv/another.md'));
       pending.complete(true);
@@ -388,11 +387,10 @@ void main() {
         );
         await tester.pumpAndSettle();
         for (final action in ['Download', 'Open preview']) {
-          final button = find.ancestor(
-            of: find.text(action),
-            matching: find.byType(OutlinedButton),
-          );
+          final button = find.byTooltip(action);
           expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
+          expect(tester.getSize(button).width, greaterThanOrEqualTo(48));
+          expect(find.text(action), findsNothing);
           expect(tester.getRect(button).right, lessThanOrEqualTo(304));
         }
         expect(tester.takeException(), isNull);

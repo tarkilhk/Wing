@@ -17,6 +17,7 @@ import 'package:wing/core/widgets/activity_time.dart';
 import 'package:wing/core/widgets/compact_activity_row.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'package:wing/core/widgets/profile_transcript_disclosure.dart';
 import 'package:wing/core/widgets/profile_saved_agents.dart';
 import 'helpers/pump_markdown_widget.dart';
@@ -285,22 +286,32 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
               children: [
                 ProfileActivitySection(
                   initiallyExpanded: true,
-                  children: [
-                    const ProfileTodoPanel(
-                      todos: [
-                        GatewayTodo(
-                          content:
-                              'Check the full list of available properties and compare privacy.',
-                          status: GatewayTodoStatus.completed,
+                  detailsBuilder: (_) => ProfileActivityTabs(
+                    tabs: [
+                      ProfileActivityTab(
+                        id: 'timeline',
+                        label: 'Timeline',
+                        child: Column(
+                          children: [
+                            const ProfileTodoPanel(
+                              todos: [
+                                GatewayTodo(
+                                  content:
+                                      'Check the full list of available properties and compare privacy.',
+                                  status: GatewayTodoStatus.completed,
+                                ),
+                                GatewayTodo(
+                                  content: 'Review alternatives',
+                                  status: GatewayTodoStatus.pending,
+                                ),
+                              ],
+                            ),
+                            ProfileSubagentPanel(session: supervision),
+                          ],
                         ),
-                        GatewayTodo(
-                          content: 'Review alternatives',
-                          status: GatewayTodoStatus.pending,
-                        ),
-                      ],
-                    ),
-                    ProfileSubagentPanel(session: supervision),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

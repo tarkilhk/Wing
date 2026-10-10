@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/bot_group_session.dart';
 import 'package:wing/core/services/bot_profile_edit_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
@@ -12,6 +13,119 @@ import 'support/bots_fixture.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  test(
+    'conversation appearance admits exact canonical root and tip only',
+    () async {
+      final fixture = BotsFixture();
+      final methods = <String>[];
+      const png =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=';
+      fixture.profiles.first['has_avatar'] = true;
+      fixture.readHook = (_, method, _) async {
+        methods.add(method);
+        if (method == 'profiles.get_asset') {
+          return {'found': true, 'data': png};
+        }
+        return null;
+      };
+      final session = BotsSession((_) async => [fixture.repository]);
+      addTearDown(session.dispose);
+      final scope = WorkspaceScope(
+        connectionId: 'host',
+        connectionIdentity: 'instance-1',
+        profileName: 'atlas',
+      );
+      for (final id in ['atlas-chat', 'atlas-tip']) {
+        methods.clear();
+        final bot = await session.botForConversation(
+          ProfileSessionKey(scope, id),
+        );
+        expect(bot!.title, 'Atlas');
+        expect(bot.avatar, base64Decode(png));
+        expect(
+          bot
+              .withMetadata(metadata: bot.metadata, revision: 4)
+              .describesConversation(ProfileSessionKey(scope, 'atlas-tip')),
+          true,
+        );
+        expect(methods, ['profiles.list', 'profiles.get_asset']);
+      }
+      for (final key in [
+        ProfileSessionKey(scope, 'atlas-cron'),
+        ProfileSessionKey(
+          WorkspaceScope(
+            connectionId: 'host',
+            connectionIdentity: 'instance-1',
+            profileName: 'mira',
+          ),
+          'atlas-chat',
+        ),
+        ProfileSessionKey(
+          WorkspaceScope(
+            connectionId: 'other',
+            connectionIdentity: 'instance-1',
+            profileName: 'atlas',
+          ),
+          'atlas-chat',
+        ),
+        ProfileSessionKey(
+          WorkspaceScope(
+            connectionId: 'host',
+            connectionIdentity: 'edited-instance',
+            profileName: 'atlas',
+          ),
+          'atlas-chat',
+        ),
+      ]) {
+        methods.clear();
+        expect(await session.botForConversation(key), isNull);
+        expect(methods, isNot(contains('profiles.get_asset')));
+      }
+      expect(fixture.commands, isEmpty);
+    },
+  );
+  test(
+    'conversation appearance read failure and disposal stay passive',
+    () async {
+      final fixture = BotsFixture();
+      var retains = 0, releases = 0;
+      final repository = BotsRepository(
+        scope: fixture.repository.scope,
+        instance: fixture.repository.instance,
+        read: fixture.read,
+        command: fixture.command,
+        ownership: fixture.ownership,
+        retain: () => retains++,
+        release: () => releases++,
+      );
+      final session = BotsSession((_) async => [repository]);
+      final key = ProfileSessionKey(
+        WorkspaceScope(
+          connectionId: 'host',
+          connectionIdentity: 'instance-1',
+          profileName: 'atlas',
+        ),
+        'atlas-chat',
+      );
+      fixture.readHook = (_, method, _) async => throw StateError('Offline');
+      expect(await session.botForConversation(key), isNull);
+      expect(session.state.errors, isEmpty);
+      final held = Completer<Map<String, dynamic>?>();
+      final started = Completer<void>();
+      fixture.readHook = (_, method, _) async {
+        started.complete();
+        return held.future;
+      };
+      final reading = session.botForConversation(key);
+      await started.future;
+      session.dispose();
+      held.complete(null);
+      expect(await reading, isNull);
+      expect(retains, 2);
+      expect(releases, retains);
+      expect(fixture.commands, isEmpty);
+    },
+  );
   test(
     'roster preview and click share the server-owned canonical root, never last_session',
     () async {

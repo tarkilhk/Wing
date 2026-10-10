@@ -69,6 +69,42 @@ class BotsSession extends ChangeNotifier {
     }
   }
 
+  /// One passive read for the displayed conversation, independent of roster
+  /// polling. Exact stock root/tip identity admits appearance; lookup failure
+  /// leaves the conversation available with its ordinary title.
+  Future<BotRecord?> botForConversation(ProfileSessionKey key) async {
+    bool current() => !_closed;
+    if (!current()) return null;
+    try {
+      final sources = await _sources(current);
+      if (!current()) return null;
+      final source = sources
+          .where(
+            (repository) =>
+                repository.scope.connectionId == key.workspace.connectionId &&
+                repository.scope.connectionIdentity ==
+                    key.workspace.connectionIdentity,
+          )
+          .firstOrNull;
+      if (source == null) return null;
+      source.retain();
+      try {
+        final roster = await source.bots();
+        if (!current()) return null;
+        final bot = roster
+            .where((bot) => bot.describesConversation(key))
+            .firstOrNull;
+        if (bot == null) return null;
+        final appearance = await source.enrich(bot);
+        return current() ? appearance : null;
+      } finally {
+        source.release();
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> refresh() async {
     if (_closed || _loading || _busy) return;
     final generation = ++_readGeneration;

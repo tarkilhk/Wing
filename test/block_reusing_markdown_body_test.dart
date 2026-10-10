@@ -345,9 +345,9 @@ void main() {
       same(attachment),
     );
     expect(tester.element(find.byType(DeliverableAttachment)), same(element));
-    await tester.tap(find.text('Open preview'));
+    await tester.tap(find.byTooltip('Open preview'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Download'));
+    await tester.tap(find.byTooltip('Download'));
     await tester.pumpAndSettle();
     expect(calls, ['new open', 'new download']);
   });
