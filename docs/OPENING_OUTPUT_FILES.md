@@ -5,8 +5,11 @@ file paths in inline code, plus plain `.html` / `.htm` paths) appear as
 file cards with separate **Download** and **Open preview** actions. Download opens
 Android's save destination picker; cancelling does not save a file. Open preview
 opens the existing full-screen reader, and Back returns to the conversation.
-Markdown starts in **Rendered** mode with a **Source** control. Copy message
-retains the original authored text, including the server path.
+Markdown starts as formatted content. The icon-only **Show Raw content** /
+**Show formatted content** control switches views; **Copy content**, **Share file**
+and **Download** use the same viewer toolbar. Action names are accessible labels
+and tooltips. Copy message retains the original authored text, including the
+server path.
 
 Inline code paths such as `/home/tarkil/projects/reports/report.md` use the same
 reader. Detection requires a rooted path or `./` / `../` prefix and a filename
@@ -59,7 +62,7 @@ desktop side pane. The integration uses stock `/api/fs/read-text`,
 
 | Content | In-app behavior | Boundary |
 | --- | --- | --- |
-| Markdown and code | Rendered/Source controls, copying, tables and supported diagrams | Keep server truncation notices visible. Download or Save or share retrieves the full file within the download limit. Document links use the open file's directory; links in chat use the saved chat directory. |
+| Markdown and code | Raw/formatted Markdown controls, selectable code, copying, tables and supported diagrams | Keep server truncation notices visible. Download or Save or share retrieves the full file within the download limit. Document links use the open file's directory; links in chat use the saved chat directory. |
 | Images and SVG | Explicit loading and zoom; SVG uses the restricted diagram viewer | Preserve a useful source or save/open fallback. |
 | PDF | Read PDF, Previous/Next page and pinch zoom | Viewing only; no editing, forms, text search or selection. Password-protected/unsupported files can use another app. |
 | Audio and video | Play media, timeline, pause and seek through Android controls | Explicit Play; device codecs determine support. No background playback or authenticated-URL streaming. |
@@ -68,9 +71,24 @@ desktop side pane. The integration uses stock `/api/fs/read-text`,
 
 PDF/audio/video also offer Open in app. Save or share remains available when a compatible viewer is absent or an in-app format fails. A successful viewer launch does not prove successful playback or rendering.
 
+Code coloring uses an explicit fence language or the supplied file language;
+unlabelled text stays literal. Chat fences wrap long lines by default and expose
+an icon-only horizontal-scrolling toggle. Source selection and copying preserve
+the original characters across wrapping and offscreen lines. Live chat fences
+remain literal until the response completes and the fence closes. Full Activity
+source viewers retain their own wrap and copy controls; these do not change the
+Markdown file viewer's Raw/formatted choice.
+
 ## Download and cache ownership
 
 Downloads are capped at 32 MiB, checking both declared length and streamed bytes. Disable duplicate delivery while pending. Closing a preview must prevent a late download from launching a viewer. The native bridge rechecks activity lifetime before launch.
+
+Embedded history images (`data:image` references) use the same admission policy
+as attachment and tool-image previews. Raw and normalized URI text must fit
+45 MiB, and decoded image-file bytes must fit 32 MiB. Before URI normalization,
+Wing counts the expansion caused by Unicode and percent escapes; before decoding,
+it checks the decoded byte count. An oversized image cannot enter preview or
+sharing. Other outputs remain available.
 
 Authenticated reads have a 45-second deadline for response headers and body,
 including the password/session-token reads that precede them. Expiry aborts the
@@ -79,7 +97,15 @@ its pending reads immediately. A rejected credential can still renew once.
 
 Android viewers receive downloaded bytes, safe display filenames and supported MIME types. Sanitize the decoded basename; use UUID cache filenames. Never pass backend credentials, headers, cookies or authenticated URLs to another app.
 
-FileProvider grants temporary read access only to the `delivered_outputs/` cache area. Age/count pruning removes abandoned delivery files. This is temporary viewing storage, not an offline library. Explicitly saved/shared copies have their own destination lifetime.
+Wing's native viewer FileProvider grants temporary read access only to the `delivered_outputs/` cache area. Age/count pruning removes abandoned delivery files. This is temporary viewing storage, not an offline library. Explicitly saved/shared copies have their own destination lifetime.
+
+Output sharing uses the same pending-share admission as configuration backups
+and skill text. Finish the current share sheet before trying another offer.
+Android's share plugin copies the file into its own provider cache; Wing removes
+its original staging directory only after the share operation settles, including
+dismissal or error. This cleanup leaves provider-cache and recipient copies
+independent. See [sharing from Wing](SHARING_AND_CAPTURE.md#sharing-from-wing)
+for their retention.
 
 ## PDF and media resources
 
@@ -107,6 +133,6 @@ Content policies and native interception block external resources, navigation, f
 
 Mermaid and SVG have a separate restricted offline renderer with tighter source limits. See [Diagram previews](DIAGRAM_PREVIEWS.md) for vendor versions, licenses and update checks.
 
-Web links accept only HTTP/HTTPS with a host and no URL user information. Custom Tabs can fall back to the external browser or the launcher's WebView path; failure remains visible. No authenticated resource proxy is added for arbitrary pages.
+Web links accept only HTTP/HTTPS with a host and no URL user information. Custom Tabs can fall back to the external browser; failure remains visible. No authenticated resource proxy is added for arbitrary pages.
 
 Native PDF/image/SVG zoom and common media playback were exercised against real Hermes downloads during September acceptance. HTML browser fixtures establish sandbox behavior, not exhaustive native phone coverage. See [Testing](TESTING.md).

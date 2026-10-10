@@ -4,7 +4,7 @@ Wing helps you return to the right conversation and keep it moving from your pho
 
 ## Find a conversation
 
-Open **Chats** to search, pin and group conversations. Filter by profile, project or status; use **Activity** to find work that is running or needs input. The selected connection and profile determine what you see in Wing without changing another client's selection.
+Open **Chats** to search, pin and group conversations. Filter by profile, project or status; use **Recents** to find recent conversations and work that is running or needs input. The selected connection and profile determine what you see in Wing without changing another client's selection.
 
 ## Send the next idea
 
@@ -14,13 +14,25 @@ While Hermes is working, the composer can **Steer**, **Queue** or **Stop**. The 
 
 ## Revisit the result
 
-Open a chat from **Recents** to swipe between conversations. When you return to
+Open a chat from **Recents** to switch between that visit's conversations with a
+two-finger horizontal swipe. Pinch inward to open the card stack; its icon-only
+controls also support keyboard and accessibility navigation. Android Back
+returns from the stack to the conversation, then to the retained Recents filter.
+When you return to
 a conversation already loaded in this workspace, its retained messages appear
 while Wing refreshes from Hermes. The thin bar at the top stays visible during
 refresh; new replies appear when the server history arrives. If refresh fails,
 the retained conversation stays readable with a retry notice. A conversation
 without retained history still needs its initial server load.
 
-Use the pencil beside a sent message to edit it. The time sits above the Edit and Copy icons beside its bubble. In the editor, confirm **Replace and resend** to replace that turn and all later history; this requires an idle, connected chat. Use **Find in chat** to search older messages, **Outputs** to browse files, or the answer actions to regenerate or branch into another chat. Model changes show Hermes warnings before you confirm them.
+Sent messages have a compact footer with the date on the left and icon-only
+Edit and Restore actions on the right. Copy sits outside the bubble at its
+upper-right corner. Edit opens a correction; confirm **Replace and resend** to
+replace that turn and all later history in an idle, connected chat. **Restore
+checkpoint** reruns the saved prompt without editing it and can interrupt a
+running turn after confirmation. Both preserve separate composer work and pause
+queued follow-ups. Use **Find in chat** to search older messages, **Outputs** to
+browse files, or the answer actions to regenerate or branch into another chat.
+Model changes show Hermes warnings before you confirm them.
 
 [Explore Wing](FEATURES.md) · [Conversation details](CONVERSATION_ACTIONS_AND_READING.md)

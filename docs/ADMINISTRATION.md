@@ -4,11 +4,11 @@ Wing puts everyday profile settings, server checks and usage in three clear plac
 
 | Go to | Use it for |
 | --- | --- |
-| **Administration** | Models, identity, skills, provider access, MCP connectors and scheduled tasks for the selected profile. |
+| **Hermes administration** | Models, identity, skills, provider access, MCP connectors and scheduled tasks for the selected profile. |
 | **Hermes health** | Host resources, server diagnostics and checks for the selected profile. |
 | **Hermes analytics** | Activity, token usage and estimated costs. |
 
-Open these destinations from Wing's navigation drawer. The connection name and status open connection details; the server version opens Versions & updates. The rest of this guide records the exact controls and server boundaries for contributors.
+Open these destinations from Wing's navigation drawer. Bots also opens the existing editors through **Bot settings**, retaining that row's connection and profile even when it differs from the selected chat. Its appearance, duplicate and profile-management actions are described in the [Bots guide](BOTS.md). The connection name and status open connection details; the server version opens Versions & updates. The rest of this guide records the exact controls and server boundaries for contributors.
 
 Read the [ownership handoff](design/2026-09-14-administration-handoff.md) before changing these flows.
 
@@ -349,11 +349,11 @@ in ignored `build/host-health/`.
 | A03–A06 | Existing individual skill/tool toggles and inventories, reached from Skills and tools | Configured, enabled and platform remain distinct. Toolset enablement can start backend setup; it is not proof of readiness. |
 | A07 | Searchable retained-memory list and complete detail | Read-only; generated positional identity is used only for reads. |
 | A08 | Explicit unavailable state | Edit/delete requires a stable identity and concurrency-safe backend contract. No memory mutation is sent. |
-| A09–A11 | Shared and profile access inventories, source labels, stored-key management, supported device-code sign-in, cancellation, disconnect | External CLI login remains external. Pool-account detail cannot be safely attributed to an arbitrary selected owner; it is explicitly unavailable. No credential values are fetched for display. |
+| A09–A11 | Profile access inventories, source labels, stored-key management, supported device-code sign-in, cancellation, disconnect | External CLI login remains external. Pool-account detail cannot be safely attributed to an arbitrary selected owner; it is explicitly unavailable. No credential values are fetched for display. |
 | A13 | Auxiliary assignments, automatic choice, reset-all, unavailable-model warning, expensive-model confirmation | Reset-all discloses endpoint-credential clearing. Readback must match the affected tasks. |
 | A14 | Ordered fallback list with add/remove/reorder, schema-supported agent/subagent execution controls | Fallback edits check for an already-changed list and verify the saved result. Matches desktop normalization: string entries become provider/model rows, incomplete rows remain editable locally, and only complete pairs are saved after an explicit edit. Opening does not write settings; routing metadata is preserved. Non-list values produce an empty editor. Verified against upstream `21642218445e213b02ea7158f71214022645c9c6` (`apps/desktop/src/app/settings/fallback-models-field.tsx`) on 2026-09-19. Custom provider definitions remain P2. |
 | A16 | Dedicated full-screen description/SOUL editor under Identity | Uses the captured profile gateway; existing readback behavior is retained. |
-| A17 | Create, clone configuration, rename and delete through the trailing Manage profiles pill in the Profile selector | Default profile has presentation-only rename and no delete action. Creation/rename/deletion is followed by discovery. Unconfirmed outcomes remain unconfirmed. Full-data/channel cloning and optional multi-step setup are not offered. |
+| A17 | Create, clone configuration, rename and delete through the trailing Manage profiles pill in the Profile selector; captured profile editors and Duplicate bot in Bots | Default profile has presentation-only rename and no delete action. Creation/rename/deletion is followed by discovery. Unconfirmed outcomes remain unconfirmed. Profile-manager cloning copies configuration; Bots duplication requests the stock full profile clone with channel bindings excluded. Optional multi-step setup is not offered. |
 | A18–A19 | Recorded skill usage ordering, provenance, complete instructions, edit/archive agent-owned skills | Bundled instructions are read-only. Existing changed content is detected before saving; this is not a server compare-and-swap guarantee. |
 | A20 | Official Hub/search, provenance preview, install, uninstall and group update | Tracks returned background action identity and actual exit status. Install/update acceptance requires an authorized target and actual action result. |
 | A22 | Scoped toolset providers, effective key readiness, model selection, explicit post-setup action | Setup explains host requirements and tracks the returned action. An effective inherited key is not offered as removable from the profile. |
@@ -517,7 +517,7 @@ These estimates apply the current models.dev direct OpenAI API base rates to the
 
 `ProfileModelCatalog` combines the scoped stock catalog with `ModelsDevPricing`'s app-wide anonymous public rate read. `ModelsDevPrices` selects only the direct OpenAI API entries, and `ModelPrices` preserves their numeric precision for both screens. Backend prices on other picker routes remain route-specific. Analytics values only `openai-codex` this way; it requires all three rates and counts, with no alias or reseller matching. It retains rates for historical models outside today's picker. A download failure preserves tokens and Hermes estimates; cached rates remain usable with an explicit notice, while an empty cache leaves subscription estimates unavailable. Device-cached prices revalidate after six hours; Refresh requests both the backend catalog with `refresh=1` and public-rate revalidation. No bundled price asset or backend modification is required.
 
-The pricing contract was inspected at upstream main `8bff64d6ed3414a66976bfa8ab72c14b6bca2a6f` on 9 October 2026 (`hermes_cli/web_routers/models.py`, `hermes_cli/inventory.py`, `hermes_cli/models_pricing.py`). This revision supplies picker pricing only for supported API providers; `openai-codex` has no prices. Subscription estimates therefore remain unavailable until stock Hermes supplies them. The client does not borrow another route's API prices. `usage_cost_test.dart`, `usage_analytics_test.dart`, `usage_analytics_session_test.dart` and `administration_usage_test.dart` guard shared decoding, absence, failure/recovery and retirement.
+The stock pricing contract was inspected at upstream main `8bff64d6ed3414a66976bfa8ab72c14b6bca2a6f` on 9 October 2026 (`hermes_cli/web_routers/models.py`, `hermes_cli/inventory.py`, `hermes_cli/models_pricing.py`). That backend observation alone does not supply the direct API rates needed for Codex valuation. Wing's shared public models.dev reader supplies them independently; missing exact-ID rates remain unavailable. `models_dev_pricing_test.dart`, `usage_cost_test.dart`, `usage_analytics_test.dart`, `usage_analytics_session_test.dart` and `administration_usage_test.dart` guard shared decoding, absence, failure/recovery and retirement. See [model and pricing ownership](MODEL_CATALOG.md#shared-pricing-observations).
 
 Render the actual Usage screen with `CAPTURE_USAGE=true` and `CAPTURE_FONT_DIR` pointing to Flutter's `bin/cache/artifacts/material_fonts`; `test/administration_usage_test.dart` writes captures to ignored `build/usage-review/`.
 
@@ -600,8 +600,9 @@ Older recorded findings remain qualified as last known. Open Health to investiga
 or request a fresh check. This is a warning about current Hermes usage, not an
 always-on server monitor. Thresholds and qualified notices do not predict OOM.
 
-A bell occupies the title row on every screen and appears only with current
-issues. It rings once for a new issue/escalation and respects reduced motion.
+A bell occupies the title row on every screen and appears while unresolved
+issues remain, including qualified last-known findings. It rings once for a new
+issue/escalation and respects reduced motion.
 A brief notice is optional; alerts never auto-open a modal. Notices float below
 the toolbar with generous clearance, 24 dp side gutters and a 360 dp width cap.
 The neutral raised surface uses a small warning/critical icon, a readable title,

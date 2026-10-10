@@ -1326,6 +1326,11 @@
       "feature": "performance-tooling",
       "library": "lib/core/services/performance_instrumentation.dart"
     },
+    "lib/core/services/platform_share.dart": {
+      "role": "platform",
+      "feature": "attachments-and-sharing",
+      "library": "lib/core/services/platform_share.dart"
+    },
     "lib/core/services/profile_capabilities_session.dart": {
       "role": "application",
       "feature": "capabilities",

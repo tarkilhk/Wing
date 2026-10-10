@@ -25,7 +25,6 @@ class ServerConnectionStatus extends ChangeNotifier {
   String? _accessProblem;
   String? get recoveryProblem => _failedRecoveries.values.lastOrNull?.message;
   String? get problem => recoveryProblem ?? _accessProblem;
-  DateTime? lastConnected;
   Future<void> Function()? retry;
   VoidCallback? onInterruption;
   bool _closed = false;
@@ -116,7 +115,6 @@ class ServerConnectionStatus extends ChangeNotifier {
     if (_closed) return;
     access = ConnectionAvailability.available;
     _accessProblem = null;
-    lastConnected = DateTime.now();
     _changed();
   }
 
@@ -125,7 +123,6 @@ class ServerConnectionStatus extends ChangeNotifier {
     _live[owner] = connected
         ? ConnectionAvailability.available
         : ConnectionAvailability.unavailable;
-    if (connected) lastConnected = DateTime.now();
     _changed();
   }
 

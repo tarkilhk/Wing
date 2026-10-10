@@ -283,6 +283,22 @@ void main() {
           tester,
           () => find.textContaining('Backup exported').evaluate().isNotEmpty,
         );
+        final remainingStages = cache
+            .listSync(followLinks: false)
+            .whereType<Directory>()
+            .where(
+              (directory) =>
+                  directory.uri.pathSegments
+                      .where((part) => part.isNotEmpty)
+                      .last
+                      .startsWith('wing-backup-') &&
+                  !exportStageBaseline!.contains(directory.path),
+            );
+        expect(
+          remainingStages,
+          isEmpty,
+          reason: 'Wing must release its export stage after Android handoff.',
+        );
         final exported = cache
             .listSync(recursive: true, followLinks: false)
             .whereType<File>()
@@ -295,9 +311,10 @@ void main() {
         expect(
           exported,
           hasLength(1),
-          reason: 'One owned backup was exported.',
+          reason: 'One recipient-provider backup remains after Wing cleanup.',
         );
         ownedExport = exported.single;
+        expect(ownedExport.parent.path, endsWith('/share_plus'));
         final contents = await ownedExport.readAsString();
         final decoded = await ConfigBackupCodec.decode(
           contents,

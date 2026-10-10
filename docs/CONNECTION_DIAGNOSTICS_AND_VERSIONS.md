@@ -5,7 +5,7 @@ Use [Getting started](GETTING_STARTED.md) for the first connection and [self-hos
 ## Returning to Wing
 
 When Wing returns to the foreground, the visible workspace immediately attempts
-to restore its connection, including from Activity, App settings and administration
+to restore its connection, including from Recents, App settings and administration
 destinations. Opening a disconnected workspace or returning to it also retries
 without waiting for the background retry timer. Failed temporary connections use
 a bounded retry burst; **Retry connection** remains available if recovery fails.
@@ -33,7 +33,7 @@ Access headers support authenticated proxies through **Sign in → Custom setup 
 
 Secrets use the same secure storage and transactional save/rollback path as connection credentials. They are included only in explicit configuration export (optionally encrypted with a passphrase), never in displayed URLs, errors or logs. Credential changes must not leave the visible connection and stored secret out of sync.
 
-Dashboard HTTP requests refuse redirects, including requests authenticated with the dashboard session token. Configure the final URL and path directly. WebSocket authentication retains its redirect checks. Some HTTP operations still lack a deadline; see [issue #4](https://github.com/tarkilhk/Wing/issues/4).
+Dashboard HTTP requests refuse redirects, including requests authenticated with the dashboard session token. Configure the final URL and path directly. WebSocket authentication retains its redirect checks. Dashboard reads and downloads now use a 45-second deadline for response headers and body, abort timed-out requests, and abort pending reads when their client is disposed. The authentication reads that precede them are bounded too. Some state-changing HTTP requests still lack a response deadline; read timeouts do not establish that a preceding write failed. See [issue #4](https://github.com/tarkilhk/Wing/issues/4).
 
 ## Diagnostics and versions
 

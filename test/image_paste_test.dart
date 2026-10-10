@@ -294,6 +294,23 @@ void main() {
     expect(chat.composer.observation.attachments, hasLength(1));
   });
 
+  testWidgets('stalled clipboard read expires without blocking the composer', (
+    tester,
+  ) async {
+    final clipboard = Completer<Uint8List>();
+    await show(tester);
+    final preparation = controller.addPastedImage(chat, () => clipboard.future);
+    final failure = expectLater(preparation, throwsA(isA<StateError>()));
+    expect(chat.composer.observation.preparing, isTrue);
+    await tester.pump(const Duration(seconds: 20));
+    await failure;
+    expect(chat.composer.observation.preparing, isFalse);
+    expect(controller.canAddAttachment(chat), isTrue);
+    clipboard.complete(png);
+    await tester.pump();
+    expect(chat.composer.observation.attachments, isEmpty);
+  });
+
   testWidgets('ordinary text still pastes at the selection', (tester) async {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       ImageClipboard.channel,

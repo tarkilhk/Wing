@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'config_backup.dart';
+import 'platform_share.dart';
 
 /// Platform-facing half of the backup feature: picking files, writing the
 /// export, and handing it to the share sheet.
@@ -39,32 +41,48 @@ class ConfigBackupIo {
     final directory = await getTemporaryDirectory();
     if (!canDispatch()) return null;
 
-    // Each offer owns a distinct stage: a later export cannot overwrite a file
-    // whose URI is still being read by a previously admitted recipient.
+    // Each pending offer owns a distinct stage so overlapping native reads
+    // cannot overwrite one another's source.
     Directory? stage;
     var dispatched = false;
     try {
       stage = await directory.createTemp('wing-backup-');
       if (!canDispatch()) return null;
-      final file = File('${stage.path}/wing-config-$stamp.json');
+      // Android's provider cache keeps only the source basename. Include this
+      // offer's unique stage ID so distinct exports cannot share a filename.
+      final offerId = stage.uri.pathSegments
+          .where((segment) => segment.isNotEmpty)
+          .last
+          .substring('wing-backup-'.length);
+      final file = File('${stage.path}/wing-config-$stamp-$offerId.json');
       await file.writeAsString(contents, flush: true);
       if (!canDispatch()) return null;
 
       // Admission is the share API call. The plugin owns its ensuing native
       // preparation and chooser work; route closure cannot revoke that offer.
-      dispatched = true;
-      final result = await SharePlus.instance.share(
+      final result = await platformShare(
         ShareParams(
           subject: 'Wing configuration backup',
           files: <XFile>[XFile(file.path, mimeType: 'application/json')],
         ),
+        onDispatched: () => dispatched = true,
       );
       if (result.status == ShareResultStatus.dismissed) return null;
       return file.uri.pathSegments.last;
+    } on PlatformShareBusy catch (error) {
+      throw ConfigBackupException(error.message);
     } finally {
-      // Never remove an admitted URI when its chooser completes: a recipient
-      // may still be reading. Only this operation's undispatched stage is ours.
-      if (!dispatched && stage != null) await stage.delete(recursive: true);
+      // share_plus 13.3.0 copies Android sources into its own provider cache
+      // before presenting the chooser. Delete only Wing's original after the
+      // native operation settles; recipients retain the plugin-owned copy.
+      if (stage != null &&
+          (!dispatched || defaultTargetPlatform == TargetPlatform.android)) {
+        try {
+          await stage.delete(recursive: true);
+        } on FileSystemException {
+          // Temporary storage may already have been removed by the OS.
+        }
+      }
     }
   }
 

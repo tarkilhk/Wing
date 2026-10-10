@@ -50,7 +50,7 @@ Find bots across your saved connections and return to each bot's continuing chat
 
 ## Live work
 
-Inspect tool calls, tasks and delegated agents, then steer or stop a run, queue a follow-up, or fork the conversation. Choose a skill while composing a message to send its instructions with your request.
+Inspect tool calls, tasks and delegated agents, then steer or stop a run, queue a follow-up, or fork from a selected saved answer. Choose a skill while composing a message to send its instructions with your request.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/live-work.html">
@@ -62,7 +62,7 @@ Inspect tool calls, tasks and delegated agents, then steer or stop a run, queue 
 
 ## Answers and files
 
-Read formatted Markdown and wide tables, copy code or whole replies, listen to answers, and preview, save or share output files.
+Read formatted Markdown and wide tables, copy code or whole replies, listen to answers, and preview, save or share output files. Edit an earlier sent message, or restore its checkpoint to remove later history and rerun that prompt.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/results.html">

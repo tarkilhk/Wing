@@ -9,6 +9,7 @@ import '../../models/chat_output.dart';
 import '../../models/skill_reader.dart';
 import '../../presentation/skill_document.dart';
 import '../../services/skill_reader_session.dart';
+import '../../services/platform_share.dart';
 import '../../theme/wing_theme.dart';
 import '../markdown_message_content.dart';
 import '../resource_filename.dart';
@@ -125,7 +126,7 @@ class _SkillDocumentViewerState extends State<SkillDocumentViewer> {
     final box = context.findRenderObject() as RenderBox?;
     setState(() => _sharing = true);
     try {
-      await SharePlus.instance.share(
+      await platformShare(
         ShareParams(
           text: payload,
           title: widget.document.name,
@@ -134,6 +135,8 @@ class _SkillDocumentViewerState extends State<SkillDocumentViewer> {
               : box.localToGlobal(Offset.zero) & box.size,
         ),
       );
+    } on PlatformShareBusy catch (error) {
+      if (mounted) _notice(error.message);
     } catch (_) {
       if (mounted) _notice('Could not share this text. Try again.');
     } finally {

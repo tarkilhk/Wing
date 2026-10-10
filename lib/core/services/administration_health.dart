@@ -621,25 +621,6 @@ class AdministrationHealth extends ChangeNotifier {
     );
   }
 
-  AdministrationHealthStatus get status {
-    final values = [
-      for (final finding in profileFindings) finding.status,
-      for (final observation in diagnostics.values)
-        observation.failed
-            ? AdministrationHealthStatus.failure
-            : AdministrationHealthStatus.unknown,
-      if (_starting.isNotEmpty) AdministrationHealthStatus.unknown,
-    ];
-    for (final severity in [
-      AdministrationHealthStatus.failure,
-      AdministrationHealthStatus.warning,
-      AdministrationHealthStatus.unknown,
-    ]) {
-      if (values.contains(severity)) return severity;
-    }
-    return AdministrationHealthStatus.healthy;
-  }
-
   bool canStartDiagnostic(String path) {
     if (_disposed || _starting.contains(path)) return false;
     final previous = _operations[path];

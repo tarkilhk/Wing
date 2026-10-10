@@ -74,6 +74,7 @@ class ComposerSession {
   final _files = <AttachmentDraft>[];
   final _queue = <_QueueEntry>[];
   final _jobs = <AttachmentImageJob>{};
+  Completer<Uint8List>? _clipboardReadCancelled;
   _QueueEntry? _editing;
   final _submissions = <ComposerSubmission, _SubmissionWork>{};
   ComposerTransfer? _transfer;
@@ -681,6 +682,12 @@ class ComposerSession {
 
   void cancelPreparation() {
     _preparationGeneration++;
+    final clipboard = _clipboardReadCancelled;
+    if (clipboard != null && !clipboard.isCompleted) {
+      clipboard.completeError(
+        StateError('The attachment preparation no longer owns this chat.'),
+      );
+    }
     for (final job in _jobs.toList()) {
       job.cancel();
     }
@@ -776,7 +783,24 @@ class ComposerSession {
       });
   Future<void> pasteImage(Future<Uint8List> Function() readImage) =>
       _prepare((ensure, register) async {
-        final bytes = await readImage();
+        final cancelled = Completer<Uint8List>();
+        _clipboardReadCancelled = cancelled;
+        final Uint8List bytes;
+        try {
+          bytes = await Future.any([
+            Future.sync(readImage).timeout(
+              const Duration(seconds: 20),
+              onTimeout: () => throw StateError(
+                'Clipboard reading took too long. Copy the image again.',
+              ),
+            ),
+            cancelled.future,
+          ]);
+        } finally {
+          if (identical(_clipboardReadCancelled, cancelled)) {
+            _clipboardReadCancelled = null;
+          }
+        }
         ensure();
         return _attachments.prepareImageBytes(
           bytes: bytes,

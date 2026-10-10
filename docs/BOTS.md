@@ -18,12 +18,11 @@ connection cannot retarget an old row's request.
 
 Bot conversations use the Chats screen and select Chats in the drawer. A
 confirmed canonical conversation shows its bot name in the top bar. Assistant
-messages use the bot's avatar and name in place of the Hermes portrait and label.
-The same identity is used for saved and streaming replies. This also applies
-when opened through Recents or a notification, and to its current compression
-tip. Project controls remain below the title. Other conversations retain their
-titles and Hermes reply identity. While appearance is loading or unavailable,
-the saved title and Hermes reply identity remain.
+messages use the shared transcript layout without repeated author names or
+avatars. The bot title also applies when opened through Recents or a notification,
+and to its current compression tip. Project controls remain below the title.
+Other conversations retain their saved titles. While appearance is loading or
+unavailable, the saved chat title remains.
 
 ## Profile options
 
@@ -43,6 +42,8 @@ New bot and Duplicate
 use stock profile creation; duplication excludes channel bindings to avoid
 taking over messaging channels. Fresh profiles inherit the instance's launch
 credentials/model defaults, as indicated before creation.
+Bot settings keeps the captured instance/profile throughout those editors;
+opening it does not change the selected chat's profile or model.
 
 Appearance includes a display title, eight classic desktop shapes, twelve
 profile hues, name-derived color, image upload/remove and generation through
@@ -55,8 +56,12 @@ Reload saved appearance rereads the name, shape, color and avatar, preserving
 edited fields and adopting fresh untouched fields. Successful reload is silent.
 A desktop metadata conflict keeps the draft and requires Reload/review, then an
 explicit retry or another edit. Metadata and asset saves acknowledge separately,
-so a retry does not resend an already-saved section. If pending edits cannot be
-saved when leaving, the editor offers Keep editing or Discard.
+so a retry does not resend an already-saved section. Each acknowledgement updates
+the editor's immutable saved bot record without discarding later draft changes.
+Returning to Bot settings carries that record; reopening appearance retains the
+confirmed image or removal. Choosing a shape after a saved upload clears the
+image. If pending edits cannot be saved when leaving, the editor offers Keep
+editing or Discard.
 
 **Bot settings** opens the existing role/SOUL, model/defaults, provider
 accounts/credentials and skills/tools/library/hub/plugin editors for that
@@ -93,7 +98,7 @@ The conversation header was verified against stock upstream main
 `resolved_id`, profile metadata and `profiles.get_asset`. `BotsSession` owns a
 passive appearance read per displayed conversation; it does not start roster,
 presence or group polling. The view validates the result against the displayed
-conversation and shares it between the top bar and assistant messages, without
+conversation and supplies the top bar title, without
 reloading on composer changes. Passive Recents pages borrow only matching
 appearance. Leaving the destination clears the displayed appearance, so reopening
 the same chat adopts newly saved appearance. The stock `Bot Chat` title remains
@@ -107,17 +112,39 @@ Inspected stock upstream Hermes main
 `apps/desktop/src/plugins/hermes-bots` implementation. No backend modification,
 plugin, custom endpoint, deployment upgrade or old-protocol fallback is added.
 
+Profile creation and hosted-room contracts were rechecked on 10 October 2026 at
+stock upstream `dce1e9b37581dd62e480a9064dc04a709c2940d3`:
+[`methods_profiles.py`](https://github.com/NousResearch/hermes-agent/blob/dce1e9b37581dd62e480a9064dc04a709c2940d3/tui_gateway/methods_profiles.py)
+retains full/configuration clone selection, channel exclusion and launch-default
+inheritance;
+[`methods_groups.py`](https://github.com/NousResearch/hermes-agent/blob/dce1e9b37581dd62e480a9064dc04a709c2940d3/tui_gateway/methods_groups.py)
+retains gateway-owned room creation, authority state and idempotent typed sends.
+
+Live ownership was rechecked on 10 October 2026 at stock upstream
+`0c4b0c283279ae0c91eff88526c4a6d4b60a8b9d` in
+[`sessions.py`](https://github.com/NousResearch/hermes-agent/blob/0c4b0c283279ae0c91eff88526c4a6d4b60a8b9d/hermes_cli/web_routers/sessions.py).
+Search resolves a compression ancestor to its current tip, so it cannot prove
+ownership of an exact live session key. `BotsRepository` uses the profile-scoped
+`ProfileGateway.sessionMetadata` read instead. It requires the requested session
+ID and canonical profile in the returned row. Only a typed session-not-found
+response for that endpoint establishes absence; transport failures, malformed
+rows and missing profiles leave status unknown.
+
 | Fact/action | Owner and admission |
 | --- | --- |
 | Saved-instance sources | `savedBotsSession` resolves current secure registry authority; commands retain exact instance identity |
 | Roster and commands | `BotsSession` retains per-instance observations on read failure and fences stale publications/retired view commands |
 | Wire parsing | `BotsRepository` validates current stock objects, profile ownership, revisions, monotonic log cursors and room authority |
 | Continuing chat | Exact server-owned `Bot Chat` title; hidden/follow-profile-config creation, eager title materialization, re-list/adopt after a race |
-| Working/input status | `session.active_list` has no profile field: prove unique ownership through hidden-inclusive profile search before attribution; ambiguity/read failure stays unknown |
-| Appearance | `BotProfileEditSession` owns debounced serial autosaves, changed-field drafts, metadata CAS, silent reload/review and partial acknowledgements; Back flushes before disposing |
+| Working/input status | `session.active_list` has no profile field: exact `sessionMetadata` reads prove unique ownership in a canonical profile, including compression ancestors; ambiguity or unavailable ownership stays unknown |
+| Appearance | `BotProfileEditSession` owns debounced serial autosaves, changed-field drafts, metadata CAS, silent reload/review and independent metadata/asset acknowledgements in the saved bot record; Back flushes before disposing |
 | Hosted discussions | `BotGroupSession` owns log replay, visible polling, exact frozen sends and fenced approval/recovery commands |
 | Screen | `BotScreenSession` owns visible read-only frame polling and profile-scoped power actions |
 | Presentation | Native views own navigation, text input, tab/filter/search and geometry; established settings editors retain their own save workflows |
+
+The [architecture map](ARCHITECTURE.md) locates these owners alongside the
+existing administration and conversation boundaries. Source and fixture
+verification follows [the testing policy](TESTING.md#verification-scope-and-stopping).
 
 The source and fixture checks establish the client contract. A live current
 Hermes instance, configured image provider and physical Android device are still

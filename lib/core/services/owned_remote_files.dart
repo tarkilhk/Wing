@@ -122,6 +122,128 @@ Future<ImageResource> acquireUserAttachmentImage(
   allowWindowsPaths: false,
 );
 
+/// Admits raw and normalized URI text before parsing or copying its payload.
+/// UriData can expand a Unicode character to nine percent-encoded characters;
+/// its temporary normalized representation shares the 45 MiB text budget.
+({String mimeType, Uint8List bytes}) decodeEmbeddedImage(String target) {
+  const encodedLimit = 45 * 1024 * 1024;
+  if (target.length > encodedLimit) {
+    throw const FormatException('Image attachment too large');
+  }
+  final comma = target.indexOf(',');
+  if (comma >= 0 && !(comma >= 7 && target.startsWith(';base64', comma - 7))) {
+    _admitPercentImageContent(target, comma + 1, encodedLimit);
+  }
+  final data = UriData.parse(target);
+  if (!data.mimeType.startsWith('image/')) {
+    throw const FormatException('Invalid image attachment');
+  }
+  final content = data.contentText;
+  if (content.length + comma + 1 > encodedLimit) {
+    throw const FormatException('Image attachment too large');
+  }
+  var decodedLength = content.length;
+  if (data.isBase64) {
+    decodedLength = content.length ~/ 4 * 3;
+    if (content.endsWith('==')) {
+      decodedLength -= 2;
+    } else if (content.endsWith('=')) {
+      decodedLength--;
+    }
+  } else {
+    for (var index = 0; index < content.length; index++) {
+      if (content.codeUnitAt(index) == 0x25) {
+        decodedLength -= 2;
+        index += 2;
+      }
+    }
+  }
+  if (decodedLength > RemoteFilesClient.defaultMaxDownloadBytes) {
+    throw const FormatException('Image attachment too large');
+  }
+  return (mimeType: data.mimeType, bytes: data.contentAsBytes());
+}
+
+// Count URI normalization and decoded bytes without allocating either. Keep
+// UriData responsible for syntax and decoding; these counts follow its RFC 2396
+// literal characters, RFC 3986 unreserved escapes and UTF-8 percent encoding.
+void _admitPercentImageContent(String target, int start, int encodedLimit) {
+  var encoded = start;
+  var decoded = 0;
+  for (var index = start; index < target.length; index++) {
+    final code = target.codeUnitAt(index);
+    var byteCount = 1;
+    var textCount = 1;
+    if (code == 0x25) {
+      final high = index + 2 < target.length
+          ? _hexImageDigit(target.codeUnitAt(index + 1))
+          : -1;
+      final low = index + 2 < target.length
+          ? _hexImageDigit(target.codeUnitAt(index + 2))
+          : -1;
+      if (high >= 0 && low >= 0) {
+        textCount = _unreservedImageChar(high * 16 + low) ? 1 : 3;
+        index += 2;
+      } else {
+        textCount = 3; // UriData escapes a literal invalid percent as %25.
+      }
+    } else if (code >= 0x80) {
+      byteCount = code <= 0x7ff ? 2 : 3;
+      if (code >= 0xd800 && code <= 0xdbff && index + 1 < target.length) {
+        final tail = target.codeUnitAt(index + 1);
+        if (tail >= 0xdc00 && tail <= 0xdfff) {
+          byteCount = 4;
+          index++;
+        }
+      }
+      textCount = byteCount * 3;
+    } else if (!_unreservedImageChar(code) &&
+        !switch (code) {
+          0x21 ||
+          0x24 ||
+          0x26 ||
+          0x27 ||
+          0x28 ||
+          0x29 ||
+          0x2a ||
+          0x2b ||
+          0x2c ||
+          0x2f ||
+          0x3a ||
+          0x3b ||
+          0x3d ||
+          0x3f ||
+          0x40 => true,
+          _ => false,
+        }) {
+      textCount = 3;
+    }
+    encoded += textCount;
+    decoded += byteCount;
+    if (encoded > encodedLimit ||
+        decoded > RemoteFilesClient.defaultMaxDownloadBytes) {
+      throw const FormatException('Image attachment too large');
+    }
+  }
+}
+
+bool _unreservedImageChar(int code) =>
+    (code >= 0x30 && code <= 0x39) ||
+    (code >= 0x41 && code <= 0x5a) ||
+    (code >= 0x61 && code <= 0x7a) ||
+    switch (code) {
+      0x2d || 0x2e || 0x5f || 0x7e => true,
+      _ => false,
+    };
+
+int _hexImageDigit(int code) => code >= 0x30 && code <= 0x39
+    ? code - 0x30
+    : code >= 0x41 && code <= 0x46
+    ? code - 0x41 + 10
+    : code >= 0x61 && code <= 0x66
+    ? code - 0x61 + 10
+    : -1;
+
 Future<ImageResource> _acquireImageResource(
   String target, {
   required Future<Uint8List> Function(String)? loadRemote,
@@ -131,18 +253,11 @@ Future<ImageResource> _acquireImageResource(
   if (allowEmbedded && target.length > 45 * 1024 * 1024) {
     throw const FormatException('Image attachment too large');
   }
-  final uri = Uri.tryParse(target);
-  if (allowEmbedded && uri?.scheme == 'data') {
-    final data = uri!.data!;
-    if (!data.mimeType.startsWith('image/')) {
-      throw const FormatException('Invalid image attachment');
-    }
-    final bytes = data.contentAsBytes();
-    if (bytes.length > RemoteFilesClient.defaultMaxDownloadBytes) {
-      throw const FormatException('Image attachment too large');
-    }
-    return ImageResource.bytes(bytes);
+  if (target.length >= 5 && target.substring(0, 5).toLowerCase() == 'data:') {
+    if (!allowEmbedded) throw const FormatException('Image unavailable');
+    return ImageResource.bytes(decodeEmbeddedImage(target).bytes);
   }
+  final uri = Uri.tryParse(target);
   final external =
       allowEmbedded &&
           uri != null &&

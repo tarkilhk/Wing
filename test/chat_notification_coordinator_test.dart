@@ -1,9 +1,12 @@
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/models/notification_input.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:wing/core/services/turn_notification_service.dart';
 import 'package:wing/core/models/chat_notification_content.dart';
 import 'package:wing/core/models/notification_focus.dart';
 import 'package:wing/core/services/chat_notification_coordinator.dart';
@@ -55,6 +58,247 @@ void main() {
     );
   });
   tearDown(() => appPreferences.dispose());
+  test(
+    'queued replay retries a failed first delivery without repeating its cue',
+    () async {
+      final held = _HeldFailedDelivery();
+      sink = held;
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
+      var cues = 0;
+      notices.activity.addListener(() => cues++);
+      final failed = expectLater(reply('retry'), throwsStateError);
+      await held.started.future;
+      final replay = reply('retry');
+      expect(cues, 1);
+      expect(sink.shown, isEmpty);
+      held.release.complete();
+      await failed;
+      await replay;
+      expect(sink.shown, hasLength(1));
+      expect(sink.shown.single.alert, isTrue);
+      expect(cues, 1);
+      await reply('retry');
+      expect(sink.shown, hasLength(1));
+      expect(cues, 1);
+      await prefs.reload();
+      final restored = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
+      expect(restored.resultFor(chat)?.identity, 'answer:retry');
+      expect(restored.hasNotice(chat), isTrue);
+    },
+  );
+
+  for (final replayAlerts in [false, true]) {
+    test(
+      'silent policy refresh cannot confirm an undelivered result (replay alerts: $replayAlerts)',
+      () async {
+        final held = _HeldFailedDelivery();
+        sink = held;
+        notices = ChatNotificationCoordinator(
+          prefs,
+          sink,
+          appPreferences: appPreferences,
+        );
+        var cues = 0;
+        notices.activity.addListener(() => cues++);
+        final failed = expectLater(reply('retry'), throwsStateError);
+        await held.started.future;
+        held.release.complete();
+        await failed;
+        await appPreferences.setNotificationPreviews(false);
+        await notices.refreshPreferences();
+        expect(sink.shown, isEmpty);
+        await prefs.reload();
+        final stored =
+            jsonDecode(prefs.getString(ChatNotificationCoordinator.storageKey)!)
+                as Map;
+        expect(
+          (stored[chat] as Map)['result'],
+          isNull,
+          reason:
+              'A silent no-post refresh did not deliver or suppress the pending result',
+        );
+        await reply('retry', alert: replayAlerts);
+        expect(sink.shown, hasLength(1));
+        expect(
+          sink.shown.single.alert,
+          isTrue,
+          reason: 'Replay retains the original fresh-alert admission',
+        );
+        expect(sink.shown.single.showPreview, isFalse);
+        expect(cues, 1);
+        await prefs.reload();
+        final restored = ChatNotificationCoordinator(
+          prefs,
+          sink,
+          appPreferences: appPreferences,
+        );
+        expect(restored.resultFor(chat)?.identity, 'answer:retry');
+        expect(restored.hasNotice(chat), isTrue);
+      },
+    );
+  }
+
+  for (final throwsError in [false, true]) {
+    test(
+      'replay confirms a failed journal without reposting (throws: $throwsError)',
+      () async {
+        SharedPreferences.resetStatic();
+        final platform = _FailedNoticeJournal(throwsError: throwsError);
+        SharedPreferencesStorePlatform.instance = platform;
+        prefs = await SharedPreferences.getInstance();
+        notices = ChatNotificationCoordinator(
+          prefs,
+          sink,
+          appPreferences: appPreferences,
+        );
+        addTearDown(() => SharedPreferences.setMockInitialValues({}));
+        var cues = 0;
+        notices.activity.addListener(() => cues++);
+        await expectLater(reply('retry'), throwsStateError);
+        expect(sink.shown, hasLength(1));
+        await prefs.reload();
+        expect(prefs.getString(ChatNotificationCoordinator.storageKey), isNull);
+        await reply('retry');
+        expect(sink.shown, hasLength(1));
+        expect(cues, 1);
+        await prefs.reload();
+        final restored = ChatNotificationCoordinator(
+          prefs,
+          sink,
+          appPreferences: appPreferences,
+        );
+        expect(restored.resultFor(chat)?.identity, 'answer:retry');
+        expect(restored.hasNotice(chat), isTrue);
+        expect(platform.writes, 2);
+        await reply('retry');
+        expect(platform.writes, 2);
+      },
+    );
+  }
+
+  test(
+    'an unrelated write cannot acknowledge a failed first delivery on restart',
+    () async {
+      final held = _HeldFailedDelivery();
+      sink = held;
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
+      final failed = expectLater(reply('retry'), throwsStateError);
+      await held.started.future;
+      held.release.complete();
+      await failed;
+      await notices.result(
+        chat: chat.replaceFirst('"chat"', '"other"'),
+        title: 'Other',
+        scope: 'Home',
+        focus: const NotificationFocus('answer', 'other'),
+        content: ChatNotificationContent.reply('Other answer'),
+      );
+      await prefs.reload();
+      sink = RecordingTurnNotificationSink();
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
+      expect(notices.resultFor(chat), isNull);
+      await reply('retry');
+      expect(sink.shown, hasLength(1));
+      expect(sink.shown.single.alert, isTrue);
+      expect(notices.resultFor(chat)?.identity, 'answer:retry');
+    },
+  );
+
+  test(
+    'approval delivery confirms the deferred reply without another alert on replay',
+    () async {
+      final held = _HeldFailedDelivery();
+      sink = held;
+      notices = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
+      final cues = <ConversationActivityKind>[];
+      notices.activity.addListener(
+        () => cues.add(notices.activity.value!.kind),
+      );
+      final failed = expectLater(reply('deferred'), throwsStateError);
+      await held.started.future;
+      held.release.complete();
+      await failed;
+      await inputs([approval('request')]);
+      expect(sink.shown.single.focus?.identity, 'approval:request');
+      await reply('deferred');
+      expect(sink.shown, hasLength(1));
+      expect(cues, [
+        ConversationActivityKind.reply,
+        ConversationActivityKind.inputNeeded,
+      ]);
+      await prefs.reload();
+      final restored = ChatNotificationCoordinator(
+        prefs,
+        sink,
+        appPreferences: appPreferences,
+      );
+      expect(restored.resultFor(chat)?.identity, 'answer:deferred');
+      expect(restored.inputFor(chat)?.focus.identity, 'approval:request');
+      await inputs([]);
+      expect(sink.shown.last.focus?.identity, 'answer:deferred');
+    },
+  );
+
+  for (final suppression in ['category', 'permission', 'baseline']) {
+    test(
+      'journal retry keeps $suppression suppression even after preferences change',
+      () async {
+        SharedPreferences.resetStatic();
+        final platform = _FailedNoticeJournal(throwsError: false);
+        SharedPreferencesStorePlatform.instance = platform;
+        prefs = await SharedPreferences.getInstance();
+        notices = ChatNotificationCoordinator(
+          prefs,
+          sink,
+          appPreferences: appPreferences,
+        );
+        addTearDown(() => SharedPreferences.setMockInitialValues({}));
+        if (suppression == 'category') {
+          await appPreferences.setCompletedNotifications(false);
+        }
+        if (suppression == 'permission') {
+          sink.permissionResult = false;
+        }
+        await expectLater(
+          reply('quiet', alert: suppression != 'baseline'),
+          throwsStateError,
+        );
+        await appPreferences.setCompletedNotifications(true);
+        sink.permissionResult = true;
+        await reply('quiet');
+        expect(sink.shown, isEmpty);
+        await prefs.reload();
+        final restored = ChatNotificationCoordinator(
+          prefs,
+          sink,
+          appPreferences: appPreferences,
+        );
+        expect(restored.resultFor(chat)?.identity, 'answer:quiet');
+        expect(restored.hasNotice(chat), isFalse);
+      },
+    );
+  }
+
   test(
     'read-only activity projects fresh journal facts without native permission',
     () async {
@@ -313,4 +557,37 @@ void main() {
     await inputs([]);
     expect(sink.cancelled, hasLength(1));
   });
+}
+
+class _HeldFailedDelivery extends RecordingTurnNotificationSink {
+  final started = Completer<void>();
+  final release = Completer<void>();
+  bool fail = true;
+
+  @override
+  Future<void> show(TurnNotification notification) async {
+    if (fail) {
+      fail = false;
+      started.complete();
+      await release.future;
+      throw StateError('Controlled first delivery failure');
+    }
+    await super.show(notification);
+  }
+}
+
+class _FailedNoticeJournal extends InMemorySharedPreferencesStore {
+  _FailedNoticeJournal({required this.throwsError}) : super.empty();
+  final bool throwsError;
+  int writes = 0;
+
+  @override
+  Future<bool> setValue(String type, String key, Object value) async {
+    if (key == 'flutter.${ChatNotificationCoordinator.storageKey}' &&
+        ++writes == 1) {
+      if (throwsError) throw StateError('Controlled journal failure');
+      return false;
+    }
+    return super.setValue(type, key, value);
+  }
 }

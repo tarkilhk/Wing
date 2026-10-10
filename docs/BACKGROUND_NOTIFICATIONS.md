@@ -43,6 +43,22 @@ Approval actions were verified against upstream main commit `bd0affe5e5f723579df
 
 While the existing watcher runs, a single 30-second timer reconciles pending notices against corroborated runtime/open-request snapshots and the approval queue. Resume also reconciles once. Pending requests never extend the watcher's lifetime. Stock desktop read watermarks do not prove the latest answer was visible, so desktop opening does not clear result notifications; completed desktop decisions can clear pending-input notices.
 
+Result delivery has three acknowledgements in `ChatNotificationCoordinator`:
+observing an outcome, successfully rendering or intentionally suppressing it,
+and saving the notification journal. Observing a fresh outcome can emit its
+in-app activity cue once without proving native delivery. A failed first post
+remains eligible for replay; replay retries delivery without repeating that cue.
+If posting succeeds but the journal write fails, replay confirms the journal
+without posting again. An unrelated chat's write cannot acknowledge an
+unrendered result.
+
+Silent preference refreshes can reconcile an existing notification slot. When
+there is no slot, a silent refresh does not confirm an earlier failed fresh post;
+replay retains that outcome's original alert admission. An intentional initial
+baseline, disabled category or permission, and an explicitly dismissed revision
+remain quiet. These retry rules add no polling timer and do not recover server
+outcomes Wing never received.
+
 ## Event coverage
 
 Loaded chats receive session events through their attached transport. The server's global `sessions.changed` broadcast is an empty, coalesced invalidation. Android uses it to reconcile status snapshots for connected targets; it does not treat it as a completion payload or attach every historical chat.
@@ -108,3 +124,9 @@ and `-t integration_test/notification_revamp_device.dart`; this uses the isolate
 The coordinator, answer-visibility, approval-queue, startup-permission and
 monitoring tests cover replacement, FIFO, restart/dismissal, accepted responses,
 stale targets, preview privacy, and failure retention.
+[Coordinator regressions](../test/chat_notification_coordinator_test.dart) hold
+failed delivery, queued replay and journal writes, then verify eventual delivery,
+one activity cue, durable confirmation, suppression and silent-refresh behavior.
+[Preference race regressions](../test/chat_notification_preference_refresh_race_test.dart)
+cover changes during permission checks/delivery and failed journal confirmation.
+These are controlled host checks; native lifecycle acceptance remains separate.

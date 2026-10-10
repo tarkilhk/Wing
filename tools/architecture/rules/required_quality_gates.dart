@@ -8,7 +8,7 @@ const _boundSourceCommand =
     '$_sourceCommand --baseline-reference "build/architecture-baseline-reference.json"';
 const _changedTestsCommand =
     r'python3 scripts/test.py --changed-since "$TEST_BASE_REF" --skip-linters';
-const _fullTestsCommand = 'python3 scripts/test.py --full';
+const _fullTestsCommand = 'python3 scripts/test.py --full --skip-linters';
 const _testBaseRef =
     r'${{ github.event.pull_request.base.sha || github.event.before }}';
 const _fixtureNames = [
@@ -198,6 +198,7 @@ List<String> _checkNightly(Directory root) {
     }
     final steps = (job['steps'] as List).whereType<Map>().toList();
     for (final command in [
+      _sourceCommand,
       _fullTestsCommand,
       for (final name in _fixtureNames)
         'dart run tools/architecture/tests/${name}_test.dart',
@@ -210,6 +211,15 @@ List<String> _checkNightly(Directory root) {
                 _hardFailure(entry.$2['continue-on-error']) &&
                 _mandatory(entry.$2['if']) &&
                 _runsFinalCommand(entry.$2['run'], command) &&
+                (command != _fullTestsCommand ||
+                    steps
+                        .take(entry.$1)
+                        .any(
+                          (setup) =>
+                              _hardFailure(setup['continue-on-error']) &&
+                              _mandatory(setup['if']) &&
+                              _runsFinalCommand(setup['run'], _sourceCommand),
+                        )) &&
                 steps
                     .take(entry.$1)
                     .any(

@@ -4,6 +4,12 @@ Type `/` at the start of the composer to browse the connected gateway's commands
 
 Send resolves inline skill references through `command.dispatch` before submitting the expanded instructions. The chat displays the original message. Repeated references to the same skill load it once; multiple distinct inline skills each load through the captured profile and runtime. Failed loading retains the queued message and never silently submits an unexpanded prompt. Built-in commands mentioned in prose remain literal text.
 
+Received skill activity opens the shared instruction reader with raw/formatted
+viewing, Contents and scoped reference reads. Opening it preserves the received
+instructions and does not rerun the slash command. The reader's optional
+metadata and file reads belong to a captured connection/profile session; see
+[Tool activity](TOOL_ACTIVITY.md#captured-skill-reading).
+
 Inspected stock Hermes commit `5f045f842a60184748dda30acb9fecbd961cc18b` on 9 October 2026: `tui_gateway/methods_tools.py` supplies the session-scoped skill catalog and `command.dispatch` skill payload; `tui_gateway/methods_complete.py` supplies argument ranges and skill identity. This is implemented entirely in Wing.
 
 ## Dispatch contract

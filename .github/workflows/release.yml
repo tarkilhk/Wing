@@ -143,7 +143,7 @@ jobs:
         run: flutter analyze --no-pub --fatal-infos
 
       - name: Run tests
-        run: python3 scripts/test.py --full
+        run: python3 scripts/test.py --full --skip-linters
 
       - name: Test opt-in performance measurements
         run: flutter test --no-pub --dart-define=WING_PERF_INSTRUMENTATION=true test/performance_instrumentation_test.dart test/markdown_inline_parser_test.dart test/markdown_parse_worker_test.dart test/background_markdown_content_test.dart test/background_markdown_message_test.dart

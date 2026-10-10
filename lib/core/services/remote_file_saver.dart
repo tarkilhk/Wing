@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'remote_files_client.dart';
+import 'platform_share.dart';
 
 /// Saves authenticated bytes through Android's document destination picker.
 /// A cancelled picker is not a failure and must not report a successful save.
@@ -28,8 +29,10 @@ Future<void> shareRemoteFile(RemoteFileDownload download) async {
   try {
     final file = File('${directory.path}/${download.filename}');
     await file.writeAsBytes(download.bytes, flush: true);
-    dispatched = true;
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+    await platformShare(
+      ShareParams(files: [XFile(file.path)]),
+      onDispatched: () => dispatched = true,
+    );
   } finally {
     // share_plus 13.3.0 copies Android inputs into its own provider cache before
     // presenting the chooser. Release only Wing's staging directory here.

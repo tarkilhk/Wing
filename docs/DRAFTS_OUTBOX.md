@@ -20,6 +20,11 @@ unsent work, not copies of the conversation history.
 - Send waits for an attachment being prepared. A failed initial save preserves
   the editable work and prevents network submission.
 
+Saved-message Edit, Restore checkpoint, Regenerate and Branch use their own
+verified history boundaries and preserve the separate current draft. Edit and
+Restore pause outgoing follow-ups for review. The composer has no Fork action.
+See [Conversation actions](CONVERSATION_ACTIONS_AND_READING.md).
+
 ## Storage and performance
 
 The `composer_work_v2` format uses one preferences entry per verified connection,

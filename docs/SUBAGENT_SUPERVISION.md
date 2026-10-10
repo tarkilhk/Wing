@@ -2,11 +2,24 @@
 
 Open a chat's three-dot menu and choose **Subagents** to refresh its active children. Received subagent events also show a compact expandable roster in the transcript. Chats without known subagents gain no extra transcript row.
 
+The same live roster appears in Activity's **Agents** tab. Its rows share the
+existing supervisor and captured parent runtime; opening either surface does
+not create a second roster owner. Saved delegation receipts remain passive
+agent activity, with supplied goals, one lifecycle status and exact received
+output. They do not gain live controls or fabricated elapsed timers. Live
+children show their first goal as a compact title and retain further goal text
+in details; long output uses the shared bounded reader.
+
 The detail sheet displays the child goal, status and available activity information, plus selectable live output. It refreshes the tail every two seconds while open and the app is active. After three consecutive failures, automatic refresh stops and Retry remains available. Closing the sheet stops its timer. Roster refresh is manual after the initial read; live events update known progress.
 
 Steer appears when the backend says the child accepts guidance. Accepted steering is queued; the backend can still report missed delivery if the child finishes first. Rejected or failed steering retains the typed text. Interrupt reports an acknowledged request and waits for the backend to publish terminal state.
 
-Every read and control uses the originating profile gateway, parent runtime and exact child ID. A later profile selection cannot redirect it. List replies cannot overwrite newer events or revive terminal rows, and controls require matching acknowledgement IDs. Replaced runtimes invalidate pending results.
+Every read and control uses the originating profile gateway, parent runtime and
+exact child ID. A later profile selection cannot redirect it. Only the latest
+roster refresh may publish its snapshot or read error. An older response cannot
+discard a newer refresh, and live events received during a read retain their
+newer progress. List replies cannot revive terminal rows. Controls require
+matching acknowledgement IDs; replaced runtimes invalidate pending results.
 
 ## Server limits
 

@@ -93,8 +93,14 @@ void main() {
       );
       final failure = expectLater(preparation, throwsA(isA<StateError>()));
       chat.composer.cancelPreparation();
-      clipboard.complete(image());
-      await failure;
+      try {
+        await failure.timeout(const Duration(seconds: 2));
+        expect(chat.composer.observation.preparing, isFalse);
+        expect(controller.canAddAttachment(chat), isTrue);
+      } finally {
+        clipboard.complete(image());
+      }
+      await Future<void>.delayed(Duration.zero);
       expect(writes, 0);
       expect(chat.composer.observation.attachments, isEmpty);
       expect(chat.composer.observation.preparing, isFalse);
@@ -113,8 +119,13 @@ void main() {
       final failure = expectLater(preparation, throwsA(isA<StateError>()));
       controller.dispose();
       disposed = true;
-      clipboard.complete(image());
-      await failure;
+      try {
+        await failure.timeout(const Duration(seconds: 2));
+        expect(chat.composer.observation.preparing, isFalse);
+      } finally {
+        clipboard.complete(image());
+      }
+      await Future<void>.delayed(Duration.zero);
       expect(writes, 0);
       expect(chat.composer.observation.attachments, isEmpty);
     },

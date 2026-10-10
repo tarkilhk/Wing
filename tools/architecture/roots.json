@@ -565,6 +565,15 @@
       "status": "supported"
     },
     {
+      "id": "host-test-test/reply_duration_test.dart",
+      "kind": "host-test",
+      "path": "test/reply_duration_test.dart",
+      "purpose": "Saved prompt-to-final-reply timestamp projection and Activity header render regressions",
+      "source": "docs/TOOL_ACTIVITY.md; test/reply_duration_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
       "id": "dart-main-test/retired_answer_versions_namespace_guard_test.dart",
       "kind": "host-test",
       "path": "test/retired_answer_versions_namespace_guard_test.dart",
@@ -6199,15 +6208,6 @@
       "source": "docs/TESTING.md; test/source_highlighting_test.dart",
       "status": "supported",
       "selector": "main"
-    },
-    {
-      "id": "host-test-test/reply_duration_test.dart",
-      "kind": "host-test",
-      "path": "test/reply_duration_test.dart",
-      "purpose": "Saved prompt-to-final-reply timestamp projection and Activity header render regressions",
-      "source": "docs/TOOL_ACTIVITY.md; test/reply_duration_test.dart",
-      "status": "supported",
-      "selector": "main"
     }
   ],
   "files": [
@@ -6405,6 +6405,11 @@
       "path": "android/app/src/main/kotlin/com/tarkilhk/wing/ImageClipboardChannel.kt",
       "area": "android",
       "provenance": "tracked"
+    },
+    {
+      "path": "android/app/src/main/kotlin/com/tarkilhk/wing/ImageClipboardReader.kt",
+      "area": "android",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "android/app/src/main/kotlin/com/tarkilhk/wing/MainActivity.kt",
@@ -6670,6 +6675,11 @@
       "path": "android/app/src/test/kotlin/com/tarkilhk/wing/ExternalShareUriPolicyTest.kt",
       "area": "android",
       "provenance": "tracked"
+    },
+    {
+      "path": "android/app/src/test/kotlin/com/tarkilhk/wing/ImageClipboardReaderTest.kt",
+      "area": "android",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "android/app/src/test/kotlin/com/tarkilhk/wing/NotificationInteractionSecurityTest.kt",
@@ -8137,6 +8147,16 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/presentation/source_highlighting.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/presentation/source_language.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/presentation/tool_activities/browser_web.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -8922,6 +8942,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/services/platform_share.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/profile_capabilities_session.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -9673,6 +9698,11 @@
     },
     {
       "path": "lib/core/widgets/source_code_block.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/source_code_text.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
     },
@@ -12042,6 +12072,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "test/recent_capture_release_safe_guard_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/recent_conversation_session_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
@@ -12070,6 +12105,11 @@
       "path": "test/remote_files_client_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/reply_duration_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/required_quality_gates_test.dart",
@@ -12327,6 +12367,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/source_highlighting_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/speech_synthesis_view_dependency_guard_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
@@ -12353,11 +12398,6 @@
     },
     {
       "path": "test/streaming_work_budget_test.dart",
-      "area": "test",
-      "provenance": "tracked"
-    },
-    {
-      "path": "test/transcript_preparation_work_budget_test.dart",
       "area": "test",
       "provenance": "tracked"
     },
@@ -12595,6 +12635,11 @@
       "path": "test/transcript_history_dispatch_guard_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/transcript_preparation_work_budget_test.dart",
+      "area": "test",
+      "provenance": "tracked"
     },
     {
       "path": "test/turn_notification_service_test.dart",
@@ -13553,6 +13598,16 @@
     },
     {
       "path": "tools/architecture/rules/reading_view_inputs.md",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/recent_capture_release_safe.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/recent_capture_release_safe.md",
       "area": "tools",
       "provenance": "intentional-untracked"
     },
@@ -14760,46 +14815,6 @@
       "path": "website/workspaces.html",
       "area": "website",
       "provenance": "tracked"
-    },
-    {
-      "path": "test/recent_capture_release_safe_guard_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "tools/architecture/rules/recent_capture_release_safe.dart",
-      "area": "tools",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "tools/architecture/rules/recent_capture_release_safe.md",
-      "area": "tools",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/presentation/source_highlighting.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/presentation/source_language.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/widgets/source_code_text.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/source_highlighting_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/reply_duration_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

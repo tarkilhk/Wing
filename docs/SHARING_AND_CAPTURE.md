@@ -16,6 +16,19 @@ If clearing an incoming share fails after its conversation draft was saved, the 
 
 Photos and Files feed the same attachment path. Images receive the existing sanitization and file limits.
 
+Clipboard image reading starts only after an explicit Paste action. Android
+provider reads have a 15-second deadline and a bounded shared worker/byte budget.
+The composer stops waiting after 20 seconds, and cancelling preparation releases
+its wait immediately. A failed or cancelled paste keeps existing draft text and
+attachments; late bytes cannot enter a different or closed composer. Copy the
+image again to retry.
+
+Some external providers ignore cancellation. Their native work and cleanup keep
+their existing capacity charged until they actually finish, even after the
+deadline, so reopening Wing cannot create more workers for a stalled provider.
+Capacity exhaustion reports that clipboard reading is busy instead of queuing
+unbounded work. Late streams stay owned by the retired operation for cleanup.
+
 Image preflight removes private metadata before codec parsing. Discarded JPEG,
 PNG and WebP metadata has no separate size cap within the 64 MiB input limit.
 All bytes after JPEG EOI are discarded without parsing vendor directories,
@@ -46,8 +59,25 @@ The capture descriptor is saved before launch. Successful nonempty output, up to
 
 An interruption after saving the conversation draft but before acknowledging intake can offer the content again. External shares require review; camera captures with a verified originating chat attach directly to its draft. Nothing sends automatically. A copy interrupted before native intake commits may need to be shared again.
 
-A locally created chat can expire while Camera is open. Same-process return joins any reconnect and preserves the draft/settings. If the original session is confirmed missing after process death, New chat with recovered draft moves the existing draft in one storage write, preserves uncertainty, pauses queues and resets upload references. Staging failure retains that recovered draft and retries reuse the new chat. Missing files remain visible for removal or reattachment. Send stays explicit.
+A locally created chat can expire while Camera is open. Same-process return joins any reconnect and preserves the draft/settings. If the original session is confirmed missing after process death, New chat with recovered draft saves the destination before removing the source. These are ordered writes to two preference keys, not an atomic transfer; interruption can leave two recoverable copies. Recovery preserves uncertainty, pauses queues and resets upload references. Staging failure retains the recovered draft and retries reuse the new chat. Missing files remain visible for removal or reattachment. Send stays explicit. See [drafts and sending](CONVERSATION_ACTIONS_AND_READING.md#drafts-and-sending).
 
 Empty abandoned capture output is cleared when Android returns. Keep it pending while Camera is foreground so a file still being written is not treated as complete. Chats also exposes saved drafts without a loaded chat row through the same verified missing-session recovery path.
 
 Samsung checks covered picker/camera cancellation, successful capture, reviewed file/photo intake and restart recovery. File upload acceptance does not guarantee automatic workspace-reference expansion; see [conversation attachments](CONVERSATION_ACTIONS_AND_READING.md#attachments-in-history) and [Testing](TESTING.md).
+
+## Sharing from Wing
+
+Configuration backups, downloaded output files and skill-document text share one
+pending Android share operation. A second offer reports "Finish the current share
+sheet, then try again." It does not replace the first offer. Finish or dismiss
+that sheet before retrying.
+
+For file shares, Wing keeps its private original while the native operation is
+pending. The Android share plugin copies it into a separate provider cache before
+opening the chooser. After the operation settles, Wing removes its staging
+directory, including on dismissal or error. The plugin-cache copy may remain
+until a later share clears that cache, Android removes it, or you clear Wing's
+cache in Android Settings. A receiving app can save its own copy, whose lifetime
+is controlled by that app. Chooser completion does not establish that a receiving
+app finished reading or deleted a saved copy. Treat plaintext backups and other
+shared secrets accordingly.

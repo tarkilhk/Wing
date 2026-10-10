@@ -476,13 +476,53 @@ void main() {
     }
   });
 
+  test('nightly external source checking cannot be omitted or softened', () {
+    final file = File('${root.path}/.github/workflows/nightly-tests.yml');
+    for (final replacement in [
+      'run: echo source checks',
+      'run: python3 scripts/check_commit_linters.py --dart-only || true',
+      'if: false\n        run: python3 scripts/check_commit_linters.py --dart-only',
+      'continue-on-error: true\n        run: python3 scripts/check_commit_linters.py --dart-only',
+    ]) {
+      _writeWorkflows(root);
+      expect(checkRequiredQualityGates(root), isEmpty);
+      file.writeAsStringSync(
+        file.readAsStringSync().replaceFirst(
+          'run: python3 scripts/check_commit_linters.py --dart-only',
+          replacement,
+        ),
+      );
+      expect(
+        checkRequiredQualityGates(root),
+        contains(contains('nightly-tests.yml')),
+      );
+    }
+  });
+
   test('nightly dependencies must precede the complete suite', () {
     final file = File('${root.path}/.github/workflows/nightly-tests.yml');
     const setup = '      - name: Dependencies\n        run: flutter pub get\n';
     final contents = file.readAsStringSync();
     expect(contents, contains(setup));
     file.writeAsStringSync(contents.replaceFirst(setup, '') + setup);
-    expect(checkRequiredQualityGates(root), hasLength(7));
+    expect(
+      checkRequiredQualityGates(root),
+      hasLength(2 + fixtureCommands.length),
+    );
+  });
+
+  test('nightly source checks must precede externally checked host tests', () {
+    final file = File('${root.path}/.github/workflows/nightly-tests.yml');
+    const source =
+        '      - name: Current source\n'
+        '        run: python3 scripts/check_commit_linters.py --dart-only\n';
+    final contents = file.readAsStringSync();
+    expect(contents, contains(source));
+    file.writeAsStringSync(contents.replaceFirst(source, '') + source);
+    expect(
+      checkRequiredQualityGates(root),
+      contains(contains('Run python3 scripts/test.py --full --skip-linters')),
+    );
   });
 
   test('missing and malformed nightly workflows fail closed', () {
@@ -634,7 +674,7 @@ jobs:
 ${independentCommands.where((command) => item.$1 == 'release.yml' || !fixtureCommands.contains(command) || command.contains('workspace_search_owner_test.dart')).map((command) => '      - name: Independent production guard\n        run: $command').join('\n')}
       - name: Host tests
         ${item.$1 == 'pr-quality.yml' ? 'env:\n          TEST_BASE_REF: $testBaseRef' : '# exhaustive release'}
-        run: ${item.$1 == 'pr-quality.yml' ? changedTestsCommand : 'python3 scripts/test.py --full'}
+        run: ${item.$1 == 'pr-quality.yml' ? changedTestsCommand : 'python3 scripts/test.py --full --skip-linters'}
       ${nativeSetup ? '- name: Native dependency setup\n        run: ./android/gradlew -p android :app:testDebugUnitTest --no-daemon' : '# no dependency setup'}
 ${nativeCommands.map((command) => '      - name: Native guard\n        run: $command').join('\n')}
 ''');
@@ -649,8 +689,10 @@ jobs:
     steps:
       - name: Dependencies
         run: flutter pub get
+      - name: Current source
+        run: python3 scripts/check_commit_linters.py --dart-only
       - name: Exhaustive tests
-        run: python3 scripts/test.py --full
+        run: python3 scripts/test.py --full --skip-linters
 ${fixtureCommands.map((command) => '      - name: Proof fixtures\n        run: $command').join('\n')}
 ''');
 }

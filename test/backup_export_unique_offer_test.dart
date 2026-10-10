@@ -3,82 +3,113 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:wing/core/services/config_backup.dart';
 import 'package:wing/core/services/config_backup_io.dart';
+import 'package:wing/core/services/platform_share.dart';
+import 'package:wing/core/services/remote_file_saver.dart';
+import 'package:wing/core/services/remote_files_client.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test(
-    'concurrent export offers keep distinct readable files and contents',
-    () async {
-      final directory = await Directory.systemTemp.createTemp(
-        'wing-distinct-backup-offers-',
-      );
-      const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
-      const shareChannel = MethodChannel('dev.fluttercommunity.plus/share');
-      final messenger =
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      final directoryResult = Completer<String>();
-      final bothLookups = Completer<void>();
-      final bothShares = Completer<void>();
-      final shareResult = Completer<String>();
-      var lookups = 0;
-      final sharedPaths = <String>[];
-      messenger.setMockMethodCallHandler(pathChannel, (call) {
-        expect(call.method, 'getTemporaryDirectory');
-        lookups++;
-        if (lookups == 2) bothLookups.complete();
-        return directoryResult.future;
-      });
-      messenger.setMockMethodCallHandler(shareChannel, (call) {
-        expect(call.method, 'share');
-        final paths = List<String>.from(
-          (call.arguments as Map)['paths'] as List,
+  for (final fails in [false, true]) {
+    test(
+      'pending backup rejects other file offers and releases admission after ${fails ? 'error' : 'success'}',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'wing-share-admission-',
         );
-        expect(paths, hasLength(1));
-        sharedPaths.add(paths.single);
-        if (sharedPaths.length == 2) bothShares.complete();
-        return shareResult.future;
-      });
-      addTearDown(() async {
-        messenger.setMockMethodCallHandler(pathChannel, null);
-        messenger.setMockMethodCallHandler(shareChannel, null);
-        await directory.delete(recursive: true);
-      });
-
-      Future<String> contents(String theme) => ConfigBackupCodec.encode(
-        ConfigBackup(
-          createdAt: DateTime.utc(2026, 10, 4),
-          appVersion: 'fixture',
-          connections: [],
-          preferences: {'theme_mode': theme},
-        ),
-        passphrase: '',
-      );
-      final firstContents = await contents('light');
-      final secondContents = await contents('dark');
-      final io = ConfigBackupIo();
-      final first = io.deliverExport(firstContents, canDispatch: () => true);
-      final second = io.deliverExport(secondContents, canDispatch: () => true);
-      await bothLookups.future;
-      expect(sharedPaths, isEmpty);
-      directoryResult.complete(directory.path);
-      await bothShares.future;
-
-      // The offers overlap without relying on a wall-clock delay or timestamp.
-      expect(sharedPaths.toSet(), hasLength(2));
-      expect(
-        await Future.wait(sharedPaths.map((path) => File(path).readAsString())),
-        unorderedEquals([firstContents, secondContents]),
-      );
-      shareResult.complete('fixture-recipient');
-      expect(await first, isNotNull);
-      expect(await second, isNotNull);
-      expect(
-        await Future.wait(sharedPaths.map((path) => File(path).readAsString())),
-        unorderedEquals([firstContents, secondContents]),
-      );
-    },
-  );
+        const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
+        const shareChannel = MethodChannel('dev.fluttercommunity.plus/share');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        final firstEntered = Completer<File>();
+        final settled = Completer<String>();
+        final sharedPaths = <String>[];
+        messenger.setMockMethodCallHandler(
+          pathChannel,
+          (_) async => directory.path,
+        );
+        messenger.setMockMethodCallHandler(shareChannel, (call) {
+          final source = File(
+            ((call.arguments as Map)['paths'] as List).single as String,
+          );
+          sharedPaths.add(source.path);
+          if (sharedPaths.length == 1) {
+            // Native preparation has entered but has not copied this source yet.
+            firstEntered.complete(source);
+            return settled.future;
+          }
+          return Future.value('recipient');
+        });
+        addTearDown(() async {
+          messenger.setMockMethodCallHandler(pathChannel, null);
+          messenger.setMockMethodCallHandler(shareChannel, null);
+          await directory.delete(recursive: true);
+        });
+        final io = ConfigBackupIo();
+        final first = io.deliverExport('first secret', canDispatch: () => true);
+        final source = await firstEntered.future;
+        try {
+          await expectLater(
+            io.deliverExport('second secret', canDispatch: () => true),
+            throwsA(
+              isA<ConfigBackupException>().having(
+                (e) => e.message,
+                'message',
+                contains('current share sheet'),
+              ),
+            ),
+          );
+          await expectLater(
+            shareRemoteFile(
+              RemoteFileDownload(filename: 'report.txt', bytes: [1]),
+            ),
+            throwsA(isA<PlatformShareBusy>()),
+          );
+          await expectLater(
+            platformShare(ShareParams(text: 'Received skill text')),
+            throwsA(isA<PlatformShareBusy>()),
+          );
+          expect(
+            sharedPaths,
+            [source.path],
+            reason: 'No second native call may supersede the preparing offer',
+          );
+          expect(await source.readAsString(), 'first secret');
+          expect(
+            (await directory.list().toList()).map((entry) => entry.path),
+            [source.parent.path],
+            reason: 'Rejected backup and output offers release their stages',
+          );
+        } finally {
+          if (fails) {
+            final failed = expectLater(
+              first,
+              throwsA(isA<PlatformException>()),
+            );
+            settled.completeError(
+              PlatformException(code: 'preparation-failed'),
+            );
+            await failed;
+          } else {
+            settled.complete('recipient');
+            await first;
+          }
+        }
+        expect(await source.parent.exists(), isFalse);
+        expect(
+          await io.deliverExport('later secret', canDispatch: () => true),
+          isNotNull,
+        );
+        expect(sharedPaths, hasLength(2));
+        expect(
+          sharedPaths.map((path) => File(path).uri.pathSegments.last).toSet(),
+          hasLength(2),
+        );
+        expect(await directory.list().toList(), isEmpty);
+      },
+    );
+  }
 }

@@ -6,7 +6,6 @@ import '../models/hermes_profile.dart';
 import '../models/profile_session_key.dart';
 import 'administration_repository.dart';
 import 'attachment_image_preflight.dart';
-import '../models/session_visibility.dart';
 
 typedef BotsRead =
     Future<Map<String, dynamic>> Function(
@@ -83,10 +82,10 @@ class BotsRepository {
       try {
         final found = <String>{};
         for (final id in sessions) {
-          final rows = await server
-              .gateway(profile)
-              .search(id, visibility: SessionVisibility.all);
-          if (rows.any((row) => row['id'] == id)) found.add(id);
+          // Search resolves compression ancestors to their current tip. Only
+          // exact profile-owned metadata can establish this live key's owner.
+          final row = await server.gateway(profile).sessionMetadata(id);
+          if (row != null) found.add(id);
         }
         return found;
       } finally {

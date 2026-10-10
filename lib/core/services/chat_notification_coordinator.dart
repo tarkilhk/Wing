@@ -27,6 +27,11 @@ class _ChatNotice {
   String title;
   String scope;
   Map<String, dynamic>? result;
+  // Observation, delivery and persistence are separate acknowledgments. A
+  // failed first delivery must not become durable through another chat's write.
+  Map<String, dynamic>? renderedResult;
+  Map<String, dynamic>? persistedResult;
+  bool resultAlerts = true;
   List<NotificationInput> inputs = [];
   String? dismissed;
   String? posted;
@@ -35,7 +40,7 @@ class _ChatNotice {
   Map<String, dynamic> toJson() => {
     'title': title,
     'scope': scope,
-    'result': result,
+    'result': renderedResult,
     'inputs': inputs.map((v) => v.toJson()).toList(),
     'dismissed': dismissed,
     'posted': posted,
@@ -109,6 +114,8 @@ class ChatNotificationCoordinator {
         state.result = data['result'] == null
             ? null
             : Map<String, dynamic>.from(data['result']);
+        state.renderedResult = state.result;
+        state.persistedResult = state.result;
         state.inputs = (data['inputs'] as List)
             .map(
               (v) => NotificationInput.fromJson(Map<String, dynamic>.from(v)),
@@ -131,6 +138,9 @@ class ChatNotificationCoordinator {
       jsonEncode(_chats.map((key, value) => MapEntry(key, value.toJson()))),
     );
     if (!saved) throw StateError('Notification state was not saved');
+    for (final state in _chats.values) {
+      state.persistedResult = state.renderedResult;
+    }
   }
 
   Future<void> _serialize(Future<void> Function() work) {
@@ -255,18 +265,32 @@ class ChatNotificationCoordinator {
     final state = _chats.putIfAbsent(chat, () => _ChatNotice(title, scope));
     state.title = title;
     state.scope = scope;
-    if (state.result?['identity'] == focus.identity) return;
-    state.result = {
-      'identity': focus.identity,
-      'focus': focus.toJson(),
-      'content': content.toJson(),
-    };
-    if (alert &&
+    final newlyObserved = state.result?['identity'] != focus.identity;
+    if (!newlyObserved && identical(state.result, state.persistedResult)) {
+      return;
+    }
+    if (newlyObserved) {
+      state.resultAlerts = alert;
+      state.result = {
+        'identity': focus.identity,
+        'focus': focus.toJson(),
+        'content': content.toJson(),
+      };
+    }
+    if (newlyObserved &&
+        alert &&
         focus.kind == 'answer' &&
         content.category == ChatNotificationCategory.update) {
       _publishActivity(chat, focus, ConversationActivityKind.reply);
     }
-    await _render(chat, state, alert: alert);
+    if (!identical(state.result, state.renderedResult)) {
+      await _render(
+        chat,
+        state,
+        alert: state.resultAlerts,
+        admitBaseline: !state.resultAlerts,
+      );
+    }
     await _write();
   });
 
@@ -392,6 +416,18 @@ class ChatNotificationCoordinator {
     String chat,
     _ChatNotice state, {
     required bool alert,
+    bool admitBaseline = false,
+  }) async {
+    final acknowledged = await _renderNotice(chat, state, alert: alert);
+    // A quiet baseline intentionally admits history. A quiet redraw that has
+    // no existing native slot cannot confirm an earlier failed fresh delivery.
+    if (acknowledged || admitBaseline) state.renderedResult = state.result;
+  }
+
+  Future<bool> _renderNotice(
+    String chat,
+    _ChatNotice state, {
+    required bool alert,
   }) async {
     final first = state.inputs.firstOrNull;
     final result = state.result;
@@ -401,7 +437,7 @@ class ChatNotificationCoordinator {
       }
       state.posted = null;
       state.rendered = null;
-      return;
+      return true;
     }
     final content =
         first?.content ??
@@ -411,16 +447,16 @@ class ChatNotificationCoordinator {
     // Known-disabled categories can withdraw without a platform permission read.
     if (!_categoryAllowed(content)) {
       await _withdraw(chat, state);
-      return;
+      return true;
     }
     // The native permission read can yield to a confirmed preference change.
     // Capture dispatch facts only after it settles, before physical delivery.
     final permitted = await sink.notificationsEnabled() != false;
     if (!_categoryAllowed(content)) {
       await _withdraw(chat, state);
-      return;
+      return true;
     }
-    if (!permitted) return;
+    if (!permitted) return true;
     final focus =
         first?.focus ??
         NotificationFocus.fromJson(Map<String, dynamic>.from(result!['focus']));
@@ -432,7 +468,8 @@ class ChatNotificationCoordinator {
                 .toList(),
           );
     // Silent baselines may reconcile existing alerts but never post history.
-    if (state.dismissed == revision || (!alert && state.posted == null)) return;
+    if (state.dismissed == revision) return true;
+    if (!alert && state.posted == null) return false;
     final preview = appPreferences.current.notificationPreviewsAllowed;
     final counts = <String, int>{};
     for (final input in state.inputs) {
@@ -472,9 +509,10 @@ class ChatNotificationCoordinator {
       alert: alert && state.posted != revision,
     );
     final rendered = jsonEncode(notification.toJson());
-    if (state.rendered == rendered) return;
+    if (state.rendered == rendered) return true;
     await sink.show(notification);
     state.posted = revision;
     state.rendered = rendered;
+    return true;
   }
 }

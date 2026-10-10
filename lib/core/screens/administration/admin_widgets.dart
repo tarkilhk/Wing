@@ -9,9 +9,6 @@ import 'package:flutter/material.dart';
 import '../../widgets/studio_error.dart';
 import '../../widgets/studio_action_label.dart';
 
-/// Inherit all Studio component states and the selected app accent.
-ThemeData administrationTheme(ThemeData base) => base;
-
 class AdminPage extends StatelessWidget {
   final String title;
   final String scope;
@@ -29,43 +26,38 @@ class AdminPage extends StatelessWidget {
     this.bottomNavigationBar,
   });
   @override
-  Widget build(BuildContext context) => Theme(
-    data: administrationTheme(Theme.of(context)),
-    child: Builder(
-      builder: (context) => Scaffold(
-        appBar: WingAppBar(
-          context: context,
+  Widget build(BuildContext context) => Scaffold(
+    appBar: WingAppBar(
+      context: context,
 
-          title: Text(title, maxLines: 6, softWrap: true),
-          actions: actions,
-        ),
-        bottomNavigationBar: bottomNavigationBar == null
-            ? null
-            : Padding(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.viewInsetsOf(context).bottom,
-                ),
-                child: bottomNavigationBar,
-              ),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: ServerConnectionScope.of(context) == null
-                  ? Text(scope, style: Theme.of(context).textTheme.bodySmall)
-                  : ServerConnectionLabel(
-                      label: scope,
-                      pickerMode: pickerMode,
-                      includeProfiles:
-                          scope != ServerConnectionScope.of(context)?.label,
-                      status: ServerConnectionScope.of(context),
-                    ),
+      title: Text(title, maxLines: 6, softWrap: true),
+      actions: actions,
+    ),
+    bottomNavigationBar: bottomNavigationBar == null
+        ? null
+        : Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(context).bottom,
             ),
-            Expanded(child: child),
-          ],
+            child: bottomNavigationBar,
+          ),
+    body: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: ServerConnectionScope.of(context) == null
+              ? Text(scope, style: Theme.of(context).textTheme.bodySmall)
+              : ServerConnectionLabel(
+                  label: scope,
+                  pickerMode: pickerMode,
+                  includeProfiles:
+                      scope != ServerConnectionScope.of(context)?.label,
+                  status: ServerConnectionScope.of(context),
+                ),
         ),
-      ),
+        Expanded(child: child),
+      ],
     ),
   );
 }

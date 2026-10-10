@@ -120,6 +120,66 @@ void main() {
     );
   });
 
+  for (final olderFails in [false, true]) {
+    test(
+      'newer roster wins after an older ${olderFails ? 'error' : 'running snapshot'} settles first',
+      () async {
+        final older = Completer<Map<String, dynamic>>();
+        final newer = Completer<Map<String, dynamic>>();
+        host.pendingList = older;
+        final first = controller.refreshSubagents(chat);
+        host.pendingList = newer;
+        final second = controller.refreshSubagents(chat);
+        if (olderFails) {
+          older.completeError(StateError('Old request failed'));
+        } else {
+          older.complete({
+            'subagents': [
+              {'subagent_id': 'child', 'status': 'running'},
+            ],
+          });
+        }
+        await first;
+        expect(chat.subagents, isEmpty);
+        expect(chat.subagentsError, isNull);
+        expect(chat.subagentsLoading, isTrue);
+        newer.complete({
+          'subagents': [
+            {'subagent_id': 'child', 'status': 'completed'},
+          ],
+        });
+        await second;
+        expect(chat.subagents.single.status, GatewaySubagentStatus.completed);
+        expect(chat.subagentsError, isNull);
+        expect(chat.subagentsLoading, isFalse);
+      },
+    );
+  }
+
+  test('an older roster cannot replace a newer completed snapshot', () async {
+    final older = Completer<Map<String, dynamic>>();
+    final newer = Completer<Map<String, dynamic>>();
+    host.pendingList = older;
+    final first = controller.refreshSubagents(chat);
+    host.pendingList = newer;
+    final second = controller.refreshSubagents(chat);
+    newer.complete({
+      'subagents': [
+        {'subagent_id': 'child', 'status': 'completed'},
+      ],
+    });
+    await second;
+    older.complete({
+      'subagents': [
+        {'subagent_id': 'child', 'status': 'running'},
+      ],
+    });
+    await first;
+    expect(chat.subagents.single.status, GatewaySubagentStatus.completed);
+    expect(chat.subagentsLoading, isFalse);
+    expect(chat.subagentsError, isNull);
+  });
+
   test('events merge sparse updates and normalize terminal status', () {
     host.event('a', 'subagent.start', {
       'subagent_id': 'child',

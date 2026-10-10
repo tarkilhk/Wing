@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/chat_output.dart';
 import 'android_file_delivery_service.dart';
 import 'media_preview_service.dart';
+import 'owned_remote_files.dart';
 import 'profile_gateway.dart';
 import 'remote_files_client.dart';
 import 'remote_file_saver.dart';
@@ -192,7 +193,7 @@ final class ChatOutputsSession extends ChangeNotifier {
       if (path != null) {
         file = await download(path);
       } else if (output.url!.startsWith('data:image/')) {
-        final data = UriData.parse(output.url!);
+        final data = decodeEmbeddedImage(output.url!);
         final extension =
             const {
               'image/png': 'png',
@@ -204,7 +205,7 @@ final class ChatOutputsSession extends ChangeNotifier {
             'img';
         file = RemoteFileDownload(
           filename: 'image.$extension',
-          bytes: data.contentAsBytes(),
+          bytes: data.bytes,
         );
       } else {
         uri = externalWebLink(output.url!);

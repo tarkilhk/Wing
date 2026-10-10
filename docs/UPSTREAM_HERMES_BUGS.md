@@ -9,7 +9,7 @@ Last verified: 2026-09-14, local Hermes 0.21.2, installed source commit `e16f686
 | HUP-001 | High | Browser and vault target different tabs | Open, reproduced | Not filed | [#5](https://github.com/tarkilhk/Wing/issues/5) |
 | HUP-002 | Medium | Non-default profile loop command/control mismatch | Open, reproduced | Not filed | [#6](https://github.com/tarkilhk/Wing/issues/6) |
 | HUP-003 | Medium | Global activity omits child-only work | Open, reproduced contract gap | Not filed | [#7](https://github.com/tarkilhk/Wing/issues/7) |
-| HUP-004 | Medium | Windows profile deletion fails with an open MCP log handle | Open, fix proposed | [Issue #110953](https://github.com/NousResearch/hermes-agent/issues/110953), [PR #110954](https://github.com/NousResearch/hermes-agent/pull/110954) | [#8](https://github.com/tarkilhk/Wing/issues/8) |
+| HUP-004 | Medium | Windows profile deletion fails with an open MCP log handle | Local issue open; upstream issue closed, proposed PR closed unmerged; acceptance not rerun | [Issue #110953](https://github.com/NousResearch/hermes-agent/issues/110953), [PR #110954](https://github.com/NousResearch/hermes-agent/pull/110954) | [#8](https://github.com/tarkilhk/Wing/issues/8) |
 
 Priorities reflect mobile impact. Close an entry only after its acceptance criteria pass against a recorded backend version. Add the upstream issue URL and fix commit when available; a newer version alone does not establish a fix.
 
@@ -77,6 +77,11 @@ At the recorded check, the PR was open and the installed backend was unchanged. 
 [issue #87761](https://github.com/NousResearch/hermes-agent/issues/87761) and
 [PR #87787](https://github.com/NousResearch/hermes-agent/pull/87787) address a
 running gateway service, which this reproduction does not require.
+
+**Tracking update, 2026-10-10:** Upstream issue #110953 is closed as completed;
+PR #110954 is closed without merging. Wing issue #8 remains open. This status
+check did not rerun the Windows acceptance case or establish a current upstream
+fix commit; the original reproduction and closure criteria remain dated above.
 
 **Mobile impact:** Deleting a profile can return HTTP 500 after a connector has
 started because the backend still owns an open log handle.

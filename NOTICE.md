@@ -12,8 +12,8 @@ The development-only renderer harness uses [Playwright Core](https://github.com/
 
 The vendored Flutter setup action retains [its MIT license](.github/actions/setup-flutter/LICENSE) and upstream copyright notice. Its source revision and local changes are recorded in [the action README](.github/actions/setup-flutter/README.md).
 
-The New chat icon uses Lucide's `square-pen` from `lucide-static` 0.468.0, under the [ISC license](assets/fonts/LUCIDE-LICENSE). The app includes a single-glyph font subset and the matching Android shortcut vector; see [icon provenance](assets/fonts/README.md).
+The New chat and Fork icons use Lucide's `square-pen` and `git-fork` from `lucide-static` 0.468.0, under the [ISC license](assets/fonts/LUCIDE-LICENSE). The app includes a two-glyph font subset and the matching New chat Android shortcut vector; see [icon provenance](assets/fonts/README.md).
 
 The website self-hosts Latin subsets of Manrope and Source Sans 3, distributed under the SIL Open Font License 1.1. Their copyright and license notices are retained in [Manrope's OFL notice](website/assets/fonts/MANROPE-OFL.txt) and [Source Sans 3's OFL notice](website/assets/fonts/SOURCE-SANS-3-OFL.txt). These web fonts are not bundled in the Android app. See [website maintenance](docs/WEBSITE.md) for design and asset provenance.
 
-Syntax highlighting uses [re_highlight](https://pub.dev/packages/re_highlight) 0.0.3 by Reqable, distributed under the MIT license. Its dependency license is retained in Flutter's bundled notices.
+Syntax highlighting uses [re_highlight](https://pub.dev/packages/re_highlight) 0.0.3, and the read-only source viewport uses [re_editor](https://pub.dev/packages/re_editor) 0.10.0. Both are by Reqable and distributed under the MIT license. Their dependency licenses are retained in Flutter's bundled notices.

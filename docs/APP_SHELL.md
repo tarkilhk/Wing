@@ -2,7 +2,9 @@
 
 ## Drawer and chat list
 
-The drawer opens Chats, Activity, Connections, App settings and Hermes administration. Projects are a scope within Chats. There is no permanent bottom navigation or intermediate More page.
+The drawer opens Chats, Recents, Bots, Hermes instances, App settings, Hermes
+administration, Hermes health and Hermes analytics. Projects are a scope within
+Chats. There is no permanent bottom navigation or intermediate More page.
 
 Chats browses all profiles on the selected connection. Search stays above one
 compact Status / Profile / Project filter row. Each filter opens its own anchored
@@ -23,7 +25,10 @@ pen creates a chat. Creation asks for an owning profile unless exactly one profi
 is filtered or available. Project row menus retain New chat, Rename, Appearance
 and Delete. Selection uses Studio tint and row actions retain 48 dp targets.
 
-Back unwinds the current preview or editor, then returns from a conversation to Chats. At the workspace root it opens the drawer before exiting. Navigation preserves the open work and draft.
+Back unwinds the current preview, editor or Recents card stack, then returns from
+a conversation to its originating Chats, Recents or Bots route. Recents retains
+the selected filter and visit's conversation order. At the workspace root Back
+opens the drawer before exiting. Navigation preserves the open work and draft.
 
 ## Profile ownership
 
@@ -60,7 +65,7 @@ Create a project using an absolute folder on the host. Repository discovery is a
 
 Move chat uses `workspace.move` with the durable session key, destination working folder and profile. It is not a file move or cross-profile transfer. The app freshly resumes and verifies a uniquely owned idle runtime before the mutation, then refreshes the lists and preserves the open draft. The chosen working folder is the primary project path, falling back to its first repository.
 
-In a conversation, tap **Unassigned** or the project name beside the server to
+In a conversation, tap **Unassigned** or the project icon and name beside the server to
 open the project selector. The Studio sheet shows the current project and lets
 you search destinations by name or working folder. Choosing a destination moves
 the chat; Cancel makes no change. A failed move stays open for retry, and controls

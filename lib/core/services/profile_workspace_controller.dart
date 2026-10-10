@@ -2411,7 +2411,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
       final response = await resource.gateway.call('subagent.list', {
         'session_id': runtime,
       });
-      if (!_subagentReadIsCurrent(resource, chat, runtime, revision, before)) {
+      if (!_subagentReadIsCurrent(
+        resource,
+        chat,
+        runtime,
+        revision,
+        before,
+        loadGeneration,
+      )) {
         return;
       }
       final raw = response['subagents'];
@@ -2451,7 +2458,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
         );
       chat._subagentsRevision++;
     } catch (_) {
-      if (_subagentReadIsCurrent(resource, chat, runtime, revision, before)) {
+      if (_subagentReadIsCurrent(
+        resource,
+        chat,
+        runtime,
+        revision,
+        before,
+        loadGeneration,
+      )) {
         chat._subagentsError = 'Subagents could not be refreshed. Retry.';
       }
     } finally {
@@ -2543,11 +2557,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String runtime,
     int revision,
     List<GatewaySubagentActivity> before,
+    int loadGeneration,
   ) =>
       !_closed &&
       identical(_resources[chat._key.workspace], resource) &&
       identical(resource._chats[chat._key.sessionId], chat) &&
       chat.runtime.runtimeId == runtime &&
+      chat._subagentsLoadGeneration == loadGeneration &&
       chat._subagentsRevision == revision &&
       identical(chat._subagents, before);
 

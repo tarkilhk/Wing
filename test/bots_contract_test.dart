@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/bots.dart';
@@ -10,9 +11,259 @@ import 'package:wing/core/services/bot_profile_edit_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'support/bots_fixture.dart';
+import 'support/administration_fixture.dart';
+import 'package:wing/core/services/bot_avatar_io.dart';
+import 'package:wing/core/services/connection_manager.dart';
+
+const _avatarPng =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=';
+
+class _AvatarPicker extends BotAvatarIo {
+  @override
+  Future<Uint8List?> pick() async => base64Decode(_avatarPng);
+}
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  for (final status in ['working', 'waiting']) {
+    test(
+      'production presence proves compressed root ownership: $status',
+      () async {
+        final administration = AdministrationFixture();
+        final fixture = BotsFixture();
+        for (final row in fixture.profiles) {
+          administration.configs[row['name'] as String] = {};
+        }
+        administration.rpcOverride = (method, params) async {
+          if (method == 'session.active_list') {
+            return {
+              'sessions': [
+                {
+                  'id': 'runtime',
+                  'session_key': 'atlas-chat',
+                  'status': status,
+                },
+              ],
+            };
+          }
+          return fixture.read(params['profile'] as String, method, params);
+        };
+        administration.override = (method, path, query, body) async {
+          if (path == 'profiles') {
+            return {'profiles': fixture.profiles};
+          }
+          if (path == 'profiles/active') {
+            return {'current': 'atlas', 'active': 'atlas'};
+          }
+          if (path == 'sessions/search') {
+            return {
+              'results': [
+                {
+                  'id': 'atlas-tip',
+                  'session_id': 'atlas-tip',
+                  'profile': query['profile'],
+                },
+              ],
+            };
+          }
+          if (query['profile'] == 'atlas') {
+            return {'id': 'atlas-chat', 'profile': 'atlas', 'hidden': true};
+          }
+          throw DashboardSessionNotFound(path);
+        };
+        final repository = BotsRepository.forServer(administration.server);
+        final roster = await repository.bots();
+        final presence = await repository.presence(roster);
+        expect(
+          presence[roster.first.id],
+          status == 'waiting' ? BotPresence.needsInput : BotPresence.working,
+        );
+        expect(presence[roster[1].id], BotPresence.idle);
+        expect(presence[roster[2].id], BotPresence.idle);
+        expect(
+          administration.requests.any((r) => r.$2 == 'sessions/search'),
+          false,
+        );
+      },
+    );
+  }
+  for (final failure in ['transport', 'owner', 'id', 'wrong absence']) {
+    test(
+      'production presence stays unknown on $failure and recovers',
+      () async {
+        final administration = AdministrationFixture();
+        final fixture = BotsFixture();
+        administration.rpcOverride = (method, params) async =>
+            method == 'session.active_list'
+            ? {
+                'sessions': [
+                  {
+                    'id': 'runtime',
+                    'session_key': 'atlas-chat',
+                    'status': 'working',
+                  },
+                ],
+              }
+            : fixture.read(params['profile'] as String, method, params);
+        var broken = true;
+        administration.override = (method, path, query, body) async {
+          if (path == 'profiles') {
+            return {'profiles': fixture.profiles};
+          }
+          if (path == 'profiles/active') {
+            return {'current': 'atlas', 'active': 'atlas'};
+          }
+          if (path == 'sessions/search') return {'results': []};
+          if (query['profile'] != 'atlas') throw DashboardSessionNotFound(path);
+          if (broken) {
+            switch (failure) {
+              case 'transport':
+                throw StateError('Offline');
+              case 'owner':
+                return {'id': 'atlas-chat', 'profile': 'mira'};
+              case 'id':
+                return {'id': 'atlas-tip', 'profile': 'atlas'};
+              case 'wrong absence':
+                throw const DashboardSessionNotFound('sessions/another');
+            }
+          }
+          return {'id': 'atlas-chat', 'profile': 'atlas'};
+        };
+        final repository = BotsRepository.forServer(administration.server);
+        final roster = await repository.bots();
+        expect(
+          (await repository.presence(roster)).values,
+          everyElement(BotPresence.unknown),
+        );
+        broken = false;
+        expect(
+          (await repository.presence(roster))[roster.first.id],
+          BotPresence.working,
+        );
+      },
+    );
+  }
+  test(
+    'uploaded avatar handoff preserves saved image and clears it on shape selection',
+    () async {
+      final fixture = BotsFixture();
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        (await fixture.repository.bots()).first,
+        avatarIo: _AvatarPicker(),
+      );
+      await edit.pickImage();
+      edit.change(title: 'Saved title', color: '#123456');
+      expect(await edit.flush(), true);
+      final acknowledged = edit.bot;
+      expect(acknowledged.hasAvatar, true);
+      expect(acknowledged.avatar, orderedEquals(base64Decode(_avatarPng)));
+      expect(acknowledged.title, 'Saved title');
+      expect(acknowledged.color, '#123456');
+      expect(acknowledged.chat!.sessionId, 'atlas-chat');
+      expect(acknowledged.metadata['unrelated'], {
+        'nested': ['kept'],
+      });
+      edit.dispose();
+      final reopened = BotProfileEditSession(fixture.repository, acknowledged);
+      expect(reopened.image, orderedEquals(base64Decode(_avatarPng)));
+      reopened.change(shape: 'triangle');
+      expect(await reopened.flush(), true);
+      expect(reopened.bot.avatar, isNull);
+      expect(reopened.bot.hasAvatar, false);
+      expect(fixture.commands.last.$3['clear'], true);
+      final afterShape = reopened.bot;
+      reopened.dispose();
+      final finalEditor = BotProfileEditSession(fixture.repository, afterShape);
+      expect(finalEditor.image, isNull);
+      expect(finalEditor.shape, 'triangle');
+      finalEditor.dispose();
+    },
+  );
+  test(
+    'avatar acknowledgement preserves edits arriving during an asset write',
+    () async {
+      final fixture = BotsFixture();
+      final started = Completer<void>(), held = Completer<void>();
+      final clearing = Completer<void>(), clearHeld = Completer<void>();
+      fixture.commandHook = (_, method, _) async {
+        if (method == 'profiles.set_asset' && !started.isCompleted) {
+          started.complete();
+          await held.future;
+        } else if (method == 'profiles.set_asset') {
+          clearing.complete();
+          await clearHeld.future;
+        }
+        return null;
+      };
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        (await fixture.repository.bots()).first,
+        avatarIo: _AvatarPicker(),
+      );
+      addTearDown(edit.dispose);
+      await edit.pickImage();
+      final saving = edit.flush();
+      await started.future;
+      edit.change(title: 'Newer title');
+      edit.removeImage();
+      held.complete();
+      await clearing.future;
+      expect(edit.bot.avatar, orderedEquals(base64Decode(_avatarPng)));
+      expect(edit.bot.hasAvatar, true);
+      expect(edit.bot.title, 'Newer title');
+      expect(edit.bot.revision, 4);
+      expect(edit.image, isNull);
+      expect(edit.dirty, true);
+      clearHeld.complete();
+      expect(await saving, true);
+      expect(edit.bot.title, 'Newer title');
+      expect(edit.bot.avatar, isNull);
+      expect(edit.bot.hasAvatar, false);
+      expect(edit.dirty, false);
+      expect(
+        fixture.commands.where((c) => c.$2 == 'profiles.set_asset').length,
+        2,
+      );
+      final reopened = BotProfileEditSession(fixture.repository, edit.bot);
+      expect(reopened.image, isNull);
+      reopened.dispose();
+    },
+  );
+  test(
+    'failed asset write leaves metadata acknowledgement and retries only asset',
+    () async {
+      final fixture = BotsFixture();
+      var failAsset = true;
+      fixture.commandHook = (_, method, _) async {
+        if (method == 'profiles.set_asset' && failAsset) {
+          throw StateError('Lost acknowledgement');
+        }
+        return null;
+      };
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        (await fixture.repository.bots()).first,
+        avatarIo: _AvatarPicker(),
+      );
+      addTearDown(edit.dispose);
+      await edit.pickImage();
+      edit.change(title: 'Saved metadata');
+      expect(await edit.flush(), false);
+      expect(edit.bot.title, 'Saved metadata');
+      expect(edit.bot.revision, 3);
+      expect(edit.bot.hasAvatar, false);
+      expect(edit.bot.avatar, isNull);
+      failAsset = false;
+      expect(await edit.flush(), true);
+      expect(edit.bot.avatar, orderedEquals(base64Decode(_avatarPng)));
+      expect(edit.bot.hasAvatar, true);
+      expect(
+        fixture.commands.where((c) => c.$2 == 'profiles.configure').length,
+        1,
+      );
+    },
+  );
   test(
     'conversation appearance admits exact canonical root and tip only',
     () async {

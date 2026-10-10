@@ -204,7 +204,7 @@ pointer timestamps for velocity. A new gesture can interrupt a returning card
 once selection has settled. Two-finger gestures admit unselected transcript prose
 and exclude Android's 24 dp edge zones. Active text
 selection, code, message actions, Activity controls, pending-input panels, composer,
-voice and queued-prompt editing keep their input. Chat actions omits recent
+voice and queued-prompt editing keep their input. The Chat actions menu omits recent
 conversation navigation; use the two-finger swipe and inward pinch instead.
 Accessible navigation within the stack uses explicit icon-only controls with
 labels and tooltips. An enabled accessibility service alone does not disable expert
@@ -684,9 +684,13 @@ Source uses `WingTokens.sourceColor` for keywords, strings, numbers, names,
 variables and comments in both themes, with Studio's existing mono typography.
 Chat code, Activity source and file previews share `SourceCodeText`. Grammar
 coloring preserves literal text, selection and copy; numbered file receipts
-retain their supplied gutter characters. Live fences color after response completion;
-large or dense source remains literal to bound added rendering work. Unlabelled text and console logs use
-the ordinary foreground. Diff and diagnostic colors keep their semantic owner.
+retain their supplied gutter characters. Live fences color after response
+completion. Tokenization runs off the UI thread, while the read-only source
+viewport builds spans for visible lines and wrapped segments. Large or dense
+source retains coloring without a document-size cutoff. Wrapping can be
+toggled without rewriting the original text or its selection offsets.
+Unlabelled text and console logs use the ordinary foreground. Diff and
+diagnostic colors keep their semantic owner.
 
 Conversation file cards put icon-only Download and Open preview actions beside
 the wrapping filename, using the download-to-tray arrow and outlined eye. Keep

@@ -54,6 +54,26 @@ class BotRecord {
   final Uint8List? avatar;
   String get id => '${scope.connectionIdentity}/${profile.name}';
 
+  /// Adopt a confirmed asset write independently of metadata acknowledgements.
+  BotRecord withAvatar(Uint8List? image) => BotRecord(
+    scope: scope,
+    instance: instance,
+    profile: profile,
+    title: title,
+    shape: shape,
+    color: color,
+    pinned: pinned,
+    hidden: hidden,
+    hasAvatar: image != null,
+    revision: revision,
+    metadata: metadata,
+    chat: chat,
+    resolvedChat: resolvedChat,
+    preview: preview,
+    presence: presence,
+    avatar: image,
+  );
+
   BotRecord withMetadata({
     required Map<String, Object?> metadata,
     required int revision,

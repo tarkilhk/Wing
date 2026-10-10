@@ -366,6 +366,13 @@ They run in `python3 scripts/test.py --full`, which executes every discovered
 retain all their actual repository/DTO and fixture checks in routine runs.
 New unclassified suites run routinely; they are never silently scheduled away.
 
+Both routine and full mode launch `scripts/check_commit_linters.py` alongside
+host tests. `--skip-linters` explicitly delegates those checks to separate CI
+steps; checker fixtures do not replace current-source checking. The runner
+records local versus external source checks and fails on a local linter failure
+in either mode. `scripts/tests/test_test_runner.py` covers that admission and
+failure propagation.
+
 | Check | Cadence |
 | --- | --- |
 | Source linters | Every local commit with the hook installed, every branch push/PR, and release |
@@ -376,17 +383,21 @@ CI uses `--changed-since` with the preceding commit or PR base to select full
 verification when tool inputs change. Unknown or missing history selects the
 full suite. The nightly workflow also supports manual dispatch. Scheduling
 preserves every test but can delay finding a checking-tool regression until the
-next full run; checking the current app source is never deferred.
+next full run. PR and release workflows enforce current-source checks separately.
+Nightly runs a mandatory current-source Dart gate before full host tests with
+`--skip-linters`, plus selected independent fixtures. Native source gates remain
+in PR/release after Gradle dependency setup.
 
 CI runs the Dart source checks together with
 `python3 scripts/check_commit_linters.py --dart-only`, preserving each rule while
 sharing startup and analysis work. PR checks also bind the aggregate to the
 preceding architecture baseline with `--baseline-reference`. Python source
 checks run explicitly, and native source guards run after Gradle has supplied
-their compiler dependencies. PR host tests use `scripts/test.py --skip-linters`
+their compiler dependencies. PR and release host tests use `scripts/test.py --skip-linters`
 because these mandatory workflow steps enforce the linters separately. The
-workflow guard requires the Dart source gate before that host step and Gradle
-setup before each native gate. Local routine verification keeps all linters.
+workflow guard requires the Dart source gate before PR/nightly host steps and
+Gradle setup before each PR/release native gate. Local routine verification keeps
+all linters.
 Python runner tests prove source-check discovery, baseline handling, failure
 propagation and separation of native dependencies; they run in both workflows.
 
@@ -415,8 +426,9 @@ APK build, and native JVM boundary tests. Android checks use Flutter 3.44.0,
 Temurin Java 17, SDK platform 36, build-tools 36.0.0 and the project's pinned
 Gradle distribution. The debug build uses the development application ID and
 Android's generated debug key; it requires no production signing secrets.
-Native JVM tests exercise the actual notification identity and shared-content
-URI boundary code, but do not emulate Android intents, permissions or WebView.
+Native JVM tests exercise the actual notification identity, shared-content
+URI and clipboard provider boundaries, but do not emulate Android intents,
+permissions or WebView.
 
 After `flutter pub get` and `flutter build apk --debug --no-pub`, run the JVM
 tests from the checkout root:
@@ -444,6 +456,25 @@ checks establish desktop Chromium enforcement and require separate Android
 WebView acceptance on a disposable emulator.
 
 ## Useful test entry points
+
+The 10 October review repairs use held or failed I/O at the existing owners:
+`chat_notification_coordinator_test.dart` covers delivery/journal retry and
+silent policy refresh; `bots_contract_test.dart` and `bots_view_test.dart` cover
+acknowledged appearance and exact live ownership; `profile_subagents_test.dart`
+covers overlapping reads and newer live progress. These asynchronous properties
+require behavioral guards rather than source-pattern checks.
+
+Clipboard cancellation and expiry are covered by
+`test/attachment_image_lifetime_test.dart`, `test/image_paste_test.dart` and native
+`ImageClipboardReaderTest`: uncooperative providers, late cleanup, retired
+delivery and byte boundaries. `test/resource_preview_owner_test.dart` and
+`test/chat_outputs_session_test.dart` check embedded-image limits before URI
+normalization, including Unicode expansion, and rejected preview/share recovery.
+`test/backup_export_lifetime_test.dart`,
+`test/backup_export_unique_offer_test.dart` and
+`test/skill_document_viewer_test.dart` cover pending source retention, Android
+settlement cleanup, independent recipient copies and cross-feature share
+admission. Device chooser/grant acceptance remains a separate boundary.
 
 `TRANSCRIPT_PREPARATION_ADMISSION` is guarded by
 `test/transcript_preparation_work_budget_test.dart`. Timeline grouping, identity
@@ -612,7 +643,8 @@ For an automated emulator run, use
 The driver builds a disposable SDK-only share receiver, starts the Flutter test,
 selects that receiver in the actual Android share sheet, saves to Downloads through
 DocumentsUI, and selects the saved document for every restore attempt. It compares
-saved bytes with the real exported cache file and removes its helper and owned
+saved bytes with the Android plugin's provider-cache copy (Wing's original stage
+is removed after handoff settles) and removes its helper and owned
 files afterward. XML, screenshots, Flutter logs and acceptance results go under
 `build/native-backup-review/`; SDK 36/JDK 17 paths can be passed explicitly.
 Use a disposable emulator with a local file-saving share target. At each share
@@ -727,7 +759,8 @@ Deliverable card renders use `test/deliverable_attachment_test.dart` with
 themes at 320 dp with normal and 200% text under `build/deliverables-review/`.
 The offline debug target `integration_test/deliverables_native_preview.dart`
 uses production cards, the reader and Android's save picker with a synthetic
-Markdown report. Check Rendered/Source, Back, save/cancel and the saved bytes;
+Markdown report. Check the icon-only Raw/formatted content toggle, Copy content,
+Share file, Back, save/cancel and the saved bytes;
 restore the normal debug APK afterward. This establishes native UI and file
 delivery behavior, not access to a live server's files.
 

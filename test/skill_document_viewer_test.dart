@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -6,6 +7,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
+import 'package:share_plus/share_plus.dart';
+import 'package:wing/core/services/platform_share.dart';
 import 'package:wing/core/presentation/skill_document.dart';
 import 'package:wing/core/services/skill_reader_session.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -152,6 +155,56 @@ Future<void> capture(WidgetTester tester, GlobalKey key, String label) async {
 }
 
 void main() {
+  testWidgets(
+    'skill sharing cannot supersede an active platform offer and retries after settlement',
+    (tester) async {
+      const channel = MethodChannel('dev.fluttercommunity.plus/share');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final entered = Completer<void>();
+      final settled = Completer<String>();
+      final payloads = <String>[];
+      messenger.setMockMethodCallHandler(channel, (call) {
+        payloads.add((call.arguments as Map)['text'] as String);
+        if (payloads.length == 1) {
+          entered.complete();
+          return settled.future;
+        }
+        return Future.value('recipient');
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final pending = platformShare(ShareParams(text: 'Existing offer'));
+      await entered.future;
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SkillDocumentViewer(
+              document: SkillDocument.fromReceived(
+                name: 'review',
+                content: '# Review\n\nRead **original** evidence.',
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Share content'));
+        await tester.pumpAndSettle();
+        expect(payloads, ['Existing offer']);
+        expect(
+          find.text('Finish the current share sheet, then try again.'),
+          findsOneWidget,
+        );
+      } finally {
+        settled.complete('recipient');
+        await pending;
+      }
+      await tester.tap(find.byTooltip('Share content'));
+      await tester.pumpAndSettle();
+      expect(payloads, ['Existing offer', 'Review\n\nRead original evidence.']);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   setUpAll(() async {
     final fonts = Platform.environment['CAPTURE_FONT_DIR'];
     if (fonts != null) {
@@ -232,8 +285,16 @@ void main() {
           final next = tester.getRect(find.byTooltip('Next section'));
           expect(next.bottom, greaterThan(800));
           await capture(tester, boundary, key);
-          await tester.ensureVisible(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
-          await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
+          await tester.ensureVisible(
+            find.textContaining(
+              RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+            ),
+          );
+          await tester.tap(
+            find.textContaining(
+              RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+            ),
+          );
           await tester.pumpAndSettle();
           expect(find.text('Uses'), findsOneWidget);
           expect(find.text('Patches / edits'), findsOneWidget);
@@ -525,7 +586,11 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
+          await tester.tap(
+            find.textContaining(
+              RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+            ),
+          );
           await tester.pumpAndSettle();
           expect(
             find.bySemanticsLabel(RegExp(r'^Uses: 1044\.')),

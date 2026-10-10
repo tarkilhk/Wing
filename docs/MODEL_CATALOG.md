@@ -14,6 +14,12 @@ are client-side and use the existing `model/options`, `model/info` and session
 
 ## Owner and reuse
 
+The composer model control opens the chat picker. Profile model/defaults,
+auxiliary assignments, fallbacks and scheduled-task model overrides open the
+same chooser from their captured administration editors. Bot settings hands
+model edits to those existing profile editors. Analytics borrows the catalog's
+API pricing observations without changing the chat or profile model.
+
 `ProfileGateway.modelCatalog` retains the owner for its gateway lifetime.
 `ProfileAdministration.modelCatalog` borrows the administration repository's
 retained owner for that canonical profile, using its existing captured read
@@ -125,9 +131,19 @@ catalog fences publication after rate enrichment as well as after backend reads.
 
 Stock upstream `e0550c97bbd916cd5ff8fa0450e6291c31921b94`, inspected 9 October
 2026, formats route prices in `hermes_cli/inventory.py` using
-`hermes_cli/models_pricing.py`. Its model/options response does not expose direct
-OpenAI API rates or the internal usage rate card, and Codex's included zero cost
+`hermes_cli/models_pricing.py`. Its model/options response does not expose a
+numeric direct OpenAI API rate card or the internal usage rate card, and Codex's included zero cost
 is not an API-equivalent rate. This implementation requires no Hermes changes.
+
+The stock model-options and picker-pricing path was rechecked on 10 October
+2026 at `dce1e9b37581dd62e480a9064dc04a709c2940d3`:
+[`models.py`](https://github.com/NousResearch/hermes-agent/blob/dce1e9b37581dd62e480a9064dc04a709c2940d3/hermes_cli/web_routers/models.py)
+still delegates to the profile-scoped inventory;
+[`inventory.py`](https://github.com/NousResearch/hermes-agent/blob/dce1e9b37581dd62e480a9064dc04a709c2940d3/hermes_cli/inventory.py)
+still formats route prices for display, and
+[`models_pricing.py`](https://github.com/NousResearch/hermes-agent/blob/dce1e9b37581dd62e480a9064dc04a709c2940d3/hermes_cli/models_pricing.py)
+does not supply direct OpenAI or Codex rates. Wing therefore retains the shared
+public numeric-rate reader described above.
 
 `models_dev_pricing_test.dart` guards exact source selection, numeric precision,
 cache/revalidation, anonymous requests, corruption, offline retention and

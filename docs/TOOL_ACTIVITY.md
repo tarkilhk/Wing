@@ -625,7 +625,12 @@ Full text viewers keep one toolbar and Markdown raw/formatted switching there.
 Nonempty code, commands and literal output expose an icon-only wrap toggle before
 Copy, both inline and in that viewer. Wrapping starts enabled; disabling it allows
 horizontal scrolling without changing selection or copied bytes. Raw Markdown
-also exposes wrapping; formatted prose reflows naturally.
+also exposes wrapping; formatted prose reflows naturally. The full viewer owns
+its wrap state and passes it to the headerless detail section, keeping one
+toolbar. Shared `SourceCodeText` prepares source tokens off the UI thread and
+renders visible lines and wrapped segments without a document-size cutoff.
+Chat code, Activity source and file previews preserve the same literal text,
+original selection offsets and exact clipboard content.
 
 Read/write file content has a single resource header and headerless body.
 Markdown reads remove only stock gutters for formatted display and preserve
@@ -720,9 +725,12 @@ complete received instruction document. `SkillDocument` selects actual name,
 description, tags and typed author/version/license declarations; the shared
 resource header and text viewer own presentation and actions. Linked files,
 unchanged receipts and binary results do not become main-document cards. Copy
-always retains the original receipt, including front matter. The viewer never
-fetches or edits a newer skill; share uses only a supplied source locator through
-the existing captured resource owner.
+always retains the original receipt, including front matter. Opening the eye
+keeps the received instruction document; optional metadata and reference reads
+do not replace it with a newer skill. Resource sharing uses only a supplied
+source locator through the existing captured resource owner. The full reader's
+text actions follow its displayed raw/formatted mode, as specified in the
+[skill reader design contract](DESIGN_SYSTEM.md#user-value-first-activity).
 
 `test/tool_activity_state_test.dart` guards field meaning, missing/malformed
 declarations and exact content. `test/tool_activity_actions_test.dart` guards
@@ -741,14 +749,42 @@ locator never causes a client-generated path.
 `lib/core/presentation/skill_document.dart` is the single pure declaration owner.
 `SkillActivityDocument` only binds that document to its existing tool receipt;
 administration constructs the same value from its actual content/catalog reads.
-`SkillDocumentViewer` lives in the activity widget library's dedicated part and
-composes its common text viewer, action state and document frame. Activity,
+`SkillDocumentViewer` lives in `lib/core/widgets/activity/skill_document_viewer.dart`,
+with navigation and activity presentation in its own library parts. It composes
+the shared Markdown renderer, document frame and action surfaces. Activity,
 capability instruction details, installed-skill details and Hub previews all use
 that component. Administration adapters alone retain refresh, edit, archive,
 uninstall, install and read-recovery authority. No synthetic tool call is created
 for administration. `test/administration_screens_test.dart` and
 `test/profile_capabilities_screen_test.dart` guard the shared production entry
 points and preserve exact editor input without issuing a mutation on viewing.
+
+### Captured skill reading
+
+`SkillReaderSession` owns a viewer's captured connection/profile lease, optional
+metadata observations and explicitly opened reference reads. Its repository
+uses stock profile-scoped catalog, file and analytics APIs, shares bounded
+connection-local observations, and reads at most three profiles concurrently.
+Category comes from an exact catalog match. Reference rows come from validated
+backend listings beneath the supplied skill directory; a missing source locator
+does not produce a guessed directory. Only a reference in the current observation
+can be opened. Failure or absent optional metadata leaves the received
+instructions readable. Closing the viewer fences late publications and releases
+the connection after pending reads settle.
+
+The reader uses actual level-two instruction headings for Contents, the bottom
+previous/next dock and a hold-or-drag section grip. Front matter and the plugin
+bundle envelope never become headings. Reference documents use the same reader
+and exact received source, retaining a server-supplied truncation notice.
+Profile activity keeps recorded `use_count`, `patch_count` and valid last-change
+dates distinct from **Read requests · 90 days**. Missing records stay unknown;
+charts retain counts, profile labels and coverage instead of inferring zero or
+summing unlike counters. Geometry and action scope remain owned by
+[the shared design contract](DESIGN_SYSTEM.md#user-value-first-activity).
+
+`test/skill_reader_session_test.dart` covers captured reads and received
+observations; `test/skill_document_viewer_test.dart` exercises the production
+reader, Contents, reference documents and raw/formatted scope.
 
 ## Plugin skill document envelope, 9 October 2026
 

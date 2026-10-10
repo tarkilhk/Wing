@@ -47,6 +47,72 @@ class _Pdf extends PdfPreviewService {
 }
 
 void main() {
+  const encodedLimit = 45 * 1024 * 1024;
+  const prefix = 'data:image/svg+xml,';
+  for (final expanded in [('漢', 9), ('\u0000', 3)]) {
+    test(
+      'embedded image rejects normalized payload above limit: ${expanded.$2}',
+      () async {
+        final count = (encodedLimit - prefix.length) ~/ expanded.$2 + 1;
+        final target = '$prefix${expanded.$1 * count}';
+        expect(target.length, lessThan(encodedLimit));
+        expect(() {
+          decodeEmbeddedImage(target);
+        }, throwsFormatException);
+        await expectLater(() async {
+          await acquireUserAttachmentImage(target, null);
+        }, throwsFormatException);
+        await expectLater(() async {
+          await acquireToolReceiptImage(target, null);
+        }, throwsFormatException);
+      },
+    );
+  }
+  test('Unicode normalization admits the exact encoded boundary', () {
+    final count = (encodedLimit - prefix.length) ~/ 9;
+    final remainder = (encodedLimit - prefix.length) % 9;
+    final data = decodeEmbeddedImage('$prefix${'漢' * count}${'a' * remainder}');
+    expect(data.mimeType, 'image/svg+xml');
+    expect(data.bytes.length, count * 3 + remainder);
+    expect(data.bytes.take(3), utf8.encode('漢'));
+    expect(
+      data.bytes.skip(data.bytes.length - remainder),
+      List.filled(remainder, 97),
+    );
+  });
+  test('Unicode SVG and mixed escapes retain exact UTF-8 bytes', () async {
+    const source = '<svg><text>漢é🦉% A#[]</text></svg>';
+    final expected = utf8.encode(source);
+    for (final target in [
+      '$prefix$source',
+      '$prefix${Uri.encodeComponent(source)}',
+      'data:image/svg+xml;base64,${base64Encode(expected).replaceAll('=', '')}',
+    ]) {
+      final data = decodeEmbeddedImage(target);
+      expect(data.bytes, expected);
+      final image = await acquireUserAttachmentImage(target, null);
+      expect(image.bytes, expected);
+    }
+    // Invalid percent escapes are literal text under UriData's normalization.
+    expect(decodeEmbeddedImage('$prefix%zz%').bytes, utf8.encode('%zz%'));
+  });
+  test(
+    'data locators remain unavailable to ordinary conversation images',
+    () async {
+      var reads = 0;
+      for (final target in ['${prefix}x', 'DATA:image/png;base64,AQID']) {
+        await expectLater(
+          acquireConversationImage(target, (_) async {
+            reads++;
+            return Uint8List.fromList([1]);
+          }),
+          throwsFormatException,
+        );
+      }
+      expect(reads, 0);
+    },
+  );
+
   test(
     'captured transport releases once and rejects its late result',
     () async {

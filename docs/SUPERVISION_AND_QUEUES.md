@@ -20,6 +20,14 @@ rows by live status. Opening a chat and using toolbar or Android Back returns to
 Recents with the selected filter retained. Chats opened from Chats still return
 to Chats.
 
+Within a chat opened from Recents, a two-finger horizontal swipe switches to
+the adjacent conversation in that visit's retained order. An inward pinch opens
+the persistent circular card stack, which also has icon-only accessible and
+keyboard controls. Back closes the stack before returning to Recents. Chat
+actions menu contains no separate recent-conversation navigation. Gesture admission,
+text-selection protection and retained-history loading follow the
+[Recents design contract](DESIGN_SYSTEM.md#switching-recent-conversations).
+
 Verified against stock upstream main `fb2dded3d191d15c614a80d15e1c95002956867c`
 on 27 September 2026: [`GET /api/sessions`](https://github.com/NousResearch/hermes-agent/blob/fb2dded3d191d15c614a80d15e1c95002956867c/hermes_cli/web_routers/sessions.py)
 supports profile scope, `order=recent`, `archived=include` and offset/limit pages

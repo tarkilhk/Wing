@@ -22,7 +22,14 @@ Source references: [hydration](https://github.com/NousResearch/hermes-agent/blob
 
 These are producer-envelope matches copied from Desktop, not a broad technical-keyword filter. Quoted envelopes and ordinary technical discussion remain visible. Untyped delegation text retains Desktop's normal fallback. Unknown future backend formats are not silently discarded.
 
-Find in chat shares delivery and skill projection, preserving useful output while removing wrappers. Raw history, durable row IDs, pagination and user ordinal counts stay intact. Edit and regeneration reject injected deliveries before submitting a prompt. Tool calls/results and reasoning continue to use their existing collapsed activity/disclosure paths; the notification audit does not replace those specialized renderers or add sidecar answer hydration.
+Find in chat shares delivery and skill projection, preserving useful output while removing wrappers. Raw history, durable row IDs, pagination and user ordinal counts stay intact. Edit, Restore checkpoint and regeneration reject injected deliveries before submitting a prompt. Tool calls/results and reasoning use the shared ordered Activity Timeline and detail readers; this projection does not add sidecar answer hydration.
+
+Human prompts use right-aligned bubbles with a local date and Edit/Restore
+footer. Copy sits outside the upper-right corner. Assistant prose has no avatar
+or author-name row; its upper-right Copy action shares the Activity header when
+present, and its date and answer actions follow the content. Internal notices
+retain their compact presentation and never acquire human saved-message actions.
+See [Conversation preservation](DESIGN_SYSTEM.md#conversation-preservation).
 
 Regression fixtures in `test/internal_message_visibility_test.dart` cover the reported process envelope, current/legacy agent formats, single/bundled skills, Desktop negative cases, phone/tablet widths, expanded output, search, saved history refresh, hidden rows and assistant reply boundaries. `test/answer_versions_test.dart` verifies that edit/regeneration cannot submit an internal delivery. Existing steering, review, activity, search and saved-answer tests cover the retained branches. This is a client projection fix; the backend is unchanged.
 

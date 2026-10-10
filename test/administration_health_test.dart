@@ -143,15 +143,24 @@ void main() {
     return value;
   }
 
+  AdministrationHealthFinding finding(String title) =>
+      health.profileFindings.singleWhere((finding) => finding.title == title);
+
   test(
     'entry consumes existing observations and never runs diagnostics',
     () async {
       health.selectProfile(overview('default'));
       expect(calls, isEmpty);
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.unknown,
+      );
       await health.refreshReadiness();
       expect(calls, ['setup.status default']);
-      expect(health.status, AdministrationHealthStatus.healthy);
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.healthy,
+      );
     },
   );
 
@@ -163,23 +172,33 @@ void main() {
       await health.refreshReadiness();
       overviewRead = (_) async => {};
       await source.refresh(keys: {'model'});
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(
+        finding('Model selection').status,
+        AdministrationHealthStatus.unknown,
+      );
       final modelRead = Completer<Map<String, dynamic>>();
       overviewRead = (_) => modelRead.future;
       final refreshing = source.refresh(keys: {'model'});
-      expect(health.status, AdministrationHealthStatus.healthy);
+      expect(
+        finding('Model selection').status,
+        AdministrationHealthStatus.healthy,
+      );
+      expect(finding('Model selection').detail, contains('Refreshing'));
       modelRead.complete({'provider': 'example', 'model': 'research'});
       await refreshing;
       overviewRead = (_) async => throw StateError('Offline');
       await source.refresh(keys: {'model'});
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(
+        finding('Model selection').status,
+        AdministrationHealthStatus.unknown,
+      );
       overviewRead = (_) async => {'provider': 'example', 'model': 'research'};
       await source.refresh(keys: {'model'});
       overviewRead = (_) async => {
         'data': [<String, dynamic>{}],
       };
       await source.refresh(keys: {'tools'});
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(finding('Tool setup').status, AdministrationHealthStatus.unknown);
       overviewRead = (_) async => {'data': []};
       await source.refresh(keys: {'tools'});
       overviewRead = (_) async => {
@@ -188,7 +207,10 @@ void main() {
         ],
       };
       await source.refresh(keys: {'access'});
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(
+        finding('Provider access').status,
+        AdministrationHealthStatus.unknown,
+      );
     },
   );
 
@@ -196,27 +218,39 @@ void main() {
     'configuration does not establish runtime health or provider access',
     () async {
       health.selectProfile(overview('default'));
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.unknown,
+      );
       readiness = (profile) async => {'profile': profile};
       await health.refreshReadiness();
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.unknown,
+      );
       readiness = (profile) async => {
         'profile': 'another',
         'provider_configured': true,
       };
       await health.refreshReadiness();
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.unknown,
+      );
       readiness = (profile) async => {
         'profile': profile,
         'provider_configured': false,
       };
       await health.refreshReadiness();
-      expect(health.status, AdministrationHealthStatus.warning);
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.warning,
+      );
     },
   );
 
   test(
-    'expired sign-in outranks setup warnings and survives failed refresh',
+    'expired sign-in and tool setup remain distinct and survive failed refresh',
     () async {
       final source = overview('default');
       health.selectProfile(source);
@@ -227,7 +261,7 @@ void main() {
         ],
       };
       await source.refresh(keys: {'tools'});
-      expect(health.status, AdministrationHealthStatus.warning);
+      expect(finding('Tool setup').status, AdministrationHealthStatus.warning);
       overviewRead = (_) async => {
         'providers': [
           {
@@ -242,11 +276,18 @@ void main() {
         ],
       };
       await source.refresh(keys: {'access'});
-      expect(health.status, AdministrationHealthStatus.failure);
+      expect(
+        finding('Provider access').status,
+        AdministrationHealthStatus.failure,
+      );
+      expect(finding('Tool setup').status, AdministrationHealthStatus.warning);
       overviewRead = (_) async => throw StateError('Offline');
       await source.refresh(keys: {'access'});
       now = observedAt.add(const Duration(minutes: 6));
-      expect(health.status, AdministrationHealthStatus.failure);
+      expect(
+        finding('Provider access').status,
+        AdministrationHealthStatus.failure,
+      );
       expect(
         health.isStale(
           health.profileFindings
@@ -265,7 +306,10 @@ void main() {
       health.selectProfile(overview('default'));
       await health.refreshReadiness();
       now = observedAt.add(const Duration(minutes: 5));
-      expect(health.status, AdministrationHealthStatus.healthy);
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.healthy,
+      );
       expect(
         health.profileFindings.every((f) => health.isStale(f.checkedAt)),
         isTrue,
@@ -273,7 +317,10 @@ void main() {
       now = observedAt;
       readiness = (_) => Future.error(StateError('Offline'));
       await health.refreshReadiness();
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.unknown,
+      );
       expect(
         health.profileFindings.first.detail,
         contains('Refresh unavailable'),
@@ -295,7 +342,10 @@ void main() {
       health.selectProfile(a);
       pending.complete({'profile': 'default', 'provider_configured': true});
       await read;
-      expect(health.status, AdministrationHealthStatus.healthy);
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.healthy,
+      );
       expect(health.profileFindings.first.checkedAt, observedAt);
     },
   );
@@ -311,7 +361,11 @@ void main() {
       diagnosticExit = 1;
       await health.diagnosticOperation(path)!.refresh();
       health.selectProfile(overview('work'));
-      expect(health.status, AdministrationHealthStatus.failure);
+      expect(
+        health.diagnostics[path]!.classification,
+        AdministrationOperationOutcome.failed,
+      );
+      expect(health.profileName, 'work');
       expect(health.diagnostics[path]!.action.pid, 7);
       final old = health.diagnosticOperation(path)!;
       diagnosticPid = 8;
@@ -319,10 +373,16 @@ void main() {
       await health.startDiagnostic(AdministrationDiagnostic.doctor);
       await health.diagnosticOperation(path)!.refresh();
       await health.refreshReadiness();
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(
+        health.diagnostics[path]!.classification,
+        AdministrationOperationOutcome.completed,
+      );
       await old.refresh();
       expect(health.diagnostics[path]!.action.pid, 8);
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(
+        health.diagnostics[path]!.classification,
+        AdministrationOperationOutcome.completed,
+      );
       expect(calls.where((c) => c.startsWith('POST')), isEmpty);
     },
   );
@@ -338,13 +398,16 @@ void main() {
   });
 
   test(
-    'explicit credential failure overrides green and remains profile scoped',
+    'explicit credential failure remains distinct from configuration and profile scoped',
     () async {
       now = DateTime.now();
       final selected = overview('default');
       health.selectProfile(selected);
       await health.refreshReadiness();
-      expect(health.status, AdministrationHealthStatus.healthy);
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.healthy,
+      );
 
       final runtime = Completer<Map<String, dynamic>>();
       final checks = ProfileDiagnosticsController(
@@ -375,28 +438,54 @@ void main() {
       expect(checks.healthObservation.finding, isNull);
 
       final checking = checks.check();
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(
+        finding('Provider credential check').status,
+        AdministrationHealthStatus.unknown,
+      );
       runtime.complete({'profile': 'default', 'ok': false});
       await checking;
-      expect(health.status, AdministrationHealthStatus.failure);
+      expect(
+        finding('Provider credential check').status,
+        AdministrationHealthStatus.failure,
+      );
       expect(health.profileFindings.last.detail, 'Provider check failed');
       await health.refreshReadiness();
-      expect(health.status, AdministrationHealthStatus.failure);
+      expect(
+        finding('Provider credential check').status,
+        AdministrationHealthStatus.failure,
+      );
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.healthy,
+      );
 
       health.selectProfile(overview('work'));
       await health.refreshReadiness();
-      expect(health.status, AdministrationHealthStatus.healthy);
+      expect(
+        health.profileFindings.where(
+          (f) => f.title == 'Provider credential check',
+        ),
+        isEmpty,
+      );
       health.updateProfileChecks(checks.healthObservation);
-      expect(health.status, AdministrationHealthStatus.healthy);
+      expect(
+        health.profileFindings.where(
+          (f) => f.title == 'Provider credential check',
+        ),
+        isEmpty,
+      );
 
       health.selectProfile(selected);
       health.updateProfileChecks(checks.healthObservation);
       await health.refreshReadiness();
-      expect(health.status, AdministrationHealthStatus.failure);
+      expect(
+        finding('Provider credential check').status,
+        AdministrationHealthStatus.failure,
+      );
     },
   );
 
-  test('an explicit check with unavailable outcome prevents green', () async {
+  test('an explicit check with unavailable outcome stays unknown', () async {
     now = DateTime.now();
     health.selectProfile(overview('default'));
     await health.refreshReadiness();
@@ -416,13 +505,16 @@ void main() {
     );
     await checks.check();
     now = DateTime.now();
-    expect(health.status, AdministrationHealthStatus.unknown);
+    expect(
+      finding('Provider credential check').status,
+      AdministrationHealthStatus.unknown,
+    );
     expect(health.isStale(health.profileFindings.last.checkedAt), isFalse);
     expect(health.profileFindings.last.detail, 'Check incomplete');
   });
 
   test(
-    'connection interruption neutralizes otherwise current observations',
+    'connection interruption adds uncertainty alongside current profile findings',
     () async {
       final connection = ServerConnectionStatus('Server')..accessAvailable();
       health.dispose();
@@ -434,15 +526,29 @@ void main() {
       addTearDown(connection.dispose);
       health.selectProfile(overview('default'));
       await health.refreshReadiness();
-      expect(health.status, AdministrationHealthStatus.healthy);
+      expect(
+        health.profileFindings.where((f) => f.title == 'Connection'),
+        isEmpty,
+      );
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.healthy,
+      );
       connection.beginRecovery('workspace');
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(finding('Connection').status, AdministrationHealthStatus.unknown);
       expect(health.profileFindings.first.detail, 'Reconnecting');
       connection.endRecovery('workspace');
       connection.liveChanged('workspace', false);
-      expect(health.status, AdministrationHealthStatus.unknown);
+      expect(finding('Connection').status, AdministrationHealthStatus.unknown);
       connection.liveChanged('workspace', true);
-      expect(health.status, AdministrationHealthStatus.healthy);
+      expect(
+        health.profileFindings.where((f) => f.title == 'Connection'),
+        isEmpty,
+      );
+      expect(
+        finding('Provider configuration').status,
+        AdministrationHealthStatus.healthy,
+      );
     },
   );
   test(

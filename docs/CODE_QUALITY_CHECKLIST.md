@@ -8,6 +8,7 @@ they do not require repeating this publication checklist.
 ## Automated checks
 
 - [ ] `flutter analyze --fatal-infos` passes.
+- [ ] `python3 scripts/check_commit_linters.py` passes, or equivalent mandatory CI source checks are recorded. Routine and full `scripts/test.py` runs launch it unless `--skip-linters` explicitly delegates it to separate gates.
 - [ ] `python3 scripts/test.py --full` passes; opt-in skips and their coverage limits are recorded.
 - [ ] `flutter pub outdated` has been reviewed and update decisions recorded.
 - [ ] The intended signed release artifact builds and passes package, version, certificate and non-debuggable checks.

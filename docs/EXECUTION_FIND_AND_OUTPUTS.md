@@ -2,7 +2,20 @@
 
 ## Live execution
 
-Tool activity upserts by server identity, with output capped at 12,000 characters per displayed result. Expanded details preserve useful output while the ordinary transcript stays compact. Todo/progress revisions are server-owned and read-only. Reasoning and timing appear only when Hermes supplies them.
+Tool activity upserts by server identity. The Activity Timeline preserves
+individual calls and supplied reasoning in event order; Tasks, Agents and Work
+use the same scoped observations. Expanded details retain exact received text
+inside bounded scrolling viewports, with a full reader for longer content and
+no additional client-side output truncation. Todo/progress revisions are
+server-owned and read-only. Completed timing requires supplied durations;
+unknown timing stays unknown, while an active call can show a labelled estimate.
+
+Saved conversation content publishes before optional timing replay finishes.
+A failed replay leaves that content readable. The captured reading session owns
+history and enrichment; renderers do not fetch, resume sessions or invent
+missing receipts. Source uses viewport-based coloring; source, commands and
+literal output share icon-only wrapping controls. See [Tool activity](TOOL_ACTIVITY.md)
+for detail, skill-reader and exact-copy contracts.
 
 String `review.summary` events appear as transient Activity notices, with a scoped limit of 20 and position-aware deduplication. Opening a notice shows its full text. It is not an approval or a persisted memory record.
 

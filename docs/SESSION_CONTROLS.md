@@ -29,6 +29,12 @@ Remove and Clear require confirmation. If the latest received server criteria ha
 
 Open **Background work** from the chat menu to read the selected session's loops, heartbeat and processes. Known work also appears in the conversation. Refresh retrieves both the recurring-work snapshot and current process rows. Recurring-work updates arrive through the existing server event stream; process output is a snapshot refreshed on request.
 
+The conversation's Activity **Work** tab presents the same scoped goal,
+recurring-work and process observations. It shares their control owners and
+acknowledgements; opening Activity does not create another scheduler or process
+registry. Long process output uses the shared bounded detail reader without
+client-side text truncation.
+
 Loops expose Pause, Resume and Stop; heartbeats expose Pause, Resume and confirmed Clear. Running process rows expose targeted Stop. Finished rows retain their output and can be dismissed for this app session. Dismiss does not delete server history. Reads and stop acknowledgements are guarded against profile/runtime changes, duplicate taps and late responses.
 
 The installed gateway reads `process.list {session_id:<parent runtime>}` through a live session. It filters the process registry by that session's server-owned `session_key`. Rows use `session_id` as the process ID and include command, working directory, PID, owner task, server-reported uptime, `running` or `exited` status, and a 4,000-character output tail. Exit code, detached state and completion notification are optional. There is no separate process-output RPC.
@@ -41,4 +47,7 @@ Wing's chat-local `/stop` interrupts the selected chat, refreshes its session-ow
 
 All reads and actions belong to the original profile gateway and parent runtime. Newer server events must survive older reads. A control acknowledgement must be handled without erasing unsent text, attachments or queued messages. No failed or uncertain action is retried automatically. Goal/loop continuation uses the existing prompt submission path.
 
-Scheduled tasks are managed separately under Profile / Scheduled tasks. Bots, messaging and webhook administration remain separate candidates. See [Testing](TESTING.md) for recorded live acceptance. Non-default profile loops retain the [HUP-002 scope mismatch](UPSTREAM_HERMES_BUGS.md#hup-002-non-default-profile-loop-commandcontrol-mismatch).
+Scheduled tasks are managed separately under Profile / Scheduled tasks. [Bots](BOTS.md)
+has its own drawer route and server-owned controls. Messaging and webhook
+administration remain separate candidates. See [Testing](TESTING.md) for recorded
+live acceptance. Non-default profile loops retain the [HUP-002 scope mismatch](UPSTREAM_HERMES_BUGS.md#hup-002-non-default-profile-loop-commandcontrol-mismatch).

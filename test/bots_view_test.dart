@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -107,6 +108,98 @@ void main() {
           .load();
     }
   });
+  testWidgets(
+    'settings reopens acknowledged avatar after save, removal and shape selection',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      const png =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=';
+      final administration = AdministrationFixture('Home server');
+      administration.configs['atlas'] = {};
+      final fixture = BotsFixture(server: administration.server);
+      fixture.commandHook = (_, method, _) async => method == 'image.generate'
+          ? {'success': true, 'image_data': png}
+          : null;
+      final session = BotsSession((_) async => [fixture.repository]);
+      addTearDown(session.dispose);
+      await session.refresh();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.light),
+          home: BotSettingsScreen(
+            profile: administration.server.profile('atlas'),
+            bot: session.state.bots.first,
+            session: session,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      Future<void> openEditor() async {
+        await tester.tap(find.text('Edit name & appearance'));
+        await tester.pumpAndSettle();
+      }
+
+      BotAvatar preview() => tester
+          .widgetList<BotAvatar>(
+            find.descendant(
+              of: find.byType(BotProfileEditor),
+              matching: find.byType(BotAvatar),
+            ),
+          )
+          .singleWhere((avatar) => avatar.size == 88);
+      Future<void> generate() async {
+        await tester.scrollUntilVisible(
+          find.byTooltip('Generate avatar'),
+          240,
+          scrollable: find
+              .descendant(
+                of: find.byType(BotProfileEditor),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.tap(find.byTooltip('Generate avatar'));
+        await tester.pumpAndSettle();
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+      }
+
+      await openEditor();
+      await generate();
+      await openEditor();
+      expect(preview().image, orderedEquals(base64Decode(png)));
+      await tester.scrollUntilVisible(
+        find.byTooltip('Remove avatar'),
+        240,
+        scrollable: find
+            .descendant(
+              of: find.byType(BotProfileEditor),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(find.byTooltip('Remove avatar'));
+      await tester.pump();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await openEditor();
+      expect(preview().image, isNull);
+      await generate();
+      await openEditor();
+      await tester.ensureVisible(find.byTooltip('triangle'));
+      await tester.tap(find.byTooltip('triangle'));
+      await tester.pump();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(fixture.commands.last.$3['clear'], true);
+      await openEditor();
+      expect(preview().image, isNull);
+      expect(preview().shape, 'triangle');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(

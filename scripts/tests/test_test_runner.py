@@ -81,7 +81,8 @@ class TestCadence(unittest.TestCase):
         self.git('mv', 'tools/architecture/rules/example.dart', 'lib/renamed.dart')
         self.assertTrue(runner.full_for_changes(self.root, self.reference))
 
-    def run_verification(self, lint_exit, test_exit, mutate_source=False, skip_linters=False):
+    def run_verification(self, lint_exit, test_exit, mutate_source=False, skip_linters=False,
+                         full=False):
         self.write('.gitignore', 'build/\n')
         self.write('test/example_test.dart', 'void main() {}')
         self.write('scripts/check_commit_linters.py', '''
@@ -104,7 +105,7 @@ if '--version' in sys.argv:
 else:
     print(json.dumps(dict(files=['test/example_test.dart'],
         isolated=['test/example_test.dart'], batches=[], scheduled=[],
-        targets=['test/example_test.dart'])))
+        targets=['test/example_test.dart'], dart_executable=sys.argv[0], proof_commands=[])))
 ''')
         self.write('bin/flutter', '''#!/usr/bin/env python3
 import json, sys
@@ -129,7 +130,10 @@ else:
         output, error = io.StringIO(), io.StringIO()
         with (mock.patch.object(runner, 'ROOT', self.root),
               mock.patch('sys.argv', ['test.py', '--concurrency=2'] +
-                         (['--skip-linters'] if skip_linters else [])),
+                         (['--skip-linters'] if skip_linters else []) +
+                         (['--full'] if full else [])),
+              mock.patch.object(runner, 'prepare_proof_commands',
+                                side_effect=lambda *_: dict(os.environ)),
               mock.patch.dict(os.environ, {'PATH': str(self.root / 'bin') + os.pathsep + os.environ['PATH']}),
               contextlib.redirect_stdout(output), contextlib.redirect_stderr(error)):
             result = runner.main()
@@ -142,6 +146,29 @@ else:
         self.assertIn('fixture linter result', error)
         self.assertNotIn('Current-source linters passed.', output)
         self.assertTrue((self.root / 'build/linter-started').exists())
+
+    def test_full_run_cannot_omit_failing_current_source_linters(self):
+        result, output, error = self.run_verification(23, 0, full=True)
+        self.assertEqual(result, 23)
+        self.assertIn('fixture linter result', error)
+        self.assertTrue((self.root / 'build/linter-started').exists())
+        archive = Path(output.rsplit('evidence ', 1)[-1].strip())
+        summary = json.loads((archive / 'summary.json').read_text())
+        self.assertEqual(summary['suite'], 'full')
+        self.assertEqual(summary['linters'], 'local')
+
+    def test_full_run_records_passing_source_linters(self):
+        result, output, error = self.run_verification(0, 0, full=True)
+        self.assertEqual(result, 0, error)
+        self.assertIn('Current-source linters passed.', output)
+        self.assertTrue((self.root / 'build/linter-started').exists())
+
+    def test_full_run_can_use_explicit_external_linter_gate(self):
+        result, output, error = self.run_verification(23, 0, full=True, skip_linters=True)
+        self.assertEqual(result, 0, error)
+        self.assertFalse((self.root / 'build/linter-started').exists())
+        archive = Path(output.rsplit('evidence ', 1)[-1].strip())
+        self.assertEqual(json.loads((archive / 'summary.json').read_text())['linters'], 'external')
 
     def test_ci_external_linters_do_not_require_native_tooling_before_tests(self):
         result, output, error = self.run_verification(23, 0, skip_linters=True)

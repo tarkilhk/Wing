@@ -24,10 +24,15 @@ flutter build apk --debug
 ```
 
 `python3 scripts/test.py` runs product tests and all current-source linters.
-Use `python3 scripts/test.py --full` for the complete checker fixture, CLI,
-native compilation and SDK proofs as well. CI runs the complete suite nightly,
-when checking tools or their inputs change, and before a published release. The test
-inventory and coverage boundary are documented in [Testing](docs/TESTING.md).
+Use `python3 scripts/test.py --full` for the complete host test inventory,
+including checker fixtures, CLI, native compilation and SDK proofs. Both modes
+launch current-source linters unless `--skip-linters` explicitly delegates them
+to separate gates. PR and release workflows enforce source linters separately;
+nightly runs a mandatory Dart source gate before the complete host suite. Native
+source checks run in PR/release after Gradle dependency setup. Reuse unchanged
+passing evidence according to [Testing](docs/TESTING.md).
+The test inventory and coverage boundary are documented in
+[Testing](docs/TESTING.md#continuous-checks).
 
 The ordinary debug APK uses `com.tarkilhk.wing.dev`, keeping its app storage separate from Wing. No release key is needed for development. Release signing is covered in [the release guide](docs/ANDROID_RELEASE_PLAN.md).
 
@@ -83,7 +88,7 @@ required-gate linter rejects narrowing the branch trigger or adding path filters
 | --- | --- |
 | `lib/main.dart` | App wiring, connections and notification navigation |
 | `lib/core/screens/profile_workspace_screen.dart` | Conversation UI and composer |
-| `lib/core/screens/profile_workspace_browser.dart` | Profiles, projects, chats and Activity |
+| `lib/core/screens/profile_workspace_browser.dart` | Profiles, projects, chats and Recents |
 | `lib/core/services/profile_workspace_controller.dart` | Canonical workspace commands, transport and lifetime admission |
 | `lib/core/services/profile_gateway.dart` | Scoped HTTP and RPC operations |
 | `lib/core/services/attachment_draft_service.dart` | Attachment preparation and upload |

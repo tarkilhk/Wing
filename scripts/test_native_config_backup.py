@@ -91,7 +91,7 @@ class Driver:
                 path = '/sdcard/Download/' + name
                 contents = self.device.adb('exec-out', 'cat', path, binary=True)
                 source = name.removeprefix(self.prefix)
-                original = self.device.private_read(PACKAGE, 'cache/' + source)
+                original = self.device.private_read(PACKAGE, 'cache/share_plus/' + source)
                 assert contents == original, 'Saved document differs from the shared cache bytes'
                 parsed = json.loads(contents)
                 encrypted = stage == 'share-encrypted'

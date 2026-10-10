@@ -12,8 +12,7 @@ class BotProfileEditSession extends ChangeNotifier {
       _avatarIo = avatarIo ?? BotAvatarIo(),
       _title = bot.title,
       _shape = bot.shape,
-      _color = bot.color,
-      _savedImage = bot.avatar {
+      _color = bot.color {
     repository.retain();
   }
   final BotsRepository repository;
@@ -25,8 +24,7 @@ class BotProfileEditSession extends ChangeNotifier {
   String get shape => _shape;
   String get color => _color;
   Uint8List? _image;
-  Uint8List? _savedImage;
-  Uint8List? get image => _assetDirty ? _image : _savedImage;
+  Uint8List? get image => _assetDirty ? _image : _bot.avatar;
   int _assetVersion = 0;
   Timer? _autosave;
   Completer<bool>? _pending;
@@ -192,7 +190,7 @@ class BotProfileEditSession extends ChangeNotifier {
         if (assetDirty) {
           await repository.avatar(_bot, image, () => !_closed, () {});
           if (_closed) return;
-          _savedImage = image;
+          _bot = _bot.withAvatar(image);
           if (_assetVersion == assetVersion) _assetDirty = false;
         }
       }
@@ -233,7 +231,6 @@ class BotProfileEditSession extends ChangeNotifier {
       if (!_edited.contains('title')) _title = _bot.title;
       if (!_edited.contains('shape')) _shape = _bot.shape;
       if (!_edited.contains('color')) _color = _bot.color;
-      _savedImage = _bot.avatar;
       _trackEdits();
       _conflicted = false;
       _error = null;

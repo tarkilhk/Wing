@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -26,6 +27,98 @@ class _Credentials implements CredentialStore {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final outcome in ['success', 'dismissal', 'error']) {
+    test(
+      'Android export removes only its stage after native $outcome',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'wing-backup-outcome-',
+        );
+        final unrelated = File('${directory.path}/other-owner.json');
+        await unrelated.writeAsString('retain');
+        const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
+        const shareChannel = MethodChannel('dev.fluttercommunity.plus/share');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        final entered = Completer<File>();
+        final settled = Completer<String>();
+        messenger.setMockMethodCallHandler(
+          pathChannel,
+          (_) async => directory.path,
+        );
+        messenger.setMockMethodCallHandler(shareChannel, (call) {
+          final paths = List<String>.from(
+            (call.arguments as Map)['paths'] as List,
+          );
+          entered.complete(File(paths.single));
+          return settled.future;
+        });
+        addTearDown(() async {
+          messenger.setMockMethodCallHandler(pathChannel, null);
+          messenger.setMockMethodCallHandler(shareChannel, null);
+          await directory.delete(recursive: true);
+        });
+        final pending = ConfigBackupIo().deliverExport(
+          'backup-secret',
+          canDispatch: () => true,
+        );
+        final source = await entered.future;
+        expect(await source.readAsString(), 'backup-secret');
+        if (outcome == 'error') {
+          final failed = expectLater(
+            pending,
+            throwsA(isA<PlatformException>()),
+          );
+          settled.completeError(PlatformException(code: 'native-share-error'));
+          await failed;
+        } else {
+          settled.complete(outcome == 'dismissal' ? '' : 'recipient');
+          expect(await pending, outcome == 'dismissal' ? isNull : isNotNull);
+        }
+        expect(await source.parent.exists(), isFalse);
+        expect(await unrelated.readAsString(), 'retain');
+      },
+    );
+  }
+
+  test(
+    'non-Android admitted source remains available after settlement',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final directory = await Directory.systemTemp.createTemp(
+        'wing-backup-ios-',
+      );
+      const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
+      const shareChannel = MethodChannel('dev.fluttercommunity.plus/share');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      String? sharedPath;
+      messenger.setMockMethodCallHandler(
+        pathChannel,
+        (_) async => directory.path,
+      );
+      messenger.setMockMethodCallHandler(shareChannel, (call) async {
+        sharedPath =
+            ((call.arguments as Map)['paths'] as List).single as String;
+        return 'recipient';
+      });
+      addTearDown(() async {
+        messenger.setMockMethodCallHandler(pathChannel, null);
+        messenger.setMockMethodCallHandler(shareChannel, null);
+        await directory.delete(recursive: true);
+      });
+      expect(
+        await ConfigBackupIo().deliverExport(
+          'backup-secret',
+          canDispatch: () => true,
+        ),
+        isNotNull,
+      );
+      expect(await File(sharedPath!).readAsString(), 'backup-secret');
+    },
+  );
 
   test(
     'closing during real export preparation prevents native share',
@@ -109,7 +202,7 @@ void main() {
   );
 
   test(
-    'an admitted share keeps its file after session closure and settlement',
+    'Android share keeps pending source then releases it while recipient copy remains readable',
     () async {
       SharedPreferences.setMockInitialValues({'theme_mode': 'dark'});
       PackageInfo.setMockInitialValues(
@@ -141,18 +234,22 @@ void main() {
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       final shareEntered = Completer<String>();
       final shareResult = Completer<String>();
+      final recipientCopy = File('${directory.path}/recipient-copy.json');
       var shareDispatches = 0;
       messenger.setMockMethodCallHandler(pathChannel, (call) async {
         expect(call.method, 'getTemporaryDirectory');
         return directory.path;
       });
-      messenger.setMockMethodCallHandler(shareChannel, (call) {
+      messenger.setMockMethodCallHandler(shareChannel, (call) async {
         expect(call.method, 'share');
         shareDispatches++;
         final paths = List<String>.from(
           (call.arguments as Map)['paths'] as List,
         );
         expect(paths, hasLength(1));
+        // The pinned Android plugin copies the source into provider storage
+        // before presenting the chooser. Model that boundary, not its internals.
+        await File(paths.single).copy(recipientCopy.path);
         shareEntered.complete(paths.single);
         return shareResult.future;
       });
@@ -180,9 +277,10 @@ void main() {
       shareResult.complete('fixture-recipient');
       final result = await pending;
 
-      // Chooser completion is not proof that the receiving app finished reading.
+      // Recipient storage remains readable independently of Wing's source.
       expect(shareDispatches, 1);
-      expect(await sharedFile.readAsString(), contents);
+      expect(await sharedFile.parent.exists(), isFalse);
+      expect(await recipientCopy.readAsString(), contents);
       expect(result, isNull);
       expect(publications, beforeClose);
     },
