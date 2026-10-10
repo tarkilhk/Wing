@@ -167,6 +167,10 @@ class HealthAlertsSession extends ChangeNotifier {
           detail: finding.detail,
           scope: HealthAlertScope.profile,
           profileName: name,
+          destination: finding.destination,
+          connectorNames: finding.destination == 'MCP connectors'
+              ? health.failedConnectorNames
+              : const [],
           at: at,
           failed:
               at == null ||
@@ -191,19 +195,24 @@ class HealthAlertsSession extends ChangeNotifier {
 
   void _publish() {
     final next = alerts
-        .map(
-          (a) => (
-            a.id,
-            a.title,
-            a.detail,
-            a.scope,
-            a.severity,
-            a.observedAt,
-            a.occurrence,
-            a.profileName,
-            a.trigger,
-            a.lastKnown,
-          ),
+        .expand(
+          (a) => <Object>[
+            (
+              a.id,
+              a.title,
+              a.detail,
+              a.scope,
+              a.severity,
+              a.observedAt,
+              a.occurrence,
+              a.profileName,
+              a.destination,
+              a.connectorNames.length,
+              a.trigger,
+              a.lastKnown,
+            ),
+            ...a.connectorNames,
+          ],
         )
         .toList();
     if (listEquals(_published, next)) return;

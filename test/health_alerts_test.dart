@@ -461,6 +461,7 @@ void main() {
         evaluator.finding(
           key: 'endpoint:profile:$name:access',
           title: 'Model access',
+          destination: 'Access and connectors',
           detail: 'Expired',
           scope: HealthAlertScope.profile,
           at: start,
@@ -471,6 +472,7 @@ void main() {
       evaluator.finding(
         key: 'endpoint:profile:Research:access',
         title: 'Model access',
+        destination: 'Access and connectors',
         detail: 'Unknown',
         scope: HealthAlertScope.profile,
         at: null,
@@ -488,6 +490,7 @@ void main() {
       evaluator.finding(
         key: 'endpoint:profile:default:access',
         title: 'Model access',
+        destination: 'Access and connectors',
         detail: 'Available',
         scope: HealthAlertScope.profile,
         at: start,

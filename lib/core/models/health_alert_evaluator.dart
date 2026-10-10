@@ -156,6 +156,7 @@ class HealthAlertEvaluator {
         severity: alert.severity,
         observedAt: sampledAt,
         occurrence: alert.occurrence,
+        destination: alert.destination,
         trigger: alert.trigger,
         lastKnown:
             alert.severity == HealthAlertSeverity.critical && !pressureKnown,
@@ -170,6 +171,8 @@ class HealthAlertEvaluator {
     required HealthAlertScope scope,
     required DateTime? at,
     required bool? failed,
+    required String? destination,
+    List<String> connectorNames = const [],
     HealthAlertSeverity severity = HealthAlertSeverity.warning,
     String? profileName,
   }) {
@@ -181,7 +184,17 @@ class HealthAlertEvaluator {
       remove(key);
       return;
     }
-    _put(key, title, detail, scope, severity, at, profileName: profileName);
+    _put(
+      key,
+      title,
+      detail,
+      scope,
+      severity,
+      at,
+      profileName: profileName,
+      destination: destination,
+      connectorNames: connectorNames,
+    );
   }
 
   void unknown(String key) {
@@ -200,6 +213,8 @@ class HealthAlertEvaluator {
     DateTime at, {
     String? profileName,
     HealthAlertTrigger? trigger,
+    String? destination,
+    List<String> connectorNames = const [],
   }) {
     final old = _alerts[key];
     final escalated = old == null || severity.index > old.severity.index;
@@ -213,6 +228,8 @@ class HealthAlertEvaluator {
       severity: severity,
       observedAt: at,
       profileName: profileName,
+      destination: destination,
+      connectorNames: List.unmodifiable(connectorNames),
       trigger: escalated ? trigger : old.trigger,
       occurrence: escalated ? ++_occurrence : old.occurrence,
     );

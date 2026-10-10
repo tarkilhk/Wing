@@ -378,54 +378,7 @@ class _HermesAdministrationContentState
           : () => adminPushProfile(
               context,
               p,
-              (context, profile) => ProfileCapabilitiesScreen(
-                createSession: () =>
-                    ProfileCapabilitiesSession(profile.gateway),
-                connectionLabel: _server.connectionLabel,
-                onToolSetup: (name) => adminPushProfile(
-                  context,
-                  profile,
-                  (context, profile) => name == 'tts'
-                      ? profileSpeechSynthesisPage(
-                          profile,
-                          device: AndroidVoice.instance,
-                        )
-                      : AdminToolSetupPage(
-                          createSession: () =>
-                              ProfileToolSetupSession(profile, tool: name),
-                          onCredential: (context, field) => adminPushProfile(
-                            context,
-                            profile,
-                            (context, profile) => AdminSecretPage(
-                              profile: profile,
-                              name: field.key,
-                              isSet: field.isSet,
-                            ),
-                          ),
-                        ),
-                ),
-                onLibrary: () => adminPushProfile(
-                  context,
-                  profile,
-                  (context, profile) => AdminSkillLibraryPage(
-                    createSession: () => ProfileSkillsSession.library(profile),
-                  ),
-                ),
-                onHub: () => adminPushProfile(
-                  context,
-                  profile,
-                  (context, profile) => AdminSkillHubPage(
-                    createSession: () => ProfileSkillsSession.hub(profile),
-                  ),
-                ),
-                onPlugins: () => adminPushProfile(
-                  context,
-                  profile,
-                  (context, profile) => AdminPluginsPage(
-                    createSession: () => ProfilePluginsSession(profile),
-                  ),
-                ),
-              ),
+              (context, profile) => profileCapabilitiesPage(context, profile),
             ),
       overviewDestination: ProfileOverviewDestination.skills,
     ),
@@ -916,3 +869,50 @@ class _Destination {
     );
   }
 }
+
+/// Shared composition for the profile menu and alert recovery.
+Widget profileCapabilitiesPage(
+  BuildContext context,
+  ProfileAdministration profile,
+) => ProfileCapabilitiesScreen(
+  createSession: () => ProfileCapabilitiesSession(profile.gateway),
+  connectionLabel: profile.server.connectionLabel,
+  onToolSetup: (name) => adminPushProfile(
+    context,
+    profile,
+    (context, profile) => name == 'tts'
+        ? profileSpeechSynthesisPage(profile, device: AndroidVoice.instance)
+        : AdminToolSetupPage(
+            createSession: () => ProfileToolSetupSession(profile, tool: name),
+            onCredential: (context, field) => adminPushProfile(
+              context,
+              profile,
+              (context, profile) => AdminSecretPage(
+                profile: profile,
+                name: field.key,
+                isSet: field.isSet,
+              ),
+            ),
+          ),
+  ),
+  onLibrary: () => adminPushProfile(
+    context,
+    profile,
+    (context, profile) => AdminSkillLibraryPage(
+      createSession: () => ProfileSkillsSession.library(profile),
+    ),
+  ),
+  onHub: () => adminPushProfile(
+    context,
+    profile,
+    (context, profile) => AdminSkillHubPage(
+      createSession: () => ProfileSkillsSession.hub(profile),
+    ),
+  ),
+  onPlugins: () => adminPushProfile(
+    context,
+    profile,
+    (context, profile) =>
+        AdminPluginsPage(createSession: () => ProfilePluginsSession(profile)),
+  ),
+);

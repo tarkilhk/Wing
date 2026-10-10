@@ -1,6 +1,18 @@
 import '../models/host_thresholds.dart';
 import '../models/health_alert.dart';
 
+String healthAlertActionLabel(HealthAlert alert) => switch (alert.destination) {
+  'MCP connectors' =>
+    alert.connectorNames.length == 1
+        ? 'Open connector ${alert.connectorNames.single}'
+        : 'Open MCP connectors',
+  'Access and connectors' => 'Open profile access',
+  'Models and reasoning' => 'Open models and reasoning',
+  'Skills and tools' => 'Open skills and tools',
+  'Scheduled tasks' => 'Open scheduled tasks',
+  _ => 'Open Hermes health',
+};
+
 String? healthAlertTriggerSummary(HealthAlert alert) {
   final trigger = alert.trigger;
   if (trigger == null) return null;

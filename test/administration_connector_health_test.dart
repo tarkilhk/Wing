@@ -43,6 +43,8 @@ void main() {
   test('empty and disabled connector lists need no probes', () async {
     await refresh();
     expect(finding().detail, 'No connectors configured');
+    expect(health.failedConnectorNames, isEmpty);
+    expect(finding().destination, 'MCP connectors');
     servers = [
       {'name': 'disabled', 'enabled': false},
     ];
@@ -76,6 +78,7 @@ void main() {
     expect(finding().detail, '0 passed · 1 failed · 1 couldn’t be checked');
     expect(finding().status, AdministrationHealthStatus.warning);
     expect(overview.connectorChecks, {'first': false, 'second': null});
+    expect(health.failedConnectorNames, ['first']);
     probe = (_) async => {'ok': 'invalid'};
     await refresh();
     expect(finding().status, AdministrationHealthStatus.unknown);
@@ -83,6 +86,7 @@ void main() {
     probe = (_) async => {'ok': true};
     await refresh();
     expect(finding().detail, '2 of 2 connection checks passed');
+    expect(health.failedConnectorNames, isEmpty);
   });
 
   test('late connector checks cannot overwrite a newer refresh', () async {

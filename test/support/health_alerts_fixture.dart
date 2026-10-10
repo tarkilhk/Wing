@@ -10,25 +10,28 @@ import 'package:wing/core/services/background_monitoring_service.dart';
 import 'package:wing/core/services/health_alert_settings_session.dart';
 import 'package:wing/core/services/health_alert_settings_store.dart';
 import 'package:wing/core/services/health_alerts_coordinator.dart';
+import 'package:wing/core/services/administration_repository.dart';
 import 'host_resources_fixture.dart';
 
 class AlertWorkspaceFixture extends ProfileWorkspaceController {
-  AlertWorkspaceFixture(SharedPreferences prefs, AppPreferences preferences)
-    : super(
-        access: ConnectionAccess(
-          connection: SavedConnection(
-            id: 'server',
-            label: 'Home server',
-            host: 'localhost',
-            port: 1,
-            apiKey: '',
-          ),
-          dashboardOAuth: null,
-        ),
-        connectionIdentity: 'endpoint',
-        preferences: prefs,
-        appPreferences: preferences,
-      );
+  AlertWorkspaceFixture(
+    SharedPreferences prefs,
+    AppPreferences preferences, {
+    super.connectionIdentity = 'endpoint',
+  }) : super(
+         access: ConnectionAccess(
+           connection: SavedConnection(
+             id: 'server',
+             label: 'Home server',
+             host: 'localhost',
+             port: 1,
+             apiKey: '',
+           ),
+           dashboardOAuth: null,
+         ),
+         preferences: prefs,
+         appPreferences: preferences,
+       );
   bool mountedRoute = true, working = false;
   @override
   bool get initialized => true;
@@ -51,10 +54,17 @@ class AlertRegistryFixture extends ProfileWorkspaceRegistry {
 }
 
 class HealthAlertsFixture {
-  HealthAlertsFixture(this.preferences) {
+  HealthAlertsFixture(
+    this.preferences, {
+    AdministrationRepository? repository,
+  }) {
     appPreferences = AppPreferences(preferences);
-    owner = AlertWorkspaceFixture(preferences, appPreferences);
-    owner.hostResources(repository: host.server);
+    owner = AlertWorkspaceFixture(
+      preferences,
+      appPreferences,
+      connectionIdentity: repository?.connectionIdentity ?? host.identity,
+    );
+    owner.hostResources(repository: repository ?? host.server);
     registry = AlertRegistryFixture(owner);
     settings = HealthAlertSettingsSession(
       HealthAlertSettingsStore(preferences),

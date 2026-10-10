@@ -16,8 +16,10 @@ class AdminConnectorsPage extends StatefulWidget {
     required this.createSession,
     required this.pushDetail,
     required this.pushSetup,
+    this.failedConnectorNames = const {},
   });
   final ProfileConnectorsSession Function() createSession;
+  final Set<String> failedConnectorNames;
   final Future<void> Function(
     BuildContext,
     String,
@@ -142,7 +144,18 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
                               minVerticalPadding: 4,
                               horizontalTitleGap: 12,
                               title: Text(row.name),
-                              subtitle: Text(row.transport),
+                              subtitle: Text(
+                                widget.failedConnectorNames.contains(row.name)
+                                    ? 'Failed health check · ${row.transport}'
+                                    : row.transport,
+                              ),
+                              leading:
+                                  widget.failedConnectorNames.contains(row.name)
+                                  ? Icon(
+                                      Icons.warning_amber_rounded,
+                                      color: WingTokens.of(context).warning,
+                                    )
+                                  : null,
                               trailing: CompactSwitch(
                                 semanticLabel: 'Enable ${row.name}',
                                 value: row.enabled,

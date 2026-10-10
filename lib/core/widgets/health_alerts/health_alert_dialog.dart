@@ -26,6 +26,11 @@ class _HealthAlertDialog extends StatefulWidget {
 
 class _HealthAlertDialogState extends State<_HealthAlertDialog> {
   String? _selected;
+  void _open(HealthAlert alert) {
+    Navigator.pop(context);
+    widget.scope.openAlert(alert);
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.scope.alerts,
@@ -64,77 +69,88 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
               ),
               const Divider(height: 1),
               Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(12),
-                  child: alert == null
-                      ? const Text('No current health alerts.')
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (alerts.length > 1)
-                              Row(
-                                children: [
-                                  IconButton(
-                                    tooltip: 'Previous issue',
-                                    onPressed: () => setState(
-                                      () => _selected =
-                                          alerts[(index - 1 + alerts.length) %
-                                                  alerts.length]
-                                              .id,
-                                    ),
-                                    icon: const Icon(Icons.chevron_left),
+                child: Semantics(
+                  button: alert != null,
+                  label: alert == null ? null : healthAlertActionLabel(alert),
+                  child: InkWell(
+                    key: const ValueKey('health-alert-open-issue'),
+                    onTap: alert == null ? null : () => _open(alert),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(12),
+                      child: alert == null
+                          ? const Text('No current health alerts.')
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (alerts.length > 1)
+                                  Row(
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Previous issue',
+                                        onPressed: () => setState(
+                                          () => _selected =
+                                              alerts[(index -
+                                                          1 +
+                                                          alerts.length) %
+                                                      alerts.length]
+                                                  .id,
+                                        ),
+                                        icon: const Icon(Icons.chevron_left),
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          '${index + 1} of ${alerts.length}',
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Next issue',
+                                        onPressed: () => setState(
+                                          () => _selected =
+                                              alerts[(index + 1) %
+                                                      alerts.length]
+                                                  .id,
+                                        ),
+                                        icon: const Icon(Icons.chevron_right),
+                                      ),
+                                    ],
                                   ),
-                                  Expanded(
-                                    child: Text(
-                                      '${index + 1} of ${alerts.length}',
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Next issue',
-                                    onPressed: () => setState(
-                                      () => _selected =
-                                          alerts[(index + 1) % alerts.length]
-                                              .id,
-                                    ),
-                                    icon: const Icon(Icons.chevron_right),
-                                  ),
+                                Text(
+                                  alert.title,
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(
+                                        color:
+                                            alert.severity ==
+                                                HealthAlertSeverity.critical
+                                            ? tokens.danger
+                                            : tokens.warning,
+                                      ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${alert.scope.name} · ${alert.connectionLabel}${alert.profileName == null ? '' : ' · ${alert.profileName}'}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                const SizedBox(height: 12),
+                                if (healthAlertTriggerSummary(alert)
+                                    case final summary?) ...[
+                                  Text('At alert: $summary'),
+                                  const SizedBox(height: 12),
                                 ],
-                              ),
-                            Text(
-                              alert.title,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    color:
-                                        alert.severity ==
-                                            HealthAlertSeverity.critical
-                                        ? tokens.danger
-                                        : tokens.warning,
+                                Text(alert.detail),
+                                const SizedBox(height: 12),
+                                Text(
+                                  '${alert.lastKnown ? 'Last known' : 'Observed'} ${TimeOfDay.fromDateTime(alert.observedAt.toLocal()).format(context)}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                if (alert.lastKnown)
+                                  const Text(
+                                    'A fresh reading is needed to confirm recovery.',
                                   ),
+                              ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${alert.scope.name} · ${alert.connectionLabel}${alert.profileName == null ? '' : ' · ${alert.profileName}'}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            const SizedBox(height: 12),
-                            if (healthAlertTriggerSummary(alert)
-                                case final summary?) ...[
-                              Text('At alert: $summary'),
-                              const SizedBox(height: 12),
-                            ],
-                            Text(alert.detail),
-                            const SizedBox(height: 12),
-                            Text(
-                              '${alert.lastKnown ? 'Last known' : 'Observed'} ${TimeOfDay.fromDateTime(alert.observedAt.toLocal()).format(context)}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            if (alert.lastKnown)
-                              const Text(
-                                'A fresh reading is needed to confirm recovery.',
-                              ),
-                          ],
-                        ),
+                    ),
+                  ),
                 ),
               ),
               if (alert != null) ...[
@@ -143,12 +159,13 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     IconButton(
-                      tooltip: 'Open Hermes health',
-                      onPressed: () {
-                        Navigator.pop(context);
-                        widget.scope.openHealth(alert);
-                      },
-                      icon: const Icon(Icons.health_and_safety_outlined),
+                      tooltip: healthAlertActionLabel(alert),
+                      onPressed: () => _open(alert),
+                      icon: Icon(
+                        alert.scope == HealthAlertScope.host
+                            ? Icons.health_and_safety_outlined
+                            : Icons.tune,
+                      ),
                     ),
                   ],
                 ),

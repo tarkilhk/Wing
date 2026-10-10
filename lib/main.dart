@@ -2,7 +2,6 @@ import 'core/services/bots_connection_source.dart';
 import 'core/services/bots_session.dart';
 import 'core/models/profile_session_key.dart';
 import 'core/widgets/chat_notice_activity_scope.dart';
-import 'core/widgets/health_alerts/health_alert_dialog.dart';
 import 'core/screens/health_alert_health_screen.dart';
 import 'core/models/health_alert.dart';
 import 'core/services/health_alert_settings_store.dart';
@@ -348,26 +347,15 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     }
   }
 
-  void _openHealthAlerts() {
-    final context = _navigatorKey.currentContext;
-    if (context == null) return;
-    final scope = HealthAlertsScope.maybeOf(context);
-    if (scope != null) unawaited(showHealthAlerts(context, scope));
-  }
-
   Future<void> _openAlertHealth(HealthAlert alert) async {
     final controller = _healthAlerts.ownerFor(alert);
     if (controller == null || !mounted) return;
     try {
-      if (alert.profileName != null &&
-          controller.current?.scope.profileName != alert.profileName) {
-        if (!await controller.switchProfile(alert.profileName!)) return;
-      }
-      if (!mounted) return;
       await _navigatorKey.currentState?.push<void>(
         MaterialPageRoute(
           builder: (_) => HealthAlertHealthScreen(
             controller: controller,
+            alert: alert,
             onConnections: openConnections,
             onOpenSession: (key) async {
               await controller.openSession(key, propagateHistoryFailure: true);
@@ -391,7 +379,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Could not open this issue’s Health screen. Retry from the bell.',
+              'Could not open this issue’s settings. Retry from the bell.',
             ),
           ),
         );
@@ -453,7 +441,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
           activity: _chatNotices.activity,
           child: HealthAlertsScope(
             alerts: _healthAlerts,
-            openHealth: _openAlertHealth,
+            openAlert: _openAlertHealth,
             child: MediaQuery(
               data: systemMediaQuery.copyWith(
                 textScaler: preference == null
@@ -461,7 +449,6 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
                     : preference.applyTo(systemMediaQuery.textScaler),
               ),
               child: HealthAlertNotice(
-                onOpenAlerts: _openHealthAlerts,
                 navigatorKey: _navigatorKey,
                 child: Column(
                   children: [

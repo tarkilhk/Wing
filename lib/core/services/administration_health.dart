@@ -125,6 +125,19 @@ class AdministrationHealth extends ChangeNotifier {
   ModelAccessObservation get modelAccess =>
       _overview?.modelAccess ?? const ModelAccessObservation();
   String? get profileName => _overview?.profile.name;
+  List<String> get failedConnectorNames {
+    final rows = _overview?.observations['connectors']?.data?['servers'];
+    if (rows is! List) return const [];
+    return List.unmodifiable([
+      for (final row in rows)
+        if (row is Map &&
+            row['enabled'] == true &&
+            row['name'] is String &&
+            _overview?.connectorChecks[row['name']] == false)
+          row['name'] as String,
+    ]);
+  }
+
   Map<String, AdminDiagnosticObservation> get diagnostics => Map.unmodifiable({
     for (final entry in _operations.entries)
       entry.key: entry.value.state.observation,
@@ -444,6 +457,7 @@ class AdministrationHealth extends ChangeNotifier {
       final destination = switch (key) {
         'model' => 'Models and reasoning',
         'tools' => 'Skills and tools',
+        'connectors' => 'MCP connectors',
         _ => 'Access and connectors',
       };
       var status = AdministrationHealthStatus.unknown;

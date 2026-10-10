@@ -7,14 +7,14 @@ class HealthAlertsScope extends InheritedWidget {
   const HealthAlertsScope({
     super.key,
     required this.alerts,
-    required this.openHealth,
+    required this.openAlert,
     required super.child,
   });
   final HealthAlertsCoordinator alerts;
-  final Future<void> Function(HealthAlert) openHealth;
+  final Future<void> Function(HealthAlert) openAlert;
   static HealthAlertsScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<HealthAlertsScope>();
   @override
   bool updateShouldNotify(HealthAlertsScope oldWidget) =>
-      oldWidget.alerts != alerts || oldWidget.openHealth != openHealth;
+      oldWidget.alerts != alerts || oldWidget.openAlert != openAlert;
 }

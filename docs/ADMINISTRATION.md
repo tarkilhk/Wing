@@ -66,7 +66,7 @@ Memory and disk also have separate **Native Hermes critical pressure alert** swi
 
 Wing watches while foregrounded or while its existing background task monitoring is active. Health alerts do not keep monitoring running by themselves. Paused or failed readings can leave an issue qualified as last known. Doctor and security audit findings do not generate these alerts.
 
-The toolbar bell appears while issues remain. Tap it to browse issues and open Health. Optional brief notices can be dismissed without clearing the issue; recovery clears it. Backend connection failures never create health alerts; the connection LED shows availability and recovery. These are in-app alerts and do not require Android notification permission.
+The toolbar bell appears while issues remain. Tap it to browse issues, then tap an alert or its open icon to reach the settings where you can act. A connector alert opens the failed connector directly; if several failed, the connector list marks them. Profile alerts keep the connection and profile captured by the check. Resource alerts open Hermes health. Tapping a brief notice opens the same destination. Dismissing a notice keeps the issue; recovery clears it. Backend connection failures never create health alerts; the connection LED shows availability and recovery. These are in-app alerts and do not require Android notification permission.
 
 ## Analytics
 

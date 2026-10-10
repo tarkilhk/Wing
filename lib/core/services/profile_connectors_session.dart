@@ -97,6 +97,17 @@ class ProfileConnectorsSession extends ChangeNotifier {
     return _detail = ConnectorDetailRoute._(this, name, signInOnOpen, false);
   }
 
+  /// An alert can open a detail without mounting an inventory underneath it.
+  static ConnectorDetailRoute openStandaloneDetail(
+    ProfileAdministration profile,
+    String name,
+  ) {
+    final session = ProfileConnectorsSession(profile);
+    final route = ConnectorDetailRoute._(session, name, false, true);
+    session._detail = route;
+    return route;
+  }
+
   /// A picker replacement owns a new inventory; the original child borrows this one.
   ConnectorDetailRoute detailForProfile(
     String name, {

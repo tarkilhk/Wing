@@ -30,12 +30,19 @@ class HealthAlert {
     required this.severity,
     required this.observedAt,
     required this.occurrence,
+    required this.destination,
+    this.connectorNames = const [],
     this.profileName,
     this.trigger,
     this.lastKnown = false,
   });
   final String id, connectionIdentity, connectionLabel, title, detail;
   final String? profileName;
+
+  /// Captured recovery route and failed connector identities, never parsed from
+  /// the display title or looked up in a later profile's observations.
+  final String? destination;
+  final List<String> connectorNames;
   final HealthAlertTrigger? trigger;
   final HealthAlertScope scope;
   final HealthAlertSeverity severity;
@@ -52,6 +59,8 @@ class HealthAlert {
     severity: severity,
     observedAt: observedAt,
     occurrence: occurrence,
+    destination: destination,
+    connectorNames: connectorNames,
     profileName: profileName,
     trigger: trigger,
     lastKnown: lastKnown ?? this.lastKnown,

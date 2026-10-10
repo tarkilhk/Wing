@@ -665,7 +665,7 @@ void main() {
             theme: wingTheme(brightness),
             builder: (_, child) => HealthAlertsScope(
               alerts: alerts.coordinator,
-              openHealth: (_) async {},
+              openAlert: (_) async {},
               child: RepaintBoundary(key: frame, child: child!),
             ),
             home: Builder(
@@ -724,7 +724,7 @@ void main() {
         theme: wingTheme(Brightness.light),
         builder: (_, child) => HealthAlertsScope(
           alerts: fixture.coordinator,
-          openHealth: (_) async {},
+          openAlert: (_) async {},
           child: RepaintBoundary(key: frame, child: child!),
         ),
         home: Builder(

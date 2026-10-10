@@ -20,6 +20,14 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/widgets/compact_switch.dart';
 import 'package:wing/core/widgets/health_alerts/health_alerts_scope.dart';
+import 'package:wing/core/services/administration_overview.dart';
+import 'package:wing/core/screens/administration/admin_connectors_page.dart';
+import 'support/administration_fixture.dart';
+import 'package:wing/core/screens/administration/admin_providers_page.dart';
+import 'package:wing/core/screens/administration/admin_defaults_page.dart';
+import 'package:wing/core/screens/administration/admin_scheduled_tasks_page.dart';
+import 'package:wing/core/screens/profile_capabilities_screen.dart';
+import 'support/host_resources_fixture.dart';
 import 'support/health_alerts_fixture.dart';
 
 class _DelayedSettingsStore extends HealthAlertSettingsStore {
@@ -246,6 +254,9 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final fixture = HealthAlertsFixture(await SharedPreferences.getInstance());
+    await fixture.owner.hostResources().refresh();
+    await fixture.critical();
+    final alert = fixture.coordinator.alerts.single;
     final text = TextEditingController(text: 'Unsent instruction');
     await tester.pumpWidget(
       MaterialApp(
@@ -261,6 +272,7 @@ void main() {
                     MaterialPageRoute(
                       builder: (_) => HealthAlertHealthScreen(
                         controller: fixture.owner,
+                        alert: alert,
                         onConnections: () {},
                         onOpenSession: (_) async {},
                       ),
@@ -284,6 +296,56 @@ void main() {
     text.dispose();
     fixture.dispose();
   });
+  for (final (destination, pageType) in [
+    ('Access and connectors', AdminProvidersPage),
+    ('Models and reasoning', AdminDefaultsPage),
+    ('Skills and tools', ProfileCapabilitiesScreen),
+    ('Scheduled tasks', AdminScheduledTasksPage),
+  ]) {
+    testWidgets('profile alert opens $destination directly', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final admin = AdministrationFixture();
+      final fixture = HealthAlertsFixture(
+        await SharedPreferences.getInstance(),
+        repository: admin.server,
+      );
+      fixture.owner.connectionStatus.accessAvailable();
+      fixture.owner.connectionStatus.liveChanged('fixture', true);
+      final alert = HealthAlert(
+        id: 'issue',
+        connectionIdentity: admin.server.connectionIdentity,
+        connectionLabel: admin.id,
+        scope: HealthAlertScope.profile,
+        profileName: 'work',
+        title: 'Translated problem title',
+        detail: 'Needs attention',
+        severity: HealthAlertSeverity.warning,
+        observedAt: DateTime.now(),
+        occurrence: 1,
+        destination: destination,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: HealthAlertHealthScreen(
+            controller: fixture.owner,
+            alert: alert,
+            onConnections: () {},
+            onOpenSession: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(pageType), findsOneWidget);
+      expect(find.text('Hermes health'), findsNothing);
+      expect(fixture.owner.current, isNull);
+      expect(admin.requests.where((r) => r.$1 != 'GET'), isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      fixture.dispose();
+      admin.server.close();
+    });
+  }
   testWidgets('connection failures never create health incidents or notices', (
     tester,
   ) async {
@@ -300,12 +362,8 @@ void main() {
         navigatorKey: navigatorKey,
         builder: (context, child) => HealthAlertsScope(
           alerts: fixture.coordinator,
-          openHealth: (_) async {},
-          child: HealthAlertNotice(
-            navigatorKey: navigatorKey,
-            onOpenAlerts: () {},
-            child: child!,
-          ),
+          openAlert: (_) async {},
+          child: HealthAlertNotice(navigatorKey: navigatorKey, child: child!),
         ),
         home: Builder(
           builder: (context) => Scaffold(
@@ -390,12 +448,10 @@ void main() {
           navigatorKey: navigatorKey,
           builder: (context, child) => HealthAlertsScope(
             alerts: fixture.coordinator,
-            openHealth: (_) async {},
-            child: HealthAlertNotice(
-              navigatorKey: navigatorKey,
-              onOpenAlerts: () => opens++,
-              child: child!,
-            ),
+            openAlert: (_) async {
+              opens++;
+            },
+            child: HealthAlertNotice(navigatorKey: navigatorKey, child: child!),
           ),
           home: const Scaffold(body: Text('Conversation')),
         ),
@@ -436,6 +492,230 @@ void main() {
   );
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      for (final failedCount in [1, 2]) {
+        testWidgets(
+          'connector alert opens captured recovery $failedCount ${brightness.name}/$scale',
+          (tester) async {
+            tester.view.physicalSize = Size(scale == 1 ? 393 : 320, 852);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.resetPhysicalSize);
+            addTearDown(tester.view.resetDevicePixelRatio);
+            SharedPreferences.setMockInitialValues({});
+            final admin = AdministrationFixture();
+            var failProbe = true;
+            final names = [
+              'broken / docs',
+              if (failedCount == 2) 'broken calendar',
+            ];
+            admin.override = (method, path, query, body) async {
+              if (path == 'system/stats') {
+                return hostStatsPayload();
+              }
+              if (path == 'status') {
+                return hostPressurePayload();
+              }
+              if (path == 'profiles') {
+                return {
+                  'profiles': [
+                    {'name': 'work', 'is_default': false},
+                    {'name': 'personal', 'is_default': false},
+                    {'name': 'default', 'is_default': true},
+                  ],
+                };
+              }
+              if (path == 'profiles/active') {
+                return {'current': 'default', 'active': 'work'};
+              }
+              expect(query['profile'], 'work');
+              if (path == 'mcp/servers') {
+                return {
+                  'servers': [
+                    for (final name in [...names, 'healthy'])
+                      {
+                        'name': name,
+                        'enabled': true,
+                        'transport': 'http',
+                        'auth': 'oauth',
+                        'source': 'config',
+                        'plugin': null,
+                      },
+                  ],
+                };
+              }
+              expect(method, 'POST');
+              return {
+                'ok': !failProbe || path.contains('/healthy/'),
+                'tools': [],
+                'error': 'Sign-in expired',
+              };
+            };
+            final fixture = HealthAlertsFixture(
+              await SharedPreferences.getInstance(),
+              repository: admin.server,
+            );
+            fixture.owner.connectionStatus.accessAvailable();
+            fixture.owner.connectionStatus.liveChanged('fixture', true);
+            final overview = AdministrationOverview(
+              admin.server.profile('work'),
+            );
+            fixture.owner.healthSession().health.selectProfile(overview);
+            await overview.refresh(keys: {'connectors'}, testConnectors: true);
+            final captured = fixture.coordinator.alerts.single;
+            expect(fixture.coordinator.ownerFor(captured), fixture.owner);
+            expect(captured.destination, 'MCP connectors');
+            expect(captured.connectorNames, names);
+            final other = AdministrationOverview(
+              admin.server.profile('personal'),
+            );
+            fixture.owner.healthSession().health.selectProfile(other);
+            expect(fixture.coordinator.alerts.single.lastKnown, isTrue);
+            expect(fixture.coordinator.alerts.single.connectorNames, names);
+            admin.requests.clear();
+            final navigatorKey = GlobalKey<NavigatorState>();
+            final draft = TextEditingController(
+              text: 'Unsent connector question',
+            );
+            final opened = <HealthAlert>[];
+            await tester.pumpWidget(
+              MaterialApp(
+                navigatorKey: navigatorKey,
+                theme: wingTheme(brightness),
+                builder: (context, child) => HealthAlertsScope(
+                  alerts: fixture.coordinator,
+                  openAlert: (alert) async {
+                    opened.add(alert);
+                    await navigatorKey.currentState!.push<void>(
+                      MaterialPageRoute(
+                        builder: (_) => HealthAlertHealthScreen(
+                          controller: fixture.owner,
+                          alert: alert,
+                          onConnections: () {},
+                          onOpenSession: (_) async {},
+                        ),
+                      ),
+                    );
+                  },
+                  child: MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(textScaler: TextScaler.linear(scale)),
+                    child: RepaintBoundary(
+                      key: const ValueKey('capture-alerts'),
+                      child: HealthAlertNotice(
+                        navigatorKey: navigatorKey,
+                        child: child!,
+                      ),
+                    ),
+                  ),
+                ),
+                home: Builder(
+                  builder: (context) => Scaffold(
+                    appBar: WingAppBar(
+                      context: context,
+                      title: const Text('Conversation'),
+                    ),
+                    body: TextField(controller: draft),
+                  ),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            await tester.tap(find.byKey(const ValueKey('health-alert-bell')));
+            await tester.pumpAndSettle();
+            final action = failedCount == 1
+                ? 'Open connector ${names.single}'
+                : 'Open MCP connectors';
+            expect(find.byTooltip(action), findsOneWidget);
+            expect(
+              tester.getSize(find.byTooltip(action)).height,
+              greaterThanOrEqualTo(48),
+            );
+            await shot(
+              tester,
+              'connector-dialog-$failedCount-${brightness.name}-$scale',
+            );
+            await tester.tap(find.text('Connector settings'));
+            await tester.pumpAndSettle();
+            expect(opened.single.profileName, 'work');
+            expect(find.byType(Dialog), findsNothing);
+            if (failedCount == 2) {
+              expect(find.byType(AdminConnectorsPage), findsOneWidget);
+              expect(find.text('Failed health check · http'), findsNWidgets(2));
+              await shot(tester, 'connector-list-${brightness.name}-$scale');
+              await tester.tap(find.text(names.first));
+              await tester.pumpAndSettle();
+            }
+            expect(find.byType(AdminConnectorDetail), findsOneWidget);
+            expect(find.text(names.first), findsOneWidget);
+            expect(find.text('Test connection'), findsOneWidget);
+            expect(find.text('Sign in'), findsOneWidget);
+            expect(admin.requests.where((r) => r.$1 != 'GET'), isEmpty);
+            expect(
+              admin.requests
+                  .where((r) => r.$2 == 'mcp/servers')
+                  .every((r) => r.$3['profile'] == 'work'),
+              isTrue,
+            );
+            expect(tester.takeException(), isNull);
+            await shot(
+              tester,
+              'connector-detail-$failedCount-${brightness.name}-$scale',
+            );
+            await tester.tap(find.text('Test connection'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.widgetWithText(FilledButton, 'Test'));
+            await tester.pumpAndSettle();
+            expect(
+              admin.requests.last.$2,
+              'mcp/servers/broken%20%2F%20docs/test',
+            );
+            expect(admin.requests.last.$3['profile'], 'work');
+            expect(find.text('Connection failed'), findsOneWidget);
+            await tester.pageBack();
+            await tester.pumpAndSettle();
+            if (failedCount == 2) {
+              await tester.pageBack();
+              await tester.pumpAndSettle();
+            }
+            expect(find.text('Unsent connector question'), findsOneWidget);
+            expect(draft.text, 'Unsent connector question');
+            fixture.owner.healthSession().health.selectProfile(overview);
+            failProbe = false;
+            await overview.refresh(keys: {'connectors'}, testConnectors: true);
+            await tester.pumpAndSettle();
+            expect(fixture.coordinator.alerts, isEmpty);
+            failProbe = true;
+            await overview.refresh(keys: {'connectors'}, testConnectors: true);
+            await tester.pump();
+            await tester.pump(WingMotion.standard);
+            expect(
+              find.byKey(const ValueKey('health-alert-notice-card')),
+              findsOneWidget,
+            );
+            await tester.tap(find.text('Connector settings'));
+            await tester.pumpAndSettle();
+            expect(opened, hasLength(2));
+            expect(opened.last.connectorNames, names);
+            expect(find.byType(Dialog), findsNothing);
+            expect(
+              find.byKey(const ValueKey('health-alert-notice-card')),
+              findsNothing,
+            );
+            expect(
+              failedCount == 1
+                  ? find.byType(AdminConnectorDetail)
+                  : find.byType(AdminConnectorsPage),
+              findsOneWidget,
+            );
+            await tester.pumpWidget(const SizedBox());
+            draft.dispose();
+            fixture.dispose();
+            overview.dispose();
+            other.dispose();
+            admin.server.close();
+          },
+        );
+      }
       testWidgets(
         'floating notice respects safe areas, text and intent ${brightness.name}/$scale',
         (tester) async {
@@ -459,7 +739,9 @@ void main() {
               theme: wingTheme(brightness),
               builder: (context, child) => HealthAlertsScope(
                 alerts: fixture.coordinator,
-                openHealth: (_) async {},
+                openAlert: (_) async {
+                  opens++;
+                },
                 child: MediaQuery(
                   data: MediaQuery.of(context).copyWith(
                     padding: const EdgeInsets.only(top: 24, bottom: 24),
@@ -468,7 +750,6 @@ void main() {
                   ),
                   child: HealthAlertNotice(
                     navigatorKey: navigatorKey,
-                    onOpenAlerts: () => opens++,
                     child: RepaintBoundary(
                       key: const ValueKey('capture-alerts'),
                       child: child!,
@@ -590,7 +871,7 @@ void main() {
                 theme: wingTheme(brightness),
                 builder: (context, child) => HealthAlertsScope(
                   alerts: fixture.coordinator,
-                  openHealth: (_) async {
+                  openAlert: (_) async {
                     opened++;
                   },
                   child: MediaQuery(
@@ -696,7 +977,7 @@ void main() {
           await tester.tap(find.byKey(const ValueKey('health-alert-bell')));
           await tester.pumpAndSettle();
           await shot(tester, '${brightness.name}-$scale-alert');
-          await tester.tap(find.byTooltip('Open Hermes health'));
+          await tester.tap(find.text('Critical memory pressure'));
           await tester.pumpAndSettle();
           expect(opened, 1);
           await pump(

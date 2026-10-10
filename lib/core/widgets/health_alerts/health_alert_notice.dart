@@ -12,11 +12,9 @@ class HealthAlertNotice extends StatefulWidget {
   const HealthAlertNotice({
     super.key,
     required this.child,
-    required this.onOpenAlerts,
     required this.navigatorKey,
   });
   final Widget child;
-  final VoidCallback onOpenAlerts;
   final GlobalKey<NavigatorState> navigatorKey;
   @override
   State<HealthAlertNotice> createState() => _HealthAlertNoticeState();
@@ -144,12 +142,12 @@ class _HealthAlertNoticeState extends State<HealthAlertNotice> {
       ],
     );
     final openArea = Tooltip(
-      message: 'Open health alerts',
+      message: healthAlertActionLabel(notice),
       child: InkWell(
         onTap: () {
           _expiry?.cancel();
           _hide();
-          widget.onOpenAlerts();
+          _scope?.openAlert(notice);
         },
         child: Padding(
           padding: const EdgeInsets.all(WingSpacing.md),
