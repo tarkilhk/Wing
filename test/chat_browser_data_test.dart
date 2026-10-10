@@ -11,6 +11,7 @@ import 'package:wing/core/models/session_visibility.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'support/profile_paging_fixture.dart';
 
@@ -104,7 +105,10 @@ void main() {
       gatewayFactory: fixture.gateway,
     );
     await controller.initialize();
-    data = ChatBrowserData(controller);
+    data = ChatBrowserData(
+      controller,
+      readBotAppearances: fixture.botAppearances,
+    );
   });
   tearDown(() {
     data.dispose();
@@ -153,6 +157,12 @@ void main() {
       expect(bots().map((row) => row.profile).toSet(), {'personal', 'work'});
       expect(bots().every((row) => row.isBotChat), isTrue);
       expect(bots().every((row) => row.tokens == 15500), isTrue);
+      for (final row in bots()) {
+        final bot = data.botAppearance(row.sessionKey)!;
+        expect(bot.profile.name, row.profile);
+        expect(bot.shape, 'circle');
+        expect(bot.color, '#65c7bc');
+      }
       await controller.openSession(
         ProfileSessionKey(controller.browserResource('work').scope, 'bot-chat'),
       );
@@ -161,9 +171,131 @@ void main() {
       await data.chooseVisibility(SessionVisibility.chats);
       expect(bots(), isEmpty);
       data.dispose();
-      data = ChatBrowserData(controller);
+      data = ChatBrowserData(
+        controller,
+        readBotAppearances: fixture.botAppearances,
+      );
       await data.refresh(archivedOnly: false);
       expect(bots(), isEmpty);
+    },
+  );
+
+  test(
+    'production appearance reader borrows the captured server without closing it',
+    () async {
+      final server = AdministrationRepository(
+        connectionId: 'host',
+        connectionIdentity: 'test',
+        connectionLabel: 'Test',
+        gateway: (profile) => fixture.gateway(
+          WorkspaceScope(
+            connectionId: 'host',
+            connectionIdentity: 'test',
+            profileName: profile,
+          ),
+        ),
+        request: (_, _, _, _) async => throw StateError('RPC only'),
+        settingsWrite: (_, _, _, _) async => throw StateError('Read only'),
+        ownedMutation: (_, _, _, _, _, _) async => throw StateError('Read only'),
+      );
+      controller.healthSession(repository: server);
+      data.dispose();
+      data = ChatBrowserData(controller);
+      fixture.hiddenSessions['personal'] = [
+        {
+          'id': 'bot-chat',
+          'title': 'Bot Chat',
+          'profile': 'personal',
+          'hidden': 1,
+          'last_active': fixture.now,
+        },
+      ];
+      await data.chooseVisibility(SessionVisibility.all);
+      final key = ProfileSessionKey(controller.current!.scope, 'bot-chat');
+      expect(data.botAppearance(key)!.shape, 'circle');
+      expect(fixture.calls.where((call) => call.$2 == 'profiles.list'), hasLength(1));
+      data.dispose();
+      expect(controller.administration(), same(server));
+      final roster = await server.gateway('default').call('profiles.list');
+      expect(roster['profiles'], isNotEmpty);
+    },
+  );
+
+  test(
+    'appearance failure keeps a readable canonical row and its saved avatar',
+    () async {
+      fixture.hiddenSessions['personal'] = [
+        {
+          'id': 'bot-chat',
+          'title': 'Bot Chat',
+          'profile': 'personal',
+          'source': 'tui',
+          'hidden': 1,
+          'last_active': fixture.now,
+        },
+      ];
+      fixture.botMetadata['personal'] = {
+        'shape': 'hexagon',
+        'color': '#ed895b',
+      };
+      await data.chooseVisibility(SessionVisibility.all);
+      final key = ProfileSessionKey(controller.current!.scope, 'bot-chat');
+      final saved = data.botAppearance(key);
+      expect(saved!.shape, 'hexagon');
+      expect(saved.color, '#ed895b');
+      fixture.failBotAppearance = true;
+      await data.refresh(archivedOnly: false);
+      expect(data.botAppearance(key), same(saved));
+      expect(
+        data.project('').entries.any((row) => row.sessionKey == key),
+        true,
+      );
+      expect(
+        data.state.profiles.values.every((profile) => profile.error == null),
+        true,
+      );
+      fixture.failBotAppearance = false;
+      fixture.botMetadata['personal'] = {
+        'shape': 'triangle',
+        'color': '#8b5cf6',
+      };
+      await data.refresh(archivedOnly: false);
+      expect(data.botAppearance(key)!.shape, 'triangle');
+      expect(data.botAppearance(key)!.color, '#8b5cf6');
+      expect(fixture.calls.where((call) => call.$2 == 'groups.list'), isEmpty);
+    },
+  );
+
+  test(
+    'late avatar read cannot restore a hidden row after a visibility change',
+    () async {
+      fixture.hiddenSessions['personal'] = [
+        {
+          'id': 'bot-chat',
+          'title': 'Bot Chat',
+          'profile': 'personal',
+          'source': 'tui',
+          'hidden': 1,
+          'last_active': fixture.now,
+        },
+      ];
+      final held = fixture.botAppearanceDelay = Completer<void>();
+      final pending = data.chooseVisibility(SessionVisibility.all);
+      for (var turn = 0; turn < 100; turn++) {
+        if (fixture.calls.any((call) => call.$2 == 'profiles.list')) break;
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(fixture.calls.any((call) => call.$2 == 'profiles.list'), true);
+      await data.chooseVisibility(SessionVisibility.chats);
+      held.complete();
+      await pending;
+      final key = ProfileSessionKey(controller.current!.scope, 'bot-chat');
+      expect(data.botAppearance(key), isNull);
+      expect(data.project('').entries.where((row) => row.isBotChat), isEmpty);
+      expect(
+        fixture.calls.where((call) => call.$2 == 'profiles.list'),
+        hasLength(1),
+      );
     },
   );
 
@@ -574,7 +706,10 @@ void main() {
         BrowserPreferencesSaveOutcome.saved,
       );
       expect(channel.value.confirmed!.profiles, {'work'});
-      data = ChatBrowserData(controller);
+      data = ChatBrowserData(
+        controller,
+        readBotAppearances: fixture.botAppearances,
+      );
       await data.refresh(archivedOnly: false);
       expect(
         data.project('').entries.every((entry) => entry.profile == 'work'),
@@ -947,7 +1082,10 @@ void main() {
       gate.complete();
       await pending;
       // Replace for the common teardown; disposal itself is the assertion.
-      data = ChatBrowserData(controller);
+      data = ChatBrowserData(
+        controller,
+        readBotAppearances: fixture.botAppearances,
+      );
       expect(controller.current!.scope.profileName, 'personal');
     },
   );

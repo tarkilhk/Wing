@@ -1,4 +1,6 @@
 import 'package:wing/core/widgets/deleted_chat_recovery_notice.dart';
+import 'package:wing/core/widgets/bot_avatar.dart';
+import 'dart:convert';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -203,7 +205,10 @@ void main() {
           home: workspace
               ? ProfileWorkspaceScreen(controller: controller)
               : ProfileWorkspaceBrowser(
-                  createData: () => ChatBrowserData(controller),
+                  createData: () => ChatBrowserData(
+                    controller,
+                    readBotAppearances: fixture.botAppearances,
+                  ),
                   connectionLabel: controller.connection.label,
                   connectionIcon: controller.connection.icon,
                   connectionStatus: controller.connectionStatus,
@@ -256,7 +261,7 @@ void main() {
       );
       final image = await boundary.toImage(pixelRatio: 2);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-      final file = File('build/chat-list-review/$name.png');
+      final file = File('build/design-previews/chat-list-review/$name.png');
       file.parent.createSync(recursive: true);
       file.writeAsBytesSync(bytes!.buffer.asUint8List());
       image.dispose();
@@ -281,7 +286,7 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
-      testWidgets('canonical Bot Chat icon ${brightness.name} $scale', (
+      testWidgets('canonical Bot Chat avatar ${brightness.name} $scale', (
         tester,
       ) async {
         fixture.hiddenSessions['personal'] = [
@@ -302,28 +307,61 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('chat-profile-personal')));
         await tester.pumpAndSettle();
         final row = find.byKey(const ValueKey('chat-personal-bot-chat'));
-        final icon = find.byKey(
-          const ValueKey('bot-chat-icon-personal-bot-chat'),
+        final avatar = find.byKey(
+          const ValueKey('bot-chat-avatar-personal-bot-chat'),
         );
         final title = find.descendant(of: row, matching: find.text('Bot Chat'));
         expect(row, findsOneWidget);
-        expect(icon, findsOneWidget);
-        expect(tester.widget<Icon>(icon).icon, Icons.smart_toy_outlined);
+        expect(avatar, findsOneWidget);
+        final face = tester.widget<BotAvatar>(avatar);
+        expect(face.name, 'personal');
+        expect(face.shape, 'circle');
+        expect(face.color, '#65c7bc');
+        expect(tester.getSize(avatar), const Size(20, 20));
         expect(
-          tester.getRect(icon).right,
+          tester.getRect(avatar).right,
           lessThan(tester.getRect(title).left),
         );
         expect(
           find.descendant(
             of: find.byKey(const ValueKey('chat-personal-session-0')),
-            matching: find.byIcon(Icons.smart_toy_outlined),
+            matching: find.byType(BotAvatar),
           ),
           findsNothing,
         );
-        await screenshot(tester, 'bot-chat-${brightness.name}-$scale');
+        await screenshot(tester, 'bot-chat-avatar-${brightness.name}-$scale');
+        const png =
+            'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAJUlEQVR4nGNwCj/ynxLMMGoApgH/byeBMbHiw9GAgY+FUQNIxwDOD2oPx3g6jQAAAABJRU5ErkJggg==';
+        fixture.botAvatars['personal'] = png;
+        await tester.runAsync(controller.refresh);
+        // A fresh list visit reads newly saved appearance, as opening Bots does.
+        await tester.pumpWidget(const SizedBox());
+        await show(tester, brightness: brightness, scale: scale);
+        expect(tester.widget<BotAvatar>(avatar).image, base64Decode(png));
+        expect(tester.getSize(avatar), const Size(20, 20));
+        final uploaded = find.descendant(
+          of: avatar,
+          matching: find.byType(Image),
+        );
+        await tester.runAsync(
+          () => precacheImage(
+            tester.widget<Image>(uploaded).image,
+            tester.element(avatar),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<RawImage>(
+                find.descendant(of: avatar, matching: find.byType(RawImage)),
+              )
+              .image,
+          isNotNull,
+        );
+        await screenshot(tester, 'bot-chat-uploaded-${brightness.name}-$scale');
         await openViewMenu(tester, 'include-automated');
         expect(find.text('Bot Chat'), findsNothing);
-        expect(icon, findsNothing);
+        expect(avatar, findsNothing);
         expect(controller.sessionVisibility, SessionVisibility.chats);
         expect(tester.takeException(), isNull);
       });
@@ -1334,7 +1372,10 @@ void main() {
     }
   }
   test('index keeps owners distinct and includes all pages', () async {
-    final data = ChatBrowserData(controller);
+    final data = ChatBrowserData(
+      controller,
+      readBotAppearances: fixture.botAppearances,
+    );
     addTearDown(data.dispose);
     await data.refresh(archivedOnly: false);
     expect(data.entries.length, 24);

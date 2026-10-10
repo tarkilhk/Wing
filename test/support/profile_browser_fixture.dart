@@ -3,6 +3,10 @@ import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profiles_repository.dart';
+import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/bots_repository.dart';
+import 'package:wing/core/services/bots_session.dart';
 
 /// Authored UI data, never used by the production application or a live server.
 class ProfileBrowserFixture {
@@ -23,6 +27,36 @@ class ProfileBrowserFixture {
   final liveSessions = <String, List<Map<String, dynamic>>>{};
   final hiddenSessions = <String, List<Map<String, dynamic>>>{};
   final compressionTips = <String, String>{};
+  final botMetadata = <String, Map<String, dynamic>>{};
+  final botAvatars = <String, String>{};
+  Completer<void>? botAppearanceDelay;
+  bool failBotAppearance = false;
+  Future<Map<ProfileSessionKey, BotRecord>> botAppearances(
+    Iterable<ProfileSessionKey> conversations,
+  ) async {
+    final keys = conversations.toList();
+    final workspace = keys.first.workspace;
+    final source = BotsRepository(
+      scope: workspace,
+      instance: 'Test',
+      read: (profile, method, params) => gateway(
+        WorkspaceScope(
+          connectionId: workspace.connectionId,
+          connectionIdentity: workspace.connectionIdentity,
+          profileName: profile,
+        ),
+      ).call(method, params),
+      command: (_, _, _, _, _) async => throw StateError('Passive appearance'),
+      ownership: (_, _) async => throw StateError('No presence reads'),
+    );
+    final session = BotsSession((_) async => [source]);
+    try {
+      return await session.appearancesForConversations(keys);
+    } finally {
+      session.dispose();
+    }
+  }
+
   List<Map<String, dynamic>> historyRows(String profile, String id) => [];
   List<Map<String, dynamic>> searchRows(String profile, String query) => [
     for (final row in [
@@ -215,6 +249,45 @@ class ProfileBrowserFixture {
     },
     rpc: (method, params) async {
       calls.add((scope.profileName, method, params));
+      if (method == 'profiles.list') {
+        await botAppearanceDelay?.future;
+        if (failBotAppearance) throw StateError('Appearance unavailable');
+        return {
+          'install_id': 'fixture',
+          'bot_mode_protocol': true,
+          'profiles': [
+            for (final profile in ['personal', 'work'])
+              {
+                'name': profile,
+                'has_avatar': botAvatars.containsKey(profile),
+                'ui_meta': {
+                  'hermes-bots': {
+                    'title': profile,
+                    'shape': 'circle',
+                    'color': '#65c7bc',
+                    ...?botMetadata[profile],
+                  },
+                },
+                if ([
+                      ...sessions(profile),
+                      ...?hiddenSessions[profile],
+                    ].where((row) => row['title'] == 'Bot Chat').firstOrNull
+                    case final canonical?)
+                  'canonical_session': {
+                    'id': canonical['id'],
+                    'resolved_id':
+                        compressionTips[canonical['id']] ?? canonical['id'],
+                  },
+              },
+          ],
+        };
+      }
+      if (method == 'profiles.get_asset') {
+        return {
+          'found': botAvatars.containsKey(scope.profileName),
+          'data': botAvatars[scope.profileName],
+        };
+      }
       if (method == 'commands.catalog') {
         return {'pairs': <List<String>>[]};
       }

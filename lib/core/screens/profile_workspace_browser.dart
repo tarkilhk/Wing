@@ -18,6 +18,7 @@ import '../widgets/chat_list_menu.dart';
 import '../widgets/read_recovery.dart';
 import '../widgets/chat_profile_bar.dart';
 import '../widgets/chat_status_dot.dart';
+import '../widgets/bot_avatar.dart';
 import '../widgets/chat_working_border.dart';
 import '../widgets/profile_selector.dart';
 import '../widgets/server_connection_label.dart';
@@ -541,16 +542,25 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
         fontWeight: e.unread ? FontWeight.w600 : FontWeight.w400,
       ),
     );
+    final bot = _data.botAppearance(e.sessionKey);
     final title = e.isBotChat
         ? Row(
             children: [
-              Icon(
-                Icons.smart_toy_outlined,
-                key: ValueKey('bot-chat-icon-${e.profile}-${e.id}'),
-                size: 16,
-                color: WingTokens.of(context).muted,
-                semanticLabel: 'Bot chat',
-              ),
+              if (bot != null)
+                Semantics(
+                  label: '${bot.title} bot avatar',
+                  image: true,
+                  child: BotAvatar(
+                    key: ValueKey('bot-chat-avatar-${e.profile}-${e.id}'),
+                    name: bot.profile.name,
+                    shape: bot.shape,
+                    color: bot.color,
+                    image: bot.avatar,
+                    size: 20,
+                  ),
+                )
+              else
+                const SizedBox.square(dimension: 20),
               const SizedBox(width: 6),
               Expanded(child: titleText),
             ],

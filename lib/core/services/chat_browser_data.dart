@@ -10,6 +10,9 @@ import '../models/browser_mutation.dart';
 import '../models/session_visibility.dart';
 import '../models/chat_browser_preferences.dart';
 import '../models/hermes_profile.dart';
+import '../models/bots.dart';
+import 'bots_repository.dart';
+import 'bots_session.dart';
 import 'profile_workspace_controller.dart';
 import 'profile_gateway.dart'
     show ProjectFolderSuggestion, ProfileCanonicalBotChat;
@@ -111,7 +114,7 @@ class _BrowserPage {
 }
 
 final class ChatBrowserData extends ChangeNotifier {
-  ChatBrowserData(this._controller) {
+  ChatBrowserData(this._controller, {this._readBotAppearances}) {
     _preferences = _controller.appPreferences.browserPreferencesFor(
       _controller.connectionIdentity,
     );
@@ -122,6 +125,13 @@ final class ChatBrowserData extends ChangeNotifier {
     _controller.browserMutations.addListener(_mutationChanged);
   }
   final ProfileWorkspaceController _controller;
+  final Future<Map<ProfileSessionKey, BotRecord>> Function(
+    Iterable<ProfileSessionKey> conversations,
+  )?
+  _readBotAppearances;
+  BotsSession? _botAppearanceOwner;
+  final _botAppearances = <ProfileSessionKey, BotRecord>{};
+  BotRecord? botAppearance(ProfileSessionKey key) => _botAppearances[key];
   late final ValueListenable<BrowserPreferencesFact> _preferences;
   final _arrangement = ChatListArrangement();
   String _projectionQuery = '';
@@ -1226,6 +1236,40 @@ final class ChatBrowserData extends ChangeNotifier {
       _loading = false;
       if (!failedOnly) _arrangement.reset();
       _changed();
+      if (valid()) await _refreshBotAppearances(valid);
+    }
+  }
+
+  Future<void> _refreshBotAppearances(bool Function() isCurrent) async {
+    final keys = _entries
+        .where(
+          (entry) =>
+              entry.isBotChat &&
+              _controller.includesSession(entry.source, hidden: entry.hidden),
+        )
+        .map((entry) => entry.sessionKey)
+        .toSet();
+    _botAppearances.removeWhere((key, _) => !keys.contains(key));
+    if (keys.isEmpty) return;
+    try {
+      final read =
+          _readBotAppearances ??
+          (_botAppearanceOwner ??= BotsSession(
+            (_) async => [
+              BotsRepository.forServer(_controller.administration()),
+            ],
+          )).appearancesForConversations;
+      final appearances = await read(keys);
+      if (!isCurrent()) return;
+      for (final key in keys) {
+        final bot = appearances[key];
+        if (bot?.describesConversation(key) == true) {
+          _botAppearances[key] = bot!;
+        }
+      }
+      _notify();
+    } catch (_) {
+      // Decoration failure retains matching saved appearance and readable chats.
     }
   }
 
@@ -1461,6 +1505,8 @@ final class ChatBrowserData extends ChangeNotifier {
     _generation++;
     _searchGeneration++;
     _openGeneration++;
+    _botAppearanceOwner?.dispose();
+    _botAppearances.clear();
     if (_notifications == 0) {
       _disposeStorage();
       super.dispose();

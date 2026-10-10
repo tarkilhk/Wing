@@ -4,7 +4,7 @@ Open **Bots** from Wing's side menu to browse profiles from your saved Hermes in
 
 Tap a bot's avatar to edit its appearance. Tap its name or message preview to open its continuing **Bot Chat**. Back returns to the same tab, search and filter. Bot Chats use the usual conversation screen, showing the bot's display name when available.
 
-Bot Chats stay hidden from the default Chats list. Enable **Show automated chats** in Chats to reveal them, or open them directly through Bots. Other conversations retain their saved titles.
+Bot Chats stay hidden from the default Chats list. Enable **Show automated chats** in Chats to reveal them, or open them directly through Bots. Displayed Bot Chats show a small version of the bot's avatar before their name. Other conversations retain their saved titles.
 
 ## Profile options
 

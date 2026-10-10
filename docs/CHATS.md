@@ -9,7 +9,8 @@ Open **Chats** to search, pin and group conversations. Filter by profile, projec
 Hidden conversations stay out of Chats by default, including a bot's continuing
 **Bot Chat**, even after opening it from Bots. Tick **Show automated chats** in
 Chat list options to include automated conversations and each profile's canonical
-Bot Chat. A displayed canonical Bot Chat has the bot icon before its name.
+Bot Chat. A displayed canonical Bot Chat has a small version of the bot's avatar
+before its name.
 Search follows the same visibility choice.
 
 ## Send the next idea
