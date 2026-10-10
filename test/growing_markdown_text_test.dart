@@ -497,9 +497,9 @@ void main() {
         _texts(tester).map((text) => text.textSpan!.toPlainText()).join(),
         contains('More follows.'),
       );
-      await tester.tap(find.text('Open preview'));
+      await tester.tap(find.byTooltip('Open preview'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Download'));
+      await tester.tap(find.byTooltip('Download'));
       await tester.pumpAndSettle();
       expect(calls, ['new open /srv/report.md', 'new download /srv/report.md']);
       expect(tester.takeException(), isNull);

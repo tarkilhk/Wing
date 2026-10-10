@@ -75,9 +75,9 @@ void main() {
         same(original),
       );
       if (deliverables) {
-        await tester.tap(find.text('Open preview'));
+        await tester.tap(find.byTooltip('Open preview'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Download'));
+        await tester.tap(find.byTooltip('Download'));
         await tester.pumpAndSettle();
         expect(calls, ['new', 'new download']);
       } else {

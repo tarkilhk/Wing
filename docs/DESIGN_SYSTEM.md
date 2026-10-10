@@ -627,6 +627,12 @@ a failed write must not become the displayed value when the editor is reopened.
 Native preview chrome receives the active Studio palette from Flutter. Authored
 HTML, diagrams, images and video retain their content-specific appearance.
 
+Conversation file cards put icon-only Download and Open preview actions beside
+the wrapping filename, using the download-to-tray arrow and outlined eye. Keep
+48 dp targets, accent-colored icons, tooltips and accessible action names; the
+download spinner replaces its icon without changing the row geometry. Errors
+remain below the row.
+
 Conversation images follow desktop's inline preview convention: no generic
 file card or repeated filename, tap to zoom the original, and a compact download
 action. On phones the action stays visible rather than depending on hover.

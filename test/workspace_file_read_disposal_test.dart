@@ -123,7 +123,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
         await tester.settleMarkdown();
         if (!attachmentImage) {
-          final download = find.text('Download');
+          final download = find.byTooltip('Download');
           expect(download, findsOneWidget);
           await tester.ensureVisible(download);
           await tester.tap(download);
