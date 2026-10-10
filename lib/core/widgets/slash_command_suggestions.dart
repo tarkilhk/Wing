@@ -272,6 +272,35 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
         _completionGeneration == _generation && _completion?.query == _query
         ? _completion
         : null;
+    final header = Row(
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: _error != null
+                ? StudioError(_error!)
+                : Text(
+                    !_loading && completion?.showsNoMatches == true
+                        ? 'No matching commands.'
+                        : 'Commands',
+                  ),
+          ),
+        ),
+        TextFieldTapRegion(
+          child: IconButton(
+            tooltip: 'Refresh skills',
+            constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+            onPressed: _refreshing ? null : _refresh,
+            icon: _refreshing
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh, size: 20),
+          ),
+        ),
+      ],
+    );
     return ConstrainedBox(
       constraints: const BoxConstraints(maxHeight: 220),
       child: Material(
@@ -285,90 +314,63 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (_loading) const LinearProgressIndicator(),
-            Row(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: _error != null
-                        ? StudioError(_error!)
-                        : Text(
-                            !_loading && completion?.showsNoMatches == true
-                                ? 'No matching commands.'
-                                : 'Commands',
-                          ),
-                  ),
-                ),
-                TextFieldTapRegion(
-                  child: IconButton(
-                    tooltip: 'Refresh skills',
-                    constraints: const BoxConstraints.tightFor(
-                      width: 48,
-                      height: 48,
-                    ),
-                    onPressed: _refreshing ? null : _refresh,
-                    icon: _refreshing
-                        ? const SizedBox.square(
-                            dimension: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh, size: 20),
-                  ),
-                ),
-              ],
-            ),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  if (completion?.warning.isNotEmpty == true)
-                    Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Text(completion!.warning),
-                    ),
-                  if (completion != null && !_loading)
-                    for (final item in completion.items)
-                      ListTile(
-                        dense: true,
-                        title: Text(item.text),
-                        subtitle: Text(
-                          item.description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: item.isSkill
-                            ? IconButton(
-                                tooltip: 'Inspect ${item.text}',
-                                constraints: const BoxConstraints.tightFor(
-                                  width: 48,
-                                  height: 48,
-                                ),
-                                onPressed: _inspecting == null
-                                    ? () => _inspect(item)
-                                    : null,
-                                icon: identical(_inspecting, item)
-                                    ? const SizedBox.square(
-                                        dimension: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.visibility_outlined,
-                                        size: 20,
-                                      ),
-                              )
-                            : item.category.isEmpty
-                            ? null
-                            : Text(
-                                item.category,
-                                style: Theme.of(context).textTheme.labelSmall,
-                              ),
-                        onTap: () => _select(completion, item),
+            if (_error != null)
+              Flexible(child: SingleChildScrollView(child: header))
+            else
+              header,
+            if (_error == null)
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    if (completion?.warning.isNotEmpty == true)
+                      Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(completion!.warning),
                       ),
-                ],
+                    if (completion != null && !_loading)
+                      for (final item in completion.items)
+                        ListTile(
+                          dense: true,
+                          title: Text(item.text),
+                          subtitle: Text(
+                            item.description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: item.isSkill
+                              ? IconButton(
+                                  tooltip: 'Inspect ${item.text}',
+                                  constraints: const BoxConstraints.tightFor(
+                                    width: 48,
+                                    height: 48,
+                                  ),
+                                  onPressed: _inspecting == null
+                                      ? () => _inspect(item)
+                                      : null,
+                                  icon: identical(_inspecting, item)
+                                      ? const SizedBox.square(
+                                          dimension: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.visibility_outlined,
+                                          size: 20,
+                                        ),
+                                )
+                              : item.category.isEmpty
+                              ? null
+                              : Text(
+                                  item.category,
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ),
+                          onTap: () => _select(completion, item),
+                        ),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),

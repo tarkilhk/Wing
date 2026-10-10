@@ -1670,6 +1670,14 @@ void main() {
         );
         expect(editable.focusNode.hasFocus, isTrue);
         Future<void> capture(String state) async {
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'Skill picker $state must fit with the keyboard open',
+          );
+          expect(refresh.hitTestable(), findsOneWidget);
+          expect(tester.getSize(refresh), const Size(48, 48));
+          expect(tester.getRect(refresh).bottom, lessThanOrEqualTo(844 - 280));
           if (!Platform.environment.containsKey('CAPTURE_SKILL_COMPOSER')) {
             return;
           }
@@ -1732,6 +1740,18 @@ void main() {
         expect(input.value, before);
         expect(editable.focusNode.hasFocus, isTrue);
         await capture('error');
+        await tester.drag(
+          find.text('Could not refresh skills.'),
+          const Offset(0, -40),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.getRect(find.text('Could not refresh skills.')).bottom,
+          lessThanOrEqualTo(
+            tester.getRect(find.byType(SlashCommandSuggestions)).bottom,
+          ),
+        );
+        expect(refresh.hitTestable(), findsOneWidget);
         host.respond = null;
         await tester.tap(refresh);
         await tester.pumpAndSettle();
