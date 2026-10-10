@@ -1135,6 +1135,50 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(chat.reading.historyScrollOffset, closeTo(0, 1));
   });
 
+  testWidgets('restored history shows the saved prompt-to-reply interval', (
+    tester,
+  ) async {
+    final snapshot = TranscriptReadingSnapshot(
+      historySessionId: chat.key.sessionId,
+      messages: [
+        {
+          'id': 1,
+          'role': 'user',
+          'content': 'Commit and push all please',
+          'timestamp': 1791616320.25,
+        },
+        {
+          'id': 2,
+          'role': 'tool',
+          'tool_name': 'terminal',
+          'content': 'Changes pushed',
+          'timestamp': 1791616380,
+          'duration_s': 5,
+        },
+        {
+          'id': 3,
+          'role': 'assistant',
+          'content': 'Committed and pushed all changes.',
+          'timestamp': 1791616404.25,
+        },
+      ],
+    );
+    chat.reading.installSnapshot(snapshot);
+    await show(tester);
+    expect(find.text('· 1m 24s'), findsOneWidget);
+    expect(find.text('Used 1 tool'), findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(
+      AppLifecycleState.paused,
+    );
+    await tester.pump(const Duration(minutes: 10));
+    tester.binding.handleAppLifecycleStateChanged(
+      AppLifecycleState.resumed,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('· 1m 24s'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('empty assistant rows leave existing tool cards in one section', (
     tester,
   ) async {

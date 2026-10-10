@@ -236,13 +236,14 @@ all four visible insets and bounded scrolling before declaring the family ready.
 | Received field or action | User value | Placement and eligibility |
 | --- | --- | --- |
 | Saved call count | Understand how much tool work preceded this reply | Quiet “Used N tools”; omit zero/unknown counts, retain review count when supplied |
+| Saved prompt/final-reply timestamps | Understand the approximate time taken for this exchange even after reopening Wing | Quiet inline “· 1m 24s” beside the final reply's Activity count; subtract the original sent-message timestamp from the final assistant timestamp, both saved by Hermes. Tooltip names both sources. Omit unavailable, invalid, reversed or provisional times; zero is valid. No new action or timer. |
 | Current call count | Understand ongoing tool work | “Using N tools” while live; retain existing Activity tabs and payloads |
 | Reply Copy | Reuse this reply's exact text | Shared 44-by-48 dp upper-right header, beside the preceding disclosure when present; one Copy per reply |
 | Tool Copy and resource actions | Reuse reported payloads | Existing detail family, exact scope and eligibility unchanged |
 | Repeated author avatar/name | Already known from the open conversation | Omitted from replies; chat chrome owns identity |
 
 Expansion stays lazy and preserves selected tabs/nested rows. No generic
-finished status, guessed elapsed time or unsupported summary is added. Header
+finished status, receipt-clock estimate or unsupported summary is added. Header
 label/copy placement has behavioral guards in the conversation and Activity
 widget suites; static source checks cannot establish real tap routing, scrolling
 or enlarged-text wrapping.

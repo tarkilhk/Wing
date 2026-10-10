@@ -6,24 +6,33 @@ import 'transcript_notice.dart';
 /// A transient, pure projection of the existing owner's immutable reading rows.
 /// Ordinals identify presentation inputs, never runtime or command authority.
 final class TranscriptTimeline {
-  TranscriptTimeline._values(this.entries, this.sections, this.hasLiveMessage);
+  TranscriptTimeline._values(
+    this.entries,
+    this.sections,
+    this.hasLiveMessage,
+    this._replyDurations,
+  );
 
   factory TranscriptTimeline._(
     Iterable<TranscriptTimelineEntry> source, {
     required bool hasLiveMessage,
+    Map<Object, Duration>? replyDurations,
   }) {
     final entries = List<TranscriptTimelineEntry>.unmodifiable(source);
     final groups = _groupRows(entries);
+    final durations = replyDurations ?? _savedReplyDurations(entries);
     return TranscriptTimeline._values(
       entries,
-      _groupSections(groups),
+      _groupSections(groups, durations),
       hasLiveMessage,
+      durations,
     );
   }
 
   final List<TranscriptTimelineEntry> entries;
   final List<TranscriptTimelineSection> sections;
   final bool hasLiveMessage;
+  final Map<Object, Duration> _replyDurations;
 
   factory TranscriptTimeline.project(
     List<Map<String, dynamic>> rows, {
@@ -142,6 +151,7 @@ final class TranscriptTimeline {
     final result = TranscriptTimeline._(
       entries.sublist(start, end),
       hasLiveMessage: false,
+      replyDurations: _replyDurations,
     );
     return result.sections.any((section) => section.containsMessage(messageId))
         ? result
@@ -218,9 +228,15 @@ final class TranscriptTimelineGroup {
 }
 
 final class TranscriptTimelineSection {
-  TranscriptTimelineSection._(Iterable<TranscriptTimelineGroup> groups)
-    : groups = List.unmodifiable(groups);
+  TranscriptTimelineSection._(
+    Iterable<TranscriptTimelineGroup> groups, {
+    this.replyDuration,
+  }) : groups = List.unmodifiable(groups);
   final List<TranscriptTimelineGroup> groups;
+
+  /// Approximate interval from the saved human prompt to its final saved reply.
+  /// Both timestamps belong to Hermes; receipt time and tool durations do not.
+  final Duration? replyDuration;
   Iterable<TranscriptTimelineEntry> get messages =>
       groups.expand((group) => group.messages);
   Iterable<Object> get presentationIds =>
@@ -275,6 +291,7 @@ List<TranscriptTimelineGroup> _groupRows(
 
 List<TranscriptTimelineSection> _groupSections(
   List<TranscriptTimelineGroup> groups,
+  Map<Object, Duration> replyDurations,
 ) {
   final sections = <List<TranscriptTimelineGroup>>[];
   for (final group in groups) {
@@ -286,8 +303,72 @@ List<TranscriptTimelineSection> _groupSections(
       sections.add([group]);
     }
   }
-  return List.unmodifiable(sections.map(TranscriptTimelineSection._));
+  return List.unmodifiable([
+    for (var index = 0; index < sections.length; index++)
+      TranscriptTimelineSection._(
+        sections[index],
+        replyDuration:
+            sections[index].last.isActivity && index + 1 < sections.length
+            ? replyDurations[sections[index + 1]
+                  .last
+                  .messages
+                  .last
+                  .presentationId]
+            : null,
+      ),
+  ]);
 }
+
+Map<Object, Duration> _savedReplyDurations(
+  List<TranscriptTimelineEntry> entries,
+) {
+  final durations = <Object, Duration>{};
+  TranscriptTimelineEntry? prompt;
+  TranscriptTimelineEntry? reply;
+
+  void record() {
+    final sent = prompt;
+    final answer = reply;
+    if (sent == null ||
+        answer == null ||
+        sent.savedMessageId == null ||
+        answer.savedMessageId == null ||
+        answer.streaming) {
+      return;
+    }
+    final start = _savedTimestamp(sent._row['timestamp']);
+    final end = _savedTimestamp(answer._row['timestamp']);
+    if (start == null || end == null || end < start) return;
+    durations[answer.presentationId] = Duration(
+      microseconds: ((end - start) * Duration.microsecondsPerSecond).round(),
+    );
+  }
+
+  for (final entry in entries) {
+    if (entry.suppressed) continue;
+    if (entry.role == 'user' && isHumanAnswerPrompt(entry._row)) {
+      record();
+      prompt = entry;
+      reply = null;
+    } else if (entry.role == 'tool' || entry.emptyAssistant) {
+      reply = null;
+    } else if (entry.role == 'assistant' && entry.interAgentSender == null) {
+      final calls = entry._row['tool_calls'];
+      reply =
+          calls is List && calls.isNotEmpty ||
+              transcriptNoticeKind(entry._row) != null
+          ? null
+          : entry;
+    }
+  }
+  record();
+  return Map.unmodifiable(durations);
+}
+
+double? _savedTimestamp(Object? value) =>
+    value is num && value.isFinite && value > 0 && value <= 8640000000000
+    ? value.toDouble()
+    : null;
 
 bool _branchAnswer(List<Map<String, dynamic>> rows, int index) =>
     rows[index]['role'] == 'assistant' &&

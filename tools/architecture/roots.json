@@ -6199,6 +6199,15 @@
       "source": "docs/TESTING.md; test/source_highlighting_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-test/reply_duration_test.dart",
+      "kind": "host-test",
+      "path": "test/reply_duration_test.dart",
+      "purpose": "Saved prompt-to-final-reply timestamp projection and Activity header render regressions",
+      "source": "docs/TOOL_ACTIVITY.md; test/reply_duration_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -14784,6 +14793,11 @@
     },
     {
       "path": "test/source_highlighting_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/reply_duration_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     }

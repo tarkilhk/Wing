@@ -91,6 +91,17 @@ color and density that static construction checks cannot prove. Use
 inspect actual Flutter message and confirmation renders in both themes at normal
 phone size and 320 dp/200% text. Captures stay under ignored `build/`.
 
+Approximate reply time uses final saved assistant `timestamp` minus the original
+saved user `timestamp`, both from Hermes. Run `flutter test --no-pub
+test/reply_duration_test.dart test/profile_transcript_test.dart`; these cover
+final/interim/turn boundaries, local versus saved observations, missing/invalid
+and zero/fractional values, Find neighborhoods and restoration/backgrounding.
+Render review uses `--dart-define=STUDIO_REVIEW=true` with the existing
+`build/studio-roboto.ttf` and `build/studio-icons.otf` fonts. Captures stay under
+ignored `build/reply-duration-review/` and cover 390 dp/100% and 320 dp/200% in
+both themes, wrapping review metadata and keeping Copy reachable. The contract
+and inspected upstream revision are in [reply timing](TOOL_ACTIVITY.md#approximate-reply-time).
+
 Activity header/copy sharing preserves lazy section/scroll identities. Include
 `profile_transcript_test.dart`, `profile_activity_tabs_test.dart`,
 `profile_combined_activity_test.dart` and `bots_view_test.dart` when changing that

@@ -64,6 +64,12 @@ Saved user display removes generated expanded attachment context while preservin
 
 ## Model, context and reading
 
+Beside “Used N tools”, `1m 24s` shows the approximate interval from your saved
+sent message to the final saved reply, using both Hermes timestamps. It includes
+thinking and tool work and remains available after reopening Wing. Its tooltip
+explains the calculation. Missing timestamps omit the time; it appears for a new
+reply when saved history arrives. See [reply timing](TOOL_ACTIVITY.md#approximate-reply-time).
+
 Messages show a discreet local `HH:mm` timestamp in the existing assistant
 header or at the top of the user's side rail, with Edit and Copy at the bottom.
 Long-press the time for its full date and local time; screen readers announce

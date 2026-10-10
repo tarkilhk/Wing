@@ -528,6 +528,11 @@ than occupying an extra header row. When Activity precedes an answer, Copy stays
 in its disclosure header, preserving section/scroll identities and expansion.
 Activity uses “Used N tools” from received calls with its existing
 Timeline/Tasks/Agents/Work contents intact.
+Beside a final saved reply, add quiet approximate time from the saved reply
+timestamp minus its original sent-message timestamp, for example
+“Used 11 tools · 1m 24s”. Keep it in the existing wrapping header and explain
+both Hermes timestamps through a tooltip/accessibility label. Do not use local
+receipt times or summed tool durations. Contract: [reply time](TOOL_ACTIVITY.md#approximate-reply-time).
 
 Both speakers use local `dd Mmm, HH:mm`; unavailable timestamps are omitted.
 Full-date tooltips/accessibility, native selection, exact copying, attachment

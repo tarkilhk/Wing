@@ -112,6 +112,12 @@ class ProfileToolActivitySection extends StatelessWidget {
     final count = section.toolCount;
     final total = count + liveToolCount;
     final reviews = section.reviewCount;
+    final duration = section.replyDuration;
+    final metadata = [
+      if (duration != null)
+        '· ${formatToolDuration(duration.inMicroseconds / 1000000)}',
+      if (reviews > 0) '$reviews ${reviews == 1 ? 'review' : 'reviews'}',
+    ].join(' · ');
     final expanded =
         expandedMessageId != null &&
         section.containsMessage(expandedMessageId!);
@@ -121,9 +127,22 @@ class ProfileToolActivitySection extends StatelessWidget {
           : 'Activity',
       trailing: trailing,
       initiallyExpanded: expanded,
-      subtitle: reviews > 0
-          ? Text('$reviews ${reviews == 1 ? 'review' : 'reviews'}')
-          : null,
+      subtitle: metadata.isEmpty
+          ? null
+          : duration == null
+          ? Text(metadata)
+          : Tooltip(
+              message:
+                  'Approximate reply time: final reply timestamp minus your '
+                  'sent message timestamp, both from Hermes',
+              child: Text(
+                metadata,
+                semanticsLabel:
+                    'Approximate reply time '
+                    '${formatToolDuration(duration.inMicroseconds / 1000000)}'
+                    '${reviews > 0 ? ', $reviews reviews' : ''}',
+              ),
+            ),
       detailsBuilder: _details,
     );
   }

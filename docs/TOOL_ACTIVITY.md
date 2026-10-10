@@ -1,5 +1,47 @@
 # Readable tool activity
 
+## Approximate reply time
+
+The collapsed Activity header beside a saved reply displays, for example,
+“Used 11 tools · 1m 24s”. The interval is the final saved assistant message's
+Hermes `timestamp` minus the original sent user message's Hermes `timestamp`.
+It includes the time between those messages, including model thinking and tool
+work; it is not a sum of tool durations or a measured execution receipt. Both
+timestamps come from saved history, so foreground delivery, backgrounding and
+reopening Wing do not change the result. Older saved exchanges work too.
+
+`TranscriptTimeline` owns this pure projection and gives the interval only to
+the Activity section immediately before the final answer. Interim assistant
+commentary, tool-call assistant rows, hidden/generated user rows and steering
+do not replace the original prompt or final answer. Each new sent prompt resets
+the start. A provisional local reply or streamed answer has no backend interval
+until saved history arrives. Missing/invalid timestamps or a prompt outside the
+loaded history omit the metric; reversed timestamps omit it, and zero is valid.
+Find retains a known full-history interval when narrowing to its neighborhood.
+The renderer uses existing quiet wrapping header metadata, keeps review counts
+and Copy, and explains the two timestamps through a tooltip/accessibility label.
+
+Verified stock upstream main `7318e666c236aa8fffc3506c705d1c00a4821441`
+on 10 October 2026: `agent/message_metadata.py` stamps appended messages;
+`agent/turn_context.py` stamps user input; `agent/turn_final_response.py` appends
+the final answer after generation; `hermes_state_messages.py` persists and
+returns the original stamps, and `tui_gateway/session_history.py` exposes them.
+Stock `message.complete` has no total-duration field. No backend change or local
+receipt-clock estimate is introduced.
+
+`REPLY_TIMESTAMP_INTERVAL` is guarded by `test/reply_duration_test.dart`.
+It covers multi-round/multiple-turn boundaries, steering/hidden rows, local
+versus saved data, streaming, missing and invalid/zero/fractional times, and Find
+neighborhoods. The widget matrix checks quiet metadata wrapping, review count,
+lazy details and reachable Copy in light/dark at 390 dp/100% and 320 dp/200%.
+Behavioral tests are required because source analysis cannot establish supplied
+timestamp values, message order or actual wrapped bounds. Run
+`flutter test --no-pub test/reply_duration_test.dart`; opt-in
+`--dart-define=STUDIO_REVIEW=true` writes renders under ignored
+`build/reply-duration-review/` using the existing Studio review fonts.
+
+## Conversation compression
+
 Conversation compression uses stock `status.update` at inspected upstream main
 `0e21933114c911075782d5744cee5403996d38ae` (8 October 2026).
 `ChatRuntime` owns a per-session compression phase independent of turn execution
