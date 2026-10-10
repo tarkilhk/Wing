@@ -330,12 +330,25 @@ void main() {
             findsOneWidget,
             reason: 'All 14 Codex models must fit on a normal phone',
           );
+          var priceHeaderHeight = 0.0;
+          if (priced) {
+            expect(find.text('API equivalent · per 1M tokens'), findsOneWidget);
+            priceHeaderHeight = tester
+                .getSize(find.byKey(const Key('model-provider-openai-codex')))
+                .height;
+            expect(
+              priceHeaderHeight,
+              lessThanOrEqualTo(44),
+              reason: 'The units header allows two text lines and its padding',
+            );
+          }
           expect(
             tester.getRect(first).top -
-                tester.getRect(find.byType(BottomSheet)).top,
-            lessThanOrEqualTo(priced ? 132 : 108),
+                tester.getRect(find.byType(BottomSheet)).top -
+                priceHeaderHeight,
+            lessThanOrEqualTo(108),
             reason:
-                'Header, search and tabs stay compact; priced catalogs add one units row',
+                'Header, search and tabs stay compact independently of units text wrapping',
           );
           expect(find.text('Apply').hitTestable(), findsOneWidget);
           if (capture) {
