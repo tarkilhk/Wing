@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'skill_document.dart';
+import 'source_language.dart';
 
 import '../models/chat_output.dart';
 import '../services/web_preview.dart' show externalWebLink;
@@ -53,10 +54,12 @@ final class ToolDetailBlock {
     this.role = ToolDetailRole.text,
     this.exactCopyText,
     this.showEmpty = false,
+    this.language,
   });
 
   final String label;
   final String text;
+  final String? language;
   final ToolDetailFormat format;
   final bool markdown;
   final Uri? link;
@@ -231,6 +234,7 @@ final class _ToolProjection {
     List<String> facts = const [],
     String? target,
     String? exactCopyText,
+    String? language,
   }) {
     if (value is! String) return;
     request.add(
@@ -245,6 +249,7 @@ final class _ToolProjection {
         facts: facts,
         resourceTarget: target,
         exactCopyText: exactCopyText,
+        language: language,
       ),
     );
   }
@@ -262,6 +267,7 @@ final class _ToolProjection {
     bool numberedLines = false,
     bool secondary = false,
     String? exactCopyText,
+    String? language,
   }) {
     if (value is! String || value.trim().isEmpty) return;
     response.add(
@@ -278,6 +284,7 @@ final class _ToolProjection {
         numberedLines: numberedLines,
         secondary: secondary,
         exactCopyText: exactCopyText,
+        language: language,
       ),
     );
   }

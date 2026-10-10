@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../services/completion_diagnostics.dart';
 import '../theme/wing_theme.dart';
+import 'source_code_text.dart';
 
 /// Selectable source with copy and wrap controls and an optional header action.
 ///
@@ -12,12 +13,14 @@ class SourceCodeBlock extends StatefulWidget {
   final String code;
   final String? language;
   final Widget? headerAction;
+  final bool highlightingEnabled;
 
   const SourceCodeBlock({
     super.key,
     required this.code,
     this.language,
     required this.headerAction,
+    this.highlightingEnabled = true,
   });
 
   @override
@@ -26,6 +29,7 @@ class SourceCodeBlock extends StatefulWidget {
 
 class _SourceCodeBlockState extends State<SourceCodeBlock> {
   bool _wrap = false;
+  final _sourceKey = GlobalKey();
 
   @override
   void initState() {
@@ -90,27 +94,20 @@ class _SourceCodeBlockState extends State<SourceCodeBlock> {
     final background = theme.colorScheme.surfaceContainerLow;
     final header = theme.colorScheme.surfaceContainerHighest;
     final foreground = theme.colorScheme.onSurface;
+    final content = SourceCodeText(
+      key: _sourceKey,
+      highlightingEnabled: widget.highlightingEnabled,
+      text: widget.code,
+      language: widget.language,
+      style: WingTokens.of(
+        context,
+      ).typography.mono.copyWith(height: 1.45, color: foreground),
+    );
     final body = _wrap
-        ? SelectableText(
-            widget.code,
-            style: TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 13,
-              height: 1.45,
-              color: foreground,
-            ),
-          )
+        ? content
         : SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            child: SelectableText(
-              widget.code,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 13,
-                height: 1.45,
-                color: foreground,
-              ),
-            ),
+            child: content,
           );
 
     final result = Container(

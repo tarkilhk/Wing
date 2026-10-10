@@ -627,6 +627,14 @@ a failed write must not become the displayed value when the editor is reopened.
 Native preview chrome receives the active Studio palette from Flutter. Authored
 HTML, diagrams, images and video retain their content-specific appearance.
 
+Source uses `WingTokens.sourceColor` for keywords, strings, numbers, names,
+variables and comments in both themes, with Studio's existing mono typography.
+Chat code, Activity source and file previews share `SourceCodeText`. Grammar
+coloring preserves literal text, selection and copy; numbered file receipts
+retain their supplied gutter characters. Live fences color after response completion;
+large or dense source remains literal to bound added rendering work. Unlabelled text and console logs use
+the ordinary foreground. Diff and diagnostic colors keep their semantic owner.
+
 Conversation file cards put icon-only Download and Open preview actions beside
 the wrapping filename, using the download-to-tray arrow and outlined eye. Keep
 48 dp targets, accent-colored icons, tooltips and accessible action names; the

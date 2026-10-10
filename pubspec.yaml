@@ -13,6 +13,7 @@ dependencies:
   # UI
   flutter_markdown: ^0.7.6
   markdown: ^7.3.1
+  re_highlight: 0.0.3
 
   # Network
   http: ^1.2.0

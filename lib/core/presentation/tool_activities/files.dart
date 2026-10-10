@@ -41,6 +41,9 @@ void _readFile(_ToolProjection p) {
         format: ToolDetailFormat.source,
         role: ToolDetailRole.output,
         numberedLines: true,
+        language: binary || p.data['extracted_document'] == true
+            ? null
+            : sourceLanguageForPath(target),
         markdown: markdown,
         copyable: content.isNotEmpty,
       ),
@@ -108,6 +111,7 @@ void _writeFile(_ToolProjection p) {
     content,
     format: ToolDetailFormat.source,
     role: ToolDetailRole.code,
+    language: sourceLanguageForPath(_text(p.args['path'])),
     copyable: content is String && content.isNotEmpty,
   );
   if (p.data['verified'] == true && !_fileReceiptFailed(p)) {
@@ -150,6 +154,7 @@ void _patchFile(_ToolProjection p) {
         value,
         format: ToolDetailFormat.source,
         role: ToolDetailRole.code,
+        language: sourceLanguageForPath(_text(p.args['path'])),
         copyable: value is String && value.isNotEmpty,
       );
     }

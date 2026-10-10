@@ -70,6 +70,22 @@ CI runs independently. GitHub CI completion is not a prerequisite for phone
 installation. Report its status separately; published-release gates apply to
 publication.
 
+## Source code highlighting
+
+Source coloring's focused matrix is `test/source_highlighting_test.dart`, plus
+`tool_activity_execution_media_test.dart`, `tool_activity_files_test.dart`,
+`tool_activity_actions_test.dart`, `markdown_phone_content_test.dart`,
+`markdown_fence_scanner_test.dart` and `chat_outputs_screen_test.dart`.
+It checks exact selection/copy, shell/Python and supplied file languages,
+numbered multiline receipts, completion-only live coloring, worker admission and
+span bounds, unchanged span reuse/wrap retention, streamed replacement/disposal,
+both theme palettes and 390 dp/100% versus 320 dp/200% layouts. Optional
+`--dart-define=CAPTURE_SOURCE=true` writes actual renders beneath ignored
+`build/source-highlighting-review/`; supply Roboto-Regular.ttf,
+MaterialIcons-Regular.otf and DejaVuSansMono.ttf in `build/tool-fonts/`.
+Ordinary tests do not require those review fonts. See the
+[field decisions](design/activity-field-policy.md#source-coloring-10-october-2026).
+
 ## Recents conversation switching
 
 Prerequisite: at least two chats in the selected Recents filter. Open one from

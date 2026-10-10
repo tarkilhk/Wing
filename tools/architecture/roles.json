@@ -541,6 +541,16 @@
       "feature": "chat-activity",
       "library": "lib/core/presentation/skill_document.dart"
     },
+    "lib/core/presentation/source_highlighting.dart": {
+      "role": "presentation",
+      "feature": "markdown",
+      "library": "lib/core/presentation/source_highlighting.dart"
+    },
+    "lib/core/presentation/source_language.dart": {
+      "role": "presentation",
+      "feature": "markdown",
+      "library": "lib/core/presentation/source_language.dart"
+    },
     "lib/core/presentation/tool_activities/browser_web.dart": {
       "role": "presentation",
       "feature": "chat-activity",
@@ -2070,6 +2080,11 @@
       "role": "view",
       "feature": "markdown",
       "library": "lib/core/widgets/source_code_block.dart"
+    },
+    "lib/core/widgets/source_code_text.dart": {
+      "role": "view",
+      "feature": "markdown",
+      "library": "lib/core/widgets/source_code_text.dart"
     },
     "lib/core/widgets/status_transition.dart": {
       "role": "view",

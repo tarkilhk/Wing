@@ -63,6 +63,49 @@ scope; it cannot identify a file inside it. Wing keeps the exact malformed row
 Raw, qualifies unreliable context and renders valid excerpts. It does not infer
 a corrected filename/line or offer file I/O for that row.
 
+## Source coloring, 10 October 2026
+
+Inspected latest stock upstream main
+[`5ba559c9e4b1c8397df7788e319ab634144ca728`](https://github.com/NousResearch/hermes-agent/commit/5ba559c9e4b1c8397df7788e319ab634144ca728):
+`tui_gateway/tool_progress.py`, `tui_gateway/session_history.py`,
+`hermes_cli/web_routers/files.py`, `tools/code_execution_tool.py`,
+`tools/browser_use_cli.py`, `tools/terminal_tool.py` and `tools/file_tools.py`.
+Live `tool.start.args` / `tool.complete.args,result` and saved call inputs/results
+retain their existing acquisition and exact identity owners. No server change
+or new endpoint is required.
+
+| Family / received field | User value and placement | Grammar / action scope |
+| --- | --- | --- |
+| Chat fenced source / fence info | Read generated code in its existing source block | Supplied language selects a built-in grammar; exact code copy and existing wrap/preview actions |
+| `execute_code.code`, `browser_exec.code` | Reusable requested source in main Code payload | Stock schemas declare Python; exact code selection/copy and existing overflow viewer |
+| `terminal.command`, process `commandSource` | Reusable requested shell source in main Command payload | Bash coloring convention; the grammar is visual and does not assert the runtime shell/OS. Exact command selection/copy; existing overflow viewer |
+| `read_file.content` + returned/requested path | Read the received source excerpt in the existing resource frame | File extension selects grammar. Parse without stock `N\|` decoration, then restore every literal prefix for selection/copy. Binary/extracted documents have no source grammar |
+| `write_file.content`, `patch.old_string,new_string` + requested path | Read authored content / distinct Find and Replace source | Requested file extension selects grammar; exact independent copy scopes. Supplied diffs retain semantic +/- coloring |
+| `/api/fs/read-text`: `text,language` | Read actual current file preview through existing output owner | Supplied language selects grammar; stock `shell` maps to Bash source, JSX/TSX use registered grammar identifiers |
+| Console stdout/stderr, output tails, diagnostic text, unknown tool text | Read exact received evidence | No code inference from ordinary output; retain natural text and existing status/diff semantics |
+| Empty/short/overflowing/partial/failed payloads | Preserve their existing readable states and received completeness qualifiers | No new actions or frame. Syntax colors never invent success, completeness, resources or a language label |
+
+The chosen arrangement colors source inside the existing shared renderer; a
+separate editor/preview panel would duplicate framing and copy/wrap controls.
+No extra language heading or selector is introduced. Unidentified source stays
+literal. Live Markdown fences stay literal until the response finishes and the
+fence closes, avoiding grammar work and color churn during streaming.
+Tokenization runs off-thread, coalesces changing receipts and discards stale
+results. Sources over 8 Ki UTF-16 code units or 200 lines, or producing more than
+768 spans, retain full literal content without rich syntax layout. Character
+and line budgets reject work before spawning an isolate; adjacent equivalent
+tokens are coalesced. The mounted renderer reuses tokens and span trees across
+unchanged parent/selection rebuilds, refreshes colors for palette changes, and
+retains its state across wrap toggles. There is no persistent source cache.
+Palette contrast is checked against both Studio content surfaces; source colors do not replace warnings, errors or diffs.
+
+`test/source_highlighting_test.dart` covers language evidence, exact receipt bytes,
+multiline grammars, completion-only live coloring, admission/span bounds,
+streamed replacement/disposal, span reuse, theme/wrap/copy, contrast and
+chat/execution/file renders at 390 dp/100% and 320 dp/200% in both themes.
+Existing file/action/Markdown/output-viewer tests cover scoped resource controls
+and recovery. These are stock-contract fixtures, not a live server or device run.
+
 ## Execution and images
 
 Sources: [`terminal_tool.py`](https://github.com/NousResearch/hermes-agent/blob/25a71a744cb9ef06950a91638e6229b4f808d461/tools/terminal_tool.py),
