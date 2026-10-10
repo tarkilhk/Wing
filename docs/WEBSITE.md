@@ -16,10 +16,10 @@ server instructions.
 
 | Website page | Authoritative feature/setup references |
 | --- | --- |
-| `workspaces.html` | `FEATURES.md`: profiles, projects, Chats filters and drafts |
+| `workspaces.html` | `FEATURES.md`: profiles, projects and Chats filters |
 | `bots.html` | `BOTS.md`: continuing bot chats, appearance, hosted discussions and read-only screen previews |
 | `recents.html` | `FEATURES.md`: recent and ongoing chats, status filters and launcher shortcut |
-| `live-work.html` | `FEATURES.md` and `TOOL_ACTIVITY.md`: live activity, steering and tool details |
+| `live-work.html` | `FEATURES.md` and `TOOL_ACTIVITY.md`: live activity, steering, draft preservation and tool details |
 | `results.html` | `FEATURES.md`, production `ProfileMessage`, `MarkdownMessageContent` and resource viewers |
 | `health.html` | `ADMINISTRATION.md`: Host, Server and Profile checks, device alert policy, incident details, thresholds and monitoring limits |
 | `administration.html` | `ADMINISTRATION.md` and its ownership handoff: profile settings, skills and access |
@@ -88,7 +88,9 @@ The opening pairs a conversation with the expanded tool details behind it.
 Profiles, projects and Recents lead the feature story immediately afterward,
 with the open cross-profile Project selector below the switching explanation and
 a Recents card-stack capture below its switching explanation. The profiles guide
-demonstrates the profile switcher, project choices, view controls and screen navigator in their own sections.
+demonstrates the profile switcher, project choices and view controls in their own
+sections. Get connected introduces the screen navigator after the first-chat
+steps; Live work explains draft preservation beside message composition.
 Result handling shows formatting, code controls, message actions and file actions
 with the corresponding production widgets. Health and Administration each have
 their own visible screen and reader-facing guide. Analytics has its own homepage
@@ -146,16 +148,16 @@ do not repeat it merely to illustrate another sentence.
 | Page | Reader question and outcome | Wing detail to demonstrate | Further reading |
 | --- | --- | --- | --- |
 | Home | Can Wing help me run several pieces of work from my phone? | Cross-profile/project navigation, Recents, inspectable activity, reusable results, settings and analytics | Focused guides and download |
-| Profiles and projects | How do I switch agents and projects, move between screens, and keep the chat view I prefer? | One-tap profile choices, combined profile/project filters, remembered Group by/Sort by/Show details, screen navigator and retained drafts | Recents; profile settings |
-| Recents | How do I move among several conversations without losing my work? | Running/Needs input filters; two-finger switching; persistent card stack; edge cues; drafts and restored filter | Live controls; Chats organization |
+| Profiles and projects | How do I switch agents and projects and keep the chat view I prefer? | One-tap profile choices, combined profile/project filters, remembered Group by/Sort by/Show details | Recents; profile settings |
+| Recents | How do I find ongoing work and move among conversations? | Running/Needs input filters; two-finger switching; persistent card stack; edge cues and restored filter | Live controls; Chats organization |
 | Bots | How do I keep agents for different work and bring them into a shared discussion? | Continuing chats across saved connections; names, appearance and profile settings; hosted discussions with mentions | Profile settings; Recents |
-| Live work | What is the agent doing, and how can I respond or change direction? | Timeline/Tasks/Agents tabs; requests and results; steering/queueing; forking at a saved answer; editable input | Recents; using results |
+| Live work | What is the agent doing, and how can I respond or change direction? | Timeline/Tasks/Agents tabs; requests and results; steering/queueing; forking at a saved answer; editable input and retained drafts | Recents; using results |
 | Results | How do I read, reuse or export what the agent produced? | Markdown layout; separate code and message actions; file previews and Android sharing | Tool details; sending attachments |
 | Health | Where is my setup having trouble, what can I check, and when will Wing alert me? | Host/Server/Profile checks; issue bell and triggering readings; warning/recovery thresholds; active-use monitoring limits | Profile settings; connection recovery |
 | Administration | How do I change the intended agent's configuration without losing my edits? | Selected profile identity; setting search; model/skill/access controls; confirmed saves | Schedules; usage; Health |
 | Scheduled tasks | How do I arrange recurring work and see what a run returned? | Schedule editing, delivery choices, pause/run actions and recent results | Administration; result handling |
 | Usage | Which profiles and models account for my activity and tokens? | Daily activity, period/model breakdowns and clearly explained cost estimates | Model/provider settings |
-| Get connected | What do I need, how do I connect, and what if a check fails? | Install/Cloud/address choices, connection checks and specific recovery steps | Profiles/projects; Recents |
+| Get connected | What do I need, how do I connect and find my way around, and what if a check fails? | Install/Cloud/address choices, connection checks, screen navigator and specific recovery steps | Profiles/projects; Recents |
 
 | Homepage section | One message | Demonstration |
 | --- | --- | --- |
