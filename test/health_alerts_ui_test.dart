@@ -17,6 +17,7 @@ import 'package:wing/core/services/health_alert_settings_session.dart';
 import 'package:wing/core/services/health_alert_settings_store.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/wing_app_bar.dart';
+import 'package:wing/core/widgets/compact_switch.dart';
 import 'package:wing/core/widgets/health_alerts/health_alerts_scope.dart';
 import 'support/health_alerts_fixture.dart';
 
@@ -162,7 +163,9 @@ void main() {
       );
       await tester.tap(find.byTooltip('Open alert settings'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(SwitchListTile, 'Health alerts'));
+      await tester.tap(
+        find.widgetWithText(CompactSwitchListTile, 'Health alerts'),
+      );
       await tester.pump();
       expect(session.saving, isTrue);
       expect(session.value.enabled, isFalse);
@@ -178,8 +181,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<SwitchListTile>(
-              find.widgetWithText(SwitchListTile, 'Health alerts'),
+            .widget<CompactSwitchListTile>(
+              find.widgetWithText(CompactSwitchListTile, 'Health alerts'),
             )
             .value,
         isFalse,
@@ -709,7 +712,31 @@ void main() {
           expect(find.text('Unsaved changes'), findsNothing);
           expect(find.byTooltip('Save health alert settings'), findsNothing);
           expect(find.byTooltip('Reset draft'), findsNothing);
+          for (final metric in ['Memory usage', 'Disk usage', 'CPU usage']) {
+            expect(
+              tester.getSize(find.widgetWithText(ListTile, metric)).height,
+              greaterThanOrEqualTo(48),
+            );
+          }
           await shot(tester, '${brightness.name}-$scale-settings');
+          await tester.scrollUntilVisible(
+            find.text('Show a brief notice'),
+            160,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find
+                .widgetWithText(CompactSwitchListTile, 'Show a brief notice')
+                .hitTestable(),
+            findsOneWidget,
+          );
+          await shot(tester, '${brightness.name}-$scale-settings-arrival');
+          tester
+              .state<ScrollableState>(find.byType(Scrollable).first)
+              .position
+              .jumpTo(0);
+          await tester.pumpAndSettle();
           await tester.scrollUntilVisible(
             find.text('Memory usage'),
             160,
@@ -718,10 +745,9 @@ void main() {
           await tester.tap(find.text('Memory usage'));
           await tester.pumpAndSettle();
           await shot(tester, '${brightness.name}-$scale-editor');
-          const nativeMemoryLabel =
-              'Native Hermes critical pressure alert (95%)';
+          const nativeMemoryLabel = 'Native Hermes critical pressure alert';
           final nativeMemory = find.widgetWithText(
-            SwitchListTile,
+            CompactSwitchListTile,
             nativeMemoryLabel,
           );
           expect(nativeMemory, findsOneWidget);
@@ -827,6 +853,13 @@ void main() {
             fixture.settings.settings.rules.values.first.clearBelow,
             85.25,
           );
+          expect(
+            find.descendant(
+              of: find.widgetWithText(ListTile, 'Memory usage'),
+              matching: find.text('Not watched'),
+            ),
+            findsOneWidget,
+          );
           await tester.scrollUntilVisible(
             find.text('Disk usage'),
             160,
@@ -835,8 +868,8 @@ void main() {
           await tester.tap(find.text('Disk usage'));
           await tester.pumpAndSettle();
           final nativeDisk = find.widgetWithText(
-            SwitchListTile,
-            'Native Hermes critical pressure alert (95% + low free space)',
+            CompactSwitchListTile,
+            'Native Hermes critical pressure alert',
           );
           expect(nativeDisk, findsOneWidget);
           await tester.ensureVisible(nativeDisk);
@@ -856,6 +889,10 @@ void main() {
           );
           await tester.tap(find.byTooltip('Close rule editor'));
           await tester.pumpAndSettle();
+          expect(
+            find.text('Above 90% for 2 min · native critical off'),
+            findsOneWidget,
+          );
           await tester.scrollUntilVisible(
             find.text('CPU usage'),
             160,

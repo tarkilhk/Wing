@@ -535,6 +535,10 @@ Open Menu → Hermes health → Alert settings (the outlined bell row above Host
 Settings apply on this device across active connections. RAM and disk warn
 strictly above 90% for two minutes and clear strictly below 85% for two minutes.
 CPU is off initially; its editable defaults are 95%, 80% and three minutes.
+The device-wide Health alerts switch leads the page, followed by grouped Host
+thresholds, Server & profile, and When an issue arrives controls. Host rows show
+the warning threshold and duration alongside the independent native-critical
+state; open a row for recovery limits and full trigger explanations.
 The compact editor reads “Alert after [minutes] if above [percent]” and
 “Clear after [minutes] if below [percent]”. Warning and recovery durations are
 independent, accept 1–30 minutes, and preserve decimal percentages. Existing

@@ -434,6 +434,16 @@ issue count and severity colour until recovery. See [Health alerts](ADMINISTRATI
 
 Use 16 dp page gutters, a 4 dp spacing grid, 6 dp action corners, 8 dp group/composer corners, 24-28 sp page titles, 16 sp body text and 12-13 sp metadata. Primary action paint can be about 40 dp high inside a minimum 48 dp touch area. Text scaling must allow rows and controls to grow. Keep established compact activity density; improve touch areas without adding visible card padding.
 
+Alert settings leads with the device-wide master switch and a quiet monitoring
+note. Use consistent compact groups for Host thresholds, Server & profile, and
+When an issue arrives, with subordinate section labels and 12 dp row insets.
+Host summaries show the warning threshold/duration and native-critical state;
+recovery settings and fixed trigger explanations belong in the editor. Use
+shared compact switches throughout the screen and its editors. Native-critical
+labels omit parenthetical thresholds, and the overview omits the repeated
+immediate-alert caption. Rows retain at least 48 dp touch targets and grow with
+text instead of clipping.
+
 The owner's 7 October density refinement makes compact spacing a requirement
 throughout Studio. Avoid generous empty space, oversized card padding, tall
 passive rows and separate lines for facts that fit together legibly. Use 8–12 dp

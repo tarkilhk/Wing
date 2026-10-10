@@ -19,10 +19,22 @@ String healthAlertMetricLabel(HostMetric metric) => switch (metric) {
   _ => 'CPU usage',
 };
 
+String healthAlertRuleSummary(HostMetric metric, HealthAlertRule rule) {
+  if (!rule.enabled) {
+    return rule.nativeCriticalEnabled
+        ? 'Native critical alerts only'
+        : 'Not watched';
+  }
+  final warning =
+      'Above ${healthAlertPercentage(rule.warnAbove)}% for ${rule.alertMinutes} min';
+  return healthAlertNativeCriticalLabel(metric) == null
+      ? warning
+      : '$warning · native critical ${rule.nativeCriticalEnabled ? 'on' : 'off'}';
+}
+
 String? healthAlertNativeCriticalLabel(HostMetric metric) => switch (metric) {
-  HostMetric.memoryUsedPercent => 'Native Hermes critical pressure alert (95%)',
-  HostMetric.diskUsedPercent =>
-    'Native Hermes critical pressure alert (95% + low free space)',
+  HostMetric.memoryUsedPercent ||
+  HostMetric.diskUsedPercent => 'Native Hermes critical pressure alert',
   _ => null,
 };
 

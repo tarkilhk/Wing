@@ -3,6 +3,8 @@ import '../models/health_alert.dart';
 import '../models/host_thresholds.dart';
 import '../presentation/health_alert_presentation.dart';
 import '../services/health_alert_settings_session.dart';
+import '../theme/wing_theme.dart';
+import '../widgets/compact_switch.dart';
 import '../widgets/wing_app_bar.dart';
 import '../widgets/studio_error.dart';
 import 'administration/admin_widgets.dart';
@@ -23,108 +25,140 @@ class HealthAlertSettingsScreen extends StatelessWidget {
           leading: const BackButton(),
         ),
         body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          padding: const EdgeInsets.fromLTRB(
+            WingSpacing.lg,
+            WingSpacing.sm,
+            WingSpacing.lg,
+            WingSpacing.xl,
+          ),
           children: [
-            const Text('This device', style: TextStyle(fontSize: 12)),
-            const SizedBox(height: 8),
-            const Text(
-              'Warn about problems that may affect Hermes. Checks run while Wing is open or monitoring work.',
-            ),
-            _SaveError(session: session),
-            _toggle(
-              'Health alerts',
-              'Applies to active connections on this device.',
-              settings.enabled,
-              (value) =>
-                  session.update((current) => current.copyWith(enabled: value)),
-            ),
-            const Text('Host thresholds'),
             AdminGroup(
               children: [
-                for (final metric in hostAlertMetrics)
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                    minVerticalPadding: 4,
-                    leading: Icon(switch (metric) {
-                      HostMetric.memoryUsedPercent => Icons.memory,
-                      HostMetric.diskUsedPercent => Icons.storage_outlined,
-                      _ => Icons.developer_board_outlined,
-                    }),
-                    title: Text(healthAlertMetricLabel(metric)),
-                    subtitle: Text(
-                      settings.rules[metric]!.enabled
-                          ? 'Alert after ${settings.rules[metric]!.alertMinutes} min · clear below ${healthAlertPercentage(settings.rules[metric]!.clearBelow)}% after ${settings.rules[metric]!.clearMinutes} min'
-                          : settings.rules[metric]!.nativeCriticalEnabled
-                          ? 'Native critical pressure only'
-                          : 'Not watched',
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (settings.rules[metric]!.enabled)
-                          Text(
-                            '${healthAlertPercentage(settings.rules[metric]!.warnAbove)}%',
-                          ),
-                        const Icon(Icons.chevron_right, size: 18),
-                      ],
-                    ),
-                    onTap: () => showDialog<void>(
-                      context: context,
-                      builder: (_) =>
-                          _RuleEditor(metric: metric, session: session),
-                    ),
+                _toggle(
+                  'Health alerts',
+                  'All active connections on this device.',
+                  settings.enabled,
+                  (value) => session.update(
+                    (current) => current.copyWith(enabled: value),
                   ),
+                ),
               ],
             ),
-            const Text(
-              'Native critical pressure alerts immediately when enabled.',
-            ),
-            const SizedBox(height: 16),
-            const Text('Server & profile'),
-            _toggle(
-              'Server problems',
-              'Observed connection failures.',
-              settings.server,
-              (value) =>
-                  session.update((current) => current.copyWith(server: value)),
-            ),
-            _toggle(
-              'Profile problems',
-              'Observed access, connector or task failures.',
-              settings.profile,
-              (value) =>
-                  session.update((current) => current.copyWith(profile: value)),
-            ),
-            const SizedBox(height: 16),
-            const Text('When an issue arrives'),
-            _toggle(
-              'Animate the bell',
-              'Ring once for a new issue or escalation.',
-              settings.animateBell,
-              (value) => session.update(
-                (current) => current.copyWith(animateBell: value),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                WingSpacing.md,
+                WingSpacing.sm,
+                WingSpacing.md,
+                0,
+              ),
+              child: Text(
+                'Checks run while Wing is open or monitoring work.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: WingTokens.of(context).muted,
+                ),
               ),
             ),
-            _toggle(
-              'Show a brief notice',
-              'Keep working; tap the bell for details.',
-              settings.showNotice,
-              (value) => session.update(
-                (current) => current.copyWith(showNotice: value),
+            _SaveError(session: session),
+            _section(context, 'Host thresholds', [
+              for (final metric in hostAlertMetrics)
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: WingSpacing.md,
+                  ),
+                  minTileHeight: 56,
+                  visualDensity: VisualDensity.standard,
+                  minVerticalPadding: WingSpacing.sm,
+                  horizontalTitleGap: WingSpacing.md,
+                  leading: Icon(switch (metric) {
+                    HostMetric.memoryUsedPercent => Icons.memory,
+                    HostMetric.diskUsedPercent => Icons.storage_outlined,
+                    _ => Icons.developer_board_outlined,
+                  }, size: 20),
+                  title: Text(healthAlertMetricLabel(metric)),
+                  subtitle: Text(
+                    healthAlertRuleSummary(metric, settings.rules[metric]!),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, size: 18),
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (_) =>
+                        _RuleEditor(metric: metric, session: session),
+                  ),
+                ),
+            ]),
+            _section(context, 'Server & profile', [
+              _toggle(
+                'Server problems',
+                'Connection failures.',
+                settings.server,
+                (value) => session.update(
+                  (current) => current.copyWith(server: value),
+                ),
               ),
-            ),
+              _toggle(
+                'Profile problems',
+                'Access, connector or task failures.',
+                settings.profile,
+                (value) => session.update(
+                  (current) => current.copyWith(profile: value),
+                ),
+              ),
+            ]),
+            _section(context, 'When an issue arrives', [
+              _toggle(
+                'Animate the bell',
+                'Once for a new issue or escalation.',
+                settings.animateBell,
+                (value) => session.update(
+                  (current) => current.copyWith(animateBell: value),
+                ),
+              ),
+              _toggle(
+                'Show a brief notice',
+                'Tap the bell for details.',
+                settings.showNotice,
+                (value) => session.update(
+                  (current) => current.copyWith(showNotice: value),
+                ),
+              ),
+            ]),
           ],
         ),
       );
     },
   );
+  Widget _section(BuildContext context, String title, List<Widget> children) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              WingSpacing.md,
+              WingSpacing.lg,
+              WingSpacing.md,
+              WingSpacing.sm,
+            ),
+            child: Semantics(
+              header: true,
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: WingTokens.of(context).muted,
+                ),
+              ),
+            ),
+          ),
+          AdminGroup(children: children),
+        ],
+      );
+
   Widget _toggle(
     String title,
     String subtitle,
     bool value,
     ValueChanged<bool> choose,
-  ) => SwitchListTile(
-    contentPadding: EdgeInsets.zero,
+  ) => CompactSwitchListTile(
+    contentPadding: const EdgeInsets.symmetric(horizontal: WingSpacing.md),
     title: Text(title),
     subtitle: Text(subtitle),
     value: value,
@@ -244,14 +278,15 @@ class _RuleEditorState extends State<_RuleEditor> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _row(
-                      'Usage warning',
-                      Switch(
-                        value: _rule.enabled,
-                        onChanged: (value) => widget.session.updateRule(
-                          widget.metric,
-                          (current) => current.copyWith(enabled: value),
-                        ),
+                    CompactSwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: WingSpacing.md,
+                      ),
+                      title: const Text('Usage warning'),
+                      value: _rule.enabled,
+                      onChanged: (value) => widget.session.updateRule(
+                        widget.metric,
+                        (current) => current.copyWith(enabled: value),
                       ),
                     ),
                     _condition(
@@ -272,7 +307,7 @@ class _RuleEditorState extends State<_RuleEditor> {
                         case final label?) ...[
                       const SizedBox(height: 8),
                       const Divider(height: 1),
-                      SwitchListTile(
+                      CompactSwitchListTile(
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 12,
                         ),
@@ -410,27 +445,6 @@ class _RuleEditorState extends State<_RuleEditor> {
     );
   }
 
-  Widget _row(String label, Widget control) => ConstrainedBox(
-    constraints: const BoxConstraints(minHeight: 48),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Expanded(child: Text(label)),
-          const SizedBox(width: 8),
-          Semantics(
-            label: '${healthAlertMetricLabel(widget.metric)} $label',
-            child: SizedBox(
-              width: MediaQuery.textScalerOf(context).scale(16) >= 24
-                  ? 132
-                  : 112,
-              child: control,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
   @override
   void dispose() {
     _warn.dispose();

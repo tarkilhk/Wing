@@ -19,6 +19,7 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/core/widgets/compact_switch.dart';
 import 'package:wing/core/widgets/health_alerts/health_alerts_scope.dart';
 import 'package:wing/main.dart';
 
@@ -542,8 +543,8 @@ void main() {
       observations.memoryCritical = false;
       await observations.owner.hostResources().refresh();
       final nativeMemory = find.widgetWithText(
-        SwitchListTile,
-        'Native Hermes critical pressure alert (95%)',
+        CompactSwitchListTile,
+        'Native Hermes critical pressure alert',
       );
       await tester.ensureVisible(nativeMemory);
       await tester.tap(nativeMemory);
