@@ -93,7 +93,8 @@ Result handling shows formatting, code controls, message actions and file action
 with the corresponding production widgets. Health and Administration each have
 their own visible screen and reader-facing guide. Analytics has its own homepage
 section with the activity grid, model breakdown and token trends.
-Bots and hosted discussions have their own homepage section and guide. Health
+The homepage shows the cross-connection Bots roster and appearance editor;
+hosted discussions are explained in the Bots guide. Health
 includes alerts: its overview shows Alert settings, and its guide demonstrates
 host, backend and profile alert controls and notification details in three short sections. Monitoring limits stay beside the alert settings.
 The workflow explorer stays focused on following work and steering a conversation.
@@ -159,8 +160,8 @@ do not repeat it merely to illustrate another sentence.
 | Homepage section | One message | Demonstration |
 | --- | --- | --- |
 | Opening | Wing is the Android client for your Hermes setup | Actual conversation and expanded tool output |
-| Profiles/projects and Recents | Switch profiles and projects, keep the preferred view and return to work without losing drafts | Switching text followed by the cross-profile Project selector; Recents text followed by Recents |
-| Bots and discussions | Return to each agent or bring several into one server-hosted discussion | Roster with distinct appearance and status; populated shared discussion |
+| Profiles/projects and Recents | Switch profiles and projects, keep the preferred view and move between ongoing conversations | Switching text followed by the cross-profile Project selector; Recents text followed by its card stack |
+| Bots | Find agents across connections, return to their conversations and tell them apart | Roster with pins and work status; appearance editor. Hermes discussion mechanics stay in the guide. |
 | Follow and steer | Inspect work before deciding whether to correct, queue or stop it | Activity with all three tabs on Timeline; held composer controls |
 | Markdown/code/files | Read and reuse the exact part of an answer you need | Formatted reply; code controls; message actions; file actions, each after its own text |
 | Health | Check the host, backend and profiles, then set alerts and inspect notifications | Aligned Health overview and notification screenshots, with the active-monitoring limit and guide link last |

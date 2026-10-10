@@ -36,9 +36,9 @@ Find running chats and conversations waiting for your input across profiles. In 
 
 [Explore Recents and gestures](https://tarkilhk.github.io/Wing/recents.html)
 
-## Bots and group discussions
+## Manage your bots
 
-Keep a continuing chat with each bot across your saved connections. Pin favorites, personalize their appearance, or bring 2–6 bots from one connection into a hosted discussion with mentions and shared replies.
+Find bots across your saved connections and return to each bot's continuing chat. Pin the bots you use most, filter by Working or Needs input, and give each one a distinct name and appearance.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/bots.html">
@@ -46,7 +46,7 @@ Keep a continuing chat with each bot across your saved connections. Pin favorite
   </a>
 </p>
 
-[Explore bots and discussions](https://tarkilhk.github.io/Wing/bots.html)
+[Explore Bots](https://tarkilhk.github.io/Wing/bots.html)
 
 ## Live work
 
