@@ -277,6 +277,10 @@ Run `health_alerts_test.dart`, `health_alerts_ui_test.dart` and
 `studio_selection_test.dart`; `CAPTURE_ALERTS=true` with `CAPTURE_ALERT_DIR` exports
 memory/disk editor renders in both themes at normal and enlarged text.
 
+Open global Alert settings over a saved conversation. Switch away long enough
+for Android to block background access and exhaust connection retries, then return
+with the server reachable: recovery starts without leaving settings, the saved
+draft remains, and no connection health notice or bell issue should appear.
 Switch away and return while the network wakes or automatic retries are active:
 no connection health notice or bell issue should appear. Exhaust the recovery
 burst with the connection still unavailable: Wing should show “Connection needs
@@ -284,7 +288,8 @@ refresh”. Start a fresh retry or restore availability: the connection incident
 and its notice should disappear. A chat-only failure with healthy transport stays
 local to that chat. Run `server_connection_status_test.dart`,
 `profile_workspace_controller_test.dart`, `health_alerts_test.dart` and
-`health_alerts_ui_test.dart` for the controlled owner/retry/foreground regressions.
+`health_alerts_ui_test.dart` and `app_notification_routing_test.dart` for the
+controlled owner/retry/foreground regressions.
 Host tests establish event ordering under supplied failures; they do not establish
 physical-device network timing.
 

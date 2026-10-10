@@ -46,7 +46,8 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     if (_closed) return;
     _scheduleRetirement();
     final active = _controllers.values.any((owner) => owner.hasActiveChats);
-    final fingerprint = '$active:$monitoringSummary:${_controllers.values.map((owner) => '${owner.connectionIdentity}:${owner.initialized}:${owner.hasMountedRoutes}').join('|')}';
+    final fingerprint =
+        '$active:$monitoringSummary:${_controllers.values.map((owner) => '${owner.connectionIdentity}:${owner.initialized}:${owner.hasMountedRoutes}').join('|')}';
     if (_monitoringFingerprint == fingerprint) return;
     _monitoringFingerprint = fingerprint;
     _hasActiveChats = active;
@@ -170,14 +171,19 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     }
   }
 
-  void recoverConnections() {
+  void recoverConnections() => _resumeConnections(networkChanged: true);
+
+  /// Foreground entry retries unavailable connections without replacing live ones.
+  void resumeConnections() => _resumeConnections(networkChanged: false);
+
+  void _resumeConnections({required bool networkChanged}) {
     if (_closed) return;
     _retireSettledOwners();
     for (final owner in _controllers.values) {
       if (owner.initialized ||
           owner.recovering ||
           owner.notificationChat != null) {
-        owner.resumeConnection(networkChanged: true);
+        unawaited(owner.resumeConnection(networkChanged: networkChanged));
       }
     }
   }

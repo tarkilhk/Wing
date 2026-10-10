@@ -593,6 +593,10 @@ recovery. “Connection needs refresh” appears only when every active recovery
 stopped and a failed recovery left the connection unavailable, requiring a manual
 refresh. This includes exhausted startup retries and failures that cannot be
 retried automatically, such as rejected sign-in or certificate verification.
+Application foreground entry starts a fresh connection recovery before admitting
+health alerts, including while global Alert settings covers the workspace. Android
+can block idle background connections; exhausted retries during that suspension
+do not justify a new manual-refresh notice before foreground recovery runs.
 Starting another recovery burst or restoring connection availability removes the
 incident. A chat-only failure on a healthy connection does not create a global
 connection notice or turn a later transient interruption into one.
@@ -648,7 +652,10 @@ protects the specific validation message, retention of the saved rule and persis
 after correction; static checks cannot establish this input/error/save journey.
 `server_connection_status_test.dart`
 and `profile_workspace_controller_test.dart` cover multiple recovery owners,
-stale chat failures, exhausted startup/live retries and refresh recovery. These
+stale chat failures, exhausted startup/live retries and refresh recovery.
+`app_notification_routing_test.dart` covers app foreground recovery beneath global
+Alert settings, admission before notices, preserved drafts and genuine continuing
+outages. These
 are behavioral guards: a static source rule cannot establish retry completion or
 the ordering of transport loss, foreground return and recovery publication.
 Layout depends on rendered metrics,

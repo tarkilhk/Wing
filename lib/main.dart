@@ -338,6 +338,10 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Admit recovery before alerts inspect failures retained during suspension.
+      _profileControllers.resumeConnections();
+    }
     _healthAlerts.setForeground(state == AppLifecycleState.resumed);
     if (state == AppLifecycleState.resumed) {
       unawaited(_chatNotices.applicationResumed());

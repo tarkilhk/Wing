@@ -1,3 +1,8 @@
+import 'dart:io';
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/screens/health_alert_settings_screen.dart';
+import 'package:wing/core/widgets/health_alerts/health_alerts_scope.dart';
+import 'support/host_resources_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -160,6 +165,142 @@ Future<void> _pumpNavigation(WidgetTester tester) async {
 const _nativeNotifications = MethodChannel(NativeNotificationSink.channelName);
 
 void main() {
+  for (final serverRecovers in [true, false]) {
+    testWidgets(
+      'app foreground recovers beneath global alert settings: serverRecovers=$serverRecovers',
+      (tester) async {
+        final harness = await _harness();
+        harness.host.running = false;
+        final resources = HostResourcesFixture(identity: harness.identity);
+        final repository = AdministrationRepository(
+          connectionId: harness.connection.id,
+          connectionIdentity: harness.identity,
+          connectionLabel: harness.connection.label,
+          request: resources.server.request,
+          settingsWrite: resources.server.settingsWrite,
+          ownedMutation: resources.server.ownedMutation,
+          gateway: (name) => harness.host.gateway(
+            WorkspaceScope(
+              connectionId: harness.connection.id,
+              connectionIdentity: harness.identity,
+              profileName: name,
+            ),
+          ),
+        );
+        harness.controller.hostResources(repository: repository);
+        addTearDown(resources.server.close);
+        final app = await _pumpApp(tester, harness);
+        await app.currentState!.openProfileNotification(_payload(harness, 'a'));
+        await _pumpNavigation(tester);
+        final chat = harness.controller.current!.chat!;
+        await harness.controller.updateDraft(chat, 'Keep the unsent follow-up');
+        final context = tester.element(find.byType(ProfileWorkspaceScreen));
+        final alerts = HealthAlertsScope.maybeOf(context)!.alerts;
+        await alerts.settings.update(
+          (policy) => policy.copyWith(profile: false),
+        );
+        unawaited(
+          Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) =>
+                  HealthAlertSettingsScreen(session: alerts.settings),
+            ),
+          ),
+        );
+        await _pumpNavigation(tester);
+        expect(find.byType(HealthAlertSettingsScreen), findsOneWidget);
+        final healthyDisconnects = harness.host.disconnectCalls;
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        expect(harness.host.disconnectCalls, healthyDisconnects);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        harness.host.connectError = const SocketException(
+          'Android APP_BACKGROUND',
+        );
+        harness.host.gateways['a']!.onConnectionChanged!(false);
+        for (final seconds in [1, 2, 4, 8, 16]) {
+          await tester.pump(Duration(seconds: seconds));
+        }
+        expect(
+          harness.controller.connectionStatus.requiresManualRefresh,
+          isTrue,
+        );
+        expect(alerts.alerts, isEmpty);
+        final attempts = harness.host.connectCalls;
+        final gate = Completer<void>();
+        harness.host.connectDelay = gate;
+        if (serverRecovers) harness.host.connectError = null;
+        addTearDown(() {
+          if (!gate.isCompleted) gate.complete();
+        });
+        final notices = <String>[];
+        void observe() =>
+            notices.addAll(alerts.alerts.map((alert) => alert.title));
+        alerts.addListener(observe);
+        addTearDown(() => alerts.removeListener(observe));
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        expect(notices, isNot(contains('Connection needs refresh')));
+        expect(harness.host.connectCalls, attempts + 1);
+        expect(
+          harness.controller.connectionStatus.requiresManualRefresh,
+          isFalse,
+        );
+        gate.complete();
+        await tester.pump();
+        for (
+          var i = 0;
+          i < 100 && serverRecovers && harness.controller.recovering;
+          i++
+        ) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        if (serverRecovers) {
+          expect(harness.controller.recovering, isFalse);
+          expect(
+            harness.controller.connectionStatus.liveAvailable('a'),
+            isTrue,
+          );
+          expect(alerts.alerts, isEmpty);
+        } else {
+          for (final seconds in [1, 2, 4, 8, 16]) {
+            await tester.pump(Duration(seconds: seconds));
+          }
+          expect(
+            harness.controller.connectionStatus.requiresManualRefresh,
+            isTrue,
+          );
+          expect(notices, contains('Connection needs refresh'));
+        }
+        expect(chat.composer.observation.text, 'Keep the unsent follow-up');
+        expect(
+          harness.host.calls.where((call) => call.$2 == 'prompt.submit'),
+          isEmpty,
+        );
+        expect(find.byType(HealthAlertSettingsScreen), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   for (final scenario in [
     'once',
     'cached-once',
