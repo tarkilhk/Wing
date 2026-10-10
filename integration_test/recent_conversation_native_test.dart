@@ -493,7 +493,9 @@ void main() {
           addTearDown(() async {
             if (await file.exists()) await file.delete();
           });
-          await first.composer.addFile(file.path, 'recents-qa.txt');
+          await first.composer.addFiles([
+            (path: file.path, name: 'recents-qa.txt'),
+          ]);
           await controller.updateDraft(first, 'Draft_');
           await tester.pumpAndSettle();
           await _native(

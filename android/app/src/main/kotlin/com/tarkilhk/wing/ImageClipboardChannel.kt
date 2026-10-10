@@ -61,7 +61,7 @@ class ImageClipboardChannel(messenger: BinaryMessenger, activity: Activity) {
                     error is CancellationException ->
                         "Clipboard reading was cancelled or took too long. Copy the image again."
                     error.message == "too_large" ->
-                        "The clipboard image exceeds the 64 MiB draft budget."
+                        "The clipboard image exceeds the 64 MiB image input limit."
                     else ->
                         "Unable to read the clipboard image. Copy a JPEG, PNG, or WebP image again."
                 }

@@ -422,7 +422,9 @@ void main() {
       expect(chat.composer.observation.saving, isTrue);
       await controller.updateDraft(chat, 'Newer typing');
       await expectLater(
-        controller.addAttachment(chat, newerFile.cachedPath, newerFile.name),
+        controller.addAttachments(chat, [
+          (path: newerFile.cachedPath, name: newerFile.name),
+        ]),
         throwsStateError,
       );
       expect(await File(newerFile.cachedPath).exists(), isTrue);

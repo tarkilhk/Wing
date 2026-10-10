@@ -232,7 +232,9 @@ void main() {
     addTearDown(() async {
       if (await source.exists()) await source.delete();
     });
-    await harness.controller.addAttachment(original, source.path, fileName);
+    await harness.controller.addAttachments(original, [
+      (path: source.path, name: fileName),
+    ]);
     final staged = File(
       (await readComposerFixture(
         chat: original,

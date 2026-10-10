@@ -110,7 +110,7 @@ void main() {
       ),
     );
     final tile = find.byKey(const ValueKey('composer-image-thumbnail'));
-    expect(tester.getSize(tile), const Size(84, 84));
+    expect(tester.getSize(tile), const Size(96, 96));
     final preview = tester.widget<Image>(
       find.descendant(of: tile, matching: find.byType(Image)),
     );
@@ -273,7 +273,7 @@ void main() {
       );
       expect(
         tester.getSize(find.byKey(const ValueKey('composer-image-thumbnail'))),
-        const Size(84, 84),
+        const Size(96, 96),
       );
       expect(find.byTooltip('Upload failed'), findsOneWidget);
       await tester.tap(find.byTooltip('Remove Preview image'));

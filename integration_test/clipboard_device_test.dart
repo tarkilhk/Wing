@@ -104,11 +104,9 @@ void main() {
         preferences: fixturePreferences,
       ))!.attachments.single;
       expect(pasted.sanitized, isTrue);
-      await controller.addAttachment(
-        chat,
-        pasted.cachedPath,
-        'Selected photo.png',
-      );
+      await controller.addAttachments(chat, [
+        (path: pasted.cachedPath, name: 'Selected photo.png'),
+      ]);
       await tester.pumpAndSettle();
       final thumbnails = find.byKey(const ValueKey('composer-image-thumbnail'));
       expect(thumbnails, findsNWidgets(2));

@@ -10,10 +10,10 @@ import 'attachment_image_preflight.dart';
 import 'attachment_image_worker.dart';
 
 /// Maximum number of mixed image/file drafts in a Remote Gateway composer.
-const maxRemoteAttachmentDrafts = 10;
+const maxRemoteAttachmentDrafts = 40;
 
-/// Aggregate Remote Gateway draft budget: exactly 64 MiB (67,108,864 bytes).
-const maxRemoteAttachmentDraftBytes = 64 * 1024 * 1024;
+/// Aggregate Remote Gateway draft budget: exactly 128 MiB (134,217,728 bytes).
+const maxRemoteAttachmentDraftBytes = 128 * 1024 * 1024;
 
 /// Existing per-item limit for generic files: exactly 16 MiB.
 const maxGenericAttachmentBytes = 16 * 1024 * 1024;
@@ -342,13 +342,13 @@ class AttachmentDraftService {
     final snapshot = drafts.toList(growable: false);
     if (snapshot.length > maxRemoteAttachmentDrafts) {
       throw const AttachmentDraftException(
-        'You can attach up to 10 items to one Remote Gateway draft.',
+        'You can attach up to 40 items to one Remote Gateway draft.',
       );
     }
     final total = snapshot.fold<int>(0, (sum, draft) => sum + draft.byteLength);
     if (total > maxRemoteAttachmentDraftBytes) {
       throw const AttachmentDraftException(
-        'Attachments are limited to 64 MiB total per draft.',
+        'Attachments are limited to 128 MiB total per draft.',
       );
     }
     for (final draft in snapshot) {
@@ -670,7 +670,7 @@ class AttachmentDraftService {
   void _ensureRemoteSlot(Iterable<AttachmentDraft> drafts) {
     if (drafts.length >= maxRemoteAttachmentDrafts) {
       throw const AttachmentDraftException(
-        'You can attach up to 10 items to one Remote Gateway draft.',
+        'You can attach up to 40 items to one Remote Gateway draft.',
       );
     }
   }
@@ -682,7 +682,7 @@ class AttachmentDraftService {
     final current = drafts.fold<int>(0, (sum, draft) => sum + draft.byteLength);
     if (current + candidateBytes > maxRemoteAttachmentDraftBytes) {
       throw const AttachmentDraftException(
-        'Attachments are limited to 64 MiB total per draft.',
+        'Attachments are limited to 128 MiB total per draft.',
       );
     }
   }

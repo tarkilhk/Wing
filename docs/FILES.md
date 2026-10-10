@@ -4,7 +4,9 @@
 
 In the composer, choose **Camera**, **Photos** or **Files**. You can also share text, a link, an image or a file from another Android app into Wing. Incoming shares open a review so you can choose the connection, profile and chat. Nothing is sent until you tap **Send** in the chat.
 
-A draft can hold up to **10 attachments** and **64 MiB** in total. Generic files are limited to **16 MiB each**. Wing shows an error if a selection is too large; your Hermes server or provider may have a smaller limit.
+With **Photos** or **Files**, select several items in the picker and confirm to add them together. Tap an image thumbnail in the draft to open a full-screen preview; pinch to zoom, then go back to continue composing. The × removes that attachment.
+
+A draft can hold up to **40 attachments** and **128 MiB** in total. Generic files are limited to **16 MiB each**. Wing shows an error if a selection is too large and keeps your existing draft; your Hermes server or provider may have a smaller limit.
 
 If Wing cannot prepare a selected photo, it shows the reason and keeps your existing draft. Choose a JPEG, PNG or WebP image within the processing limits and try again.
 

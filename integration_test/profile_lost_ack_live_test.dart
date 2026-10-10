@@ -219,7 +219,9 @@ void main() {
       addTearDown(() async {
         if (await source.exists()) await source.delete();
       });
-      await controller.addAttachment(chat, source.path, '$nonce.txt');
+      await controller.addAttachments(chat, [
+        (path: source.path, name: '$nonce.txt'),
+      ]);
       chat.composer.editText(
         'Attachment transport check $nonce. Reply exactly ACK_$nonce. Do not '
         'use tools or perform any other work.',

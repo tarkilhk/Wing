@@ -44,6 +44,7 @@ import '../widgets/image_paste_menu.dart';
 import '../models/composer_action.dart';
 import '../widgets/composer_action_button.dart';
 import '../widgets/composer_attachment_tile.dart';
+import '../widgets/chat_image_preview.dart';
 import '../presentation/attachment_preview_image.dart';
 import '../services/owned_remote_files.dart';
 import '../widgets/profile_message.dart';
@@ -2050,6 +2051,34 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                       ),
                                                     )
                                                   : null,
+                                              onPreview: file.isImage
+                                                  ? () => _run(() async {
+                                                      final bytes = await chat
+                                                          .composer
+                                                          .preview(file.id)
+                                                          .readBytes();
+                                                      if (!context.mounted ||
+                                                          (controller.notificationChat ??
+                                                                  controller
+                                                                      .current
+                                                                      ?.chat) !=
+                                                              chat) {
+                                                        return;
+                                                      }
+                                                      await Navigator.of(
+                                                        context,
+                                                      ).push<void>(
+                                                        MaterialPageRoute(
+                                                          builder: (_) =>
+                                                              ChatImagePreview(
+                                                                bytes: bytes,
+                                                                title:
+                                                                    file.name,
+                                                              ),
+                                                        ),
+                                                      );
+                                                    })
+                                                  : null,
                                               onRemove:
                                                   !controller
                                                       .canRemoveAttachment(
@@ -2292,17 +2321,26 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                       _AttachmentChoice.photos
                                                   ? FileType.image
                                                   : FileType.any;
-                                              final file =
-                                                  await FilePicker.pickFile(
+                                              final files =
+                                                  await FilePicker.pickFiles(
                                                     type: type,
                                                   );
-                                              if (file?.path != null) {
-                                                await controller.addAttachment(
-                                                  chat,
-                                                  file!.path!,
-                                                  file.name,
+                                              if (files.isEmpty) return;
+                                              if (files.any(
+                                                (file) => file.path == null,
+                                              )) {
+                                                throw const AttachmentDraftException(
+                                                  'A selected file could not be opened. Select the files again.',
                                                 );
                                               }
+                                              await controller
+                                                  .addAttachments(chat, [
+                                                    for (final file in files)
+                                                      (
+                                                        path: file.path!,
+                                                        name: file.name,
+                                                      ),
+                                                  ]);
                                             }),
                                     ),
                                     ContextRing(

@@ -9,6 +9,7 @@ class ComposerAttachmentTile extends StatelessWidget {
   final String? error;
   final AttachmentDraftKind kind;
   final ImageProvider? previewImage;
+  final VoidCallback? onPreview;
   final VoidCallback? onRemove;
 
   const ComposerAttachmentTile({
@@ -17,6 +18,7 @@ class ComposerAttachmentTile extends StatelessWidget {
     required this.kind,
     required this.previewImage,
     this.error,
+    this.onPreview,
     this.onRemove,
   }) : assert(kind != AttachmentDraftKind.image || previewImage != null);
 
@@ -43,20 +45,30 @@ class ComposerAttachmentTile extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return SizedBox(
       key: const ValueKey('composer-image-thumbnail'),
-      width: 84,
-      height: 84,
+      width: 96,
+      height: 96,
       child: Stack(
         fit: StackFit.expand,
         children: [
           ClipRRect(
             borderRadius: WingRadius.card,
-            child: Image(
-              image: previewImage!,
-              fit: BoxFit.cover,
-              semanticLabel: name,
-              errorBuilder: (context, error, stackTrace) => ColoredBox(
-                color: colors.surfaceContainerHighest,
-                child: const Center(child: Icon(Icons.broken_image_outlined)),
+            child: Material(
+              child: InkWell(
+                onTap: onPreview,
+                child: Tooltip(
+                  message: 'Preview $name',
+                  child: Image(
+                    image: previewImage!,
+                    fit: BoxFit.cover,
+                    semanticLabel: 'Preview $name',
+                    errorBuilder: (context, error, stackTrace) => ColoredBox(
+                      color: colors.surfaceContainerHighest,
+                      child: const Center(
+                        child: Icon(Icons.broken_image_outlined),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

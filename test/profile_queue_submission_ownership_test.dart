@@ -52,7 +52,9 @@ void main() {
         final file = await File(
           '${cache.path}/$id.png',
         ).writeAsBytes(bitmap.encodePng(bitmap.Image(width: 2, height: 2)));
-        await controller.addAttachment(chat, file.path, '$id.png');
+        await controller.addAttachments(chat, [
+          (path: file.path, name: '$id.png'),
+        ]);
         return (await readComposerFixture(
           chat: chat,
           preferences: preferences,

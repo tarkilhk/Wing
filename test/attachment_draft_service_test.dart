@@ -101,34 +101,97 @@ void main() {
       },
     );
 
-    test('accepts 10 items and rejects item 11', () {
-      final ten = List.generate(
-        maxRemoteAttachmentDrafts,
+    test('accepts 40 items and rejects item 41', () async {
+      final source = File('${sandbox.path}/item.txt');
+      await source.writeAsString('One more attachment');
+      final forty = List.generate(
+        40,
         (index) => fakeDraft(name: '$index.bin', byteLength: 1),
       );
-      expect(() => service.validateRemoteDrafts(ten), returnsNormally);
+      expect(() => service.validateRemoteDrafts(forty), returnsNormally);
       expect(
         () => service.validateRemoteDrafts([
-          ...ten,
-          fakeDraft(name: 'eleven.bin', byteLength: 1),
+          ...forty,
+          fakeDraft(name: 'overflow.bin', byteLength: 1),
         ]),
-        throwsA(isA<AttachmentDraftException>()),
+        throwsA(
+          isA<AttachmentDraftException>().having(
+            (error) => error.message,
+            'message',
+            contains('40 items'),
+          ),
+        ),
+      );
+      final last = await service.prepareGenericFile(
+        sourcePath: source.path,
+        displayName: 'item.txt',
+        existingDrafts: forty.take(39),
+      );
+      expect(last.name, 'item.txt');
+      await expectLater(
+        service.prepareGenericFile(
+          sourcePath: source.path,
+          displayName: 'item.txt',
+          existingDrafts: forty,
+        ),
+        throwsA(
+          isA<AttachmentDraftException>().having(
+            (error) => error.message,
+            'message',
+            contains('40 items'),
+          ),
+        ),
       );
     });
 
-    test('enforces the numeric 64 MiB aggregate budget', () {
-      final exact = fakeDraft(
-        name: 'exact.png',
-        byteLength: 64 * 1024 * 1024,
-        kind: AttachmentDraftKind.image,
+    test('accepts exactly 128 MiB total and rejects one additional byte', () {
+      final exact = List.generate(
+        8,
+        (index) => fakeDraft(name: '$index.bin', byteLength: 16 * 1024 * 1024),
       );
-      expect(() => service.validateRemoteDrafts([exact]), returnsNormally);
+      expect(() => service.validateRemoteDrafts(exact), returnsNormally);
       expect(
         () => service.validateRemoteDrafts([
-          exact,
+          ...exact,
           fakeDraft(name: 'overflow.bin', byteLength: 1),
         ]),
-        throwsA(isA<AttachmentDraftException>()),
+        throwsA(
+          isA<AttachmentDraftException>().having(
+            (error) => error.message,
+            'message',
+            contains('128 MiB'),
+          ),
+        ),
+      );
+    });
+
+    test('preparation accounts for the 128 MiB aggregate budget', () async {
+      final source = File('${sandbox.path}/small.txt');
+      await source.writeAsString('x');
+      final existing = [
+        for (var index = 0; index < 7; index++)
+          fakeDraft(name: '$index.bin', byteLength: 16 * 1024 * 1024),
+        fakeDraft(name: 'remaining.bin', byteLength: 16 * 1024 * 1024 - 1),
+      ];
+      final finalByte = await service.prepareGenericFile(
+        sourcePath: source.path,
+        displayName: 'small.txt',
+        existingDrafts: existing,
+      );
+      expect(finalByte.byteLength, 1);
+      await expectLater(
+        service.prepareGenericFile(
+          sourcePath: source.path,
+          displayName: 'small.txt',
+          existingDrafts: [...existing, finalByte],
+        ),
+        throwsA(
+          isA<AttachmentDraftException>().having(
+            (error) => error.message,
+            'message',
+            contains('128 MiB'),
+          ),
+        ),
       );
     });
 

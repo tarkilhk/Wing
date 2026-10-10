@@ -12,7 +12,7 @@ Cancelling keeps the share available through Home's Review control; Discard
 explicitly removes it. A failed new-chat attempt reuses the created chat on retry.
 
 Pending shares survive app restart. The queue holds up to ten shares and 128 MiB
-of files; one share allows ten files, 64 MiB of files, and 256 Ki characters of
+of files; one share allows 40 files, 128 MiB of files, and 256 Ki characters of
 text. Unreadable or oversized input fails visibly as a whole. If saving the draft
 succeeds but clearing the pending share fails, open the saved draft and discard
 the duplicate pending item from Home.

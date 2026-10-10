@@ -416,7 +416,7 @@ void main() {
         final file = await File(
           '${cache.path}/source-$name',
         ).writeAsString(name);
-        await controller.addAttachment(chat, file.path, name);
+        await controller.addAttachments(chat, [(path: file.path, name: name)]);
       }
 
       await stage('outgoing.txt');
@@ -505,11 +505,9 @@ void main() {
       final file = await File(
         '${cache.path}/source.txt',
       ).writeAsString('Requested content');
-      final preparing = controller.addAttachment(
-        chat,
-        file.path,
-        'requested.txt',
-      );
+      final preparing = controller.addAttachments(chat, [
+        (path: file.path, name: 'requested.txt'),
+      ]);
       await service.started.future;
       expect(chat.composer.observation.preparing, isTrue);
       try {

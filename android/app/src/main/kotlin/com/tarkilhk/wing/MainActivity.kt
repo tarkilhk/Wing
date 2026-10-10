@@ -34,8 +34,9 @@ class MainActivity : FlutterActivity() {
     private val intakeQueueKey = "queue"
     private val pendingCameraKey = "pending_camera"
     private val cameraRequestCode = 9301
-    private val maxSharedItems = 10
-    private val maxSharedBytes = 64L * 1024L * 1024L
+    private val maxSharedItems = 40
+    private val maxSharedBytes = 128L * 1024L * 1024L
+    private val maxCameraBytes = 64L * 1024L * 1024L
     private val maxPendingRecords = 10
     private val maxPendingBytes = 128L * 1024L * 1024L
     private val maxSharedTextChars = 256 * 1024
@@ -381,7 +382,7 @@ class MainActivity : FlutterActivity() {
         val queue = readQueue()
         pruneOrphanedIntake(queue)
         if (queue.length() >= maxPendingRecords ||
-            queueBytes(queue) > maxPendingBytes - maxSharedBytes
+            queueBytes(queue) > maxPendingBytes - maxCameraBytes
         ) {
             throw CameraCaptureException("camera_intake_full", queueFullError)
         }
@@ -529,7 +530,7 @@ class MainActivity : FlutterActivity() {
         }
         val output = File(descriptor.path)
         val length = if (output.isFile) output.length() else 0L
-        if (length <= 0L || length > maxSharedBytes) {
+        if (length <= 0L || length > maxCameraBytes) {
             writeCameraDescriptor(null)
             deleteIntakeDirectory(descriptor.id)
             throw CameraCaptureException("camera_invalid_output", invalidCameraOutputError)
@@ -681,7 +682,7 @@ class MainActivity : FlutterActivity() {
         val cameraPending = readCameraDescriptor() != null
         if (current.length() + (if (cameraPending) 1 else 0) >= maxPendingRecords ||
             queueBytes(current) + recordBytes(record) +
-            (if (cameraPending) maxSharedBytes else 0L) > maxPendingBytes) {
+            (if (cameraPending) maxCameraBytes else 0L) > maxPendingBytes) {
             throw ShareImportException(queueFullError)
         }
         val destination = File(intakeDirectory(), record.getString("id"))
@@ -1109,8 +1110,8 @@ class MainActivity : FlutterActivity() {
         private val uuidPattern = Regex(
             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
         )
-        private const val tooManyFilesError = "You can share up to 10 files at once."
-        private const val incomingTooLargeError = "Shared files are limited to 64 MiB at once."
+        private const val tooManyFilesError = "You can share up to 40 files at once."
+        private const val incomingTooLargeError = "Shared files are limited to 128 MiB at once."
         private const val queueFullError =
             "Shared draft storage is full. Add or discard a pending share first."
         private const val textTooLargeError = "Shared text is too large to import."

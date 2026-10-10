@@ -4339,10 +4339,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
   void _cancelImagePreparation(ProfileChat chat) =>
       chat.composer.cancelPreparation();
 
-  Future<void> addAttachment(ProfileChat chat, String path, String name) async {
+  Future<void> addAttachments(
+    ProfileChat chat,
+    List<({String path, String name})> files,
+  ) async {
     _commandOwner(chat);
     if (!canAddAttachment(chat)) throw StateError('Wait for the current turn');
-    await chat.composer.addFile(path, name);
+    await chat.composer.addFiles(files);
     await _drainQueuedPrompts(chat);
   }
 

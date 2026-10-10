@@ -7,6 +7,12 @@ import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:image/image.dart' as image;
+import 'package:wing/core/widgets/chat_image_preview.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +31,48 @@ import 'package:wing/core/models/profile_selection.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+const _captureAttachments = bool.fromEnvironment('CAPTURE_ATTACHMENTS');
+const _attachmentFrame = ValueKey('attachment-review-frame');
+
+Future<void> _captureAttachmentFrame(WidgetTester tester, String name) async {
+  if (!_captureAttachments) return;
+  final context = tester.element(find.byKey(_attachmentFrame));
+  var loaded = false;
+  final pending = Future.wait([
+    for (final widget in tester.widgetList<Image>(find.byType(Image)))
+      precacheImage(widget.image, context),
+  ]).then((_) => loaded = true);
+  for (var attempt = 0; attempt < 200 && !loaded; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump();
+  }
+  expect(
+    loaded,
+    isTrue,
+    reason: 'Attachment images must finish before capture',
+  );
+  await pending;
+  await tester.pumpAndSettle();
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(_attachmentFrame),
+  );
+  await tester.runAsync(() async {
+    final bitmap = await boundary.toImage();
+    try {
+      final bytes = await bitmap.toByteData(format: ui.ImageByteFormat.png);
+      final directory = Directory('build/attachments-review')
+        ..createSync(recursive: true);
+      await File(
+        '${directory.path}/$name.png',
+      ).writeAsBytes(bytes!.buffer.asUint8List());
+    } finally {
+      bitmap.dispose();
+    }
+  });
+}
 
 class DelayedAttachmentDraftService extends AttachmentDraftService {
   final Completer<void> preparationStarted = Completer<void>();
@@ -51,21 +99,22 @@ class DelayedAttachmentDraftService extends AttachmentDraftService {
 }
 
 final class PhotoFileFixture extends PlatformFile {
-  PhotoFileFixture(this.uri);
+  PhotoFileFixture(this.uri, {this.name = 'photo.jpg'});
   @override
   final Uri uri;
   @override
-  String get name => 'photo.jpg';
+  final String name;
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class PhotoPickerFixture extends FilePickerPlatform {
-  PhotoPickerFixture(this.file);
-  final PlatformFile file;
+  PhotoPickerFixture(this.files, {this.type = FileType.image});
+  final List<PlatformFile> files;
+  final FileType type;
 
   @override
-  Future<PlatformFile?> pickFile({
+  Future<List<PlatformFile>> pickFiles({
     String? dialogTitle,
     String? initialDirectory,
     FileType type = FileType.any,
@@ -78,8 +127,8 @@ class PhotoPickerFixture extends FilePickerPlatform {
     LinuxOptions linuxOptions = const LinuxOptions(),
     WebOptions webOptions = const WebOptions(),
   }) async {
-    expect(type, FileType.image);
-    return file;
+    expect(type, this.type);
+    return files;
   }
 }
 
@@ -431,16 +480,37 @@ class Host {
 }
 
 void main() {
+  setUpAll(() async {
+    if (!_captureAttachments) return;
+    for (final entry in {
+      'Roboto': 'build/studio-roboto.ttf',
+      'Ahem': 'build/studio-roboto.ttf',
+      'MaterialIcons': 'build/studio-icons.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
+    }.entries) {
+      final loader = FontLoader(entry.key)
+        ..addFont(
+          Future.value(
+            ByteData.sublistView(File(entry.value).readAsBytesSync()),
+          ),
+        );
+      await loader.load();
+    }
+  });
   late Host host;
   late ProfileWorkspaceController controller;
   late SharedPreferences preferences;
   late AppPreferences appPreferences;
   late List<ProfileSessionKey> notifications;
+  late Directory attachmentCache;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     preferences = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(preferences);
     host = Host();
+    attachmentCache = Directory.systemTemp.createTempSync(
+      'wing-controller-attachments-',
+    );
     notifications = [];
     controller = ProfileWorkspaceController(
       connectionIdentity: 'original-settings',
@@ -457,6 +527,9 @@ void main() {
       preferences: preferences,
       appPreferences: appPreferences,
       gatewayFactory: host.gateway,
+      attachmentService: AttachmentDraftService(
+        cacheDirectoryProvider: () async => attachmentCache,
+      ),
       onAttention: (notification) async => notifications.add(notification.key),
     );
     await controller.initialize();
@@ -464,6 +537,7 @@ void main() {
   tearDown(() {
     controller.dispose();
     appPreferences.dispose();
+    attachmentCache.deleteSync(recursive: true);
   });
 
   test(
@@ -1614,11 +1688,9 @@ void main() {
       }
 
       controller.addListener(observeAttachmentControls);
-      final adding = controller.addAttachment(
-        chat,
-        source.path,
-        'follow-up.txt',
-      );
+      final adding = controller.addAttachments(chat, [
+        (path: source.path, name: 'follow-up.txt'),
+      ]);
       await attachmentService.preparationStarted.future;
       final settled = Completer<void>();
       void observeSettlement() {
@@ -1690,7 +1762,9 @@ void main() {
         '${sandbox.path}${Platform.pathSeparator}original.txt',
       );
       await source.writeAsString('original file');
-      await controller.addAttachment(chat, source.path, 'original.txt');
+      await controller.addAttachments(chat, [
+        (path: source.path, name: 'original.txt'),
+      ]);
       final captured = (await readComposerFixture(
         chat: chat,
         preferences: controller.preferences,
@@ -1713,7 +1787,9 @@ void main() {
       expect(await File(captured.cachedPath).exists(), isTrue);
       final nextSource = File('${sandbox.path}/next.txt');
       await nextSource.writeAsString('Next composer file');
-      await controller.addAttachment(chat, nextSource.path, 'next.txt');
+      await controller.addAttachments(chat, [
+        (path: nextSource.path, name: 'next.txt'),
+      ]);
       final next = (await readComposerFixture(
         chat: chat,
         preferences: controller.preferences,
@@ -1775,7 +1851,9 @@ void main() {
         '${sandbox.path}${Platform.pathSeparator}existing.txt',
       );
       await existing.writeAsString('existing file');
-      await controller.addAttachment(chat, existing.path, 'existing.txt');
+      await controller.addAttachments(chat, [
+        (path: existing.path, name: 'existing.txt'),
+      ]);
       final callsBeforePickerReturn = host.calls.length;
       controller
           .browserResource(chat.key.workspace.profileName)
@@ -1784,7 +1862,9 @@ void main() {
       final picked = File('${sandbox.path}${Platform.pathSeparator}picked.txt');
       await picked.writeAsString('picked after background reconnect');
 
-      await controller.addAttachment(chat, picked.path, 'picked.txt');
+      await controller.addAttachments(chat, [
+        (path: picked.path, name: 'picked.txt'),
+      ]);
 
       expect(chat.composer.observation.text, 'Keep this next message');
       expect(chat.composer.observation.attachments.map((draft) => draft.name), [
@@ -2157,6 +2237,179 @@ void main() {
     },
   );
 
+  for (final configuration in [
+    (photos: true, brightness: Brightness.light, width: 390.0, scale: 1.0),
+    (photos: true, brightness: Brightness.dark, width: 390.0, scale: 1.0),
+    (photos: true, brightness: Brightness.light, width: 320.0, scale: 2.0),
+    (photos: true, brightness: Brightness.dark, width: 320.0, scale: 2.0),
+    (photos: false, brightness: Brightness.light, width: 390.0, scale: 1.0),
+  ]) {
+    final photos = configuration.photos;
+    final reviewName =
+        '${configuration.brightness.name}-${configuration.width.toInt()}-${configuration.scale.toInt()}';
+    testWidgets(
+      '${photos ? 'Photos' : 'Files'} selects and sends multiple attachments $reviewName',
+      (tester) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = Size(configuration.width, 850);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPhysicalSize);
+        final sandbox = Directory.systemTemp.createTempSync(
+          'wing-multi-picker-',
+        );
+        final suffix = photos ? 'png' : 'txt';
+        final sample = image.Image(width: 600, height: 900);
+        image.fill(sample, color: image.ColorRgb8(227, 239, 241));
+        image.fillRect(
+          sample,
+          x1: 50,
+          y1: 60,
+          x2: 550,
+          y2: 320,
+          color: image.ColorRgb8(39, 127, 137),
+        );
+        image.fillRect(
+          sample,
+          x1: 50,
+          y1: 360,
+          x2: 550,
+          y2: 610,
+          color: image.ColorRgb8(243, 188, 96),
+        );
+        image.fillRect(
+          sample,
+          x1: 50,
+          y1: 650,
+          x2: 550,
+          y2: 840,
+          color: image.ColorRgb8(83, 118, 161),
+        );
+        final selected = [
+          for (var index = 1; index <= 2; index++)
+            File('${sandbox.path}/item-$index.$suffix')..writeAsBytesSync(
+              photos ? image.encodePng(sample) : [65, 66, 67],
+            ),
+        ];
+        final originalPicker = FilePickerPlatform.instance;
+        FilePickerPlatform.instance = PhotoPickerFixture([
+          for (final file in selected)
+            PhotoFileFixture(file.uri, name: file.uri.pathSegments.last),
+        ], type: photos ? FileType.image : FileType.any);
+        addTearDown(() {
+          FilePickerPlatform.instance = originalPicker;
+          sandbox.deleteSync(recursive: true);
+        });
+        final chat = await controller.createChat(canDispatch: () => true);
+        await controller.updateDraft(chat, 'Read both');
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: _attachmentFrame,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(configuration.brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(configuration.scale)),
+                child: child!,
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          ),
+        );
+        await tester.tap(find.byTooltip('Attach file'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(photos ? 'Photos' : 'Files'));
+        await tester.pump();
+        for (var attempt = 0; attempt < 400; attempt++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump();
+          if (!chat.composer.observation.preparing) break;
+        }
+        expect(chat.composer.observation.preparing, isFalse);
+        expect(chat.composer.observation.attachments.map((file) => file.name), [
+          'item-1.$suffix',
+          'item-2.$suffix',
+        ]);
+        expect(chat.composer.observation.text, 'Read both');
+        expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+        final saved = await tester.runAsync(
+          () => readComposerFixture(
+            chat: chat,
+            preferences: controller.preferences,
+          ),
+        );
+        expect(saved!.attachments, hasLength(2));
+        if (photos) {
+          await _captureAttachmentFrame(tester, 'composer-$reviewName');
+          await tester.tap(find.byTooltip('Preview item-1.png'));
+          for (var attempt = 0; attempt < 200; attempt++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+            await tester.pump();
+            if (find.byType(ChatImagePreview).evaluate().isNotEmpty) break;
+          }
+          await tester.pumpAndSettle();
+          expect(find.byType(ChatImagePreview), findsOneWidget);
+          final preview = tester.widget<ChatImagePreview>(
+            find.byType(ChatImagePreview),
+          );
+          final decoded = image.decodeImage(preview.bytes!)!;
+          expect((decoded.width, decoded.height), (600, 900));
+          expect(find.byType(InteractiveViewer), findsOneWidget);
+          expect(
+            tester.getSize(find.byType(ChatImagePreview)).width,
+            configuration.width,
+          );
+          await _captureAttachmentFrame(tester, 'preview-$reviewName');
+          final viewer = find.byType(InteractiveViewer);
+          final center = tester.getCenter(viewer);
+          final left = await tester.createGesture(pointer: 1);
+          final right = await tester.createGesture(pointer: 2);
+          await left.down(center - const Offset(40, 0));
+          await right.down(center + const Offset(40, 0));
+          await tester.pump();
+          await left.moveTo(center - const Offset(90, 0));
+          await right.moveTo(center + const Offset(90, 0));
+          await tester.pump();
+          expect(
+            tester
+                .widget<Transform>(
+                  find.descendant(of: viewer, matching: find.byType(Transform)),
+                )
+                .transform
+                .getMaxScaleOnAxis(),
+            greaterThan(1),
+          );
+          await left.up();
+          await right.up();
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          expect(chat.composer.observation.attachments, hasLength(2));
+          expect(chat.composer.observation.text, 'Read both');
+        }
+        await tester.runAsync(() => controller.send(chat));
+        await tester.pump();
+        expect(
+          host.calls.where(
+            (call) =>
+                call.$2 == (photos ? 'image.attach_bytes' : 'file.attach'),
+          ),
+          hasLength(2),
+        );
+        expect(
+          host.calls.where((call) => call.$2 == 'prompt.submit'),
+          hasLength(1),
+        );
+        expect(chat.composer.observation.attachments, isEmpty);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets('photo rejection shows its reason instead of a workspace error', (
     tester,
   ) async {
@@ -2164,9 +2417,9 @@ void main() {
     final source = File('${sandbox.path}/photo.jpg')
       ..writeAsBytesSync([1, 2, 3]);
     final originalPicker = FilePickerPlatform.instance;
-    FilePickerPlatform.instance = PhotoPickerFixture(
+    FilePickerPlatform.instance = PhotoPickerFixture([
       PhotoFileFixture(source.uri),
-    );
+    ]);
     addTearDown(() {
       FilePickerPlatform.instance = originalPicker;
       sandbox.deleteSync(recursive: true);

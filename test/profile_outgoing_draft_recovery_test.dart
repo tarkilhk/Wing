@@ -247,7 +247,9 @@ void main() {
         final file = await File(
           '${sandbox.path}/failed.txt',
         ).writeAsString('Payload');
-        await controller.addAttachment(chat, file.path, 'failed.txt');
+        await controller.addAttachments(chat, [
+          (path: file.path, name: 'failed.txt'),
+        ]);
         final outgoingFile = (await saved(chat)).attachments.single;
         await controller.updateDraft(chat, '  Original outgoing  ');
         host.fileAttachStarted = Completer<void>();
@@ -289,7 +291,9 @@ void main() {
       final file = await File(
         '${sandbox.path}/accepted.txt',
       ).writeAsString('Payload');
-      await controller.addAttachment(chat, file.path, 'accepted.txt');
+      await controller.addAttachments(chat, [
+        (path: file.path, name: 'accepted.txt'),
+      ]);
       final outgoingFile = (await saved(chat)).attachments.single;
       await controller.updateDraft(chat, 'Original outgoing');
       host.promptSubmitStarted = Completer<void>();
@@ -434,7 +438,9 @@ void main() {
         final key = chat.key;
         final file = File('${sandbox.path}/note.txt');
         await file.writeAsString('Attachment contents');
-        await controller.addAttachment(chat, file.path, 'note.txt');
+        await controller.addAttachments(chat, [
+          (path: file.path, name: 'note.txt'),
+        ]);
         final attachment = (await saved(chat)).attachments.single;
         await controller.updateDraft(chat, 'Original outgoing');
         host.fileAttachStarted = Completer<void>();

@@ -108,7 +108,9 @@ void main() {
       final directory = await getTemporaryDirectory();
       final attachment = File('${directory.path}/android-qa.txt');
       await attachment.writeAsString('ANDROID_PROFILE_QA');
-      await controller.addAttachment(a, attachment.path, 'android-qa.txt');
+      await controller.addAttachments(a, [
+        (path: attachment.path, name: 'android-qa.txt'),
+      ]);
       await tester.pump();
       expect(find.text('android-qa.txt'), findsOneWidget);
       if (runModel) {

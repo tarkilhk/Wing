@@ -171,7 +171,9 @@ void main() {
         await picked.writeAsBytes(
           image.encodeJpg(image.Image(width: 4, height: 3)),
         );
-        await controller.addAttachment(chat, picked.path, 'picked.jpg');
+        await controller.addAttachments(chat, [
+          (path: picked.path, name: 'picked.jpg'),
+        ]);
       });
       await show(tester);
       final thumbnails = find.byKey(const ValueKey('composer-image-thumbnail'));

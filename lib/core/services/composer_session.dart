@@ -762,25 +762,20 @@ class ComposerSession {
     }
   }
 
-  Future<void> addFile(String path, String name) =>
-      _prepare((ensure, register) {
-        final image = RegExp(
-          r'\.(png|jpe?g|webp)$',
-          caseSensitive: false,
-        ).hasMatch(name);
-        return image
-            ? _attachments.prepareImage(
-                sourcePath: path,
-                displayName: name,
-                existingDrafts: _files,
-                onImageJob: register,
-              )
-            : _attachments.prepareGenericFile(
-                sourcePath: path,
-                displayName: name,
-                existingDrafts: _files,
-              );
-      });
+  Future<void> addFiles(List<({String path, String name})> files) =>
+      _stageFiles('', [
+        for (final file in files)
+          (
+            path: file.path,
+            name: file.name,
+            mediaType: 'application/octet-stream',
+            isImage: RegExp(
+              r'\.(png|jpe?g|webp)$',
+              caseSensitive: false,
+            ).hasMatch(file.name),
+          ),
+      ], requireUnchangedDraft: false);
+
   Future<void> pasteImage(Future<Uint8List> Function() readImage) =>
       _prepare((ensure, register) async {
         final cancelled = Completer<Uint8List>();
@@ -851,11 +846,26 @@ class ComposerSession {
     return '$current\n\n$incoming';
   }
 
-  Future<void> stageShared(AndroidSharePayload payload) async {
+  Future<void> stageShared(AndroidSharePayload payload) =>
+      _stageFiles(payload.text?.trim() ?? '', [
+        for (final file in payload.files)
+          (
+            path: file.path,
+            name: file.name,
+            mediaType: file.mediaType,
+            isImage: file.isImage,
+          ),
+      ], requireUnchangedDraft: true);
+
+  Future<void> _stageFiles(
+    String incoming,
+    List<({String path, String name, String mediaType, bool isImage})>
+    selected, {
+    required bool requireUnchangedDraft,
+  }) async {
     _ensure();
     if (!canAddAttachment) throw StateError('Wait for the current turn');
-    final incoming = payload.text?.trim() ?? '';
-    if (incoming.isEmpty && payload.files.isEmpty) return;
+    if (incoming.isEmpty && selected.isEmpty) return;
     final text = _text, revision = _revision;
     final files = List<AttachmentDraft>.of(_files);
     final queue = List<_QueueEntry>.of(_queue);
@@ -888,7 +898,7 @@ class ComposerSession {
     _preparing++;
     _changed(ComposerChange.status);
     try {
-      for (final file in payload.files) {
+      for (final file in selected) {
         ensure();
         final existing = [...files, ...staged];
         final value = file.isImage
@@ -909,17 +919,22 @@ class ComposerSession {
       }
       _attachments.validateRemoteDrafts([...files, ...staged]);
       if (_saving ||
-          _draining ||
-          revision != _revision ||
-          paused != _paused ||
-          uncertain != _uncertain ||
-          !_same(_queue, queue)) {
+          _submissions.values.any((work) => work.consume) ||
+          !_same(_files, files) ||
+          (requireUnchangedDraft &&
+              (_draining ||
+                  revision != _revision ||
+                  paused != _paused ||
+                  uncertain != _uncertain ||
+                  !_same(_queue, queue)))) {
         throw StateError(
-          'The draft changed while shared files were being prepared. Try sharing again.',
+          'The draft changed while attachments were being prepared. Try again.',
         );
       }
-      _textRevision++;
-      _text = _append(text, incoming);
+      if (incoming.isNotEmpty) {
+        _textRevision++;
+        _text = _append(text, incoming);
+      }
       _files.addAll(staged);
       _revision++;
       final saving = _persist();
@@ -929,8 +944,10 @@ class ComposerSession {
       } catch (_) {
         if (_revision == stagedRevision) {
           _revision++;
-          _textRevision++;
-          _text = text;
+          if (incoming.isNotEmpty) {
+            _textRevision++;
+            _text = text;
+          }
           _files
             ..clear()
             ..addAll(files);

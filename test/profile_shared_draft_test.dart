@@ -126,6 +126,83 @@ void main() {
   );
 
   test(
+    'typing during picker preparation preserves new text and adds the batch',
+    () async {
+      await controller.updateDraft(chat, 'Before');
+      attachments.gate = Completer<void>();
+      final pending = controller.addAttachments(chat, [
+        (path: '/one', name: 'one.txt'),
+        (path: '/two', name: 'two.txt'),
+      ]);
+      await attachments.started.future;
+      await controller.updateDraft(chat, 'Typed during preparation');
+      attachments.gate!.complete();
+      await pending;
+      expect(chat.composer.observation.text, 'Typed during preparation');
+      expect(chat.composer.observation.attachments.map((file) => file.name), [
+        'one.txt',
+        'two.txt',
+      ]);
+    },
+  );
+
+  test(
+    'picker batch failure cleans staged files and preserves existing work',
+    () async {
+      final original = _draft('original', name: 'keep.txt');
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        text: 'Keep this',
+        appendAttachments: [original],
+        appendQueued: [QueuedPromptDraft(text: 'Keep queued')],
+        paused: true,
+      );
+      attachments.failAt = 2;
+      await expectLater(
+        controller.addAttachments(chat, [
+          (path: '/one', name: 'one.png'),
+          (path: '/two', name: 'two.txt'),
+        ]),
+        throwsA(isA<AttachmentDraftException>()),
+      );
+      expect(chat.composer.observation.text, 'Keep this');
+      expect(chat.composer.observation.attachments.map((file) => file.id), [
+        original.id,
+      ]);
+      expect(chat.composer.observation.queue.single.text, 'Keep queued');
+      expect(chat.composer.observation.paused, isTrue);
+      expect(attachments.removedIds, ['shared-1']);
+      expect(controller.canAddAttachment(chat), isTrue);
+    },
+  );
+
+  test(
+    'picker batch includes existing attachments in the count limit',
+    () async {
+      final original = _draft('original', name: 'keep.txt');
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        text: 'Keep this',
+        appendAttachments: [original],
+      );
+      await expectLater(
+        controller.addAttachments(chat, [
+          for (var index = 0; index < 40; index++)
+            (path: '/$index', name: '$index.txt'),
+        ]),
+        throwsA(isA<AttachmentDraftException>()),
+      );
+      expect(chat.composer.observation.text, 'Keep this');
+      expect(chat.composer.observation.attachments.map((file) => file.id), [
+        original.id,
+      ]);
+      expect(attachments.removedIds, hasLength(40));
+    },
+  );
+
+  test(
     'preparation failure cleans only new files and commits nothing',
     () async {
       final original = _draft('original', name: 'keep.txt');
