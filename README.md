@@ -16,8 +16,6 @@ Requires Android 7.0 or newer and a Hermes server you can reach from your phone.
 
 Tap a profile to focus its chats, or combine profiles in one view. Choose projects, group and sort conversations, and select the details you want to see. Wing remembers your view for each connection.
 
-Use the screen navigator to jump between Chats, Recents and agent settings.
-
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/workspaces.html">
     <img src="website/assets/screenshots/profiles-light.png" alt="Wing profile switcher with the personal profile selected and the Profile filter open" width="260">
