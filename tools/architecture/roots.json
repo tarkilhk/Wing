@@ -6208,6 +6208,23 @@
       "source": "docs/TESTING.md; test/source_highlighting_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "tool-wing-save",
+      "kind": "tool-cli",
+      "path": "scripts/wing_save.py",
+      "purpose": "Commit staged app changes and independent private internal material, then publish captured commits with recoverable per-remote outcomes",
+      "source": "AGENTS.md; CONTRIBUTING.md#workspace-saves",
+      "status": "supported"
+    },
+    {
+      "id": "tool-wing-save-tests",
+      "kind": "host-test",
+      "path": "scripts/tests/test_wing_save.py",
+      "purpose": "Real Git integration tests for public/private content boundaries, staged snapshots, failure recovery and concurrent saves",
+      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml: Python unittest discovery",
+      "status": "supported",
+      "selector": "unittest"
     }
   ],
   "files": [
@@ -10157,7 +10174,17 @@
       "provenance": "tracked"
     },
     {
+      "path": "scripts/tests/test_wing_save.py",
+      "area": "scripts",
+      "provenance": "tracked"
+    },
+    {
       "path": "scripts/verify_release_apks.py",
+      "area": "scripts",
+      "provenance": "tracked"
+    },
+    {
+      "path": "scripts/wing_save.py",
       "area": "scripts",
       "provenance": "tracked"
     },

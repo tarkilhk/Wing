@@ -59,3 +59,6 @@ key.properties
 # Generated local analysis and design output
 /graphify-out/
 /output/
+
+# Independent private notes repository, cloned into the app checkout.
+/internal/

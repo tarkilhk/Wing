@@ -190,6 +190,13 @@ Voice distinguishes device-wide saved preferences, profile configuration, microp
 
 ## Whole-checkout and runtime roots
 
+`scripts/wing_save.py` owns the development workspace save transaction: staged
+app changes and an independent ignored `internal/` repository are committed
+separately, then captured commits are pushed to their configured destinations.
+The private repository is outside the app census. Agent entry, content placement
+and recovery are defined in [workspace saves](../CONTRIBUTING.md#workspace-saves);
+real Git integration tests live in `scripts/tests/test_wing_save.py`.
+
 `tools/architecture/roots.json` schema 1 is an auditable declaration manifest:
 
 - `scope`: application root, base revision, tracked/intentional-untracked counts and excluded build/cache/installed-dependency trees. The census is explicitly not liveness proof.

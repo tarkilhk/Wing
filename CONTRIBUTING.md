@@ -82,6 +82,60 @@ Git hooks are local configuration and can be bypassed by Git. The quality
 workflow also runs on pushes to every branch and on PRs targeting `main`; its
 required-gate linter rejects narrowing the branch trigger or adding path filters.
 
+## Workspace saves
+
+Wing's app repository and the private notes repository have separate histories.
+The latter is cloned into `internal/`, which the app's `.gitignore` excludes.
+Research drafts, unpublished plans and internal review notes belong there.
+Maintained feature maps, architecture contracts and contributor instructions
+belong in the app repository alongside the code they describe.
+
+On the configured development VM, stage only the app changes belonging to the
+completed task, then save and push both repositories:
+
+```sh
+python3 scripts/wing_save.py "Describe the completed change"
+```
+
+The command runs the ordinary app commit hook, commits all Git-visible changes
+under `internal/`, records the related app SHA in the private commit, and pushes
+the private commit before the app commit. With only internal changes it creates
+only a private commit. Unstaged app edits remain untouched. Review internal
+changes before saving; everything admitted by that repository's ignore rules
+is included. Internal Git configuration, credentials, caches and captures should
+remain outside its tracked content.
+
+For a request to commit without pushing, add `--commit-only`. For a failed push,
+fix connectivity or reconcile the rejected branch, then run:
+
+```sh
+python3 scripts/wing_save.py --push-only
+```
+
+This retries existing commits without committing current edits. The command
+prints a separate result for each repository and remote. Completed commits
+remain available after any failure. It never force-pushes or merges conflicts
+automatically. The two repositories are separate transactions; either remote
+may already contain its commit when the other fails. Concurrent save commands
+are serialized by a local lock; editors may continue working.
+
+For a fresh Linux/Unix checkout, obtain the private clone URL from the project
+owner, clone it into `internal/`, enable the [commit hook](#local-commit-checks),
+and record the intended destinations in local Git configuration:
+
+```sh
+git clone '<private-clone-url>' internal
+git config --local wing.appRemote "$(git remote get-url origin)"
+git config --local wing.internalRemote "$(git -C internal remote get-url origin)"
+```
+
+Confirm the private repository's visibility in Gitea before configuring it.
+The save command requires both independent checkouts and exact matching `origin`
+fetch/push destinations, rejects app-tracked internal files and active Git
+merge/rebase operations, and leaves existing hooks enabled. Credentials use
+the machine's normal Git credential configuration. Each new machine needs its
+own private clone and local configuration; neither is supplied by cloning Wing.
+
 ## Source paths
 
 | Path | Responsibility |

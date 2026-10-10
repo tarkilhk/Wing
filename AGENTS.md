@@ -25,6 +25,13 @@ Before committing in a fresh checkout, enable the tracked lint hook using
 `python3 scripts/install_git_hooks.py`. See [local commit checks](CONTRIBUTING.md#local-commit-checks)
 for toolchain setup and staged-snapshot behavior.
 
+For commit/push requests, stage only the task's app changes and use
+`python3 scripts/wing_save.py "<message>"` to save both the app and the private
+`internal/` repository. Read [workspace saves](CONTRIBUTING.md#workspace-saves)
+for commit-only requests, internal-only work, fresh checkouts and failed pushes.
+Keep research drafts and internal review notes under `internal/`; maintained
+feature and architecture documentation stays with the app source.
+
 # Verification
 
 Before choosing tests, retrying a failure or preparing delivery, read and follow
