@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'answer_versions.dart';
 import 'user_message_delivery.dart';
 
@@ -19,6 +17,7 @@ UserMessageDelivery? transcriptUserDelivery(Map<String, dynamic> message) =>
 
 const _noticeKinds = {
   'async_delegation_complete',
+  'process_complete',
   'model_switch',
   'auto_continue',
   'personality_switch',
@@ -57,21 +56,21 @@ String? transcriptNoticeText(Map<String, dynamic> message) {
     case 'personality_switch':
       return 'Personality changed';
     case 'async_delegation_complete':
-      Object? metadata = message['display_metadata'];
-      if (metadata is String) {
-        try {
-          metadata = jsonDecode(metadata);
-        } on FormatException {
-          metadata = null;
-        }
-      }
-      final count = metadata is Map ? metadata['task_count'] : null;
+      final metadata = answerMessageDisplayMetadata(message);
+      final display = metadata['display_text'];
+      if (display is String && display.trim().isNotEmpty) return display.trim();
+      final count = metadata['task_count'];
       return count is num &&
               count.isFinite &&
               count > 0 &&
               count == count.round()
           ? '${count.toInt()} background agent${count == 1 ? '' : 's'} finished'
           : 'Background agent work finished';
+    case 'process_complete':
+      final display = answerMessageDisplayMetadata(message)['display_text'];
+      return display is String && display.trim().isNotEmpty
+          ? display.trim()
+          : 'Background process finished';
     default:
       return transcriptUserDelivery(message)?.headline;
   }
@@ -82,6 +81,12 @@ String? transcriptNoticeText(Map<String, dynamic> message) {
 String? transcriptNoticeResult(Map<String, dynamic> message) {
   final delivery = transcriptUserDelivery(message);
   if (delivery != null) return delivery.detail.isEmpty ? null : delivery.detail;
+  if (transcriptNoticeKind(message) == 'process_complete') {
+    final result = processCompletionDelivery(
+      answerMessageText(message),
+    )?.detail;
+    return result == null || result.isEmpty ? null : result;
+  }
   if (transcriptNoticeKind(message) != 'async_delegation_complete') return null;
   final raw = answerMessageText(message);
   final text =

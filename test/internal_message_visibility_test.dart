@@ -82,8 +82,21 @@ class _NoticeHistory extends ProfileHistoryFixture {
     {'id': 9, 'role': 'user', 'content': processBatchEnvelope},
     {'id': 10, 'role': 'user', 'content': snapshot},
     {'id': 11, 'role': 'user', 'content': _continuationEnvelope},
-    {'id': 12, 'role': 'user', 'content': _rawDelegationEnvelope},
-    {'id': 13, 'role': 'user', 'content': _processHeartbeat},
+    {
+      'id': 12,
+      'role': 'user',
+      'content': _rawDelegationEnvelope,
+      'display_kind': 'async_delegation_complete',
+      'display_metadata': {
+        'display_text': 'Subagent Tasks Completed: audit (2 tasks)',
+      },
+    },
+    {
+      'id': 13,
+      'role': 'user',
+      'content': _processHeartbeat,
+      'display_kind': 'hidden',
+    },
   ];
 }
 
@@ -114,13 +127,18 @@ void main() {
         ),
       },
     ]) {
-      final row = {'id': 13, 'role': 'user', ...fields};
+      final row = {
+        'id': 13,
+        'role': 'user',
+        'display_kind': 'hidden',
+        ...fields,
+      };
       expect(isHiddenAnswerMessage(row), isTrue, reason: '$fields');
       expect(isHumanAnswerPrompt(row), isFalse);
       final stored = answerHistoryRows([row]).single;
       expect(isHiddenAnswerMessage(stored), isTrue);
       expect(stored['id'], 13);
-      expect(isAnswerPrompt(row), isTrue);
+      expect(isAnswerPrompt(row), isFalse);
       expect(answerMessageText(stored), answerMessageText(row));
     }
   });
@@ -158,7 +176,11 @@ void main() {
   });
 
   testWidgets('process heartbeat never renders a chat bubble', (tester) async {
-    const row = {'role': 'user', 'content': _processHeartbeat};
+    const row = {
+      'role': 'user',
+      'content': _processHeartbeat,
+      'display_kind': 'hidden',
+    };
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -189,16 +211,6 @@ void main() {
           {'type': 'text', 'text': _continuationEnvelope},
         ],
       },
-      {'content': _rawDelegationEnvelope},
-      {'text': _rawDelegationEnvelope},
-      {'content': _rawDelegationEnvelope.replaceAll('\n', '\r\n')},
-      {'content': '  $_rawDelegationEnvelope\n'},
-      {'content': 'wire payload', 'display_content': _rawDelegationEnvelope},
-      {
-        'content': [
-          {'type': 'text', 'text': _rawDelegationEnvelope},
-        ],
-      },
     ]) {
       final row = {'role': 'user', ...fields};
       expect(isHiddenAnswerMessage(row), isTrue, reason: '$fields');
@@ -207,6 +219,25 @@ void main() {
       // Filtering must not change the stored history's rewind ordinals.
       expect(isAnswerPrompt(row), isTrue);
     }
+  });
+
+  test('untyped heartbeat and delegation wording has no display authority', () {
+    for (final text in [_processHeartbeat, _rawDelegationEnvelope]) {
+      final row = {'role': 'user', 'content': text};
+      expect(isHiddenAnswerMessage(row), isFalse);
+      expect(
+        TranscriptMessage.fromRow(row).kind,
+        TranscriptMessageKind.dialogue,
+      );
+      expect(answerMessageDisplayText(row), text);
+    }
+    final typed = {
+      ..._notice(),
+      'content': _rawDelegationEnvelope,
+      'display_metadata': {'display_text': 'Subagent Task Failed: audit'},
+    };
+    expect(isHiddenAnswerMessage(typed), isFalse);
+    expect(transcriptNoticeText(typed), 'Subagent Task Failed: audit');
   });
 
   test('quoted and ordinary progress messages remain visible', () {
@@ -689,12 +720,13 @@ void main() {
   });
 
   test(
-    'metadata accepts decoded and REST JSON values without leaking raw text',
+    'metadata accepts stock maps and ignores encoded or malformed values',
     () {
       for (final metadata in [
         null,
         '{invalid',
         '[]',
+        '{"task_count":1}',
         5,
         {'task_count': 'three'},
       ]) {
@@ -706,7 +738,7 @@ void main() {
       expect(
         transcriptNoticeText({
           ..._notice(),
-          'display_metadata': '{"task_count":1}',
+          'display_metadata': {'task_count': 1},
         }),
         '1 background agent finished',
       );

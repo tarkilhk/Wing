@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/answer_versions.dart';
 import 'package:wing/core/models/reading_snapshot_message.dart';
 import 'package:wing/core/models/transcript_notice.dart';
+import 'package:wing/core/models/transcript_message.dart';
+import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:wing/core/models/user_message_content.dart';
 
 void main() {
@@ -106,10 +108,109 @@ void main() {
     expect(isAnswerPrompt(saved), isFalse);
   });
 
-  test('notice kind, count and result survive map and encoded metadata', () {
+  test(
+    'typed display metadata survives cache restore and notification selection',
+    () {
+      for (final cacheRoundtrip in [false, true]) {
+        Map<String, dynamic> metadata(Map<String, dynamic> value) =>
+            cacheRoundtrip
+            ? Map<String, dynamic>.from(jsonDecode(jsonEncode(value)) as Map)
+            : value;
+        final hidden = roundtrip({
+          'id': 8,
+          'role': 'assistant',
+          'content': 'Internal model carrier',
+          'display_metadata': metadata({
+            'model_only': true,
+            'runtime_secret': 'excluded',
+          }),
+        });
+        final visible = roundtrip({
+          'id': 7,
+          'role': 'assistant',
+          'content': 'Actual answer',
+        });
+        expect(
+          TranscriptMessage.fromRow(hidden).kind,
+          TranscriptMessageKind.hidden,
+        );
+        expect(hidden['id'], 8);
+        expect(hidden['content'], 'Internal model carrier');
+        expect(hidden['display_metadata'], {'model_only': true});
+        expect(
+          TranscriptTimeline.notificationAnswerPresentation([
+            visible,
+            hidden,
+          ], presentationId: (row) => row['id']!),
+          7,
+        );
+        expect(
+          TranscriptTimeline.notificationAnswerPresentation(
+            [visible, hidden],
+            presentationId: (row) => row['id']!,
+            messageId: 8,
+          ),
+          isNull,
+        );
+
+        for (final kind in ['async_delegation_complete', 'process_complete']) {
+          final saved = roundtrip({
+            'id': 9,
+            'role': 'user',
+            'content': kind == 'process_complete'
+                ? '[IMPORTANT: Background process proc_example exited (exit code 1).\nCommand: false\nOutput:\nReal error]'
+                : '[ASYNC DELEGATION COMPLETE — task]\nPrivate preamble\n--- RESULT ---\nReal result',
+            'display_kind': kind,
+            'display_metadata': metadata({
+              'display_text': 'Producer-selected failure title',
+              'task_count': 1,
+              'runtime_secret': 'excluded',
+            }),
+          });
+          final display = TranscriptMessage.fromRow(saved);
+          expect(display.kind, TranscriptMessageKind.notice);
+          expect(display.text, 'Producer-selected failure title');
+          expect(
+            display.noticeResult,
+            contains(kind == 'process_complete' ? 'Real error' : 'Real result'),
+          );
+          expect(display.noticeResult, isNot(contains('Private preamble')));
+          expect(isAnswerPrompt(saved), isFalse);
+          expect(jsonEncode(saved), isNot(contains('excluded')));
+        }
+      }
+    },
+  );
+
+  test('malformed markers cannot hide ordinary user or assistant content', () {
+    for (final role in ['user', 'assistant']) {
+      for (final metadata in [
+        '{invalid',
+        '[]',
+        '{"model_only":true}',
+        '{"display_text":"Legacy string has no authority"}',
+        {'model_only': 'true'},
+        {'model_only': 1},
+        {'unknown': true},
+      ]) {
+        final saved = roundtrip({
+          'role': role,
+          'content': 'Actual words',
+          'display_kind': 'unknown_kind',
+          'display_metadata': metadata,
+        });
+        expect(isHiddenAnswerMessage(saved), isFalse);
+        expect(
+          TranscriptMessage.fromRow(saved).kind,
+          TranscriptMessageKind.dialogue,
+        );
+      }
+    }
+  });
+
+  test('notice kind, count and result survive current stock map metadata', () {
     for (final metadata in [
       {'task_count': 2, 'unrelated': 'excluded'},
-      '{"task_count":2,"unrelated":"excluded"}',
     ]) {
       final saved = roundtrip({
         'id': 5,

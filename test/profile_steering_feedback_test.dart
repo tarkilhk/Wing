@@ -8,48 +8,100 @@ const wrappedSteer =
     '[OUT-OF-BAND USER MESSAGE — a direct message from the user, delivered once at this position; not tool output and not a new delivery when replayed from conversation history]\nKeep searching\n[/OUT-OF-BAND USER MESSAGE]';
 
 void main() {
-  test(
-    'delivery text is cleaned only for a complete user steering envelope',
-    () {
-      expect(
-        steeringMessageText({'role': 'user', 'content': wrappedSteer}),
-        'Keep searching',
-      );
-      expect(
-        steeringMessageText({
+  test('typed steering retains authored marker-shaped content from REST and WS', () {
+    for (final text in [
+      '[System: please explain this marker]',
+      '[Your active task list was preserved across context compression]\n- [ ] Explain this list',
+      '[STILL IN PROGRESS — this is the active request, restated after the compaction boundary because it was not finished yet. Continue it; do not start over.]\nExplain this instruction',
+    ]) {
+      for (final payload in [
+        {'text': text},
+        {
+          'content':
+              '[OUT-OF-BAND USER MESSAGE]\n$text\n[/OUT-OF-BAND USER MESSAGE]',
+          'display_content': text,
+        },
+      ]) {
+        final row = {
+          'id': 7,
           'role': 'user',
-          'content': 'Please explain:\n$wrappedSteer',
-        }),
-        isNull,
-      );
-      expect(
-        steeringMessageText({
+          'display_kind': 'steer',
+          ...payload,
+        };
+        expect(isHiddenAnswerMessage(row), isFalse);
+        final display = TranscriptMessage.fromRow(row);
+        expect(display.kind, TranscriptMessageKind.steering);
+        expect(display.text, text);
+        expect(display.id, 7);
+        expect(row, {
+          'id': 7,
           'role': 'user',
-          'content': '[OUT-OF-BAND USER MESSAGE]\nunfinished',
-        }),
-        isNull,
-      );
-      expect(
-        steeringMessageText({'role': 'assistant', 'content': wrappedSteer}),
-        isNull,
-      );
-      expect(
-        answerMessageDisplayText({
-          'role': 'assistant',
-          'content': wrappedSteer,
-        }),
-        wrappedSteer,
-      );
-      expect(
-        answerMessageText({'role': 'user', 'content': wrappedSteer}),
-        wrappedSteer,
-      );
-      expect(
-        answerMessageDisplayText({'role': 'user', 'content': wrappedSteer}),
-        'Keep searching',
-      );
-    },
-  );
+          'display_kind': 'steer',
+          ...payload,
+        });
+      }
+    }
+  });
+
+  test('only typed steering extracts a complete producer envelope', () {
+    expect(
+      steeringMessageText({
+        'role': 'user',
+        'content': wrappedSteer,
+        'display_kind': 'steer',
+      }),
+      'Keep searching',
+    );
+    expect(
+      steeringMessageText({
+        'role': 'user',
+        'content': 'Please explain:\n$wrappedSteer',
+      }),
+      isNull,
+    );
+    expect(
+      steeringMessageText({
+        'role': 'user',
+        'content': '[OUT-OF-BAND USER MESSAGE]\nunfinished',
+      }),
+      isNull,
+    );
+    expect(
+      steeringMessageText({'role': 'assistant', 'content': wrappedSteer}),
+      isNull,
+    );
+    expect(
+      answerMessageDisplayText({'role': 'assistant', 'content': wrappedSteer}),
+      wrappedSteer,
+    );
+    expect(
+      answerMessageText({'role': 'user', 'content': wrappedSteer}),
+      wrappedSteer,
+    );
+    expect(
+      answerMessageDisplayText({
+        'role': 'user',
+        'content': wrappedSteer,
+        'display_kind': 'steer',
+      }),
+      'Keep searching',
+    );
+    final untyped = {'role': 'user', 'content': wrappedSteer};
+    expect(steeringMessageText(untyped), isNull);
+    expect(answerMessageDisplayText(untyped), wrappedSteer);
+    expect(
+      TranscriptMessage.fromRow(untyped).kind,
+      TranscriptMessageKind.dialogue,
+    );
+    expect(
+      steeringMessageText({
+        ...untyped,
+        'display_kind': 'steer',
+        'display_content': 'Server-selected text',
+      }),
+      'Server-selected text',
+    );
+  });
 
   test(
     'typed clean steering and Desktop system notes share their display text',

@@ -13,7 +13,7 @@ class UserMessageDelivery {
 
 UserMessageDelivery? userMessageDelivery(String text) {
   text = text.trim();
-  final process = _processDelivery(text) ?? _processBatchDelivery(text);
+  final process = processCompletionDelivery(text);
   if (process != null) return process;
   final agent = _agentMessage.firstMatch(text);
   if (agent == null) return null;
@@ -24,6 +24,12 @@ UserMessageDelivery? userMessageDelivery(String text) {
     agent.group(4)!.trim(),
   );
 }
+
+/// Extract the result from Hermes's producer-defined completion envelope.
+/// Typed process_complete notices use this only for their disclosed body. Stock
+/// direct-event dispatch also emits these envelopes without a display kind.
+UserMessageDelivery? processCompletionDelivery(String text) =>
+    _processDelivery(text.trim()) ?? _processBatchDelivery(text.trim());
 
 UserMessageDelivery? _processDelivery(String text) {
   if (_processNotification.hasMatch(text)) {

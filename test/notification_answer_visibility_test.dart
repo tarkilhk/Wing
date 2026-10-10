@@ -18,9 +18,11 @@ void main() {
   late ProfileChat chat;
   late Host host;
   late List<String> reads;
+  late NotificationFocus result;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     reads = [];
+    result = const NotificationFocus('answer', 'latest');
     host = Host();
     final preferences = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(preferences);
@@ -33,7 +35,7 @@ void main() {
       preferences: preferences,
       appPreferences: appPreferences,
       gatewayFactory: host.gateway,
-      notificationResultFor: (_) => const NotificationFocus('answer', 'latest'),
+      notificationResultFor: (_) => result,
       onNotificationRead: (_, id) async {
         reads.add(id);
       },
@@ -141,6 +143,30 @@ void main() {
     await mount(tester);
     expect(reads, ['answer:latest']);
     expect(chat.reading.notificationFocus, isNull);
+  });
+
+  testWidgets('model-only saved assistant rows cannot acknowledge an answer', (
+    tester,
+  ) async {
+    chat.reading.installSavedHistory([
+      ...chat.reading.messages,
+      {
+        'id': 41,
+        'role': 'assistant',
+        'content': 'Internal model carrier',
+        'display_metadata': {'model_only': true},
+      },
+    ]);
+    result = const NotificationFocus('answer', 'carrier', messageId: 41);
+    chat.reading.recordNotificationResult(result);
+    chat.reading.revealNotification(result);
+    await mount(tester);
+    expect(find.text('Internal model carrier'), findsNothing);
+    expect(reads, isEmpty);
+    expect(
+      chat.reading.notificationFocus,
+      const NotificationFocus('answer', 'carrier', messageId: 41),
+    );
   });
 
   testWidgets('background route and failed history cannot mark answer read', (

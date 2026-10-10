@@ -76,9 +76,14 @@ final class TranscriptMessage {
         id: id,
         text: notice,
         noticeResult: transcriptNoticeResult(row),
-        noticeDisclosure: delivery?.disclosure ?? 'View result',
-        noticePlainText: delivery != null,
-        noticeMonospace: delivery?.kind == 'process_notification',
+        noticeDisclosure: row['display_kind'] == 'process_complete'
+            ? 'Output'
+            : delivery?.disclosure ?? 'View result',
+        noticePlainText:
+            delivery != null || row['display_kind'] == 'process_complete',
+        noticeMonospace:
+            delivery?.kind == 'process_notification' ||
+            row['display_kind'] == 'process_complete',
       );
     }
     final review = reviewMessageText(row);

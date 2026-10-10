@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'answer_versions.dart';
 import 'user_message_content.dart';
 
 /// Fields that describe a saved row's reading presentation, never live state.
@@ -30,10 +31,10 @@ Map<String, dynamic> captureReadingSnapshotMessage(Map<String, dynamic> row) =>
       ])
         if (row.containsKey(key)) key: row[key],
       if (row['display_metadata'] case final Map metadata)
-        'display_metadata': {'task_count': metadata['task_count']}
-      else if (row['display_metadata'] case final String metadata
-          when metadata.length < 32768)
-        'display_metadata': metadata,
+        'display_metadata': {
+          for (final key in ['task_count', 'display_text', 'model_only'])
+            if (metadata.containsKey(key)) key: metadata[key],
+        },
       if (row['submitted_attachments'] is List)
         'submitted_attachments': [
           for (final attachment in readingSnapshotAttachments(
@@ -44,7 +45,7 @@ Map<String, dynamic> captureReadingSnapshotMessage(Map<String, dynamic> row) =>
     };
 
 /// A bounded, typed JSON projection of the display fields understood by the
-/// transcript. In particular, notice metadata retains only its task count;
+/// transcript. Notice metadata retains its title/count and model-only marker;
 /// arbitrary nested gateway records and decision/transport fields are excluded.
 Map<String, dynamic> projectReadingSnapshotMessage(Map row) {
   final result = <String, dynamic>{};
@@ -66,24 +67,31 @@ Map<String, dynamic> projectReadingSnapshotMessage(Map row) {
     final value = _content(row[key]);
     if (value != null) result[key] = value;
   }
-  if (result['display_kind'] == 'async_delegation_complete') {
-    Object? metadata = row['display_metadata'];
-    if (metadata is String && metadata.length < 32768) {
-      try {
-        metadata = jsonDecode(metadata);
-      } on FormatException {
-        metadata = null;
-      }
+  final metadata = answerMessageDisplayMetadata(Map<String, dynamic>.from(row));
+  final displayMetadata = <String, dynamic>{};
+  if (metadata['model_only'] case final bool modelOnly) {
+    displayMetadata['model_only'] = modelOnly;
+  }
+  if (const {
+    'async_delegation_complete',
+    'process_complete',
+  }.contains(result['display_kind'])) {
+    final display = metadata['display_text'];
+    if (display is String && display.trim().isNotEmpty) {
+      displayMetadata['display_text'] = display;
     }
-    final count = metadata is Map ? metadata['task_count'] : null;
+  }
+  if (result['display_kind'] == 'async_delegation_complete') {
+    final count = metadata['task_count'];
     if (count is num &&
         count.isFinite &&
         count > 0 &&
         count <= 0x7fffffff &&
         count == count.round()) {
-      result['display_metadata'] = {'task_count': count.toInt()};
+      displayMetadata['task_count'] = count.toInt();
     }
   }
+  if (displayMetadata.isNotEmpty) result['display_metadata'] = displayMetadata;
   if (row['submitted_attachments'] is List) {
     result['submitted_attachments'] = [
       for (final attachment in readingSnapshotAttachments(

@@ -8,28 +8,29 @@ String answerMessageText(Map<String, dynamic> message) {
 }
 
 /// The gateway's delivery envelope is model context, not user-facing prose.
-/// Only recognize a complete user-row envelope; quoted or partial markers stay
-/// visible. Typed steering rows can also contain already-clean display text.
+/// Persisted user rows are classified by Hermes's display kind. The envelope
+/// parser only extracts content from an already classified steering message.
 String? steeringMessageText(Map<String, dynamic> message) {
   if (message['role'] == 'system') {
     final text = answerMessageText(message);
     return text.startsWith('steer:') ? text.substring(6).trim() : null;
   }
-  if (message['role'] != 'user') return null;
-  // Classification needs the written envelope, not encoded image bytes. Only
-  // materialize the original projection if it actually contains that envelope.
-  final inspection = _answerInspectionText(message).trim();
-  if (!_steeringEnvelope.hasMatch(inspection) &&
-      message['display_kind'] != 'steer') {
+  if (message['role'] != 'user' || message['display_kind'] != 'steer') {
     return null;
   }
+  final projected = message['display_content'];
+  if (projected != null) return _answerText(projected).trim();
   final raw = answerMessageText(message).trim();
   final match = _steeringEnvelope.firstMatch(raw);
   if (match != null) return match.group(1)!.trim();
-  if (message['display_kind'] != 'steer') return null;
-  return _answerText(
-    message['display_content'] ?? message['content'] ?? message['text'],
-  ).trim();
+  return raw;
+}
+
+/// Read the stock display metadata at its wire boundary. Malformed or unknown
+/// values carry no display authority; content is never inspected to infer them.
+Map answerMessageDisplayMetadata(Map<String, dynamic> message) {
+  final metadata = message['display_metadata'];
+  return metadata is Map ? metadata : const {};
 }
 
 final _steeringEnvelope = RegExp(
@@ -118,38 +119,22 @@ bool isBranchMessage(Map<String, dynamic> message) =>
     _answerInspectionText(message).trim().isNotEmpty;
 
 bool isHiddenAnswerMessage(Map<String, dynamic> message) {
-  if (message['display_kind'] == 'hidden') return true;
-  if (message['role'] != 'user') return false;
+  if (message['display_kind'] == 'hidden' ||
+      answerMessageDisplayMetadata(message)['model_only'] == true) {
+    return true;
+  }
+  // Producer classification wins over recognizers for the remaining untyped
+  // stock rows. Authored steering text can itself quote any technical marker.
+  if (message['role'] != 'user' || message['display_kind'] != null) {
+    return false;
+  }
   if (message['_todo_snapshot_synthetic'] == true ||
       _answerInspectionText(message).trimLeft().startsWith('[System:')) {
     return true;
   }
   final display = answerMessageDisplayText(message);
-  return _isTaskSnapshot(display) ||
-      _isContinuationReminder(display) ||
-      _processHeartbeat.hasMatch(display.trim()) ||
-      (message['display_kind'] == null &&
-          _asyncDelegationBatch.hasMatch(display.trimLeft()));
+  return _isTaskSnapshot(display) || _isContinuationReminder(display);
 }
-
-// Stock Hermes format_process_notification, inspected at upstream commit
-// e33fd7e09b42c50e347cd32564a4a83ad5c4a97b. Match the heartbeat header and
-// payload boundaries; timing prose and optional subagent attribution can vary.
-final _processHeartbeat = RegExp(
-  r'^\[Background process [^\s\]]+ heartbeat #(?:\d+|\?) — '
-  r'still running after [^\r\n]+\.\r?\n'
-  r'(?:[^\r\n]*\r?\n)*?Command: [\s\S]*?\r?\n'
-  r'Output since last heartbeat:\r?\n[\s\S]*\]$',
-);
-
-// Stock Hermes _format_batch_delegation, inspected at upstream commit
-// c712f06dcdd24053a4118f38d2090ac53137ecfc. Match the producer header and
-// preamble together so quoted markers and ordinary discussion stay visible.
-final _asyncDelegationBatch = RegExp(
-  r'^\[ASYNC DELEGATION BATCH COMPLETE — deleg_[a-zA-Z0-9]+\]\r?\n'
-  r'A background fan-out unit you dispatched earlier — '
-  r'[^\r\n]+ — has finished; its consolidated results are below\.',
-);
 
 /// A compaction reminder repeats the active request for the agent. Recognize
 /// the complete standalone envelope, leaving quoted or partial markers visible.
@@ -164,7 +149,7 @@ bool _isContinuationReminder(String text) {
 }
 
 /// TodoStore.format_for_injection uses this stable header for standalone
-/// post-compression snapshots. Older history omits the synthetic flag. Match
+/// post-compression snapshots. Stock persistence omits the synthetic flag. Match
 /// only that envelope at the start, never a task list or quoted marker alone.
 /// Keep stored rows intact so paging and rewind retain their server ordinals.
 bool _isTaskSnapshot(String text) {
