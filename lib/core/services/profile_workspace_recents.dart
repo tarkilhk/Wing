@@ -124,7 +124,27 @@ final class _WorkspaceRecentConversationSource
           false);
   @override
   Object previewRevision(RecentConversationKey target) {
-    if (target.group != null) return (_group(target),);
+    if (target.group != null) {
+      final group = _group(target);
+      // Stock roster refreshes recreate immutable room objects. Invalidate
+      // pixels on changed display facts, rather than fresh object identity.
+      return (
+        group?.name,
+        group?.instance,
+        group?.preview,
+        group?.working,
+        group?.blocked,
+        group?.lastMessageSequence,
+        group?.lastAnswerSequence,
+        group?.lastMessageAt,
+        group?.iconColor,
+        group?.iconRevision,
+        jsonEncode([
+          for (final member in group?.members ?? const <BotGroupMember>[])
+            [member.id, member.profile, member.handle, member.name],
+        ]),
+      );
+    }
     final key = target.chat!;
     final chat = controller._resources[key.workspace]?._chats[key.sessionId];
     final saved = controller._savedRecents

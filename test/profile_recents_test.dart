@@ -469,6 +469,12 @@ void main() {
         final origin = RecentConversationEntry.group(group).key;
         expect(visit.selected, origin);
         expect(visit.modeEnabled, isFalse);
+        final revision = visit.previewRevision(origin);
+        await bots.refresh();
+        expect(visit.previewRevision(origin), revision);
+        botFixture.room['name'] = 'Renamed team';
+        await bots.refresh();
+        expect(visit.previewRevision(origin), isNot(revision));
         visit.activate();
         await Future<void>.delayed(Duration.zero);
         final target = visit.entries
