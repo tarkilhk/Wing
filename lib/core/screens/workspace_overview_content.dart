@@ -97,7 +97,12 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
         padding: const EdgeInsets.all(16),
         children: [
           if (controller.recentsLoading || widget.bots.state.loading)
-            const LinearProgressIndicator(),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: LinearProgressIndicator(
+                semanticsLabel: 'Loading recent chats',
+              ),
+            ),
           for (final error in {
             ...controller.recentsProfileErrors.values,
             ...widget.bots.state.errors,

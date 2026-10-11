@@ -7,6 +7,7 @@ import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/models/session_visibility.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,12 +20,16 @@ import 'support/bots_fixture.dart';
 
 class _RecentsFixture extends ProfileBrowserFixture {
   bool unread = false;
+  bool failDiscovery = false;
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final delegate = super.gateway(scope);
     return ProfileGateway(
       scope: scope,
-      discover: delegate.discover,
+      discover: () async {
+        if (failDiscovery) throw http.ClientException('Discovery interrupted');
+        return delegate.discover();
+      },
       get: delegate.read,
       rpc: delegate.call,
       ownedPatch: (path, body, canDispatch, onDispatched) async {
@@ -413,6 +418,30 @@ void main() {
       expect(controller.recentChats(), hasLength(106));
       expect(controller.recentsAvailableProfiles, 1);
       expect(controller.recentsProfileErrors['work'], isNotNull);
+    },
+  );
+
+  test(
+    'discovery failure retains chats and the next refresh clears its error',
+    () async {
+      await controller.refreshRecents();
+      final previous = controller
+          .recentChats()
+          .map((chat) => chat.key)
+          .toList();
+      expect(previous, isNotEmpty);
+      fixture.failDiscovery = true;
+      await controller.refreshRecents();
+      expect(
+        controller.recentsProfileErrors['recents'],
+        'Recent chats could not be loaded.',
+      );
+      expect(controller.recentChats().map((chat) => chat.key), previous);
+      expect(controller.recentsLoading, isFalse);
+      fixture.failDiscovery = false;
+      await controller.refreshRecents();
+      expect(controller.recentsProfileErrors, isEmpty);
+      expect(controller.recentChats().map((chat) => chat.key), previous);
     },
   );
 
