@@ -148,14 +148,14 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                       isSelected: draft.iconColor == color,
                       onPressed: () => Navigator.pop(context, color),
                       icon: BotGroupPicture(
-                        name: draft.effectiveName,
+                        avatars: draft.iconMembers,
                         color: color,
                         size: 32,
                       ),
                       selectedIcon: Stack(
                         children: [
                           BotGroupPicture(
-                            name: draft.effectiveName,
+                            avatars: draft.iconMembers,
                             color: color,
                             size: 32,
                           ),
@@ -217,7 +217,7 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
       alignment: Alignment.center,
       children: [
         BotGroupPicture(
-          name: draft.effectiveName,
+          avatars: draft.iconMembers,
           color: draft.iconColor,
           image: draft.picture,
           size: 64,
@@ -501,7 +501,7 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                 child: Row(
                   children: [
                     BotGroupPicture(
-                      name: draft.effectiveName,
+                      avatars: draft.iconMembers,
                       color: draft.iconColor,
                       image: draft.picture,
                     ),

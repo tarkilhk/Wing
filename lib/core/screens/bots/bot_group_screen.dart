@@ -475,19 +475,15 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                         constraints: const BoxConstraints(minHeight: 48),
                         child: Row(
                           children: [
-                            if (_session.group.picture != null)
-                              BotGroupPicture(
-                                name: _session.group.name,
-                                color: _session.group.iconColor,
-                                image: _session.group.picture,
-                                size: 32,
-                              )
-                            else
-                              Icon(
-                                Icons.group_outlined,
-                                size: 24,
-                                color: colors.onSurfaceVariant,
-                              ),
+                            BotGroupPicture(
+                              avatars: [
+                                for (final member in _session.group.members)
+                                  _session.appearance(member.profile),
+                              ],
+                              color: _session.group.iconColor,
+                              image: _session.group.picture,
+                              size: 32,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(

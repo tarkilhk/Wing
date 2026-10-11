@@ -26,6 +26,7 @@ import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/bot_group_draft_session.dart';
 import 'package:wing/core/services/bot_avatar_io.dart';
 import 'package:wing/core/widgets/bot_group_picture.dart';
+import 'package:wing/core/widgets/bot_group_identity.dart';
 import 'package:wing/core/services/bot_screen_window.dart';
 import 'package:wing/core/services/bot_profile_edit_session.dart';
 import 'package:wing/core/theme/profile_colors.dart';
@@ -140,6 +141,124 @@ Future<void> _revealGroup(
 
 void main() {
   if (_export) _ReviewBinding();
+  for (final brightness in [Brightness.dark, Brightness.light]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group avatar collage fits every member ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = scale == 1
+              ? const Size(390, 844)
+              : const Size(320, 640);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          fixture.profiles.addAll([
+            for (var index = 0; index < 4; index++)
+              BotsFixture.profile('bot$index', 'Bot $index'),
+          ]);
+          for (final (index, profile) in fixture.profiles.indexed) {
+            profile['ui_meta']['hermes-bots']['shape'] = botShapes[index];
+          }
+          final bots = await fixture.repository.bots();
+          final saved = (await fixture.repository.groups()).single;
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: RepaintBoundary(
+                  key: frame,
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: BotGroupIdentity(
+                          group: saved.withIcon(
+                            color: ProfileColorChoice.cyan,
+                            revision: 1,
+                          ),
+                          bots: bots,
+                          size: 48,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      for (var count = 2; count <= 6; count++) ...[
+                        Text('$count bots'),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            for (final size in [32.0, 40.0, 48.0, 64.0]) ...[
+                              BotGroupPicture(
+                                key: ValueKey('collage-$count-$size'),
+                                avatars: bots.take(count).toList(),
+                                color: ProfileColorChoice.cyan,
+                                size: size,
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          for (var count = 2; count <= 6; count++) {
+            for (final size in [32.0, 40.0, 48.0, 64.0]) {
+              final icon = find.byKey(ValueKey('collage-$count-$size'));
+              await tester.ensureVisible(icon);
+              await tester.pumpAndSettle();
+              final avatars = find.descendant(
+                of: icon,
+                matching: find.byType(BotAvatar),
+              );
+              expect(avatars, findsNWidgets(count));
+              final bounds = tester.getRect(icon);
+              for (final avatar in avatars.evaluate()) {
+                final rect = tester.getRect(find.byWidget(avatar.widget));
+                expect(bounds.contains(rect.topLeft), true);
+                expect(bounds.contains(rect.bottomRight), true);
+              }
+            }
+          }
+          final identity = find.byType(BotGroupIdentity);
+          await _capture(
+            tester,
+            frame,
+            'group-collage-bottom-${brightness.name}-$scale',
+          );
+          await _revealGroup(tester, identity, delta: -200);
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(of: identity, matching: find.byType(BotAvatar)),
+            findsNWidgets(2),
+          );
+          expect(
+            find.descendant(of: identity, matching: find.byType(Text)),
+            findsNothing,
+          );
+          expect(tester.takeException(), isNull);
+          await _capture(
+            tester,
+            frame,
+            'group-collage-${brightness.name}-$scale',
+          );
+        },
+      );
+    }
+  }
+
   setUpAll(() async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(BotScreenWindow.channel, (_) async => null);
@@ -646,14 +765,14 @@ void main() {
         final icon = tester.widget<BotGroupPicture>(
           find.byType(BotGroupPicture).last,
         );
-        expect(icon.name, 'Launch team');
+        expect(icon.avatars.map((bot) => bot?.profile.name), ['atlas', 'mira']);
         expect(icon.color?.slot, isNotNull);
         expect(
           find.descendant(
             of: find.byType(BotGroupPicture).last,
-            matching: find.text('L'),
+            matching: find.byType(BotAvatar),
           ),
-          findsOneWidget,
+          findsNWidgets(2),
         );
         await _revealGroup(tester, find.text('Members'), delta: -120);
         expect(find.text('2 of 6 selected'), findsOneWidget);

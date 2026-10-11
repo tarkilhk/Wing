@@ -56,16 +56,16 @@ add; removing a picked bot returns it to the list. Leave the
 name blank to use the selected bots' names, or enter a name of up to 64 characters.
 Choose a Hermes instance when several are ready.
 
-The default room icon uses the first letter of its name and a random color from
-Hermes/Wing's usual color palette. The color stays fixed while you edit and is
-saved on Hermes.
+The default room icon groups the selected bots’ avatars inside a square frame
+with a random color from Hermes/Wing’s usual palette. The frame color stays fixed
+while you edit and is saved on Hermes. Renaming the room keeps its member avatars.
 
 Upload a room picture, generate one from a description, or remove it. Generation
 uses the chosen instance's default profile image provider. Uploads accept PNG,
 JPEG and WebP up to 2 MB. Wing crops a 256 px square thumbnail and compresses it
 to at most 45 KB for upload. Creating the group saves its picture on the chosen
 Hermes backend; another Wing device connected to that backend can load it.
-Removing a picture restores the letter icon. Icons appear in the group list and
+Removing a picture restores the member-avatar collage. Icons appear in the group list and
 conversation header. Desktop uses a
 separate room format and does not currently display Wing's hosted-room pictures.
 

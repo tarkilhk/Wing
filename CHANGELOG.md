@@ -8,6 +8,8 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Bots and discussions
 
+- Default group icons show member bot avatars inside a square frame with a random Hermes palette color.
+
 - Fix generated group pictures and bot avatars with stock Hermes. Add detailed
   device diagnostics while keeping the existing on-screen errors.
 
