@@ -102,7 +102,7 @@ class ChatRuntime {
   bool _liveSessionConfirmed = true;
   ChatExecution _execution = ChatExecution.idle;
   ChatRecovery _recovery = ChatRecovery.ready;
-  String? _openingError, _error;
+  String? _openingError, _error, _commandError;
   ChatMainActivity _main = ChatMainActivity.working;
   bool _compacting = false;
   GatewayToolActivity? _mainTool;
@@ -159,7 +159,7 @@ class ChatRuntime {
     secureResponding: _secureResponding,
     commandRunning: _commandRunning,
     changingAnswer: _changingAnswer,
-    error: _error,
+    error: _error ?? _commandError,
     decisionError: _decisionError,
     decisionErrorRequestId: _decisionErrorRequestId,
   );
@@ -388,6 +388,7 @@ class ChatRuntime {
       _tools.clear();
       _activity.clear();
       _error = null;
+      _commandError = null;
     }
     return original;
   }
@@ -407,6 +408,7 @@ class ChatRuntime {
       _main = ChatMainActivity.working;
       _mainTool = null;
       _error = null;
+      _commandError = null;
     }
     return capture;
   }
@@ -502,12 +504,22 @@ class ChatRuntime {
     if (!_closed) _error = error;
   }
 
+  void reportCommandError(String error) {
+    // A resume describes the turn, not the outcome of a timed-out command.
+    // Keep this local outcome until the next explicit command or turn.
+    if (!_closed) {
+      _error = null;
+      _commandError = error;
+    }
+  }
+
   void beginCommand() {
     if (!_closed) {
       _commandRevision++;
       _commandPrompt = null;
       _commandRunning = true;
       _error = null;
+      _commandError = null;
     }
   }
 

@@ -1053,6 +1053,193 @@ void main() {
     );
   });
 
+  for (final command in ['/model', '/tools', '/reload-mcp']) {
+    for (final stalledMethod in ['command.dispatch', 'slash.exec']) {
+      testWidgets(
+        'all slash commands stop waiting when $stalledMethod is silent: $command',
+        (tester) async {
+          final response = Completer<Map<String, dynamic>>();
+          var dispatched = false;
+          addTearDown(() {
+            if (!response.isCompleted) response.complete({'output': 'Late'});
+          });
+          host.respond = (method, _) async {
+            if (method != stalledMethod) {
+              throw JsonRpcError(
+                method,
+                'not a quick/plugin/bundle/skill command: ${command.substring(1)}',
+                code: 4018,
+              );
+            }
+            dispatched = true;
+            return response.future;
+          };
+          chat.composer.editText(command);
+          final sending = controller.send(chat);
+          await tester.pump();
+          expect(dispatched, isTrue);
+          expect(chat.runtime.commandRunning, isTrue);
+          await tester.pump(const Duration(seconds: 61));
+          expect(chat.runtime.commandRunning, isFalse);
+          expect(chat.runtime.error, contains('uncertain'));
+          expect(chat.composer.observation.text, command);
+          response.complete({'type': 'send', 'message': 'Late command prompt'});
+          await tester.pump();
+          await sending;
+          expect(chat.composer.observation.text, command);
+          expect(chat.reading.messages, isEmpty);
+          expect(
+            host.commandCalls.where((c) => c.$1 == 'prompt.submit'),
+            isEmpty,
+          );
+          expect(
+            host.commandCalls.where((c) => c.$1 == stalledMethod),
+            hasLength(1),
+          );
+        },
+      );
+    }
+
+    test(
+      'all slash commands report worker timeout uncertainty: $command',
+      () async {
+        host.respond = (method, _) async {
+          if (method == 'command.dispatch') {
+            throw JsonRpcError(
+              method,
+              'not a quick/plugin/bundle/skill command: ${command.substring(1)}',
+              code: 4018,
+            );
+          }
+          throw JsonRpcError(method, 'slash worker timed out', code: 5030);
+        };
+        chat.composer.editText(command);
+        await controller.send(chat);
+        expect(chat.runtime.commandRunning, isFalse);
+        expect(chat.runtime.error, contains('uncertain'));
+        expect(chat.composer.observation.text, command);
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'slash.exec'),
+          hasLength(1),
+        );
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'prompt.submit'),
+          isEmpty,
+        );
+      },
+    );
+  }
+
+  testWidgets('a late routing refusal cannot execute after command timeout', (
+    tester,
+  ) async {
+    final response = Completer<Map<String, dynamic>>();
+    host.respond = (_, _) => response.future;
+    chat.composer.editText('/model');
+    final sending = controller.send(chat);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 61));
+    await sending;
+    expect(chat.runtime.commandRunning, isFalse);
+    response.completeError(
+      JsonRpcError(
+        'command.dispatch',
+        'not a quick/plugin/bundle/skill command: model',
+        code: 4018,
+      ),
+    );
+    await tester.pump();
+    expect(host.commandCalls.where((c) => c.$1 == 'slash.exec'), isEmpty);
+    expect(chat.composer.observation.text, '/model');
+    expect(chat.runtime.error, contains('uncertain'));
+  });
+
+  testWidgets('built-in execution has a bound after delayed resolution', (
+    tester,
+  ) async {
+    final resolving = Completer<Map<String, dynamic>>();
+    final executing = Completer<Map<String, dynamic>>();
+    host.respond = (method, _) =>
+        method == 'command.dispatch' ? resolving.future : executing.future;
+    chat.composer.editText('/tools');
+    final sending = controller.send(chat);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 40));
+    resolving.completeError(
+      JsonRpcError(
+        'command.dispatch',
+        'not a quick/plugin/bundle/skill command: tools',
+        code: 4018,
+      ),
+    );
+    await tester.pump();
+    expect(host.commandCalls.where((c) => c.$1 == 'slash.exec'), hasLength(1));
+    expect(chat.runtime.commandRunning, isTrue);
+    await tester.pump(const Duration(seconds: 21));
+    expect(chat.runtime.commandRunning, isTrue);
+    await tester.pump(const Duration(seconds: 40));
+    await sending;
+    expect(chat.runtime.commandRunning, isFalse);
+    expect(chat.runtime.error, contains('uncertain'));
+    executing.complete({'output': 'Late tools'});
+    await tester.pump();
+    expect(chat.reading.messages, isEmpty);
+    expect(chat.composer.observation.text, '/tools');
+  });
+
+  testWidgets('a late command result cannot finish a newer command', (
+    tester,
+  ) async {
+    final previous = Completer<Map<String, dynamic>>();
+    host.respond = (_, _) => previous.future;
+    chat.composer.editText('/custom');
+    final first = controller.send(chat);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 61));
+    await first;
+    final next = Completer<Map<String, dynamic>>();
+    host.respond = (_, _) => next.future;
+    chat.composer.editText('/another');
+    final second = controller.send(chat);
+    await tester.pump();
+    previous.complete({'type': 'prefill', 'message': 'Stale draft'});
+    await tester.pump();
+    expect(chat.runtime.commandRunning, isTrue);
+    expect(chat.runtime.error, isNull);
+    expect(chat.composer.observation.text, '/another');
+    next.complete({'type': 'exec', 'output': 'New command finished'});
+    await tester.pump();
+    await second;
+    expect(chat.runtime.commandRunning, isFalse);
+    expect(chat.composer.observation.text, isEmpty);
+    expect(chat.reading.messages.last['content'], 'New command finished');
+  });
+
+  testWidgets('connection recovery retains the uncertain command outcome', (
+    tester,
+  ) async {
+    host.running = false;
+    host.respond = (_, _) async => throw JsonRpcError(
+      'command.dispatch',
+      'Connection closed',
+      reason: 'connection_closed',
+    );
+    chat.composer.editText('/custom');
+    final sending = controller.send(chat);
+    await tester.pump();
+    await sending;
+    await tester.pump(const Duration(seconds: 2));
+    expect(chat.runtime.offline, isFalse);
+    expect(chat.runtime.commandRunning, isFalse);
+    expect(chat.runtime.error, contains('uncertain'));
+    expect(chat.composer.observation.text, '/custom');
+    expect(
+      host.commandCalls.where((c) => c.$1 == 'command.dispatch'),
+      hasLength(1),
+    );
+    expect(host.commandCalls.where((c) => c.$1 == 'slash.exec'), isEmpty);
+  });
+
   test('timeout never retries via slash.exec or prompt.submit', () async {
     host.respond = (_, _) async => throw TimeoutException('lost reply');
     chat.composer.editText('/custom');
@@ -1393,6 +1580,99 @@ void main() {
       expect(chat.yolo, isTrue);
     },
   );
+
+  for (final restriction in {
+    'advanced': ['reload-mcp', 'curator', 'kanban'],
+    'settings': ['login'],
+  }.entries) {
+    for (final name in restriction.value) {
+      for (final route in ['direct', 'catalog alias', 'dispatch alias']) {
+        test(
+          'restricted commands never dispatch: ${restriction.key} /$name via $route',
+          () async {
+            host.readCatalog = (profile) async => {
+              ...host.catalog(profile),
+              'canon': {'/shortcut': '/$name'},
+              'commands': {
+                '/$name': {'desktop': restriction.key},
+              },
+            };
+            host.respond = (_, _) async => {
+              'type': 'alias',
+              'target': '/$name',
+            };
+            final text = switch (route) {
+              'catalog alias' => '/shortcut argument',
+              'dispatch alias' => '/custom argument',
+              _ => '/$name argument',
+            };
+            chat.composer.editText(text);
+            await controller.send(chat);
+            expect(
+              chat.runtime.error,
+              contains('not available as a chat command'),
+            );
+            expect(chat.runtime.error, contains('/$name'));
+            expect(chat.runtime.commandRunning, isFalse);
+            expect(chat.composer.observation.text, text);
+            expect(chat.reading.messages, isEmpty);
+            expect(
+              host.commandCalls.where(
+                (c) => {'slash.exec', 'prompt.submit'}.contains(c.$1),
+              ),
+              isEmpty,
+            );
+            expect(
+              host.commandCalls
+                  .where((c) => c.$1 == 'command.dispatch')
+                  .map((c) => c.$2['name']),
+              route == 'dispatch alias' ? ['custom'] : isEmpty,
+            );
+          },
+        );
+      }
+    }
+  }
+
+  test('hidden commands remain executable by name', () async {
+    host.readCatalog = (profile) async => {
+      ...host.catalog(profile),
+      'commands': {
+        '/model': {'desktop': 'hidden'},
+      },
+    };
+    chat.composer.editText('/model');
+    await controller.send(chat);
+    expect(chat.runtime.error, isNull);
+    expect(chat.composer.observation.text, isEmpty);
+    expect(
+      host.commandCalls
+          .singleWhere((c) => c.$1 == 'command.dispatch')
+          .$2['name'],
+      'model',
+    );
+  });
+
+  test('phone-owned commands retain their local handler', () async {
+    host.readCatalog = (profile) async => {
+      ...host.catalog(profile),
+      'commands': {
+        '/profile': {'desktop': 'terminal'},
+      },
+    };
+    chat.composer.editText('/profile');
+    await controller.send(chat);
+    expect(chat.runtime.error, isNull);
+    expect(chat.composer.observation.text, isEmpty);
+    expect(
+      host.commandCalls.where(
+        (c) =>
+            {'command.dispatch', 'slash.exec', 'prompt.submit'}.contains(c.$1),
+      ),
+      isEmpty,
+    );
+    expect(chat.reading.messages.single['content'], 'Profile: a');
+  });
 
   test('terminal commands explain requirement and preserve draft', () async {
     chat.composer.editText('/clear');
@@ -1824,6 +2104,43 @@ void main() {
       expect(chat.runtime.error, contains('Skill load failed'));
     },
   );
+
+  testWidgets('a stalled inline skill cannot submit a late prompt', (
+    tester,
+  ) async {
+    final response = Completer<Map<String, dynamic>>();
+    addTearDown(() {
+      if (!response.isCompleted) response.complete({'output': 'Late'});
+    });
+    host.respond = (_, _) => response.future;
+    const original = 'Please use /a-skill for this task';
+    chat.composer.editText(original);
+    final sending = controller.send(chat);
+    for (
+      var i = 0;
+      i < 20 && !host.commandCalls.any((c) => c.$1 == 'command.dispatch');
+      i++
+    ) {
+      // Prompt preparation journals through real I/O before skill dispatch.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(
+      host.commandCalls.where((c) => c.$1 == 'command.dispatch'),
+      hasLength(1),
+    );
+    await tester.pump(const Duration(seconds: 61));
+    await sending;
+    expect(host.commandCalls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
+    expect(chat.composer.observation.queue.single.text, original);
+    expect(chat.composer.observation.error, isNotNull);
+    response.complete({'type': 'skill', 'message': 'Late skill expansion'});
+    await tester.pump();
+    expect(host.commandCalls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
+    expect(chat.composer.observation.queue.single.text, original);
+  });
 
   test('inline commands and paths stay literal', () async {
     const original =

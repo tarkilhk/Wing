@@ -23,9 +23,11 @@ can address active work. Commands that start a normal turn wait until idle.
 Built-in commands mentioned within ordinary prose remain text.
 
 A command's presence in the catalog does not guarantee it works on mobile.
-Terminal-only and messaging-only commands retain their requirements. A server
-microphone command does not use your phone's microphone. You can still type a
-command by name when the catalog is stale.
+Wing checks the server's availability restrictions before running a command.
+Commands reserved for management controls, settings, the terminal or messaging
+explain their requirement and keep your draft. A server microphone command does
+not use your phone's microphone. You can still type a command by name when the
+catalog is stale; known restrictions still apply.
 
 Skill receipts open the [instruction reader](TOOL_ACTIVITY.md#captured-skill-reading)
 without rerunning the command. See [Queues and pending input](SUPERVISION_AND_QUEUES.md)

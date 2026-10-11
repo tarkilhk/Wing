@@ -148,6 +148,7 @@ class ProfileGatewayConnection {
 /// The stock modern Hermes contract. All profile-owned traffic passes through
 /// this immutable scope. There is no unscoped or experimental-recovery fallback.
 class ProfileGateway {
+  static const commandTimeout = Duration(seconds: 60);
   late final _skillReader = SkillReaderRepository(_get);
   SkillReaderSession skillReader(SkillReaderTarget document) =>
       SkillReaderSession(
@@ -171,8 +172,10 @@ class ProfileGateway {
     String method,
     Map<String, dynamic> params,
   ) async {
+    final command = const {'command.dispatch', 'slash.exec'}.contains(method);
     try {
-      return await _rpcRequest(method, params);
+      final request = _rpcRequest(method, params);
+      return await (command ? request.timeout(commandTimeout) : request);
     } catch (failure, stack) {
       logConnectionDiagnostic(
         'gateway.rpc_failed',
@@ -185,7 +188,12 @@ class ProfileGateway {
         error: failure,
         stackTrace: stack,
       );
-      if (isTemporaryWorkspaceFailure(failure)) {
+      final commandTimedOut =
+          command &&
+          (failure is TimeoutException ||
+              failure is JsonRpcError && failure.reason == 'request_timeout');
+      // A slow command is not evidence that its event socket is disconnected.
+      if (!commandTimedOut && isTemporaryWorkspaceFailure(failure)) {
         disconnect();
         _liveChanged(false);
         onConnectionChanged?.call(false);
@@ -477,15 +485,12 @@ class ProfileGateway {
         final envelope = await current.send(
           method,
           params,
-          timeout: method == 'mcp.servers.oauth.start'
-              ? const Duration(seconds: 45)
-              : const {
-                  'command.dispatch',
-                  'slash.exec',
-                  'session.compress',
-                }.contains(method)
-              ? const Duration(minutes: 11)
-              : const Duration(seconds: 30),
+          timeout: switch (method) {
+            'mcp.servers.oauth.start' => const Duration(seconds: 45),
+            'command.dispatch' || 'slash.exec' => commandTimeout,
+            'session.compress' => const Duration(minutes: 11),
+            _ => const Duration(seconds: 30),
+          },
         );
         final error = envelope['error'];
         if (error is Map) {
@@ -574,6 +579,46 @@ class ProfileGateway {
     String method, [
     Map<String, dynamic> params = const {},
   ]) => _rpc(method, {...params, 'profile': scope.profileName});
+
+  /// Resolve and execute a slash command with bounded RPC waits. Only the
+  /// stock refusal that dispatch did not execute anything permits slash.exec.
+  /// Timeout retires routing; a late refusal must never start another handler.
+  Future<Map<String, dynamic>> dispatchCommand({
+    required String sessionId,
+    required String name,
+    required String argument,
+    required bool Function() canDispatch,
+  }) async {
+    void requireActive() {
+      if (!canDispatch()) {
+        throw StateError('Chat changed. The command result was not applied.');
+      }
+    }
+
+    requireActive();
+    Map<String, dynamic> result;
+    try {
+      result = await call('command.dispatch', {
+        'session_id': sessionId,
+        'name': name,
+        'arg': argument,
+      });
+    } on JsonRpcError catch (failure) {
+      if (failure.code != 4018 ||
+          !failure.message.startsWith(
+            'not a quick/plugin/bundle/skill command:',
+          )) {
+        rethrow;
+      }
+      requireActive();
+      result = await call('slash.exec', {
+        'session_id': sessionId,
+        'command': '/$name${argument.isEmpty ? '' : ' $argument'}',
+      });
+    }
+    requireActive();
+    return result;
+  }
 
   /// Reload is process-wide. Its stock schema forbids a profile parameter;
   /// this gateway provides the connection, not the operation's scope.
