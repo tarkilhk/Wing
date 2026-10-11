@@ -1,3 +1,4 @@
+import 'bot_mention_scope.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -155,8 +156,11 @@ class ProfileMessage extends StatelessWidget {
                                   10,
                                   4,
                                 ),
-                                child: SelectableText(
-                                  content,
+                                child: SelectableText.rich(
+                                  BotMentionScope.of(
+                                        context,
+                                      )?.text(content, colors.primary) ??
+                                      TextSpan(text: content),
                                   style: theme.textTheme.bodyLarge?.copyWith(
                                     height: 1.45,
                                     color: colors.onPrimaryContainer,

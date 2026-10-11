@@ -9414,6 +9414,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/widgets/bot_mention_scope.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/chat_find_sheet.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -9494,6 +9499,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/widgets/composer_icon_button.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
       "path": "lib/core/widgets/config_backup_actions.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -9510,6 +9520,11 @@
     },
     {
       "path": "lib/core/widgets/context_ring.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/conversation_activity_status.dart",
       "area": "lib",
       "provenance": "tracked"
     },
@@ -10520,6 +10535,11 @@
     },
     {
       "path": "test/bot_group_view_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_mention_scope_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },
@@ -14426,16 +14446,6 @@
     {
       "path": "website/workspaces.html",
       "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "lib/core/widgets/composer_icon_button.dart",
-      "area": "lib",
-      "provenance": "tracked"
-    },
-    {
-      "path": "lib/core/widgets/conversation_activity_status.dart",
-      "area": "lib",
       "provenance": "tracked"
     }
   ],

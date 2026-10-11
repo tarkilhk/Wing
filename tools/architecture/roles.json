@@ -1836,6 +1836,11 @@
       "feature": "bots",
       "library": "lib/core/widgets/bot_group_picture.dart"
     },
+    "lib/core/widgets/bot_mention_scope.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/widgets/bot_mention_scope.dart"
+    },
     "lib/core/widgets/chat_find_sheet.dart": {
       "role": "view",
       "feature": "conversation",

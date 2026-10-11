@@ -17,6 +17,7 @@ import '../services/completion_diagnostics.dart';
 import '../services/web_preview.dart';
 import '../theme/profile_markdown_style.dart';
 import 'chat_inline_image.dart';
+import 'bot_mention_scope.dart';
 import 'markdown_code_block.dart';
 import 'block_reusing_markdown_body.dart';
 import 'background_markdown_content.dart';
@@ -309,7 +310,9 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     final theme = Theme.of(context);
     final styleSheet = _styleSheet ??= profileMarkdownStyle(theme);
     final markdownTheme = _markdownTheme ??= profileMarkdownTheme(theme);
+    final mentions = BotMentionScope.of(context);
     final builders = _markdownBuilders ??= {
+      if (mentions != null) BotMentionScope.tag: BotMentionBuilder(),
       if (widget.documentPath != null || widget.onHeadings != null)
         _headingAnchorTag: _HeadingAnchorBuilder(_headingKeys),
       if (widget.deliverables)

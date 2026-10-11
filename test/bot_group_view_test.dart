@@ -58,18 +58,31 @@ Future<void> _render(WidgetTester tester, GlobalKey key, String name) async {
   for (var pass = 0; pass < 4; pass++) {
     await _settleGroupMarkdown(tester);
   }
-  await tester.runAsync(() async {
-    final frame =
-        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-    final image = await frame.toImage();
-    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    final directory = Directory('build/design-previews/bot-groups')
-      ..createSync(recursive: true);
-    await File(
-      '${directory.path}/$name.png',
-    ).writeAsBytes(bytes!.buffer.asUint8List());
-    image.dispose();
-  });
+  final shadows = debugDisableShadows;
+  debugDisableShadows = false;
+  try {
+    void repaint(RenderObject object) {
+      object.markNeedsPaint();
+      object.visitChildren(repaint);
+    }
+
+    repaint(key.currentContext!.findRenderObject()!);
+    await tester.pump();
+    await tester.runAsync(() async {
+      final frame =
+          key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final image = await frame.toImage();
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      final directory = Directory('build/design-previews/bot-groups')
+        ..createSync(recursive: true);
+      await File(
+        '${directory.path}/$name.png',
+      ).writeAsBytes(bytes!.buffer.asUint8List());
+      image.dispose();
+    });
+  } finally {
+    debugDisableShadows = shadows;
+  }
 }
 
 void main() {
@@ -155,7 +168,7 @@ void main() {
       'created_at': 1791756000.0,
     });
     fixture.events.add(
-      _event(2, 'message.user', 'you', '**Literal user text**'),
+      _event(2, 'message.user', 'you', '**Literal user text** @bot_atlas'),
     );
     final group = (await fixture.repository.groups()).first;
     final appearances = await fixture.repository.bots();
@@ -175,6 +188,42 @@ void main() {
     await tester.settleMarkdown();
     expect(find.byType(ProfileMessage), findsNWidgets(2));
     expect(find.text('User'), findsOneWidget);
+    final userText = tester
+        .widgetList<SelectableText>(find.byType(SelectableText))
+        .firstWhere(
+          (text) =>
+              text.textSpan?.toPlainText().contains('Literal user') ?? false,
+        );
+    expect(userText.textSpan!.toPlainText(), '**Literal user text** @Atlas');
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<(String, Object?)>((
+            'user-message-bubble',
+            'room-1:2',
+          )),
+        ),
+        matching: find.byTooltip('Copy message'),
+      ),
+    );
+    expect(copied, '**Literal user text** @bot_atlas');
+
     for (final (kind, id, speaker) in [
       ('bot-message-bubble', 'room-1:1', 'Atlas'),
       ('user-message-bubble', 'room-1:2', 'User'),
@@ -379,13 +428,13 @@ void main() {
             1,
             'message.member',
             'atlas',
-            'I’m checking the evidence before the build. ${List.filled(8, 'The approved sources and calculation definitions are in our shared mission.').join(' ')}',
+            '@bot_mira, I’m checking the evidence before the build. ${List.filled(8, 'The approved sources and calculation definitions are in our shared mission.').join(' ')}',
           ),
           _event(
             2,
             'message.user',
             'you',
-            'Please review this evidence and explain what I need to do next.',
+            '@bot_atlas, please review this evidence and explain what I need to do next.',
           ),
         ]);
         final group = (await fixture.repository.groups()).first;
@@ -498,22 +547,48 @@ void main() {
         await tester.enterText(input, 'Keep this draft');
         await tester.pump(const Duration(milliseconds: 300));
         expect(find.byTooltip('Send group message'), findsOneWidget);
-        await tester.tap(find.byKey(const ValueKey('group-members-entry')));
+        final entry = find.byKey(const ValueKey('group-members-entry'));
+        final anchorRect = tester.getRect(entry);
+        await tester.tap(entry);
+        await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
-        expect(find.byType(Dialog), findsOneWidget);
+        expect(find.byType(Dialog), findsNothing);
+        final atlas = find.byKey(const ValueKey(('group-member', 'atlas')));
+        final mira = find.byKey(const ValueKey(('group-member', 'mira')));
         expect(
-          find.descendant(
-            of: find.byType(Dialog),
-            matching: find.text('Atlas'),
-          ),
+          find.descendant(of: atlas, matching: find.text('Atlas')),
           findsOneWidget,
         );
         expect(
-          find.descendant(of: find.byType(Dialog), matching: find.text('Mira')),
+          find.descendant(of: mira, matching: find.text('Mira')),
           findsOneWidget,
         );
+        final firstRect = tester.getRect(atlas);
+        expect(firstRect.top, closeTo(anchorRect.bottom + 8, 1));
+        expect(firstRect.left, closeTo(anchorRect.left, 1));
+        expect(firstRect.width, lessThanOrEqualTo(280));
+        if (scale == 1) expect(firstRect.height, lessThanOrEqualTo(36));
+        expect(find.text('Group members'), findsNothing);
         await _render(tester, frame, 'members-${brightness.name}-$scale');
-        await tester.tap(find.byTooltip('Close members'));
+        await tester.tapAt(const Offset(10, 500));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(atlas, findsNothing);
+        await tester.tap(entry);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(atlas, findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(atlas, findsNothing);
+        await tester.tap(find.byTooltip('Group options'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Group members'), findsNothing);
+        expect(find.text('Refresh group'), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         expect(
           tester.widget<TextField>(input).controller!.text,

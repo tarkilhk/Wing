@@ -1,3 +1,4 @@
+import '../../widgets/bot_mention_scope.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/bot_group_session.dart';
@@ -33,6 +34,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   late final _session = widget.createSession();
   final _composer = SkillComposerController();
   final _focus = FocusNode();
+  final _membersAnchor = GlobalKey();
   bool get _showReferences =>
       _session.pendingText == null &&
       !_session.sending &&
@@ -114,18 +116,23 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     final name =
         member?.name ??
         (event.actorName.isNotEmpty ? event.actorName : event.actor);
-    return ProfileMessage(
-      key: ValueKey(('group-message', event.sequence)),
-      message: TranscriptMessage.discussion(
-        id: '${_session.group.id}:${event.sequence}',
-        text: event.text,
-        timestamp: event.timestamp,
-        sender: user ? null : name,
-        senderHandle: member?.handle,
+    return BotMentionScope(
+      names: {
+        for (final member in _session.group.members) member.handle: member.name,
+      },
+      child: ProfileMessage(
+        key: ValueKey(('group-message', event.sequence)),
+        message: TranscriptMessage.discussion(
+          id: '${_session.group.id}:${event.sequence}',
+          text: event.text,
+          timestamp: event.timestamp,
+          sender: user ? null : name,
+          senderHandle: member?.handle,
+        ),
+        senderAppearance: user || member == null
+            ? null
+            : _session.appearance(member.profile),
       ),
-      senderAppearance: user || member == null
-          ? null
-          : _session.appearance(member.profile),
     );
   }
 
@@ -170,67 +177,73 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   }
 
   Future<void> _showMembers() async {
-    _focus.unfocus();
-    await showDialog<void>(
+    final source = _membersAnchor.currentContext;
+    if (source == null) return;
+    final overlay =
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final box = source.findRenderObject()! as RenderBox;
+    RelativeRect position() {
+      final rect = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
+      return RelativeRect.fromRect(
+        Rect.fromLTWH(rect.left, rect.bottom + WingSpacing.xs, 0, 0),
+        Offset.zero & overlay.size,
+      );
+    }
+
+    var lastPosition = position();
+    await showMenu<void>(
       context: context,
-      builder: (context) => Dialog(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: 360,
-            maxHeight: MediaQuery.sizeOf(context).height * .65,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
+      semanticLabel: 'Group members',
+      requestFocus: true,
+      positionBuilder: (_, _) {
+        if (box.attached &&
+            overlay.attached &&
+            box.hasSize &&
+            overlay.hasSize) {
+          lastPosition = position();
+        }
+        return lastPosition;
+      },
+      constraints: const BoxConstraints(minWidth: 200, maxWidth: 280),
+      elevation: 4,
+      menuPadding: const EdgeInsets.symmetric(vertical: WingSpacing.xs),
+      popUpAnimationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : const AnimationStyle(duration: Duration(milliseconds: 160)),
+      items: [
+        for (final member in _session.group.members)
+          _MemberEntry(
+            key: ValueKey(('group-member', member.id)),
+            child: Builder(
+              builder: (context) {
+                final bot = _session.appearance(member.profile);
+                final name = bot?.title ?? member.name;
+                return Row(
                   children: [
+                    BotAvatar(
+                      name: name,
+                      shape: bot?.shape ?? 'circle',
+                      color: bot?.color ?? '',
+                      image: bot?.avatar,
+                      size: 24,
+                    ),
+                    const SizedBox(width: WingSpacing.sm),
                     Expanded(
                       child: Text(
-                        'Group members',
-                        style: Theme.of(context).textTheme.titleMedium,
+                        name,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'Close members',
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                    ),
                   ],
-                ),
-                Flexible(
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: [
-                      for (final member in _session.group.members)
-                        Builder(
-                          builder: (context) {
-                            final bot = _session.appearance(member.profile);
-                            final name = bot?.title ?? member.name;
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: BotAvatar(
-                                name: name,
-                                shape: bot?.shape ?? 'circle',
-                                color: bot?.color ?? '',
-                                image: bot?.avatar,
-                                size: 32,
-                              ),
-                              title: Text(name),
-                            );
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
-        ),
-      ),
+      ],
     );
+    if (mounted) _acknowledgeLatest();
   }
 
   Widget _activityStatus(BuildContext context) {
@@ -396,8 +409,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
             icon: const Icon(Icons.more_horiz),
             onSelected: (action) async {
               switch (action) {
-                case 'members':
-                  await _showMembers();
                 case 'histories':
                   await _openWorkingHistories();
                 case 'refresh':
@@ -424,10 +435,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
             itemBuilder: (_) => [
               if (widget.onEdit != null)
                 const PopupMenuItem(value: 'edit', child: Text('Edit group')),
-              const PopupMenuItem(
-                value: 'members',
-                child: Text('Group members'),
-              ),
               const PopupMenuItem(
                 value: 'histories',
                 child: Text('Bot working histories'),
@@ -458,6 +465,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                   button: true,
                   label: 'Show group members',
                   child: Material(
+                    key: _membersAnchor,
                     color: Colors.transparent,
                     child: InkWell(
                       key: const ValueKey('group-members-entry'),
@@ -741,4 +749,27 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       ),
     );
   }
+}
+
+// Roster observations have text semantics, rather than disabled action semantics.
+class _MemberEntry extends PopupMenuEntry<void> {
+  const _MemberEntry({super.key, required this.child});
+  final Widget child;
+  @override
+  double get height => 0;
+  @override
+  bool represents(void value) => false;
+  @override
+  State<_MemberEntry> createState() => _MemberEntryState();
+}
+
+class _MemberEntryState extends State<_MemberEntry> {
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(
+      horizontal: WingSpacing.md,
+      vertical: WingSpacing.xs,
+    ),
+    child: widget.child,
+  );
 }
