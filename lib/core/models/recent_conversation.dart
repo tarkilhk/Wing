@@ -1,15 +1,53 @@
 import 'profile_session_key.dart';
 import 'bots.dart';
 import 'transcript_reading.dart';
+import 'transcript_message.dart';
 
-/// The displayed Recents membership and order captured at route entry.
-final class RecentConversationEntry {
-  const RecentConversationEntry({required this.key, required this.title});
-  final ProfileSessionKey key;
-  final String title;
+/// A chat and a hosted room have distinct, authenticated identities.
+final class RecentConversationKey {
+  const RecentConversationKey.chat(ProfileSessionKey value)
+    : chat = value,
+      group = null;
+  const RecentConversationKey.group(String value) : group = value, chat = null;
+  final ProfileSessionKey? chat;
+  final String? group;
+  @override
+  bool operator ==(Object other) =>
+      other is RecentConversationKey &&
+      chat == other.chat &&
+      group == other.group;
+  @override
+  int get hashCode => Object.hash(chat, group);
 }
 
-/// A captured All catalog, including usable entries after partial failure.
+/// One immutable conversation identity in the canonical Recents order.
+final class RecentConversationEntry {
+  RecentConversationEntry.chat({
+    required ProfileSessionKey key,
+    required this.title,
+  }) : key = RecentConversationKey.chat(key),
+       group = null;
+  RecentConversationEntry.group(BotGroup value)
+    : key = RecentConversationKey.group(value.key),
+      title = value.name,
+      group = value;
+  final RecentConversationKey key;
+  final String title;
+  final BotGroup? group;
+}
+
+/// Immutable passive discussion facts; no room visibility/read authority.
+final class GroupConversationPreview {
+  GroupConversationPreview({
+    required Iterable<TranscriptMessage> messages,
+    required Map<String, BotRecord> appearances,
+  }) : messages = List.unmodifiable(messages),
+       appearances = Map.unmodifiable(appearances);
+  final List<TranscriptMessage> messages;
+  final Map<String, BotRecord> appearances;
+}
+
+/// A captured catalog, including usable entries after partial failure.
 final class RecentConversationCatalog {
   RecentConversationCatalog({
     required Iterable<RecentConversationEntry> entries,
@@ -27,11 +65,13 @@ final class RecentConversationPreview {
     required this.draft,
     required this.scopeLabel,
     this.modelLabel,
+    this.group,
   });
   final RecentConversationEntry entry;
   final TranscriptReadingSnapshot reading;
   final String draft, scopeLabel;
   final String? modelLabel;
+  final GroupConversationPreview? group;
 }
 
 final class RecentConversationCard {
@@ -83,8 +123,8 @@ final class ConversationNudge {
 
 ConversationDirection? recentConversationDirection(
   List<RecentConversationEntry> entries,
-  ProfileSessionKey current,
-  ProfileSessionKey target,
+  RecentConversationKey current,
+  RecentConversationKey target,
 ) {
   final from = entries.indexWhere((entry) => entry.key == current);
   final to = entries.indexWhere((entry) => entry.key == target);

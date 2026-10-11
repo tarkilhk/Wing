@@ -249,7 +249,7 @@ void main() {
         addTearDown(tester.view.reset);
         final frame = GlobalKey();
         ProfileRecentChat? opened;
-        List<ProfileRecentChat>? displayed;
+        List<WorkspaceRecentItem>? displayed;
         String? openedRoom;
         await tester.pumpWidget(
           MaterialApp(
@@ -355,12 +355,10 @@ void main() {
         await tester.tap(botName);
         await tester.pumpAndSettle();
         expect(opened?.key.sessionId, 'running');
-        expect(displayed!.map((row) => row.key.sessionId), [
-          'needs-input',
-          'running',
-          'side-work',
-          'recent',
-        ]);
+        expect(
+          displayed!.map((row) => row.chat?.key.sessionId ?? row.group!.id),
+          ['needs-input', 'running', 'room-1', 'side-work', 'recent'],
+        );
         expect(() => displayed!.clear(), throwsUnsupportedError);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());

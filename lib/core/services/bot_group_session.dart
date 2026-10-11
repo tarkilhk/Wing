@@ -188,6 +188,30 @@ class BotGroupSession extends ChangeNotifier {
     }
   }
 
+  /// Passive tail read for card previews. Never acquires visibility or receipts.
+  Future<List<BotGroupEvent>> readRecentMessages({
+    required int limit,
+    required bool Function() canRead,
+  }) async {
+    if (limit < 1) throw ArgumentError.value(limit, 'limit');
+    final messages = <BotGroupEvent>[];
+    var end = group.lastMessageSequence;
+    while (end > 0 && messages.length < limit) {
+      if (_closed || !canRead()) throw StateError('Group preview retired');
+      final start = (end - 100).clamp(0, end);
+      final page = await repository.groupLog(group, since: start);
+      if (_closed || !canRead()) throw StateError('Group preview retired');
+      messages.insertAll(
+        0,
+        page.events.where((event) => event.sequence <= end && event.isMessage),
+      );
+      end = start;
+    }
+    return List.unmodifiable(
+      messages.skip((messages.length - limit).clamp(0, messages.length)),
+    );
+  }
+
   Future<void> refresh() async {
     if (_closed || _reading || _capturing) return;
     _reading = true;

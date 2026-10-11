@@ -2,9 +2,69 @@ part of 'profile_workspace_controller.dart';
 
 const _recentPreviewMessageLimit = 6;
 
+/// One globally ordered list, with distinct chat and room navigation targets.
+class WorkspaceRecentItem {
+  WorkspaceRecentItem.chat(ProfileRecentChat value, this.bot)
+    : chat = value,
+      group = null,
+      unread = value.unread;
+  const WorkspaceRecentItem.group(BotGroup value, this.unread)
+    : group = value,
+      chat = null,
+      bot = null;
+  final ProfileRecentChat? chat;
+  final BotRecord? bot;
+  final BotGroup? group;
+  final bool unread;
+  double get lastMessage =>
+      chat?.lastActive ??
+      (group?.lastMessageAt?.millisecondsSinceEpoch ?? 0) / 1000;
+  RecentConversationEntry get conversation => group == null
+      ? RecentConversationEntry.chat(key: chat!.key, title: chat!.title)
+      : RecentConversationEntry.group(group!);
+  String get identity =>
+      group?.key ??
+      '${chat!.key.workspace.connectionIdentity}/${chat!.key.workspace.profileName}/${chat!.key.sessionId}';
+}
+
+/// One membership/order projection for the destination and the pinch catalog.
+List<WorkspaceRecentItem> workspaceRecentItems(
+  ProfileWorkspaceController controller,
+  BotsSession bots, {
+  required Map<ProfileSessionKey, BotRecord> appearances,
+  DateTime? now,
+}) {
+  final cutoff = (now ?? DateTime.now()).millisecondsSinceEpoch / 1000 - 86400;
+  final result =
+      [
+        for (final chat in controller.recentChats(now: now))
+          WorkspaceRecentItem.chat(
+            chat,
+            bots.cachedAppearance(chat.key) ?? appearances[chat.key],
+          ),
+        for (final group in bots.observedGroups)
+          if (group.working ||
+              group.blocked ||
+              (group.lastMessageAt?.millisecondsSinceEpoch ?? 0) / 1000 >=
+                  cutoff)
+            WorkspaceRecentItem.group(group, bots.groupReads.unread(group)),
+      ]..sort((a, b) {
+        final time = b.lastMessage.compareTo(a.lastMessage);
+        return time != 0 ? time : a.identity.compareTo(b.identity);
+      });
+  return List.unmodifiable(result);
+}
+
 final class _WorkspaceRecentConversationSource
     implements RecentConversationSource {
-  _WorkspaceRecentConversationSource(this.controller, this.bots);
+  _WorkspaceRecentConversationSource(
+    this.controller,
+    this.bots,
+    this.onOpenGroup,
+  );
+  final Future<void> Function(BotGroup) onOpenGroup;
+  BotGroup? _group(RecentConversationKey key) =>
+      key.group == null ? null : bots.groupForKey(key.group!);
   final BotsSession bots;
   Set<ProfileSessionKey> _appearanceDemand = {};
   int _appearanceEpoch = -1;
@@ -14,35 +74,48 @@ final class _WorkspaceRecentConversationSource
   @override
   Future<RecentConversationCatalog> loadRecents({required bool refresh}) async {
     if (refresh) bots.invalidateAppearances();
-    if (refresh || !controller.recentsLoaded || controller.recentsLoading) {
-      await controller.refreshRecents();
-    }
+    await Future.wait([controller.refreshRecents(), bots.refresh()]);
     if (!current) throw StateError('Workspace is no longer available');
-    final all = controller.recentChats();
-    return RecentConversationCatalog(
-      entries: [
-        for (final item in all)
-          RecentConversationEntry(key: item.key, title: item.title),
-      ],
-      error: controller.recentsProfileErrors.isEmpty
-          ? null
-          : 'Some recent chats could not be loaded.',
-    );
+    return catalog;
   }
+
+  @override
+  RecentConversationCatalog get catalog => RecentConversationCatalog(
+    entries: [
+      for (final item in workspaceRecentItems(
+        controller,
+        bots,
+        appearances: const {},
+      ))
+        item.conversation,
+    ],
+    error: controller.recentsProfileErrors.isEmpty && bots.state.errors.isEmpty
+        ? null
+        : 'Some recent conversations could not be loaded.',
+  );
 
   @override
   bool get current => !controller._closed;
   @override
-  ProfileSessionKey? get selected =>
-      (controller.notificationChat ?? controller.current?.chat)?.key;
+  RecentConversationKey? get selected {
+    final key = (controller.notificationChat ?? controller.current?.chat)?.key;
+    return key == null ? null : RecentConversationKey.chat(key);
+  }
+
   @override
-  bool admits(ProfileSessionKey key) =>
+  bool admits(RecentConversationKey target) =>
       current &&
+      (target.group != null
+          ? _group(target) != null
+          : _admitsChat(target.chat!));
+  bool _admitsChat(ProfileSessionKey key) =>
       controller.owns(key) &&
       !(controller._resources[key.workspace]?.blocksSession(key.sessionId) ??
           false);
   @override
-  Object previewRevision(ProfileSessionKey key) {
+  Object previewRevision(RecentConversationKey target) {
+    if (target.group != null) return (_group(target),);
+    final key = target.chat!;
     final chat = controller._resources[key.workspace]?._chats[key.sessionId];
     final saved = controller._savedRecents
         .where((item) => item.key == key)
@@ -59,19 +132,23 @@ final class _WorkspaceRecentConversationSource
       chat == null ? null : controller.chatProjectLabel(chat),
       saved?.lastActive,
       controller.connectionStatus.phase,
-      admits(key),
+      _admitsChat(key),
     );
   }
 
   @override
-  BotRecord? appearanceFor(ProfileSessionKey key) => bots.cachedAppearance(key);
+  BotRecord? appearanceFor(RecentConversationKey key) =>
+      key.chat == null ? null : bots.cachedAppearance(key.chat!);
 
   @override
   Future<void> prepareAppearances(
-    Iterable<ProfileSessionKey> keys,
+    Iterable<RecentConversationKey> keys,
     bool Function() canRead,
   ) async {
-    final demand = keys.toSet();
+    final demand = keys
+        .map((key) => key.chat)
+        .whereType<ProfileSessionKey>()
+        .toSet();
     if (_appearanceEpoch == bots.appearanceEpoch &&
         setEquals(demand, _appearanceDemand)) {
       return;
@@ -102,9 +179,9 @@ final class _WorkspaceRecentConversationSource
 
   @override
   RecentConversationPreview? cachedPreview(RecentConversationEntry entry) {
-    if (!admits(entry.key)) return null;
-    final resource = controller._resources[entry.key.workspace];
-    final chat = resource?._chats[entry.key.sessionId];
+    if (!admits(entry.key) || entry.key.chat == null) return null;
+    final resource = controller._resources[entry.key.chat!.workspace];
+    final chat = resource?._chats[entry.key.chat!.sessionId];
     if (chat == null ||
         (chat.reading.historySessionId == null &&
             chat.reading.messages.isEmpty)) {
@@ -128,17 +205,17 @@ final class _WorkspaceRecentConversationSource
     TranscriptReadingSnapshot reading,
     String draft,
   ) {
-    final resource = controller._resources[entry.key.workspace];
-    final chat = resource?._chats[entry.key.sessionId];
+    final resource = controller._resources[entry.key.chat!.workspace];
+    final chat = resource?._chats[entry.key.chat!.sessionId];
     return RecentConversationPreview(
-      entry: RecentConversationEntry(
-        key: entry.key,
+      entry: RecentConversationEntry.chat(
+        key: entry.key.chat!,
         title: chat?.title ?? entry.title,
       ),
       reading: reading,
       draft: draft,
       scopeLabel: chat == null
-          ? entry.key.workspace.profileName
+          ? entry.key.chat!.workspace.profileName
           : controller.chatProjectLabel(chat),
       modelLabel: chat?.model,
     );
@@ -147,21 +224,31 @@ final class _WorkspaceRecentConversationSource
   @override
   Future<RecentConversationPreview> loadPreview(
     RecentConversationEntry entry,
+    bool Function() canRead,
   ) async {
-    if (!admits(entry.key)) throw StateError('Conversation is unavailable');
+    if (!canRead() || !admits(entry.key)) {
+      throw StateError('Conversation is unavailable');
+    }
+    if (entry.group != null) return _loadGroupPreview(entry, canRead);
     final cached = cachedPreview(entry);
     if (cached != null) return cached;
-    final resource = controller._resource(entry.key.workspace.profileName);
+    final resource = controller._resource(
+      entry.key.chat!.workspace.profileName,
+    );
     final page = await resource.gateway.history(
-      entry.key.sessionId,
+      entry.key.chat!.sessionId,
       limit: _recentPreviewMessageLimit,
       inlineImages: false,
     );
-    if (!admits(entry.key) || page.sessionId != entry.key.sessionId) {
+    if (!canRead() ||
+        !admits(entry.key) ||
+        page.sessionId != entry.key.chat!.sessionId) {
       throw StateError('Conversation preview changed');
     }
-    final draft = await controller.savedDraft(entry.key);
-    if (!admits(entry.key)) throw StateError('Conversation preview changed');
+    final draft = await controller.savedDraft(entry.key.chat!);
+    if (!canRead() || !admits(entry.key)) {
+      throw StateError('Conversation preview changed');
+    }
     return _preview(
       entry,
       TranscriptReadingSnapshot(
@@ -172,8 +259,74 @@ final class _WorkspaceRecentConversationSource
     );
   }
 
+  Future<RecentConversationPreview> _loadGroupPreview(
+    RecentConversationEntry entry,
+    bool Function() canRead,
+  ) async {
+    final group = _group(entry.key)!;
+    final session = bots.openGroup(group);
+    try {
+      final messages = await session.readRecentMessages(
+        limit: _recentPreviewMessageLimit,
+        canRead: canRead,
+      );
+      if (!canRead() || !admits(entry.key)) {
+        throw StateError('Group preview unavailable');
+      }
+      return RecentConversationPreview(
+        entry: entry,
+        reading: TranscriptReadingSnapshot(
+          messages: const [],
+          historySessionId: null,
+        ),
+        draft: '',
+        scopeLabel: 'Bot group',
+        group: GroupConversationPreview(
+          messages: [
+            for (final event in messages)
+              TranscriptMessage.discussion(
+                id: '${group.id}:${event.sequence}',
+                text: event.text,
+                timestamp: event.timestamp,
+                sender: event.kind == 'message.user'
+                    ? null
+                    : group.members
+                              .where((member) => member.id == event.actorId)
+                              .firstOrNull
+                              ?.name ??
+                          (event.actorName.isNotEmpty
+                              ? event.actorName
+                              : event.actor),
+                senderHandle: group.members
+                    .where((member) => member.id == event.actorId)
+                    .firstOrNull
+                    ?.handle,
+              ),
+          ],
+          appearances: {
+            for (final member in group.members)
+              member.handle: ?session.appearance(member.profile),
+          },
+        ),
+      );
+    } finally {
+      session.dispose();
+    }
+  }
+
   @override
-  Future<void> open(ProfileSessionKey key, bool Function() isCurrent) async {
+  Future<void> open(
+    RecentConversationKey target,
+    bool Function() isCurrent,
+  ) async {
+    if (target.group != null) {
+      if (!admits(target) || !isCurrent()) {
+        throw StateError('Group is unavailable');
+      }
+      await onOpenGroup(_group(target)!);
+      return;
+    }
+    final key = target.chat!;
     final previous = controller._current;
     final previousSession = previous?._selectedSession;
     final navigation = controller._navigationGeneration + 1;
@@ -193,7 +346,7 @@ final class _WorkspaceRecentConversationSource
       // Restore only this command's former selection, never a newer navigation.
       if (isCurrent() &&
           controller._navigationGeneration == navigation &&
-          selected != key &&
+          selected != RecentConversationKey.chat(key) &&
           previous != null &&
           previousSession != null &&
           !previous.blocksSession(previousSession) &&
@@ -254,7 +407,7 @@ final class _WorkspaceRecentConversationSource
   });
 
   bool _ownsRefresh(ProfileChat chat, ProfileSessionKey key, Object token) =>
-      admits(key) &&
+      admits(RecentConversationKey.chat(key)) &&
       identical(
         controller._resources[key.workspace]?._chats[key.sessionId],
         chat,

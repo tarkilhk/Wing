@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/bots.dart';
 import '../models/profile_live_activity.dart';
 import '../models/profile_colors.dart';
-import '../services/workspace_recents_session.dart';
+import '../services/profile_workspace_controller.dart';
 import '../theme/profile_colors.dart';
 import '../theme/wing_theme.dart';
 import '../screens/profile_project_actions.dart' show projectAvatar;

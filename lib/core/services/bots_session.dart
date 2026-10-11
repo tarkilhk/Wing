@@ -171,6 +171,16 @@ class BotsSession extends ChangeNotifier {
     return repository;
   }
 
+  /// Immutable room facts before roster-only pin decoration.
+  List<BotGroup> get observedGroups =>
+      List.unmodifiable(_groups.values.expand((groups) => groups));
+
+  /// Exact immutable room observation, independent of roster pin presentation.
+  BotGroup? groupForKey(String key) => _groups.values
+      .expand((groups) => groups)
+      .where((group) => group.key == key)
+      .firstOrNull;
+
   /// Capture already enriched roster appearance for this room visit. Typing
   /// references never starts another roster or avatar read.
   BotGroupSession openGroup(BotGroup group) => BotGroupSession(

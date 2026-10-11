@@ -454,7 +454,7 @@ void main() {
             expect(host.resumes, resumes);
             expect(controller.current!.chat!.key, first.key);
             var center = indices.reduce((a, b) => a < b ? a : b) + 1;
-            if (visit.entryAt(center).key == first.key) {
+            if (visit.entryAt(center).key.chat == first.key) {
               await _native(
                 tester,
                 '$prefix-momentum-slow-browse',
@@ -624,7 +624,7 @@ void main() {
                 'Stack Back must preserve a keyboard already hidden with Android Back',
           );
           expect(readReceipts, ['answer:3']);
-          host.failedResume = ring[(origin + 1) % ring.length].key;
+          host.failedResume = ring[(origin + 1) % ring.length].key.chat!;
           await swipe('failed-selection');
           expect(controller.current!.chat!.key, first.key);
           expect(
@@ -639,7 +639,7 @@ void main() {
           var sequence = 0;
           for (final kind in ConversationActivityKind.values) {
             activity.value = ChatNoticeActivity(
-              key: ring[(origin + 1) % ring.length].key,
+              key: ring[(origin + 1) % ring.length].key.chat!,
               kind: kind,
               identity: 'native-${kind.name}',
               sequence: ++sequence,
@@ -667,7 +667,7 @@ void main() {
             capture: false,
           );
           activity.value = ChatNoticeActivity(
-            key: ring[(origin + 1) % ring.length].key,
+            key: ring[(origin + 1) % ring.length].key.chat!,
             kind: ConversationActivityKind.reply,
             identity: 'editing',
             sequence: ++sequence,
@@ -772,7 +772,7 @@ void main() {
           if (!large) {
             final target = List.generate(ring.length, (i) => i).firstWhere(
               (i) =>
-                  ring[i].key.workspace !=
+                  ring[i].key.chat!.workspace !=
                   controller.current!.chat!.key.workspace,
             );
             Future<void> browseToTarget() async {
@@ -802,7 +802,7 @@ void main() {
             }
 
             final beforeCrossProfile = controller.current!.chat!.key;
-            host.failedResume = ring[target].key;
+            host.failedResume = ring[target].key.chat!;
             await browseToTarget();
             await _native(
               tester,
