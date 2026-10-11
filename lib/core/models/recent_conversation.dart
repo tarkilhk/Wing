@@ -8,6 +8,16 @@ final class RecentConversationEntry {
   final String title;
 }
 
+/// A captured All catalog, including usable entries after partial failure.
+final class RecentConversationCatalog {
+  RecentConversationCatalog({
+    required Iterable<RecentConversationEntry> entries,
+    required this.error,
+  }) : entries = List.unmodifiable(entries);
+  final List<RecentConversationEntry> entries;
+  final String? error;
+}
+
 /// Passive saved-history facts, never live execution or selection authority.
 final class RecentConversationPreview {
   const RecentConversationPreview({

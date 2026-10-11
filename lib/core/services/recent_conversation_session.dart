@@ -15,35 +15,74 @@ abstract interface class RecentConversationSource implements Listenable {
   RecentConversationPreview? cachedPreview(RecentConversationEntry entry);
   Future<RecentConversationPreview> loadPreview(RecentConversationEntry entry);
   Future<void> open(ProfileSessionKey key, bool Function() isCurrent);
+  Future<RecentConversationCatalog> loadRecents({required bool refresh});
 }
 
 /// Owns one Recents visit: frozen membership, provisional reads, fenced
 /// selection, and coalesced cues borrowed from the notification journal.
 /// Gesture geometry, rendered captures and springs belong to the view.
 final class RecentConversationSession extends ChangeNotifier {
-  RecentConversationSession({
+  RecentConversationSession.fromRecents({
     required Iterable<RecentConversationEntry> entries,
     required RecentConversationSource source,
     required ValueListenable<ChatNoticeActivity?> activity,
-  }) : entries = List.unmodifiable(entries),
-       // Public constructor names describe capabilities, not private storage.
-       // ignore: prefer_initializing_formals
-       _source = source,
-       _activity = activity {
+  }) : this._(
+         entries: entries,
+         source: source,
+         activity: activity,
+         activitySource: null,
+         catalogEnabled: false,
+       );
+
+  RecentConversationSession.fromChat({
+    required RecentConversationEntry chat,
+    required RecentConversationSource source,
+    required ValueListenable<ChatNoticeActivity?> Function() activity,
+  }) : this._(
+         entries: [chat],
+         source: source,
+         activity: null,
+         activitySource: activity,
+         catalogEnabled: true,
+       );
+
+  RecentConversationSession._({
+    required Iterable<RecentConversationEntry> entries,
+    required this._source,
+    required this._activity,
+    required this._activitySource,
+    required bool catalogEnabled,
+  }) : _entries = List.unmodifiable(entries),
+       _catalogEnabled = catalogEnabled,
+       _modeEnabled = !catalogEnabled {
     if (this.entries.map((entry) => entry.key).toSet().length !=
         this.entries.length) {
       throw ArgumentError('Recents membership must have unique scoped keys');
     }
-    _lastActivity = activity.value?.sequence ?? 0;
+    _lastActivity = _activity?.value?.sequence ?? 0;
+    if (this.entries.any((entry) => entry.key == _source.selected)) {
+      _selected = _source.selected;
+    }
     _source.addListener(_sourceChanged);
-    _activity.addListener(_activityChanged);
+    _activity?.addListener(_activityChanged);
   }
 
   static const preparationLimit = 10;
 
-  final List<RecentConversationEntry> entries;
+  List<RecentConversationEntry> _entries;
+  List<RecentConversationEntry> get entries => _entries;
+  final bool _catalogEnabled;
+  bool _modeEnabled;
+  bool get modeEnabled => active && _modeEnabled;
+  bool _catalogReading = false, _membershipPaused = false;
+  RecentConversationCatalog? _pendingCatalog;
+  bool get catalogLoading => _catalogReading || _pendingCatalog != null;
+  String? _catalogError;
+  String? get catalogError => _catalogError;
+  int _catalogGeneration = 0;
   final RecentConversationSource _source;
-  final ValueListenable<ChatNoticeActivity?> _activity;
+  ValueListenable<ChatNoticeActivity?>? _activity;
+  final ValueListenable<ChatNoticeActivity?> Function()? _activitySource;
   final _cards = <ProfileSessionKey, RecentConversationCard>{};
   final _reads = <ProfileSessionKey, int>{};
   final _wanted = <ProfileSessionKey>[];
@@ -68,6 +107,72 @@ final class RecentConversationSession extends ChangeNotifier {
   int _nudgeSequence = 0;
   Timer? _cueTimer;
   ChatNoticeActivity? _pendingCue;
+
+  /// A completed entry intent enables switching and admits the first catalog.
+  /// Adopting the mounted chat never reopens it or changes its recency.
+  void activate() {
+    if (!active || _modeEnabled) return;
+    final activity = _activity = _activitySource!();
+    activity.addListener(_activityChanged);
+    _modeEnabled = true;
+    _lastActivity = activity.value?.sequence ?? 0;
+    _discardCue();
+    if (_catalogEnabled) unawaited(_loadCatalog(refresh: false));
+    _emit();
+  }
+
+  void retryCatalog() {
+    if (modeEnabled && _catalogEnabled && !catalogLoading) {
+      unawaited(_loadCatalog(refresh: true));
+    }
+  }
+
+  /// Membership publication waits for presentation to settle. New entries append
+  /// once, preserving every existing card's physical index for this visit.
+  void setMembershipPaused(bool paused) {
+    _membershipPaused = paused;
+    if (!paused && active && _pendingCatalog != null) _adoptCatalog();
+  }
+
+  Future<void> _loadCatalog({required bool refresh}) async {
+    final generation = ++_catalogGeneration;
+    _catalogReading = true;
+    _catalogError = null;
+    _emit();
+    if (!active || generation != _catalogGeneration) return;
+    RecentConversationCatalog catalog;
+    try {
+      catalog = await _source
+          .loadRecents(refresh: refresh)
+          .timeout(const Duration(seconds: 15));
+    } catch (_) {
+      catalog = RecentConversationCatalog(
+        entries: const [],
+        error: 'Recent chats could not be loaded.',
+      );
+    }
+    if (!active || generation != _catalogGeneration) return;
+    _catalogReading = false;
+    _pendingCatalog = catalog;
+    if (!_membershipPaused) {
+      _adoptCatalog();
+    } else {
+      _emit();
+    }
+  }
+
+  void _adoptCatalog() {
+    final catalog = _pendingCatalog!;
+    _pendingCatalog = null;
+    final keys = entries.map((entry) => entry.key).toSet();
+    _entries = List.unmodifiable([
+      ...entries,
+      for (final entry in catalog.entries)
+        if (keys.add(entry.key)) entry,
+    ]);
+    _catalogError = catalog.error;
+    _emit();
+  }
 
   RecentConversationEntry entryAt(int index) => entries[index % entries.length];
   int get selectedIndex =>
@@ -244,7 +349,7 @@ final class RecentConversationSession extends ChangeNotifier {
   }
 
   void setInteractive(bool value, {required ProfileSessionKey? origin}) {
-    _interactive = value && active;
+    _interactive = value && modeEnabled;
     _cueOrigin = origin;
     if (!_interactive) _discardCue();
   }
@@ -267,7 +372,7 @@ final class RecentConversationSession extends ChangeNotifier {
   }
 
   void _activityChanged() {
-    final activity = _activity.value;
+    final activity = _activity!.value;
     if (activity == null || activity.sequence <= _lastActivity) return;
     _lastActivity = activity.sequence;
     if (!_interactive || selecting || _cueOrigin == null) return;
@@ -345,8 +450,9 @@ final class RecentConversationSession extends ChangeNotifier {
     if (_closed) return;
     _closed = true;
     ++_selectionGeneration;
+    ++_catalogGeneration;
     _source.removeListener(_sourceChanged);
-    _activity.removeListener(_activityChanged);
+    _activity?.removeListener(_activityChanged);
     _discardCue();
     _reads.clear();
     for (final timer in _readTimers.values) {

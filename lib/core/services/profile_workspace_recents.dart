@@ -9,9 +9,31 @@ final class _WorkspaceRecentConversationSource
   final _readingRevisions = Expando<Object>();
 
   @override
+  Future<RecentConversationCatalog> loadRecents({required bool refresh}) async {
+    if (refresh || !controller.recentsLoaded || controller.recentsLoading) {
+      await controller.refreshRecents();
+    }
+    if (!current) throw StateError('Workspace is no longer available');
+    final all = controller.recentChats();
+    return RecentConversationCatalog(
+      entries: [
+        for (final item in [
+          ...all.where((item) => item.activity != null),
+          ...all.where((item) => item.activity == null),
+        ])
+          RecentConversationEntry(key: item.key, title: item.title),
+      ],
+      error: controller.recentsProfileErrors.isEmpty
+          ? null
+          : 'Some recent chats could not be loaded.',
+    );
+  }
+
+  @override
   bool get current => !controller._closed;
   @override
-  ProfileSessionKey? get selected => controller.current?.chat?.key;
+  ProfileSessionKey? get selected =>
+      (controller.notificationChat ?? controller.current?.chat)?.key;
   @override
   bool admits(ProfileSessionKey key) =>
       current &&

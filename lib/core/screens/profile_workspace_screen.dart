@@ -464,8 +464,15 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }
 
   Widget _withRecentSwitcher(ProfileChat chat, Widget child, BotRecord? bot) {
-    final visit = _recentVisit;
-    if (visit == null || !visit.active) return child;
+    if (_recentVisit?.active != true) {
+      _recentVisit?.dispose();
+      _recentVisit = controller.chatRecentConversationSession(
+        chat: chat,
+        activity: () => ChatNoticeActivityScope.of(context),
+      );
+      _recentRenderedChat = chat;
+    }
+    final visit = _recentVisit!;
     return ValueListenableBuilder<bool>(
       valueListenable: _composerEditing,
       child: child,
@@ -846,6 +853,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         return _secondaryDestination(context);
       }
       if (chat == null) {
+        _disposeRecentVisit();
         // Transcript notifications must not recreate the Chats subtree.
         // Leaving the list or changing its owner starts a fresh visit.
         if (_browser?.key != ValueKey(current?.scope) ||

@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
+import 'package:wing/core/models/recent_conversation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 
@@ -83,6 +86,65 @@ void main() {
   tearDown(() {
     controller.dispose();
     appPreferences.dispose();
+  });
+
+  test(
+    'entry catalog anchors an old draft without changing recency or reopening',
+    () async {
+      await controller.refreshRecents();
+      await controller.openSession(
+        ProfileSessionKey(controller.current!.scope, 'old'),
+      );
+      final chat = controller.current!.chat!;
+      await controller.updateDraft(chat, 'Unsent work');
+      final activity = ValueNotifier<ChatNoticeActivity?>(null);
+      final visit = controller.chatRecentConversationSession(
+        chat: chat,
+        activity: () => activity,
+      );
+      addTearDown(visit.dispose);
+      addTearDown(activity.dispose);
+      final reads = fixture.reads.length, calls = fixture.calls.length;
+      expect(visit.modeEnabled, isFalse);
+      expect(visit.selected, chat.key);
+      visit.activate();
+      await Future<void>.delayed(Duration.zero);
+      expect(visit.entries.first.key, chat.key);
+      expect(
+        visit.entries.where((entry) => entry.key == chat.key),
+        hasLength(1),
+      );
+      expect(
+        visit.entries.any((entry) => entry.key.workspace.profileName == 'work'),
+        isTrue,
+      );
+      expect(
+        controller.recentChats().any((item) => item.key == chat.key),
+        isFalse,
+      );
+      expect(chat.composer.observation.displayedText, 'Unsent work');
+      expect(fixture.calls, hasLength(calls));
+      expect(fixture.reads, hasLength(reads));
+    },
+  );
+
+  test('simultaneous Recents consumers share the physical refresh', () async {
+    final delay = Completer<void>();
+    fixture.pageDelays[('personal', 0)] = delay;
+    Future<void>? observed;
+    controller.addListener(() {
+      if (controller.recentsLoading && observed == null) {
+        observed = controller.refreshRecents();
+      }
+    });
+    final first = controller.refreshRecents();
+    final second = controller.refreshRecents();
+    expect(identical(first, second), isTrue);
+    expect(identical(first, observed), isTrue);
+    delay.complete();
+    await first;
+    expect(controller.recentsLoading, isFalse);
+    expect(controller.recentChats(), isNotEmpty);
   });
 
   test(
