@@ -7561,6 +7561,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/models/bot_exchange.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/models/bots.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -7954,6 +7959,11 @@
       "path": "lib/core/models/slash_command.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/models/tool_payload.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/models/transcript_message.dart",
@@ -10274,6 +10284,11 @@
       "path": "test/block_reusing_markdown_body_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/bot_exchange_activity_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/bots_contract_test.dart",

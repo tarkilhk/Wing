@@ -71,6 +71,7 @@ final class ConversationGestureSample {
 /// expert gesture is recognized; excluded controls never enter this arena.
 class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
   bool Function(PointerDownEvent) admits = (_) => false;
+  bool allowSlide = false;
   void Function(ConversationGestureSample)? onStart;
   void Function(ConversationGestureSample)? onUpdate;
   void Function()? onEnd;
@@ -197,7 +198,8 @@ class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
             contraction > 32 &&
             contraction > delta.distance * 2) {
           _claim(ConversationGestureKind.pinch);
-        } else if (delta.dx.abs() > kTouchSlop &&
+        } else if (allowSlide &&
+            delta.dx.abs() > kTouchSlop &&
             delta.dx.abs() > delta.dy.abs() * 1.4 &&
             delta.dx.abs() * 2 > contraction) {
           _claim(ConversationGestureKind.slide);

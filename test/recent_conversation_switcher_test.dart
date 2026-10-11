@@ -1,5 +1,7 @@
+import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/models/notification_focus.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -19,8 +21,10 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/widgets/source_code_block.dart';
+import 'package:wing/core/widgets/bot_avatar.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/recent_conversation_session.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/markdown_parse_worker.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
@@ -35,6 +39,7 @@ import 'package:wing/core/widgets/recent_conversations/conversation_preview.dart
 import 'package:wing/core/widgets/recent_conversations/recent_conversation_switcher.dart';
 
 import 'support/profile_browser_fixture.dart';
+import 'support/bots_fixture.dart';
 
 const _export = bool.fromEnvironment('STUDIO_REVIEW');
 
@@ -69,10 +74,31 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
       <ProfileSessionKey, Completer<RecentConversationPreview>>{};
   bool rejectOpen = false;
   Completer<void>? waitingOpen;
-  int previewReads = 0;
+  int previewReads = 0, historyReads = 0;
   final previewOrder = <ProfileSessionKey>[];
+  Completer<RecentConversationCatalog>? catalogRead;
+  int catalogReads = 0;
+  @override
+  Future<RecentConversationCatalog> loadRecents({required bool refresh}) {
+    catalogReads++;
+    return catalogRead?.future ??
+        Future.value(RecentConversationCatalog(entries: entries, error: null));
+  }
+
   @override
   bool admits(ProfileSessionKey key) => current;
+  final appearances = <ProfileSessionKey, BotRecord>{};
+  int appearancePreparations = 0;
+  @override
+  BotRecord? appearanceFor(ProfileSessionKey key) => appearances[key];
+  @override
+  Future<void> prepareAppearances(
+    Iterable<ProfileSessionKey> keys,
+    bool Function() canRead,
+  ) async {
+    if (canRead()) appearancePreparations++;
+  }
+
   @override
   Object previewRevision(ProfileSessionKey key) => revisions[key] ?? 0;
   final revisions = <ProfileSessionKey, int>{};
@@ -96,7 +122,11 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   @override
   Future<RecentConversationPreview> loadPreview(
     RecentConversationEntry entry,
-  ) async => waitingPreviews[entry.key]?.future ?? _readyPreview(entry);
+  ) async {
+    historyReads++;
+    return waitingPreviews[entry.key]?.future ?? _readyPreview(entry);
+  }
+
   @override
   Future<void> open(ProfileSessionKey key, bool Function() isCurrent) async {
     if (!isCurrent()) return;
@@ -195,6 +225,13 @@ class _ScreenFixture extends ProfileBrowserFixture {
           '## A quieter workspace\n\nThe conversation stays in place. Switch when you need to check another task.\n\nYour draft stays with this conversation.',
     },
   ];
+}
+
+class _EmptyScreenFixture extends _ScreenFixture {
+  @override
+  List<Map<String, dynamic>> sessions(String profile) => const [];
+  @override
+  List<Map<String, dynamic>> historyRows(String profile, String id) => const [];
 }
 
 Future<void> _finishFrames(WidgetTester tester) async {
@@ -297,6 +334,102 @@ void main() {
     }
   });
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('canonical bot passive header ${brightness.name} $scale', (
+        tester,
+      ) async {
+        final fixture = BotsFixture();
+        fixture.profiles.first['has_avatar'] = true;
+        fixture.readHook = (_, method, _) async =>
+            method == 'profiles.get_asset'
+            ? {
+                'found': true,
+                'data':
+                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGO4Odf1PwAGyQK7B3JGZQAAAABJRU5ErkJggg==',
+              }
+            : null;
+        final owner = BotsSession((_) async => [fixture.repository]);
+        addTearDown(owner.dispose);
+        final key = ProfileSessionKey(
+          WorkspaceScope(
+            connectionId: 'host',
+            connectionIdentity: 'instance-1',
+            profileName: 'atlas',
+          ),
+          'atlas-chat',
+        );
+        final bot = await owner.botForConversation(key);
+        expect(fixture.commands, isEmpty);
+        final entry = RecentConversationEntry(key: key, title: 'Bot Chat');
+        final frame = GlobalKey();
+        tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: RepaintBoundary(
+              key: frame,
+              child: ConversationPreview(
+                card: RecentConversationCard(
+                  entry: entry,
+                  bot: bot,
+                  preview: RecentConversationPreview(
+                    entry: entry,
+                    reading: TranscriptReadingSnapshot(
+                      messages: const [],
+                      historySessionId: key.sessionId,
+                    ),
+                    draft: '',
+                    scopeLabel: 'Unassigned',
+                  ),
+                ),
+                connectionLabel: 'Host',
+              ),
+            ),
+          ),
+        );
+        await _finishFrames(tester);
+        expect(find.text('Atlas'), findsOneWidget);
+        expect(find.text('Bot Chat'), findsNothing);
+        final avatar = tester.widget<BotAvatar>(find.byType(BotAvatar));
+        expect(
+          avatar.image,
+          base64Decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGO4Odf1PwAGyQK7B3JGZQAAAABJRU5ErkJggg==',
+          ),
+        );
+        expect(avatar.size, 32);
+        final savedImage = tester.renderObject<RenderImage>(
+          find.descendant(
+            of: find.byType(BotAvatar),
+            matching: find.byType(RawImage),
+          ),
+        );
+        expect(savedImage.image, isNotNull);
+        final bounds = tester.getRect(find.byType(BotConversationTitle));
+        expect(
+          bounds.right,
+          lessThanOrEqualTo(tester.view.physicalSize.width - 40),
+        );
+        expect(tester.takeException(), isNull);
+        await _capture(
+          tester,
+          frame,
+          'canonical-bot-header-${brightness.name}-$scale',
+        );
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+  }
+
   group('gesture and motion contract', () {
     late _UiSource source;
     late ValueNotifier<ChatNoticeActivity?> activity;
@@ -305,7 +438,7 @@ void main() {
     setUp(() {
       source = _UiSource();
       activity = ValueNotifier(null);
-      session = RecentConversationSession(
+      session = RecentConversationSession.fromRecents(
         entries: source.entries,
         source: source,
         activity: activity,
@@ -316,6 +449,15 @@ void main() {
       activity.dispose();
       source.dispose();
     });
+    void enterDormant() {
+      session.dispose();
+      session = RecentConversationSession.fromChat(
+        chat: source.entries.first,
+        source: source,
+        activity: () => activity,
+      );
+    }
+
     testWidgets('capture waits for a scheduled chat repaint', (tester) async {
       final color = ValueNotifier(Colors.red);
       addTearDown(color.dispose);
@@ -369,8 +511,9 @@ void main() {
       double textScale = 1,
       GlobalKey? frame,
       Widget Function(RecentConversationCard)? buildPreview,
+      bool dormant = false,
     }) async {
-      await session.select(source.selected);
+      if (!dormant) await session.select(source.selected);
       source.opens.clear();
       tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1;
@@ -448,7 +591,7 @@ void main() {
         session.dispose();
         source.dispose();
         source = _UiSource(count: 100);
-        session = RecentConversationSession(
+        session = RecentConversationSession.fromRecents(
           entries: source.entries,
           source: source,
           activity: activity,
@@ -699,7 +842,7 @@ void main() {
         session.dispose();
         source.dispose();
         source = _UiSource(count: 100);
-        session = RecentConversationSession(
+        session = RecentConversationSession.fromRecents(
           entries: source.entries,
           source: source,
           activity: activity,
@@ -901,6 +1044,52 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
+
+    testWidgets(
+      'catalog retry preserves the focused identity after circular browsing',
+      (tester) async {
+        enterDormant();
+        source.catalogRead = Completer();
+        await mount(tester, dormant: true, accessible: true);
+        switcher.currentState!.openStack();
+        source.catalogRead!.complete(
+          RecentConversationCatalog(
+            entries: source.entries.take(2),
+            error: 'One profile is offline.',
+          ),
+        );
+        await _finishFrames(tester);
+        await tester.tap(find.byTooltip('Previous conversation'));
+        await _finishFrames(tester);
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics &&
+                widget.properties.label == 'Chat 1, conversation 2 of 2',
+          ),
+          findsOneWidget,
+        );
+        source.catalogRead = Completer();
+        await tester.tap(find.byTooltip('Retry recent chats'));
+        await tester.pump();
+        source.catalogRead!.complete(
+          RecentConversationCatalog(entries: source.entries, error: null),
+        );
+        await _finishFrames(tester);
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics &&
+                widget.properties.label == 'Chat 1, conversation 2 of 3',
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(find.byTooltip('Open conversation'));
+        await _finishFrames(tester);
+        expect(source.selected, source.entries[1].key);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     for (final brightness in Brightness.values) {
       for (final scale in [1.0, 2.0]) {
@@ -1173,6 +1362,164 @@ void main() {
         expect(visited.debugDisposed, isTrue);
       },
     );
+
+    testWidgets(
+      'entry pinch activates once; swipe and canceled pinch stay dormant',
+      (tester) async {
+        enterDormant();
+        await mount(tester, dormant: true);
+        await _twoContacts(
+          tester,
+          const Offset(220, 400),
+          const Offset(300, 400),
+          const Offset(50, 400),
+          const Offset(130, 400),
+        );
+        expect(session.modeEnabled, isFalse);
+        expect(source.catalogReads, 0);
+        expect(source.opens, isEmpty);
+        final first = await tester.startGesture(
+          const Offset(75, 400),
+          pointer: 1,
+        );
+        final second = await tester.startGesture(
+          const Offset(285, 400),
+          pointer: 2,
+        );
+        await first.moveTo(const Offset(145, 400));
+        await second.moveTo(const Offset(215, 400));
+        await tester.pump(const Duration(milliseconds: 16));
+        await first.cancel();
+        await second.cancel();
+        await _finishFrames(tester);
+        expect(session.modeEnabled, isFalse);
+        expect(source.catalogReads, 0);
+        await _twoContacts(
+          tester,
+          const Offset(75, 400),
+          const Offset(285, 400),
+          const Offset(145, 400),
+          const Offset(215, 400),
+        );
+        expect(session.modeEnabled, isTrue);
+        expect(source.catalogReads, 1);
+        expect(session.entries, hasLength(3));
+        expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+        switcher.currentState!.dismissStack();
+        await _finishFrames(tester);
+        expect(session.modeEnabled, isTrue);
+        await _twoContacts(
+          tester,
+          const Offset(220, 400),
+          const Offset(300, 400),
+          const Offset(50, 400),
+          const Offset(130, 400),
+        );
+        expect(source.opens, [source.entries[1].key]);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    for (final brightness in Brightness.values) {
+      for (final scale in [1.0, 2.0]) {
+        testWidgets(
+          'single-card entry, loading and retry ${brightness.name} $scale',
+          (tester) async {
+            enterDormant();
+            source.catalogRead = Completer();
+            final frame = GlobalKey();
+            await mount(
+              tester,
+              dormant: true,
+              brightness: brightness,
+              textScale: scale,
+              accessible: true,
+              frame: frame,
+            );
+            tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
+            await tester.pump();
+            await _twoContacts(
+              tester,
+              const Offset(75, 400),
+              const Offset(285, 400),
+              const Offset(145, 400),
+              const Offset(215, 400),
+            );
+            expect(find.text('Loading recent chats…'), findsOneWidget);
+            expect(find.text('No other recent chats.'), findsNothing);
+            expect(
+              tester
+                  .widget<IconButton>(
+                    find.widgetWithIcon(IconButton, Icons.chevron_right),
+                  )
+                  .onPressed,
+              isNull,
+            );
+            await _capture(
+              tester,
+              frame,
+              'entry-loading-${brightness.name}-$scale',
+            );
+            source.catalogRead!.complete(
+              RecentConversationCatalog(
+                entries: const [],
+                error: 'Recent chats could not be loaded.',
+              ),
+            );
+            await _finishFrames(tester);
+            expect(find.byTooltip('Retry recent chats'), findsOneWidget);
+            expect(find.text('No other recent chats.'), findsNothing);
+            final card = find.descendant(
+              of: find.byType(Transform),
+              matching: find.byType(RawImage),
+            );
+            expect(card, findsOneWidget);
+            expect(
+              tester.getRect(card).bottom,
+              lessThanOrEqualTo(
+                tester
+                        .getTopLeft(
+                          find.text('Recent chats could not be loaded.'),
+                        )
+                        .dy -
+                    8,
+              ),
+              reason: 'Large error text must stay below the scaled card.',
+            );
+            await _capture(
+              tester,
+              frame,
+              'entry-failed-${brightness.name}-$scale',
+            );
+            source.catalogRead = Completer();
+            await tester.tap(find.byTooltip('Retry recent chats'));
+            await tester.pump();
+            expect(source.catalogReads, 2);
+            source.catalogRead!.complete(
+              RecentConversationCatalog(entries: const [], error: null),
+            );
+            await _finishFrames(tester);
+            expect(find.text('No other recent chats.'), findsOneWidget);
+            final movingCards = find.descendant(
+              of: find.byType(Transform),
+              matching: find.byType(RawImage),
+            );
+            expect(movingCards, findsOneWidget);
+            await _capture(
+              tester,
+              frame,
+              'entry-empty-${brightness.name}-$scale',
+            );
+            await tester.tap(find.byTooltip('Open conversation'));
+            await _finishFrames(tester);
+            expect(session.modeEnabled, isTrue);
+            expect(source.opens, isEmpty);
+            expect(find.text('No other recent chats.'), findsNothing);
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
 
     testWidgets('two-finger horizontal movement switches once and wraps', (
       tester,
@@ -1581,6 +1928,66 @@ void main() {
       },
     );
 
+    testWidgets(
+      'appearance updates recapture only passive pixels without history reads',
+      (tester) async {
+        final key = source.entries[1].key;
+        BotRecord appearance(String title) => BotRecord(
+          scope: key.workspace,
+          instance: 'Host',
+          profile: HermesProfile.fromJson({'name': key.workspace.profileName}),
+          title: title,
+          shape: 'squircle',
+          color: '#65c7bc',
+          pinned: false,
+          hidden: false,
+          hasAvatar: false,
+          revision: 1,
+          metadata: const {},
+          chat: key,
+        );
+        source.appearances[key] = appearance('Atlas');
+        final frame = GlobalKey();
+        await mount(
+          tester,
+          frame: frame,
+          buildPreview: (card) =>
+              ConversationPreview(card: card, connectionLabel: 'Host'),
+        );
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        ui.Image pixels(ProfileSessionKey key) => tester
+            .widget<RawImage>(find.byKey(ValueKey((key, 'snapshot'))))
+            .image!;
+        final genuine = pixels(source.selected),
+            previous = pixels(key),
+            other = pixels(source.entries[2].key);
+        final historyReads = source.historyReads,
+            preparations = source.appearancePreparations;
+        await _finishFrames(tester);
+        expect(pixels(key), same(previous));
+        expect(source.appearancePreparations, preparations);
+        source.appearances[key] = appearance('Atlas renamed');
+        source.notifyListeners();
+        await _finishFrames(tester);
+        expect(pixels(key), isNot(same(previous)));
+        expect(previous.debugDisposed, isTrue);
+        expect(pixels(source.selected), same(genuine));
+        expect(pixels(source.entries[2].key), same(other));
+        expect(source.historyReads, historyReads);
+        expect(source.opens, isEmpty);
+        await _capture(tester, frame, 'canonical-bot-stack');
+        final reads = source.appearancePreparations;
+        final first = await tester.startGesture(const Offset(130, 400));
+        await first.moveBy(const Offset(-35, 0));
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(source.appearancePreparations, reads);
+        await first.cancel();
+        await _finishFrames(tester);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('reduced motion publishes cached cards and returns directly', (
       tester,
     ) async {
@@ -1780,8 +2187,279 @@ void main() {
     }
   }
 
+  for (final botEntry in [false, true]) {
+    testWidgets(
+      'pinch entry from ${botEntry ? 'Bots' : 'an empty new chat'} retains Back origin',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        final fixture = botEntry ? _ScreenFixture() : _EmptyScreenFixture();
+        final controller = ProfileWorkspaceController(
+          access: ConnectionAccess(
+            connection: SavedConnection(
+              id: 'host',
+              label: 'Home server',
+              host: 'localhost',
+              port: 1,
+              apiKey: '',
+            ),
+            dashboardOAuth: null,
+          ),
+          connectionIdentity: 'entry-ui',
+          preferences: preferences,
+          appPreferences: appPreferences,
+          gatewayFactory: fixture.gateway,
+        );
+        addTearDown(controller.dispose);
+        addTearDown(appPreferences.dispose);
+        await controller.initialize();
+        final bots = BotsFixture();
+        bots.profiles
+          ..clear()
+          ..add(BotsFixture.profile('personal', 'Atlas'));
+        bots.profiles.single['canonical_session']['id'] = 'chat-0';
+        final activity = ValueNotifier<ChatNoticeActivity?>(null);
+        addTearDown(activity.dispose);
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(Brightness.dark),
+            builder: (_, child) =>
+                ChatNoticeActivityScope(activity: activity, child: child!),
+            home: ProfileWorkspaceScreen(
+              controller: controller,
+              initialQuickChat: !botEntry,
+              initialDestination: botEntry
+                  ? AppDestination.bots
+                  : AppDestination.chats,
+              initialBotSession: botEntry
+                  ? ProfileSessionKey(controller.current!.scope, 'chat-0')
+                  : null,
+              createBotsSession: () =>
+                  BotsSession((_) async => [bots.repository]),
+            ),
+          ),
+        );
+        await _finishFrames(tester);
+        final chat = controller.current!.chat!;
+        final visit = tester
+            .widget<RecentConversationSwitcher>(
+              find.byType(RecentConversationSwitcher),
+            )
+            .session;
+        expect(visit.modeEnabled, isFalse);
+        if (botEntry) {
+          await _chatGesture(tester);
+        } else {
+          final area = tester.getRect(find.byType(ProfileTranscript));
+          await _twoContacts(
+            tester,
+            Offset(75, area.center.dy),
+            Offset(285, area.center.dy),
+            Offset(145, area.center.dy),
+            Offset(215, area.center.dy),
+          );
+        }
+        expect(visit.modeEnabled, isTrue);
+        expect(visit.entries.first.key, chat.key);
+        if (!botEntry) {
+          expect(find.text('No other recent chats.'), findsOneWidget);
+          expect(controller.recentChats(), isEmpty);
+        }
+        await tester.binding.handlePopRoute();
+        await _finishFrames(tester);
+        expect(controller.current!.chat, same(chat));
+        await tester.binding.handlePopRoute();
+        await _finishFrames(tester);
+        expect(visit.active, isFalse);
+        expect(controller.current!.chat, isNull);
+        if (botEntry) {
+          expect(find.byKey(const ValueKey('bots-search')), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'ordinary chat pinch activates Recents and preserves origin ${brightness.name} $scale',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          final preferences = await SharedPreferences.getInstance();
+          final appPreferences = AppPreferences(preferences);
+          final fixture = _ScreenFixture();
+          final controller = ProfileWorkspaceController(
+            access: ConnectionAccess(
+              connection: SavedConnection(
+                id: 'host',
+                label: 'Home server',
+                host: 'localhost',
+                port: 1,
+                apiKey: '',
+              ),
+              dashboardOAuth: null,
+            ),
+            connectionIdentity: 'entry-ui',
+            preferences: preferences,
+            appPreferences: appPreferences,
+            gatewayFactory: fixture.gateway,
+          );
+          addTearDown(controller.dispose);
+          addTearDown(appPreferences.dispose);
+          await controller.initialize();
+          await controller.openSession(
+            ProfileSessionKey(controller.current!.scope, 'chat-0'),
+          );
+          final original = controller.current!.chat!;
+          await controller.updateDraft(original, 'Keep this draft');
+          final activity = ValueNotifier<ChatNoticeActivity?>(null);
+          addTearDown(activity.dispose);
+          final frame = GlobalKey();
+          tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: ChatNoticeActivityScope(
+                  activity: activity,
+                  child: RepaintBoundary(key: frame, child: child!),
+                ),
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          );
+          await _finishFrames(tester);
+          final visit = tester
+              .widget<RecentConversationSwitcher>(
+                find.byType(RecentConversationSwitcher),
+              )
+              .session;
+          expect(visit.modeEnabled, isFalse);
+          expect(controller.recentsLoaded, isFalse);
+          final resumes = fixture.calls
+              .where((call) => call.$2 == 'session.resume')
+              .length;
+          final hold = Completer<void>();
+          fixture.pageDelays[('work', 0)] = hold;
+          addTearDown(() {
+            if (!hold.isCompleted) hold.complete();
+          });
+          final field = tester.widget<TextField>(
+            find.widgetWithText(TextField, 'Keep this draft'),
+          );
+          field.controller!.selection = const TextSelection.collapsed(
+            offset: 5,
+          );
+          await _chatGesture(tester);
+          expect(visit.modeEnabled, isTrue);
+          expect(find.text('Loading recent chats…'), findsOneWidget);
+          expect(controller.current!.chat, same(original));
+          expect(
+            fixture.calls.where((call) => call.$2 == 'session.resume'),
+            hasLength(resumes),
+          );
+          hold.complete();
+          await _finishFrames(tester);
+          expect(visit.entries.first.key, original.key);
+          expect(
+            visit.entries.any(
+              (entry) => entry.key.workspace.profileName == 'work',
+            ),
+            isTrue,
+          );
+          expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+          await _capture(
+            tester,
+            frame,
+            'entry-workspace-${brightness.name}-$scale',
+          );
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          expect(visit.modeEnabled, isTrue);
+          expect(controller.current!.chat, same(original));
+          expect(
+            tester
+                .widget<TextField>(
+                  find.widgetWithText(TextField, 'Keep this draft'),
+                )
+                .controller!
+                .selection
+                .baseOffset,
+            5,
+          );
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.hidden,
+          );
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.paused,
+          );
+          await tester.pump();
+          final other = visit.entries.last.key;
+          activity.value = ChatNoticeActivity(
+            key: other,
+            kind: ConversationActivityKind.reply,
+            identity: 'background',
+            sequence: 1,
+          );
+          await tester.pump(const Duration(milliseconds: 200));
+          expect(
+            find.byKey(const ValueKey('recent-conversation-nudge')),
+            findsNothing,
+          );
+          expect(visit.modeEnabled, isTrue);
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.hidden,
+          );
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 200));
+          expect(
+            find.byKey(const ValueKey('recent-conversation-nudge')),
+            findsNothing,
+          );
+          activity.value = ChatNoticeActivity(
+            key: other,
+            kind: ConversationActivityKind.reply,
+            identity: 'fresh',
+            sequence: 2,
+          );
+          await tester.pump(const Duration(milliseconds: 200));
+          await tester.pump(const Duration(milliseconds: 100));
+          expect(
+            find.byKey(const ValueKey('recent-conversation-nudge')),
+            findsOneWidget,
+          );
+          await _chatGesture(tester, pinch: false);
+          expect(controller.current!.chat!.key, other);
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          expect(visit.active, isFalse);
+          expect(controller.current!.chat, isNull);
+          expect(find.text('Last 24 hours + ongoing work'), findsNothing);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+
       testWidgets(
         'real Recents chat stack, drafts and Back in ${brightness.name} at $scale',
         (tester) async {

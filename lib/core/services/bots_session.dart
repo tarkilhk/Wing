@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/bots.dart';
+import '../models/hermes_profile.dart';
 import '../models/profile_session_key.dart';
 import 'bots_repository.dart';
 import 'bots_preferences.dart';
@@ -32,6 +33,116 @@ class BotsSession extends ChangeNotifier {
   int _readGeneration = 0;
   Timer? _poll;
   final _unconfirmedCreates = <String>{};
+  Future<List<BotsRepository>>? _appearanceSources;
+  final _appearanceRosters = <WorkspaceScope, Future<List<BotRecord>>>{};
+  final _appearanceReads = <WorkspaceScope, Future<BotRecord?>>{};
+  final _appearanceAdmissions = <WorkspaceScope, Set<bool Function()>>{};
+  final _appearanceCache = <WorkspaceScope, BotRecord>{};
+  final _appearanceKeys = <ProfileSessionKey, WorkspaceScope>{};
+  final _avatarRead = <WorkspaceScope>{};
+  int _appearanceGeneration = 0, _avatarReads = 0, _appearanceVersion = 0;
+  Completer<void>? _avatarAvailable;
+  static const _appearanceLimit = 10;
+  static const _appearanceByteLimit = 20 * 1024 * 1024;
+
+  int get appearanceEpoch => _appearanceGeneration;
+
+  /// Explicit refresh revokes stale reads and assets, retaining usable display
+  /// facts until their confirmed replacements arrive.
+  void invalidateAppearances() {
+    if (_closed) return;
+    _invalidateAppearances();
+    notifyListeners();
+  }
+
+  /// Exact canonical appearance already admitted by this workspace's owner.
+  /// This observation performs no reads, decoding or roster traversal.
+  BotRecord? cachedAppearance(ProfileSessionKey key) {
+    final scope = _appearanceKeys[key];
+    return scope == null ? null : _appearanceCache[scope];
+  }
+
+  bool _sameAppearanceMetadata(BotRecord a, BotRecord b) =>
+      a.title == b.title &&
+      a.shape == b.shape &&
+      a.color == b.color &&
+      a.revision == b.revision &&
+      a.hasAvatar == b.hasAvatar &&
+      a.chat == b.chat &&
+      a.resolvedChat == b.resolvedChat;
+
+  BotRecord _cacheAppearance(BotRecord bot, {required bool assetRead}) {
+    final previous = _appearanceCache[bot.scope];
+    if (previous != null &&
+        _sameAppearanceMetadata(previous, bot) &&
+        listEquals(previous.avatar, bot.avatar)) {
+      bot = previous;
+    }
+    final scope = bot.scope;
+    if (!identical(_appearanceCache[scope], bot)) _appearanceVersion++;
+    _appearanceCache.remove(scope);
+    _appearanceCache[scope] = bot;
+    if (assetRead) _avatarRead.add(scope);
+    _appearanceKeys.removeWhere((_, value) => value == scope);
+    for (final key in [bot.chat, bot.resolvedChat]) {
+      if (key != null) _appearanceKeys[key] = scope;
+    }
+    while (_appearanceCache.length > _appearanceLimit ||
+        _appearanceCache.values.fold<int>(
+              0,
+              (bytes, row) => bytes + (row.avatar?.lengthInBytes ?? 0),
+            ) >
+            _appearanceByteLimit) {
+      final evicted = _appearanceCache.keys.first;
+      _appearanceCache.remove(evicted);
+      _avatarRead.remove(evicted);
+      _appearanceKeys.removeWhere((_, value) => value == evicted);
+    }
+    return bot;
+  }
+
+  void _invalidateAppearances() {
+    _appearanceGeneration++;
+    _appearanceSources = null;
+    _appearanceRosters.clear();
+    _appearanceReads.clear();
+    _appearanceAdmissions.clear();
+    _avatarRead.clear();
+  }
+
+  Future<List<BotRecord>> _appearanceRoster(BotsRepository source) async {
+    final read = _appearanceRosters.putIfAbsent(source.scope, source.bots);
+    try {
+      return await read;
+    } catch (_) {
+      if (identical(_appearanceRosters[source.scope], read)) {
+        _appearanceRosters.remove(source.scope);
+      }
+      rethrow;
+    }
+  }
+
+  Future<BotRecord?> _readAppearance(
+    BotsRepository source,
+    BotRecord bot,
+    bool Function() canRead,
+  ) async {
+    while (_avatarReads >= 3) {
+      if (!canRead()) return null;
+      await (_avatarAvailable ??= Completer<void>()).future;
+    }
+    if (!canRead()) return null;
+    _avatarReads++;
+    try {
+      return await source.enrich(bot);
+    } finally {
+      _avatarReads--;
+      final available = _avatarAvailable;
+      _avatarAvailable = null;
+      available?.complete();
+    }
+  }
+
   BotsSnapshot get state => BotsSnapshot(
     bots: _bots.values.expand((rows) => rows),
     groups: _groups.values
@@ -73,21 +184,65 @@ class BotsSession extends ChangeNotifier {
   /// polling. Exact stock root/tip identity admits appearance; lookup failure
   /// leaves the conversation available with its ordinary title.
   Future<BotRecord?> botForConversation(ProfileSessionKey key) async {
-    return (await appearancesForConversations([key]))[key];
+    return (await appearancesForConversations([
+      key,
+    ], canRead: () => !_closed))[key];
   }
 
-  /// One roster read per matching instance, enriching only exact conversations.
-  /// No polling, presence reads, group reads or mutations are admitted here.
-  Future<Map<ProfileSessionKey, BotRecord>> appearancesForConversations(
-    Iterable<ProfileSessionKey> conversations,
+  /// Resolve a delivered sender by the stock @handle within its receiving
+  /// instance. Display names alone carry no identity or asset-read authority.
+  Future<BotRecord?> appearanceForSender(
+    WorkspaceScope scope,
+    String handle,
   ) async {
-    final keys = conversations.toSet();
-    final appearances = <ProfileSessionKey, BotRecord>{};
     bool current() => !_closed;
-    if (!current() || keys.isEmpty) return const {};
+    if (!current()) return null;
     try {
       final sources = await _sources(current);
-      if (!current()) return const {};
+      if (!current()) return null;
+      for (final source in sources) {
+        if (source.scope.connectionId != scope.connectionId ||
+            source.scope.connectionIdentity != scope.connectionIdentity) {
+          continue;
+        }
+        source.retain();
+        try {
+          final roster = await source.bots();
+          if (!current()) return null;
+          final matches = roster.where(
+            (bot) =>
+                (bot.profile.name == 'default' ? 'hermes' : bot.profile.name) ==
+                handle,
+          );
+          if (matches.length != 1) return null;
+          final appearance = await source.enrich(matches.single);
+          return current() ? appearance : null;
+        } finally {
+          source.release();
+        }
+      }
+    } catch (_) {
+      // An unavailable appearance must never prevent reading the delivery.
+    }
+    return null;
+  }
+
+  /// Shared passive roster and bounded avatar cache. Only exact canonical
+  /// root/tip keys admit assets. Physical admission is checked after each wait.
+  Future<Map<ProfileSessionKey, BotRecord>> appearancesForConversations(
+    Iterable<ProfileSessionKey> conversations, {
+    required bool Function() canRead,
+  }) async {
+    final keys = conversations.toSet();
+    final version = _appearanceVersion;
+    final appearances = <ProfileSessionKey, BotRecord>{};
+    final generation = _appearanceGeneration;
+    bool current() => !_closed && generation == _appearanceGeneration;
+    bool admit() => current() && canRead();
+    if (!admit() || keys.isEmpty) return const {};
+    try {
+      final sources = await (_appearanceSources ??= _sources(current));
+      if (!admit()) return const {};
       for (final source in sources) {
         final matching = keys
             .where(
@@ -97,35 +252,75 @@ class BotsSession extends ChangeNotifier {
                       key.workspace.connectionIdentity,
             )
             .toSet();
-        if (matching.isEmpty) continue;
+        if (matching.isEmpty || !admit()) continue;
         source.retain();
         try {
-          final roster = await source.bots();
+          final roster = await _appearanceRoster(source);
           if (!current()) return const {};
           for (final bot in roster) {
             final owned = matching.where(bot.describesConversation).toList();
             if (owned.isEmpty) continue;
-            final appearance = await source.enrich(bot);
-            if (!current()) return const {};
+            var appearance = _appearanceCache[bot.scope];
+            if (appearance == null ||
+                !_sameAppearanceMetadata(appearance, bot)) {
+              appearance = bot;
+              _avatarRead.remove(bot.scope);
+              appearance = _cacheAppearance(
+                bot,
+                assetRead: !bot.hasAvatar || bot.avatar != null,
+              );
+            }
+            if (!_avatarRead.contains(bot.scope) && admit()) {
+              final admissions = _appearanceAdmissions.putIfAbsent(
+                bot.scope,
+                () => {},
+              );
+              admissions.add(admit);
+              final read = _appearanceReads.putIfAbsent(
+                bot.scope,
+                () => _readAppearance(
+                  source,
+                  bot,
+                  () => current() && admissions.any((canUse) => canUse()),
+                ),
+              );
+              BotRecord? enriched;
+              try {
+                enriched = await read;
+              } finally {
+                admissions.remove(admit);
+                if (identical(_appearanceReads[bot.scope], read)) {
+                  _appearanceReads.remove(bot.scope);
+                  _appearanceAdmissions.remove(bot.scope);
+                }
+              }
+              if (!current()) return const {};
+              if (enriched != null) {
+                appearance = _cacheAppearance(enriched, assetRead: true);
+              }
+            }
             for (final key in owned) {
               appearances[key] = appearance;
             }
           }
         } catch (_) {
-          // Appearance reads cannot prevent browsing another instance's chats.
+          // Decoration cannot prevent reading another instance's conversations.
         } finally {
           source.release();
         }
       }
     } catch (_) {
-      // Keep browsing available when saved authority cannot be read.
+      // A later explicit appearance request may recover unavailable authority.
     }
-    return current() ? Map.unmodifiable(appearances) : const {};
+    if (!current()) return const {};
+    if (version != _appearanceVersion) notifyListeners();
+    return Map.unmodifiable(appearances);
   }
 
   Future<void> refresh() async {
     if (_closed || _loading || _busy) return;
     final generation = ++_readGeneration;
+    _invalidateAppearances();
     _loading = true;
     notifyListeners();
     final errors = <String>[];
@@ -178,6 +373,24 @@ class BotsSession extends ChangeNotifier {
           }
           if (!current()) return;
           _bots[identity] = List.unmodifiable(enriched);
+          _appearanceRosters[source.scope] = Future.value(_bots[identity]!);
+          final scopes = enriched.map((bot) => bot.scope).toSet();
+          for (final scope in _appearanceCache.keys.toList()) {
+            if (scope.connectionId != source.scope.connectionId ||
+                scope.connectionIdentity != source.scope.connectionIdentity) {
+              continue;
+            }
+            if (!scopes.contains(scope)) {
+              _appearanceCache.remove(scope);
+              _avatarRead.remove(scope);
+              _appearanceKeys.removeWhere((_, value) => value == scope);
+            }
+          }
+          for (final bot in enriched) {
+            if (_appearanceCache.containsKey(bot.scope)) {
+              _cacheAppearance(bot, assetRead: true);
+            }
+          }
         } catch (_) {
           errors.add('${source.instance}: bots could not refresh.');
         }
@@ -283,6 +496,7 @@ class BotsSession extends ChangeNotifier {
       }, canUse: canUse) ==
       true;
   void _replaceBot(BotRecord bot) {
+    _cacheAppearance(bot, assetRead: true);
     final rows = _bots[bot.scope.connectionIdentity];
     if (rows != null) {
       _bots[bot.scope.connectionIdentity] = List.unmodifiable(
@@ -385,6 +599,10 @@ class BotsSession extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    _invalidateAppearances();
+    _appearanceCache.clear();
+    _appearanceKeys.clear();
+    _avatarRead.clear();
     _readGeneration++;
     _poll?.cancel();
     for (final source in _repositories ?? <BotsRepository>[]) {

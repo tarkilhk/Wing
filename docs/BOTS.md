@@ -14,6 +14,10 @@ Bot settings contains appearance, configuration editors, Duplicate bot and profi
 
 Creating a bot uses the instance's launch credentials and model defaults, as explained before creation. Duplication excludes channel bindings to avoid taking over messaging channels. Settings always apply to the chosen instance/profile, without switching the currently selected chat.
 
+Recents cards show each canonical bot chat's saved name and avatar before you
+open it. Appearance is prepared while the cards are still and shared with the
+chat header; opening a card is not required to identify its bot.
+
 Appearance supports a display name, eight shapes, twelve profile hues, automatic color, image upload/removal and generation through that profile's configured image provider. PNG, JPEG and WebP uploads must fit the 2,000,000-byte avatar limit.
 
 Valid edits save automatically after a short pause. Back finishes pending saves; if saving fails, choose Keep editing or Discard. **Reload saved appearance** keeps edited fields while updating untouched ones. A conflict with another client's changes keeps your draft and asks you to reload/review before retrying. Choosing a shape after an uploaded image clears the image.
@@ -37,3 +41,18 @@ View screen periodically refreshes the selected profile's screen while visible. 
 Screen preview is read-only; it has no keyboard or pointer control. Wing does not currently configure RoomLink peer groups, desktop Direct conversations, pet avatars or automatic screen opening. Hosted groups use bots from one instance, although the bot roster and ordinary settings work across saved instances.
 
 See [Administration](ADMINISTRATION.md) for profile configuration and [Chats](CHATS.md) for conversation actions.
+
+Messages from other bots appear on the left with their name, avatar when available,
+formatted text and time. Copy copies the message body. Replies from the bot you
+are talking to stay visible as normal answers. Received bot instructions cannot
+be edited or restored as your own prompts.
+
+In Activity, **Message agent** shows the sent **Message** and its **Queued**
+acknowledgment. When Hermes returns the matching delivery result, Wing appends
+**Exchange complete** with the reply below it. Each available timestamp appears
+on the right in your local time. Queued means handed off, not delivered.
+Pending, unknown and failed outcomes retain their own labels; avoid resending
+when the outcome is uncertain. Raw details keeps the exact receipts.
+
+An unmatched “Bot delivery process finished” notice stays separate. Expand
+Output to inspect the runner's command and result.

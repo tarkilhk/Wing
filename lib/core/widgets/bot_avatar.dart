@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../theme/profile_colors.dart';
+import '../models/bots.dart';
 
 /// Desktop's friendly shape faces, rendered natively with Studio sizing.
 class BotAvatar extends StatelessWidget {
@@ -164,4 +165,40 @@ class _FacePainter extends CustomPainter {
   @override
   bool shouldRepaint(_FacePainter oldDelegate) =>
       oldDelegate.shape != shape || oldDelegate.color != color;
+}
+
+/// The shared title for live and passive canonical bot conversations.
+class BotConversationTitle extends StatelessWidget {
+  const BotConversationTitle({
+    super.key,
+    required this.title,
+    required this.bot,
+  });
+  final String title;
+  final BotRecord? bot;
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (bot case final appearance?) ...[
+        ExcludeSemantics(
+          child: BotAvatar(
+            name: appearance.title,
+            shape: appearance.shape,
+            color: appearance.color,
+            image: appearance.avatar,
+            size: 32,
+          ),
+        ),
+        const SizedBox(width: 8),
+      ],
+      Flexible(
+        child: Text(
+          bot?.title ?? title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    ],
+  );
 }

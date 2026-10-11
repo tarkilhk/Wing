@@ -4,6 +4,8 @@ import 'composer_reference_repository.dart';
 import 'composer_reference_preparation.dart';
 import '../models/recent_conversation.dart';
 import 'recent_conversation_session.dart';
+import 'bots_session.dart';
+import '../models/bots.dart';
 import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_choice.dart';
@@ -921,6 +923,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   List<ProfileRecentChat> _savedRecents = const [];
   final _recentSessionRows = <ProfileSessionKey, Map<String, dynamic>>{};
   bool _recentsLoading = false;
+  Future<void>? _recentsRefresh;
   bool get recentsLoading => _recentsLoading;
   bool _recentsLoaded = false;
   bool get recentsLoaded => _recentsLoaded;
@@ -1004,14 +1007,43 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   RecentConversationSession recentConversationSession({
     required Iterable<RecentConversationEntry> entries,
+    required BotsSession bots,
     required ValueListenable<ChatNoticeActivity?> activity,
-  }) => RecentConversationSession(
+  }) => RecentConversationSession.fromRecents(
     entries: entries,
-    source: _WorkspaceRecentConversationSource(this),
+    source: _WorkspaceRecentConversationSource(this, bots),
     activity: activity,
   );
 
-  Future<void> refreshRecents() async {
+  RecentConversationSession chatRecentConversationSession({
+    required ProfileChat chat,
+    required BotsSession bots,
+    required ValueListenable<ChatNoticeActivity?> Function() activity,
+  }) => RecentConversationSession.fromChat(
+    chat: RecentConversationEntry(key: chat.key, title: chat.title),
+    source: _WorkspaceRecentConversationSource(this, bots),
+    activity: activity,
+  );
+
+  Future<void> refreshRecents() {
+    if (_recentsRefresh case final pending?) return pending;
+    final completion = Completer<void>();
+    // Install the shared operation before publishing Loading to observers.
+    _recentsRefresh = completion.future;
+    unawaited(() async {
+      try {
+        await _refreshRecents();
+        completion.complete();
+      } catch (error, stack) {
+        completion.completeError(error, stack);
+      } finally {
+        _recentsRefresh = null;
+      }
+    }());
+    return completion.future;
+  }
+
+  Future<void> _refreshRecents() async {
     final generation = ++_recentsGeneration;
     _recentsLoading = true;
     _recentSessionRows.clear();
@@ -6418,7 +6450,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String text, {
     required Set<String> excluding,
   }) async {
-    if (!RegExp(r'\s/[^\s/]+(?=\s|$)').hasMatch(text)) return null;
+    if (!SlashSkillReference.hasInlineToken(text)) return null;
     final resource = _commandOwner(chat);
     final runtime = chat.runtime.runtimeId;
     void requireCaptured() {

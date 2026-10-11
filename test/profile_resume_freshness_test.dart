@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -46,6 +47,7 @@ void main() {
   RecentConversationSession recentVisit(Iterable<ProfileChat> chats) {
     final activity = ValueNotifier<ChatNoticeActivity?>(null);
     final visit = controller.recentConversationSession(
+      bots: BotsSession((_) async => const []),
       entries: chats.map(
         (chat) => RecentConversationEntry(key: chat.key, title: chat.title),
       ),

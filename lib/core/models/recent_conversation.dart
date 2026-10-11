@@ -1,4 +1,5 @@
 import 'profile_session_key.dart';
+import 'bots.dart';
 import 'transcript_reading.dart';
 
 /// The displayed Recents membership and order captured at route entry.
@@ -6,6 +7,16 @@ final class RecentConversationEntry {
   const RecentConversationEntry({required this.key, required this.title});
   final ProfileSessionKey key;
   final String title;
+}
+
+/// A captured All catalog, including usable entries after partial failure.
+final class RecentConversationCatalog {
+  RecentConversationCatalog({
+    required Iterable<RecentConversationEntry> entries,
+    required this.error,
+  }) : entries = List.unmodifiable(entries);
+  final List<RecentConversationEntry> entries;
+  final String? error;
 }
 
 /// Passive saved-history facts, never live execution or selection authority.
@@ -27,11 +38,13 @@ final class RecentConversationCard {
   const RecentConversationCard({
     required this.entry,
     this.preview,
+    this.bot,
     this.loading = false,
     this.error,
   });
   final RecentConversationEntry entry;
   final RecentConversationPreview? preview;
+  final BotRecord? bot;
   final bool loading;
   final String? error;
 }

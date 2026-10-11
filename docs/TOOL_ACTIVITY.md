@@ -26,10 +26,22 @@ target. A search receipt with an unreliable location remains readable in Raw
 but does not gain misleading file actions. See
 [Output viewers and downloads](OPENING_OUTPUT_FILES.md).
 
+## Messages to agents
+
+**Message agent** uses a speech-bubble icon and shows the recipient under its
+title. Its **Message** section contains the sent text. **Queued** acknowledges
+the handoff and shows the supplied queue time on the right. A later matching
+result appends **Exchange complete** and the returned reply with its saved
+receipt time; it keeps the original sections intact. Pending, unknown and failed
+results are labelled accordingly. These times describe different events, not
+a measured delivery duration. Expand Raw details for exact inputs, original
+output and delivery notifications.
+
 ## Approximate reply time
 
 A saved reply's collapsed Activity header can show "Used 11 tools · 1m 24s".
-This is the interval between the original sent prompt and final saved answer,
+This is the interval between the message that started the turn (your prompt or
+an incoming bot message) and the final saved answer,
 including thinking and tool work. It is not the sum of tool durations. Reopening
 Wing does not change an interval available in saved history. Missing or invalid
 timestamps, an unsaved reply, or an unloaded original prompt can leave it absent.

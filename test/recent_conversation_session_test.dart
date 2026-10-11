@@ -1,3 +1,4 @@
+import 'package:wing/core/models/bots.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -38,8 +39,30 @@ class _Source extends ChangeNotifier implements RecentConversationSource {
   Completer<void>? heldOpen;
   bool failOpen = false, cached = false;
   final denied = <ProfileSessionKey>{};
+  Completer<RecentConversationCatalog>? catalogRead;
+  int catalogReads = 0;
+  @override
+  Future<RecentConversationCatalog> loadRecents({required bool refresh}) {
+    catalogReads++;
+    return catalogRead?.future ??
+        Future.value(
+          RecentConversationCatalog(
+            entries: List.generate(8, _entry),
+            error: null,
+          ),
+        );
+  }
+
   @override
   bool admits(ProfileSessionKey key) => current && !denied.contains(key);
+  @override
+  BotRecord? appearanceFor(ProfileSessionKey key) => null;
+  @override
+  Future<void> prepareAppearances(
+    Iterable<ProfileSessionKey> keys,
+    bool Function() canRead,
+  ) async {}
+
   @override
   Object previewRevision(ProfileSessionKey key) => revisions[key] ?? 0;
   final revisions = <ProfileSessionKey, int>{};
@@ -68,10 +91,12 @@ void main() {
   late _Source source;
   late ValueNotifier<ChatNoticeActivity?> activity;
   late RecentConversationSession session;
+  var activityRequests = 0;
   setUp(() {
+    activityRequests = 0;
     source = _Source();
     activity = ValueNotifier(null);
-    session = RecentConversationSession(
+    session = RecentConversationSession.fromRecents(
       entries: List.generate(8, _entry),
       source: source,
       activity: activity,
@@ -81,6 +106,155 @@ void main() {
     session.dispose();
     source.dispose();
     activity.dispose();
+  });
+
+  void enterChat() {
+    session.dispose();
+    source.selected = _entry(0).key;
+    session = RecentConversationSession.fromChat(
+      chat: _entry(0),
+      source: source,
+      activity: () {
+        activityRequests++;
+        return activity;
+      },
+    );
+  }
+
+  test(
+    'dormant chat adopts selection without opening, reading or cueing',
+    () async {
+      enterChat();
+      expect(session.selected, source.selected);
+      expect(session.modeEnabled, isFalse);
+      expect(session.entries, hasLength(1));
+      session.setInteractive(true, origin: source.selected);
+      activity.value = ChatNoticeActivity(
+        key: _entry(1).key,
+        kind: ConversationActivityKind.reply,
+        identity: 'old',
+        sequence: 1,
+      );
+      expect(source.opens, isEmpty);
+      expect(source.reads, isEmpty);
+      expect(source.catalogReads, 0);
+      expect(activityRequests, 0);
+      expect(session.nudges.value, isNull);
+    },
+  );
+
+  test(
+    'activation loads once and defers membership until motion settles',
+    () async {
+      enterChat();
+      source.catalogRead = Completer();
+      session.setMembershipPaused(true);
+      session.activate();
+      session.activate();
+      expect(session.modeEnabled, isTrue);
+      expect(source.catalogReads, 1);
+      expect(activityRequests, 1);
+      expect(session.catalogLoading, isTrue);
+      source.catalogRead!.complete(
+        RecentConversationCatalog(
+          entries: [_entry(1), _entry(0), _entry(2)],
+          error: null,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(session.entries, hasLength(1));
+      expect(session.catalogLoading, isTrue);
+      session.setMembershipPaused(false);
+      expect(session.entries.map((entry) => entry.key), [
+        _entry(0).key,
+        _entry(1).key,
+        _entry(2).key,
+      ]);
+      expect(session.catalogLoading, isFalse);
+      expect(source.opens, isEmpty);
+    },
+  );
+
+  test(
+    'empty catalog retains current card and partial failure retry appends',
+    () async {
+      enterChat();
+      source.catalogRead = Completer();
+      session.activate();
+      source.catalogRead!.complete(
+        RecentConversationCatalog(entries: const [], error: null),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(session.entries, hasLength(1));
+      expect(session.catalogError, isNull);
+      source.catalogRead = Completer();
+      session.retryCatalog();
+      session.retryCatalog();
+      expect(source.catalogReads, 2);
+      source.catalogRead!.complete(
+        RecentConversationCatalog(
+          entries: [_entry(1)],
+          error: 'A profile is offline.',
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(session.entries.map((entry) => entry.key), [
+        _entry(0).key,
+        _entry(1).key,
+      ]);
+      expect(session.catalogError, isNotNull);
+      source.catalogRead = Completer();
+      session.retryCatalog();
+      source.catalogRead!.complete(
+        RecentConversationCatalog(
+          entries: [_entry(2), _entry(1), _entry(0)],
+          error: null,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(session.entries.map((entry) => entry.key), [
+        _entry(0).key,
+        _entry(1).key,
+        _entry(2).key,
+      ]);
+      expect(session.catalogError, isNull);
+    },
+  );
+
+  testWidgets(
+    'catalog deadline retains the current chat and fences late results',
+    (tester) async {
+      enterChat();
+      source.catalogRead = Completer();
+      session.activate();
+      await tester.pump(const Duration(seconds: 15));
+      expect(session.catalogLoading, isFalse);
+      expect(session.catalogError, isNotNull);
+      expect(session.entries, hasLength(1));
+      source.catalogRead!.complete(
+        RecentConversationCatalog(entries: [_entry(1)], error: null),
+      );
+      await tester.pump();
+      expect(session.entries, hasLength(1));
+      source.catalogRead = null;
+      session.retryCatalog();
+      await tester.pump();
+      expect(session.catalogError, isNull);
+      expect(session.entries, hasLength(8));
+    },
+  );
+
+  test('retirement fences a held catalog and its failure', () async {
+    enterChat();
+    source.catalogRead = Completer();
+    session.activate();
+    source.selected = _entry(7).key;
+    source.notifyListeners();
+    expect(session.active, isFalse);
+    source.catalogRead!.completeError(StateError('late offline failure'));
+    await Future<void>.delayed(Duration.zero);
+    expect(session.entries, hasLength(1));
+    expect(session.catalogError, isNull);
   });
 
   test('freezes scoped membership and wraps both ends', () {
@@ -147,7 +321,7 @@ void main() {
 
   test('center-outward preparation is unique and capped for a large ring', () {
     session.dispose();
-    session = RecentConversationSession(
+    session = RecentConversationSession.fromRecents(
       entries: List.generate(100, _entry),
       source: source,
       activity: activity,

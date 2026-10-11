@@ -4,14 +4,40 @@ const _recentPreviewMessageLimit = 6;
 
 final class _WorkspaceRecentConversationSource
     implements RecentConversationSource {
-  _WorkspaceRecentConversationSource(this.controller);
+  _WorkspaceRecentConversationSource(this.controller, this.bots);
+  final BotsSession bots;
+  Set<ProfileSessionKey> _appearanceDemand = {};
+  int _appearanceEpoch = -1;
   final ProfileWorkspaceController controller;
   final _readingRevisions = Expando<Object>();
 
   @override
+  Future<RecentConversationCatalog> loadRecents({required bool refresh}) async {
+    if (refresh) bots.invalidateAppearances();
+    if (refresh || !controller.recentsLoaded || controller.recentsLoading) {
+      await controller.refreshRecents();
+    }
+    if (!current) throw StateError('Workspace is no longer available');
+    final all = controller.recentChats();
+    return RecentConversationCatalog(
+      entries: [
+        for (final item in [
+          ...all.where((item) => item.activity != null),
+          ...all.where((item) => item.activity == null),
+        ])
+          RecentConversationEntry(key: item.key, title: item.title),
+      ],
+      error: controller.recentsProfileErrors.isEmpty
+          ? null
+          : 'Some recent chats could not be loaded.',
+    );
+  }
+
+  @override
   bool get current => !controller._closed;
   @override
-  ProfileSessionKey? get selected => controller.current?.chat?.key;
+  ProfileSessionKey? get selected =>
+      (controller.notificationChat ?? controller.current?.chat)?.key;
   @override
   bool admits(ProfileSessionKey key) =>
       current &&
@@ -41,10 +67,41 @@ final class _WorkspaceRecentConversationSource
   }
 
   @override
-  void addListener(VoidCallback listener) => controller.addListener(listener);
+  BotRecord? appearanceFor(ProfileSessionKey key) => bots.cachedAppearance(key);
+
   @override
-  void removeListener(VoidCallback listener) =>
-      controller.removeListener(listener);
+  Future<void> prepareAppearances(
+    Iterable<ProfileSessionKey> keys,
+    bool Function() canRead,
+  ) async {
+    final demand = keys.toSet();
+    if (_appearanceEpoch == bots.appearanceEpoch &&
+        setEquals(demand, _appearanceDemand)) {
+      return;
+    }
+    _appearanceEpoch = bots.appearanceEpoch;
+    _appearanceDemand = demand;
+    try {
+      await bots.appearancesForConversations(
+        demand,
+        canRead: () => current && canRead(),
+      );
+    } finally {
+      if (!canRead()) _appearanceDemand = {};
+    }
+  }
+
+  @override
+  void addListener(VoidCallback listener) {
+    controller.addListener(listener);
+    bots.addListener(listener);
+  }
+
+  @override
+  void removeListener(VoidCallback listener) {
+    controller.removeListener(listener);
+    bots.removeListener(listener);
+  }
 
   @override
   RecentConversationPreview? cachedPreview(RecentConversationEntry entry) {

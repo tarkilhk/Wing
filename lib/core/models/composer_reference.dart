@@ -345,7 +345,11 @@ final class PreparedComposerMessage {
         references: ComposerReference.decode(
           jsonDecode(value['references'] as String),
         ),
-        imageReferences: images?.group(0) ?? '',
+        // Retain the stock native-vision suffix so the attachment projection
+        // can still inspect its paths and image evidence after unwrapping.
+        imageReferences:
+            '${images?.group(0) ?? ''}'
+            '${remaining.startsWith('\n\n[Image attached') ? remaining : ''}',
       );
     } on FormatException {
       return null;
