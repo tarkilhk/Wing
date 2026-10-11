@@ -1,3 +1,24 @@
+// Punctuation and symbols delimit prose references. Hyphens and underscores
+// belong to names; slashes and backslashes keep paths and URLs literal.
+const _slashNameCharacter = r'[\p{L}\p{M}\p{N}_-]';
+const _slashSeparator = r'(?![-_/\\])[\s\p{P}\p{S}]';
+final _slashReferencePattern = RegExp(
+  '(^|$_slashSeparator)(/$_slashNameCharacter+)(?=$_slashSeparator|\$)',
+  unicode: true,
+);
+final _slashLiteralPrefixPattern = RegExp(
+  '(?:^|$_slashSeparator'
+  r'|[/\\])(?:\.\.?|[A-Za-z]:)$|(?:^|\s)[^\s]*://[^\s]*$',
+  unicode: true,
+);
+
+bool _slashIsLiteral(String text, int start) =>
+    _slashLiteralPrefixPattern.hasMatch(text.substring(0, start));
+
+Iterable<RegExpMatch> _slashReferences(String text) => _slashReferencePattern
+    .allMatches(text)
+    .where((match) => !_slashIsLiteral(text, match.end - match[2]!.length));
+
 class SlashInvocation {
   final String name;
   final String argument;
@@ -5,7 +26,8 @@ class SlashInvocation {
 
   static SlashInvocation? parse(String text) {
     final match = RegExp(
-      r'^/([^\s/]+)(?:\s+([\s\S]*))?$',
+      '^/($_slashNameCharacter+)(?:$_slashSeparator\\s*([\\s\\S]*))?\$',
+      unicode: true,
     ).firstMatch(text.trim());
     return match == null ? null : SlashInvocation(match[1]!, match[2] ?? '');
   }
@@ -100,7 +122,7 @@ class SlashCatalog {
         .toList();
   }
 
-  /// Exact skill references at word boundaries; paths and URLs stay literal.
+  /// Exact skill references at prose boundaries; paths and URLs stay literal.
   Iterable<SlashSkillReference> skillReferences(String text) =>
       SlashSkillReference.inText(
         text,
@@ -114,12 +136,16 @@ class SlashSkillReference {
   final int start;
   final int end;
 
+  /// Catalog reads use the same boundaries as highlighting and dispatch.
+  static bool hasInlineToken(String text) =>
+      _slashReferences(text).any((match) => match.end - match[2]!.length > 0);
+
   static Iterable<SlashSkillReference> inText(
     String text,
     Iterable<String> names,
   ) sync* {
     final skills = names.toSet();
-    for (final match in RegExp(r'(^|\s)(/[^\s/]+)(?=\s|$)').allMatches(text)) {
+    for (final match in _slashReferences(text)) {
       final token = match[2]!;
       if (skills.contains(token)) {
         yield SlashSkillReference(token, match.end - token.length, match.end);
@@ -145,9 +171,20 @@ class SlashCompletion {
 
   /// The active inline token, or the leading command and its arguments.
   static String? queryToken(String prefix) {
-    final inline = RegExp(r'(^|\s)(/[^\s/]*)$').firstMatch(prefix);
-    if (inline != null) return inline[2];
-    if (RegExp(r'^/[^\s/]+(?:\s[\s\S]*)$').hasMatch(prefix)) return prefix;
+    final inline = RegExp(
+      '(^|$_slashSeparator)(/$_slashNameCharacter*)\$',
+      unicode: true,
+    ).firstMatch(prefix);
+    if (inline != null &&
+        !_slashIsLiteral(prefix, inline.end - inline[2]!.length)) {
+      return inline[2];
+    }
+    if (RegExp(
+      '^/$_slashNameCharacter+(?:\\s[\\s\\S]*)\$',
+      unicode: true,
+    ).hasMatch(prefix)) {
+      return prefix;
+    }
     return null;
   }
 

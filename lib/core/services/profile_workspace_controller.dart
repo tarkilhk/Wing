@@ -6339,7 +6339,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String text, {
     required Set<String> excluding,
   }) async {
-    if (!RegExp(r'\s/[^\s/]+(?=\s|$)').hasMatch(text)) return null;
+    if (!SlashSkillReference.hasInlineToken(text)) return null;
     final resource = _commandOwner(chat);
     final runtime = chat.runtime.runtimeId;
     void requireCaptured() {

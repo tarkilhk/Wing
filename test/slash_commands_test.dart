@@ -1434,6 +1434,144 @@ void main() {
     },
   );
 
+  test('punctuation delimits skill names like whitespace', () {
+    const separators = [
+      ',',
+      '.',
+      '!',
+      '?',
+      ':',
+      ';',
+      '(',
+      ')',
+      '[',
+      ']',
+      '{',
+      '}',
+      '"',
+      "'",
+      '“',
+      '”',
+      '‘',
+      '’',
+      '…',
+      '—',
+      '，',
+      '。',
+      '+',
+      '=',
+      r'$',
+    ];
+    for (final separator in separators) {
+      final text = 'Use$separator/a-skill$separator/a_other$separator';
+      final references = SlashSkillReference.inText(text, [
+        '/a-skill',
+        '/a_other',
+      ]).toList();
+      expect(references.map((r) => r.text), [
+        '/a-skill',
+        '/a_other',
+      ], reason: text);
+      for (final reference in references) {
+        expect(text.substring(reference.start, reference.end), reference.text);
+      }
+      expect(
+        SlashCompletion.isQuery('Use /a-skill$separator'),
+        isFalse,
+        reason: separator,
+      );
+      final query = 'Use$separator/a-';
+      final completion = SlashCompletion.fromCatalog(
+        query,
+        SlashCatalog.fromJson(host.catalog('a')),
+      );
+      expect(completion.items.single.text, '/a-skill');
+      expect(
+        completion
+            .select(completion.items.single, text: query, cursor: query.length)!
+            .text,
+        'Use$separator/a-skill ',
+      );
+      expect(
+        SlashInvocation.parse('/a-skill${separator}review')!.name,
+        'a-skill',
+      );
+      expect(
+        SlashInvocation.parse('/a-skill${separator}review')!.argument,
+        'review',
+      );
+    }
+    for (final text in ['Use /a-skill-extra', 'Use /a-skill_extra']) {
+      expect(SlashSkillReference.inText(text, ['/a-skill']), isEmpty);
+      expect(SlashCompletion.isQuery(text), isTrue);
+    }
+    for (final text in [
+      'Use /a-skill/path',
+      'Use /a-skill\\path',
+      'Use word/a-skill',
+      'https://example.com/a-skill',
+      'Use ./a-skill',
+      'Use ../a-skill',
+      'Use (./a-skill).',
+      'Use "/tmp/../a-skill"',
+      'Use C:/a-skill',
+      'https://example.com?skill=/a-skill',
+      'https://example.com#/a-skill',
+    ]) {
+      expect(
+        SlashSkillReference.inText(text, ['/a-skill']),
+        isEmpty,
+        reason: text,
+      );
+      expect(SlashCompletion.isQuery(text), isFalse, reason: text);
+    }
+    expect(SlashInvocation.parse('/a-skill "review"')!.argument, '"review"');
+    expect(SlashInvocation.parse('/a-skill, (review)')!.argument, '(review)');
+    const unicodeText = '😀 (/技能_name-2),';
+    final unicodeReference = SlashSkillReference.inText(unicodeText, [
+      '/技能_name-2',
+    ]).single;
+    expect(
+      unicodeText.substring(unicodeReference.start, unicodeReference.end),
+      '/技能_name-2',
+    );
+  });
+
+  for (final original in [
+    'Use /a-skill, then review.',
+    'Use (/a-skill).',
+    '/a-skill, review.',
+    'Use /a-skill,/a-skill.',
+  ]) {
+    test('punctuation preserves skill dispatch: $original', () async {
+      host.respond = (_, params) async => {
+        'type': 'skill',
+        'message': 'Expanded ${params['name']}',
+      };
+      chat.composer.editText(original);
+      await controller.send(chat);
+      expect(
+        host.commandCalls
+            .singleWhere((c) => c.$1 == 'command.dispatch')
+            .$2['name'],
+        'a-skill',
+      );
+      expect(
+        host.commandCalls
+            .singleWhere((c) => c.$1 == 'command.dispatch')
+            .$2['arg'],
+        original.startsWith('/') ? 'review.' : original,
+      );
+      expect(
+        host.commandCalls
+            .singleWhere((c) => c.$1 == 'prompt.submit')
+            .$2['text'],
+        'Expanded a-skill',
+      );
+      expect(chat.reading.messages.single['display_content'], original);
+    });
+  }
+
   testWidgets('inline skill picker replaces the token at the cursor', (
     tester,
   ) async {
@@ -1466,6 +1604,14 @@ void main() {
     expect(input.selection.extentOffset, 22);
     expect(chat.composer.observation.text, input.text);
     expect(host.commandCalls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
+    input.value = const TextEditingValue(
+      text: 'Use /a-skill,',
+      selection: TextSelection.collapsed(offset: 13),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    expect(find.text('No matching commands.'), findsNothing);
+    expect(find.text('Commands'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -1599,6 +1745,16 @@ void main() {
       );
       expect(skill.style!.fontWeight, FontWeight.w700);
       expect(skill.style!.color, Theme.of(context).colorScheme.primary);
+      input.text = 'Use (/a-skill), then /a-skill.';
+      final punctuationSpans = span().children!.whereType<TextSpan>();
+      expect(
+        punctuationSpans
+            .where((s) => s.style?.fontWeight == FontWeight.w700)
+            .map((s) => s.text),
+        ['/a-skill', '/a-skill'],
+      );
+      expect(span().toPlainText(), input.text);
+      input.text = 'Use /a-skill then /model and /a-skill/path';
       input.value = input.value.copyWith(
         composing: const TextRange(start: 6, end: 10),
       );
