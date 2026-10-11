@@ -1177,7 +1177,8 @@ final class ChatBrowserData extends ChangeNotifier {
               resource.chats.values.any((chat) => chat.title == 'Bot Chat');
           if (needsCanonical) {
             final canonical = await retryTransientRead(
-              () => resource.gateway.canonicalBotChat(),
+              () =>
+                  _controller.browserCanonicalBotChat(profile, canRead: active),
               isActive: active,
             );
             if (!active()) return;

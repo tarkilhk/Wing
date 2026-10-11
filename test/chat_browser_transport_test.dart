@@ -3,12 +3,14 @@ import 'package:wing/core/services/connection_access.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/models/session_visibility.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'dart:io';
 
 import 'support/gateway_application_requests.dart';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -98,6 +100,21 @@ void main() {
   test(
     'profile browsing reuses one sign-in without closing the live socket',
     () async {
+      final prematureReads = <Map<String, dynamic>>[];
+      final previousPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) {
+        if (message != null && message.startsWith('[WingConnection] ')) {
+          final event =
+              jsonDecode(message.substring('[WingConnection] '.length))
+                  as Map<String, dynamic>;
+          if (event['event'] == 'gateway.rpc_failed' &&
+              event['rpc_method'] == 'session.list') {
+            prematureReads.add(event);
+          }
+        }
+        previousPrint(message, wrapWidth: wrapWidth);
+      };
+      addTearDown(() => debugPrint = previousPrint);
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final sockets = <WebSocket>[];
       final requestedProfiles = <String>{};
@@ -114,7 +131,11 @@ void main() {
               jsonEncode({
                 'jsonrpc': '2.0',
                 'id': rpc['id'],
-                'result': rpc['method'] == 'session.active_list'
+                'result':
+                    const {
+                      'session.active_list',
+                      'session.list',
+                    }.contains(rpc['method'])
                     ? {'sessions': []}
                     : {'projects': []},
               }),
@@ -205,6 +226,18 @@ void main() {
       await controller.initialize();
       expect(controller.initialized, isTrue);
       final owner = controller.current;
+      await browser.chooseVisibility(SessionVisibility.all);
+      expect(
+        prematureReads,
+        isEmpty,
+        reason: 'A healthy server must not trigger unopened-socket failures',
+      );
+      expect(
+        controller.browserResource('work').loaded,
+        isFalse,
+        reason: 'Read-only browsing must not start conversation recovery',
+      );
+      expect(controller.browserResource('work').reconnectScheduled, isFalse);
       for (var i = 0; i < 5; i++) {
         await browser.refresh(archivedOnly: false);
         expect(

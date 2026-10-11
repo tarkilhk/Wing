@@ -1652,6 +1652,22 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return _resources[key.workspace]?._chats[key.sessionId];
   }
 
+  /// Canonical browsing uses a connected reader, never an unopened chat socket.
+  Future<ProfileCanonicalBotChat?> browserCanonicalBotChat(
+    String name, {
+    required bool Function() canRead,
+  }) async {
+    if (_closed || !canRead()) throw StateError('Browser is closed');
+    final reader = _factory(browserResource(name).scope);
+    try {
+      await reader.connect();
+      if (_closed || !canRead()) throw StateError('Browser is closed');
+      return await reader.canonicalBotChat();
+    } finally {
+      reader.close();
+    }
+  }
+
   /// Project browsing uses short-lived readers, never the conversation socket.
   /// Bound the caller's concurrency instead of retaining a socket per profile.
   Future<List<Map<String, dynamic>>> browserProjects(
