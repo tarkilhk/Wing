@@ -1,3 +1,5 @@
+import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/services/bots_repository.dart';
 import 'dart:async';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -10,6 +12,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_browser_fixture.dart';
+import 'support/bots_fixture.dart';
 
 class _RecentsFixture extends ProfileBrowserFixture {
   @override
@@ -89,6 +92,69 @@ void main() {
   });
 
   test(
+    'cold passive canonical appearance loads before opening its chat',
+    () async {
+      await controller.refreshRecents();
+      final keys = controller.recentChats().map((chat) => chat.key).toList();
+      final target = keys.first;
+      final botFixture = BotsFixture();
+      final row = BotsFixture.profile(
+        target.workspace.profileName,
+        'Canonical assistant',
+      );
+      row['canonical_session'] = {
+        'id': target.sessionId,
+        'resolved_id': '${target.sessionId}-tip',
+      };
+      botFixture.profiles
+        ..clear()
+        ..add(row);
+      final bots = BotsSession(
+        (_) async => [
+          BotsRepository(
+            scope: controller.current!.scope,
+            instance: 'Host',
+            read: botFixture.read,
+            command: (_, _, _, _, _) async => throw StateError('Passive only'),
+            ownership: (_, _) async => throw StateError('No runtime reads'),
+          ),
+        ],
+      );
+      addTearDown(bots.dispose);
+      final activity = ValueNotifier<ChatNoticeActivity?>(null);
+      addTearDown(activity.dispose);
+      final visit = controller.recentConversationSession(
+        entries: [
+          for (final key in keys)
+            RecentConversationEntry(key: key, title: 'Saved title'),
+        ],
+        bots: bots,
+        activity: activity,
+      );
+      addTearDown(visit.dispose);
+      final calls = fixture.calls.length;
+      visit.prepare(keys.take(3));
+      await Future<void>.delayed(Duration.zero);
+      expect(visit.cardAt(0).bot!.title, 'Canonical assistant');
+      expect(visit.cardAt(0).bot!.describesConversation(target), isTrue);
+      expect(fixture.calls.length, calls);
+      expect(botFixture.commands, isEmpty);
+      final reading = visit.cardAt(0).preview;
+      final revision = visit.previewRevision(target),
+          pixels = visit.cardRevision(target);
+      row['ui_meta'] = {
+        'hermes-bots': {'title': 'Renamed assistant'},
+      };
+      row['ui_meta_revisions'] = {'hermes-bots': 3};
+      await bots.refresh();
+      expect(visit.previewRevision(target), revision);
+      expect(visit.cardRevision(target), isNot(pixels));
+      expect(visit.cardAt(0).preview, same(reading));
+      expect(visit.cardAt(0).bot!.title, 'Renamed assistant');
+    },
+  );
+
+  test(
     'entry catalog anchors an old draft without changing recency or reopening',
     () async {
       await controller.refreshRecents();
@@ -99,6 +165,7 @@ void main() {
       await controller.updateDraft(chat, 'Unsent work');
       final activity = ValueNotifier<ChatNoticeActivity?>(null);
       final visit = controller.chatRecentConversationSession(
+        bots: BotsSession((_) async => const []),
         chat: chat,
         activity: () => activity,
       );

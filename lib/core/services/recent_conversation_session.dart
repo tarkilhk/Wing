@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../models/profile_session_key.dart';
+import '../models/bots.dart';
 import '../models/recent_conversation.dart';
 
 /// Captured workspace reads and commands. Preview reads grant no runtime lease.
@@ -12,6 +13,11 @@ abstract interface class RecentConversationSource implements Listenable {
   ProfileSessionKey? get selected;
   bool admits(ProfileSessionKey key);
   Object previewRevision(ProfileSessionKey key);
+  BotRecord? appearanceFor(ProfileSessionKey key);
+  Future<void> prepareAppearances(
+    Iterable<ProfileSessionKey> keys,
+    bool Function() canRead,
+  );
   RecentConversationPreview? cachedPreview(RecentConversationEntry entry);
   Future<RecentConversationPreview> loadPreview(RecentConversationEntry entry);
   Future<void> open(ProfileSessionKey key, bool Function() isCurrent);
@@ -104,6 +110,7 @@ final class RecentConversationSession extends ChangeNotifier {
   bool _disposedNotifier = false;
   int _notificationDepth = 0;
   int _selectionGeneration = 0, _readGeneration = 0, _lastActivity = 0;
+  int _preparationGeneration = 0;
   int _nudgeSequence = 0;
   Timer? _cueTimer;
   ChatNoticeActivity? _pendingCue;
@@ -179,10 +186,21 @@ final class RecentConversationSession extends ChangeNotifier {
       entries.indexWhere((entry) => entry.key == _selected);
   RecentConversationCard cardAt(int index) {
     final entry = entryAt(index);
-    return _cards[entry.key] ?? RecentConversationCard(entry: entry);
+    final card = _cards[entry.key];
+    return RecentConversationCard(
+      entry: entry,
+      preview: card?.preview,
+      loading: card?.loading ?? false,
+      error: card?.error,
+      bot: _source.appearanceFor(entry.key),
+    );
   }
 
   Object previewRevision(ProfileSessionKey key) => _source.previewRevision(key);
+
+  /// Appearance changes affect passive pixels, never saved-history admission.
+  Object cardRevision(ProfileSessionKey key) =>
+      (previewRevision(key), _source.appearanceFor(key));
 
   /// Unique center-outward priority, bounded independently of ring size.
   List<ProfileSessionKey> keysAround(
@@ -247,6 +265,10 @@ final class RecentConversationSession extends ChangeNotifier {
         wanted.any((key) => !entries.any((entry) => entry.key == key))) {
       throw ArgumentError('Preparation requires at most ten ring members');
     }
+    if (!setEquals(wanted, _wanted.toSet())) {
+      _preparationGeneration++;
+    }
+    final preparation = _preparationGeneration;
     _wanted
       ..clear()
       ..addAll(wanted);
@@ -254,12 +276,24 @@ final class RecentConversationSession extends ChangeNotifier {
     _cards.removeWhere((key, _) => !wanted.contains(key));
     _revisions.removeWhere((key, _) => !wanted.contains(key));
     final changed = _pumpPreviews();
+    unawaited(
+      _source.prepareAppearances(
+        wanted,
+        () =>
+            active &&
+            preparation == _preparationGeneration &&
+            wanted.every(_wanted.contains),
+      ),
+    );
     if (evicted || changed) _emit();
   }
 
   /// Stops new admission during motion/exit without pretending physical I/O
   /// has been canceled. Its slot remains occupied until the source settles.
-  void pausePreparation() => _wanted.clear();
+  void pausePreparation() {
+    _preparationGeneration++;
+    _wanted.clear();
+  }
 
   bool _pumpPreviews() {
     var changed = false;

@@ -1,5 +1,7 @@
+import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/models/notification_focus.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -19,6 +21,7 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/widgets/source_code_block.dart';
+import 'package:wing/core/widgets/bot_avatar.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/recent_conversation_session.dart';
 import 'package:wing/core/services/bots_session.dart';
@@ -71,7 +74,7 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
       <ProfileSessionKey, Completer<RecentConversationPreview>>{};
   bool rejectOpen = false;
   Completer<void>? waitingOpen;
-  int previewReads = 0;
+  int previewReads = 0, historyReads = 0;
   final previewOrder = <ProfileSessionKey>[];
   Completer<RecentConversationCatalog>? catalogRead;
   int catalogReads = 0;
@@ -84,6 +87,18 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
 
   @override
   bool admits(ProfileSessionKey key) => current;
+  final appearances = <ProfileSessionKey, BotRecord>{};
+  int appearancePreparations = 0;
+  @override
+  BotRecord? appearanceFor(ProfileSessionKey key) => appearances[key];
+  @override
+  Future<void> prepareAppearances(
+    Iterable<ProfileSessionKey> keys,
+    bool Function() canRead,
+  ) async {
+    if (canRead()) appearancePreparations++;
+  }
+
   @override
   Object previewRevision(ProfileSessionKey key) => revisions[key] ?? 0;
   final revisions = <ProfileSessionKey, int>{};
@@ -107,7 +122,11 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   @override
   Future<RecentConversationPreview> loadPreview(
     RecentConversationEntry entry,
-  ) async => waitingPreviews[entry.key]?.future ?? _readyPreview(entry);
+  ) async {
+    historyReads++;
+    return waitingPreviews[entry.key]?.future ?? _readyPreview(entry);
+  }
+
   @override
   Future<void> open(ProfileSessionKey key, bool Function() isCurrent) async {
     if (!isCurrent()) return;
@@ -314,6 +333,95 @@ void main() {
           .load();
     }
   });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('canonical bot passive header ${brightness.name} $scale', (
+        tester,
+      ) async {
+        final fixture = BotsFixture();
+        fixture.profiles.first['has_avatar'] = true;
+        fixture.readHook = (_, method, _) async =>
+            method == 'profiles.get_asset'
+            ? {
+                'found': true,
+                'data':
+                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=',
+              }
+            : null;
+        final owner = BotsSession((_) async => [fixture.repository]);
+        addTearDown(owner.dispose);
+        final key = ProfileSessionKey(
+          WorkspaceScope(
+            connectionId: 'host',
+            connectionIdentity: 'instance-1',
+            profileName: 'atlas',
+          ),
+          'atlas-chat',
+        );
+        final bot = await owner.botForConversation(key);
+        expect(fixture.commands, isEmpty);
+        final entry = RecentConversationEntry(key: key, title: 'Bot Chat');
+        final frame = GlobalKey();
+        tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: RepaintBoundary(
+              key: frame,
+              child: ConversationPreview(
+                card: RecentConversationCard(
+                  entry: entry,
+                  bot: bot,
+                  preview: RecentConversationPreview(
+                    entry: entry,
+                    reading: TranscriptReadingSnapshot(
+                      messages: const [],
+                      historySessionId: key.sessionId,
+                    ),
+                    draft: '',
+                    scopeLabel: 'Unassigned',
+                  ),
+                ),
+                connectionLabel: 'Host',
+              ),
+            ),
+          ),
+        );
+        await _finishFrames(tester);
+        expect(find.text('Atlas'), findsOneWidget);
+        expect(find.text('Bot Chat'), findsNothing);
+        final avatar = tester.widget<BotAvatar>(find.byType(BotAvatar));
+        expect(
+          avatar.image,
+          base64Decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=',
+          ),
+        );
+        expect(avatar.size, 32);
+        final bounds = tester.getRect(find.byType(BotConversationTitle));
+        expect(
+          bounds.right,
+          lessThanOrEqualTo(tester.view.physicalSize.width - 40),
+        );
+        expect(tester.takeException(), isNull);
+        await _capture(
+          tester,
+          frame,
+          'canonical-bot-header-${brightness.name}-$scale',
+        );
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+  }
 
   group('gesture and motion contract', () {
     late _UiSource source;
@@ -1810,6 +1918,66 @@ void main() {
           ),
           isFalse,
         );
+      },
+    );
+
+    testWidgets(
+      'appearance updates recapture only passive pixels without history reads',
+      (tester) async {
+        final key = source.entries[1].key;
+        BotRecord appearance(String title) => BotRecord(
+          scope: key.workspace,
+          instance: 'Host',
+          profile: HermesProfile.fromJson({'name': key.workspace.profileName}),
+          title: title,
+          shape: 'squircle',
+          color: '#65c7bc',
+          pinned: false,
+          hidden: false,
+          hasAvatar: false,
+          revision: 1,
+          metadata: const {},
+          chat: key,
+        );
+        source.appearances[key] = appearance('Atlas');
+        final frame = GlobalKey();
+        await mount(
+          tester,
+          frame: frame,
+          buildPreview: (card) =>
+              ConversationPreview(card: card, connectionLabel: 'Host'),
+        );
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        ui.Image pixels(ProfileSessionKey key) => tester
+            .widget<RawImage>(find.byKey(ValueKey((key, 'snapshot'))))
+            .image!;
+        final genuine = pixels(source.selected),
+            previous = pixels(key),
+            other = pixels(source.entries[2].key);
+        final historyReads = source.historyReads,
+            preparations = source.appearancePreparations;
+        await _finishFrames(tester);
+        expect(pixels(key), same(previous));
+        expect(source.appearancePreparations, preparations);
+        source.appearances[key] = appearance('Atlas renamed');
+        source.notifyListeners();
+        await _finishFrames(tester);
+        expect(pixels(key), isNot(same(previous)));
+        expect(previous.debugDisposed, isTrue);
+        expect(pixels(source.selected), same(genuine));
+        expect(pixels(source.entries[2].key), same(other));
+        expect(source.historyReads, historyReads);
+        expect(source.opens, isEmpty);
+        await _capture(tester, frame, 'canonical-bot-stack');
+        final reads = source.appearancePreparations;
+        final first = await tester.startGesture(const Offset(130, 400));
+        await first.moveBy(const Offset(-35, 0));
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(source.appearancePreparations, reads);
+        await first.cancel();
+        await _finishFrames(tester);
+        expect(tester.takeException(), isNull);
       },
     );
 

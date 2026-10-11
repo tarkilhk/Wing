@@ -253,14 +253,14 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     _completed.clear();
     for (final key in _initialBatch) {
       if (_snapshots.imageFor(key) != null &&
-          _snapshots.revisionFor(key) == widget.session.previewRevision(key)) {
+          _snapshots.revisionFor(key) == _snapshotRevision(key)) {
         _completeCard(key);
       }
     }
     _batchTimer = Timer(const Duration(seconds: 15), () {
       if (!mounted) return;
       for (final key in _initialBatch.difference(_completed)) {
-        _failures[key] = widget.session.previewRevision(key);
+        _failures[key] = _snapshotRevision(key);
       }
       _pausePreparation();
       setState(() => _completed.addAll(_initialBatch));
@@ -336,7 +336,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       _snapshots.retain(neighborhood.toSet());
       final needed = <ProfileSessionKey>[];
       for (final key in priorities) {
-        final revision = widget.session.previewRevision(key);
+        final revision = _snapshotRevision(key);
         if (_snapshots.imageFor(key) != null &&
             _snapshots.revisionFor(key) != revision) {
           _snapshots.invalidate(key);
@@ -358,12 +358,13 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
         if (card.loading || card.preview == null && card.error == null) {
           continue;
         }
-        final revision = widget.session.previewRevision(key);
+        final revision = _snapshotRevision(key);
         if (card.error != null) {
           _failures[key] = revision;
           _completeCard(key);
           continue;
         }
+        _placeholders.remove(key);
         final deadline = Timer(const Duration(seconds: 5), () {
           _failures[key] = revision;
           _completeCard(key);
@@ -380,7 +381,8 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
               cancel.future,
             ]);
             if (!current()) return;
-          } while (_markdownPending(_previewBoundary.currentContext));
+          } while (_markdownPending(_previewBoundary.currentContext) ||
+              _imagesPending(_previewBoundary.currentContext));
           final boundary = _previewBoundary.currentContext?.findRenderObject();
           if (boundary is! RenderRepaintBoundary || !boundary.attached) {
             _failures[key] = revision;
@@ -398,7 +400,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
           } finally {
             _snapshots.release(bytes);
           }
-          if (!current() || revision != widget.session.previewRevision(key)) {
+          if (!current() || revision != _snapshotRevision(key)) {
             image?.dispose();
             return;
           }
@@ -473,6 +475,22 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
 
   int _captureBytes(double ratio) =>
       (_size.width * ratio).ceil() * (_size.height * ratio).ceil() * 4;
+
+  Object _snapshotRevision(ProfileSessionKey key) => _snapshots.isLive(key)
+      ? widget.session.previewRevision(key)
+      : widget.session.cardRevision(key);
+
+  bool _imagesPending(BuildContext? subtree) {
+    var pending = false;
+    void visit(RenderObject object) {
+      if (object is RenderImage && object.image == null) pending = true;
+      if (!pending) object.visitChildren(visit);
+    }
+
+    final object = subtree?.findRenderObject();
+    if (object != null) visit(object);
+    return pending;
+  }
 
   void _captureLive() {
     if (_liveCapture != null || !_liveDirty || _active || _size.isEmpty) return;

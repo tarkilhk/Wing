@@ -1257,14 +1257,14 @@ final class ChatBrowserData extends ChangeNotifier {
     _botAppearances.removeWhere((key, _) => !keys.contains(key));
     if (keys.isEmpty) return;
     try {
-      final read =
-          _readBotAppearances ??
-          (_botAppearanceOwner ??= BotsSession(
-            (_) async => [
-              BotsRepository.forServer(_controller.administration()),
-            ],
-          )).appearancesForConversations;
-      final appearances = await read(keys);
+      _botAppearanceOwner?.invalidateAppearances();
+      final appearances = _readBotAppearances != null
+          ? await _readBotAppearances(keys)
+          : await (_botAppearanceOwner ??= BotsSession(
+              (_) async => [
+                BotsRepository.forServer(_controller.administration()),
+              ],
+            )).appearancesForConversations(keys, canRead: isCurrent);
       if (!isCurrent()) return;
       for (final key in keys) {
         final bot = appearances[key];

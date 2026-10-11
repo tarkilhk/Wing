@@ -434,6 +434,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   ) async {
     _pendingRecentVisit?.dispose();
     final visit = controller.recentConversationSession(
+      bots: _bots,
       entries: displayed.map(
         (chat) => RecentConversationEntry(key: chat.key, title: chat.title),
       ),
@@ -463,10 +464,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     });
   }
 
-  Widget _withRecentSwitcher(ProfileChat chat, Widget child, BotRecord? bot) {
+  Widget _withRecentSwitcher(ProfileChat chat, Widget child) {
     if (_recentVisit?.active != true) {
       _recentVisit?.dispose();
       _recentVisit = controller.chatRecentConversationSession(
+        bots: _bots,
         chat: chat,
         activity: () => ChatNoticeActivityScope.of(context),
       );
@@ -482,7 +484,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         chatKey: chat.key,
         previewBuilder: (card) => ConversationPreview(
           card: card,
-          bot: bot?.describesConversation(card.entry.key) == true ? bot : null,
           connectionLabel: controller.connection.label,
           connectionIcon: controller.connection.icon,
           connectionStatus: controller.connectionStatus,
@@ -775,30 +776,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     child: InkWell(
       borderRadius: WingRadius.card,
       onTap: moveToProject,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (bot != null) ...[
-            ExcludeSemantics(
-              child: BotAvatar(
-                name: bot.title,
-                shape: bot.shape,
-                color: bot.color,
-                image: bot.avatar,
-                size: 32,
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Text(
-              bot?.title ?? chat.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
+      child: BotConversationTitle(title: chat.title, bot: bot),
     ),
   );
 
@@ -1155,7 +1133,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         ),
       ),
     );
-    return _withRecentSwitcher(chat, conversation, bot);
+    return _withRecentSwitcher(chat, conversation);
   }
 
   Future<void> _openWorkDetails(Widget panel) => showModalBottomSheet<void>(

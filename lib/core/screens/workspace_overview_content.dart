@@ -71,13 +71,19 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
     _wasRefreshing = refreshing;
     final keys = controller.recentChats().map((item) => item.key).toSet();
     if (!refreshed && setEquals(keys, _appearanceKeys)) return;
+    if (refreshed) widget.bots.invalidateAppearances();
     _appearanceKeys = keys;
     final generation = ++_appearanceGeneration;
     unawaited(
-      widget.bots.appearancesForConversations(keys).then((appearances) {
-        if (!mounted || generation != _appearanceGeneration) return;
-        setState(() => _appearances = appearances);
-      }),
+      widget.bots
+          .appearancesForConversations(
+            keys,
+            canRead: () => mounted && generation == _appearanceGeneration,
+          )
+          .then((appearances) {
+            if (!mounted || generation != _appearanceGeneration) return;
+            setState(() => _appearances = appearances);
+          }),
     );
   }
 

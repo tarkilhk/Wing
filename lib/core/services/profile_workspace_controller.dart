@@ -1,5 +1,7 @@
 import '../models/recent_conversation.dart';
 import 'recent_conversation_session.dart';
+import 'bots_session.dart';
+import '../models/bots.dart';
 import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_choice.dart';
@@ -998,19 +1000,21 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   RecentConversationSession recentConversationSession({
     required Iterable<RecentConversationEntry> entries,
+    required BotsSession bots,
     required ValueListenable<ChatNoticeActivity?> activity,
   }) => RecentConversationSession.fromRecents(
     entries: entries,
-    source: _WorkspaceRecentConversationSource(this),
+    source: _WorkspaceRecentConversationSource(this, bots),
     activity: activity,
   );
 
   RecentConversationSession chatRecentConversationSession({
     required ProfileChat chat,
+    required BotsSession bots,
     required ValueListenable<ChatNoticeActivity?> Function() activity,
   }) => RecentConversationSession.fromChat(
     chat: RecentConversationEntry(key: chat.key, title: chat.title),
-    source: _WorkspaceRecentConversationSource(this),
+    source: _WorkspaceRecentConversationSource(this, bots),
     activity: activity,
   );
 

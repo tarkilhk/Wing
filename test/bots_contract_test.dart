@@ -25,6 +25,224 @@ class _AvatarPicker extends BotAvatarIo {
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  ProfileSessionKey canonical(String name, {String suffix = 'chat'}) =>
+      ProfileSessionKey(
+        WorkspaceScope(
+          connectionId: 'host',
+          connectionIdentity: 'instance-1',
+          profileName: name,
+        ),
+        '$name-$suffix',
+      );
+
+  test(
+    'passive appearances coalesce roster and avatar reads and reuse warm headers',
+    () async {
+      final fixture = BotsFixture();
+      fixture.profiles.first['has_avatar'] = true;
+      final roster = Completer<Map<String, dynamic>?>();
+      final started = Completer<void>();
+      final asset = Completer<Map<String, dynamic>?>();
+      var rosters = 0, assets = 0, notifications = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method == 'profiles.list') {
+          rosters++;
+          started.complete();
+          return roster.future;
+        }
+        if (method == 'profiles.get_asset') {
+          assets++;
+          return asset.future;
+        }
+        return null;
+      };
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      owner.addListener(() => notifications++);
+      final root = canonical('atlas'), tip = canonical('atlas', suffix: 'tip');
+      final a = owner.appearancesForConversations([root], canRead: () => true);
+      final b = owner.botForConversation(tip);
+      await started.future;
+      roster.complete(null);
+      await Future<void>.delayed(Duration.zero);
+      expect(rosters, 1);
+      expect(assets, 1);
+      asset.complete({'found': true, 'data': _avatarPng});
+      final results = await Future.wait<Object?>([a, b]);
+      final map = results[0] as Map<ProfileSessionKey, BotRecord>;
+      expect(map[root], same(results[1]));
+      expect(map[root]!.avatar, base64Decode(_avatarPng));
+      expect(owner.cachedAppearance(tip), same(map[root]));
+      final changes = notifications;
+      expect(await owner.botForConversation(root), same(map[root]));
+      expect(rosters, 1);
+      expect(assets, 1);
+      expect(notifications, changes);
+      expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test('motion revokes avatar admission after a shared roster wait', () async {
+    final fixture = BotsFixture();
+    fixture.profiles.first['has_avatar'] = true;
+    final roster = Completer<Map<String, dynamic>?>(),
+        started = Completer<void>();
+    var allowed = true, assets = 0, rosters = 0;
+    fixture.readHook = (_, method, _) async {
+      if (method == 'profiles.list') {
+        rosters++;
+        started.complete();
+        return roster.future;
+      }
+      if (method == 'profiles.get_asset') {
+        assets++;
+        return {'found': true, 'data': _avatarPng};
+      }
+      return null;
+    };
+    final owner = BotsSession((_) async => [fixture.repository]);
+    addTearDown(owner.dispose);
+    final key = canonical('atlas');
+    final reading = owner.appearancesForConversations([
+      key,
+    ], canRead: () => allowed);
+    await started.future;
+    allowed = false;
+    roster.complete(null);
+    final metadata = await reading;
+    expect(metadata[key]!.title, 'Atlas');
+    expect(assets, 0);
+    allowed = true;
+    final ready = await owner.appearancesForConversations([
+      key,
+    ], canRead: () => allowed);
+    expect(ready[key]!.avatar, base64Decode(_avatarPng));
+    expect(rosters, 1);
+    expect(assets, 1);
+  });
+
+  test(
+    'passive avatar allocation admits at most three physical reads',
+    () async {
+      final fixture = BotsFixture()
+        ..profiles.add(BotsFixture.profile('fourth', 'Fourth'));
+      for (final row in fixture.profiles) {
+        row['has_avatar'] = true;
+      }
+      final held = Completer<Map<String, dynamic>?>();
+      var active = 0, peak = 0, assets = 0, rosters = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method == 'profiles.list') rosters++;
+        if (method != 'profiles.get_asset') return null;
+        assets++;
+        active++;
+        if (active > peak) peak = active;
+        final result = await held.future;
+        active--;
+        return result;
+      };
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      final reads = [
+        for (final row in fixture.profiles)
+          owner.botForConversation(canonical(row['name'] as String)),
+      ];
+      await Future<void>.delayed(Duration.zero);
+      expect(assets, 3);
+      expect(peak, 3);
+      held.complete({'found': true, 'data': _avatarPng});
+      expect(await Future.wait(reads), everyElement(isNotNull));
+      expect(assets, 4);
+      expect(rosters, 1);
+      expect(peak, 3);
+    },
+  );
+
+  test(
+    'passive cache retains at most ten appearances without rereading the roster',
+    () async {
+      final fixture = BotsFixture();
+      fixture.profiles
+        ..clear()
+        ..addAll([
+          for (var i = 0; i < 11; i++) BotsFixture.profile('bot$i', 'Bot $i'),
+        ]);
+      var rosters = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method == 'profiles.list') rosters++;
+        return null;
+      };
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      for (var i = 0; i < 11; i++) {
+        expect(
+          (await owner.botForConversation(canonical('bot$i')))!.title,
+          'Bot $i',
+        );
+      }
+      expect(owner.cachedAppearance(canonical('bot0')), isNull);
+      expect(owner.cachedAppearance(canonical('bot10'))!.title, 'Bot 10');
+      expect(
+        (await owner.botForConversation(canonical('bot0')))!.title,
+        'Bot 0',
+      );
+      expect(rosters, 1);
+    },
+  );
+
+  test(
+    'explicit passive refresh recovers changed avatar without presence or group reads',
+    () async {
+      final fixture = BotsFixture();
+      fixture.profiles.first['has_avatar'] = true;
+      var found = false, rosters = 0, assets = 0;
+      final methods = <String>[];
+      fixture.readHook = (_, method, _) async {
+        methods.add(method);
+        if (method == 'profiles.list') rosters++;
+        if (method == 'profiles.get_asset') {
+          assets++;
+          return {'found': found, if (found) 'data': _avatarPng};
+        }
+        return null;
+      };
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      final key = canonical('atlas');
+      expect((await owner.botForConversation(key))!.avatar, isNull);
+      found = true;
+      owner.invalidateAppearances();
+      expect(
+        (await owner.botForConversation(key))!.avatar,
+        base64Decode(_avatarPng),
+      );
+      expect(rosters, 2);
+      expect(assets, 2);
+      expect(
+        methods,
+        everyElement(anyOf('profiles.list', 'profiles.get_asset')),
+      );
+    },
+  );
+
+  test(
+    'confirmed owner refresh replaces only changed appearance observations',
+    () async {
+      final fixture = BotsFixture();
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      final key = canonical('atlas');
+      final before = await owner.botForConversation(key);
+      await owner.refresh();
+      expect(owner.cachedAppearance(key), same(before));
+      (fixture.profiles.first['ui_meta'] as Map)['hermes-bots']['title'] =
+          'Atlas revised';
+      fixture.profiles.first['ui_meta_revisions'] = {'hermes-bots': 3};
+      await owner.refresh();
+      expect(owner.cachedAppearance(key)!.title, 'Atlas revised');
+      expect(owner.cachedAppearance(key), isNot(same(before)));
+    },
+  );
   for (final status in ['working', 'waiting']) {
     test(
       'production presence proves compressed root ownership: $status',
@@ -299,7 +517,12 @@ void main() {
               .describesConversation(ProfileSessionKey(scope, 'atlas-tip')),
           true,
         );
-        expect(methods, ['profiles.list', 'profiles.get_asset']);
+        expect(
+          methods,
+          id == 'atlas-chat'
+              ? ['profiles.list', 'profiles.get_asset']
+              : isEmpty,
+        );
       }
       methods.clear();
       final root = ProfileSessionKey(scope, 'atlas-chat');
@@ -309,11 +532,11 @@ void main() {
         root,
         tip,
         unrelated,
-      ]);
+      ], canRead: () => true);
       expect(appearances.keys, unorderedEquals([root, tip]));
       expect(identical(appearances[root], appearances[tip]), true);
       expect(appearances[root]!.avatar, base64Decode(png));
-      expect(methods, ['profiles.list', 'profiles.get_asset']);
+      expect(methods, isEmpty);
       for (final key in [
         ProfileSessionKey(scope, 'atlas-cron'),
         ProfileSessionKey(

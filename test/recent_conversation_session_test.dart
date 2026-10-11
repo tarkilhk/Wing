@@ -1,3 +1,4 @@
+import 'package:wing/core/models/bots.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -54,6 +55,14 @@ class _Source extends ChangeNotifier implements RecentConversationSource {
 
   @override
   bool admits(ProfileSessionKey key) => current && !denied.contains(key);
+  @override
+  BotRecord? appearanceFor(ProfileSessionKey key) => null;
+  @override
+  Future<void> prepareAppearances(
+    Iterable<ProfileSessionKey> keys,
+    bool Function() canRead,
+  ) async {}
+
   @override
   Object previewRevision(ProfileSessionKey key) => revisions[key] ?? 0;
   final revisions = <ProfileSessionKey, int>{};

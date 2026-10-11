@@ -1,4 +1,5 @@
 import 'profile_session_key.dart';
+import 'bots.dart';
 import 'transcript_reading.dart';
 
 /// The displayed Recents membership and order captured at route entry.
@@ -37,11 +38,13 @@ final class RecentConversationCard {
   const RecentConversationCard({
     required this.entry,
     this.preview,
+    this.bot,
     this.loading = false,
     this.error,
   });
   final RecentConversationEntry entry;
   final RecentConversationPreview? preview;
+  final BotRecord? bot;
   final bool loading;
   final String? error;
 }

@@ -14,6 +14,10 @@ Bot settings contains appearance, configuration editors, Duplicate bot and profi
 
 Creating a bot uses the instance's launch credentials and model defaults, as explained before creation. Duplication excludes channel bindings to avoid taking over messaging channels. Settings always apply to the chosen instance/profile, without switching the currently selected chat.
 
+Recents cards show each canonical bot chat's saved name and avatar before you
+open it. Appearance is prepared while the cards are still and shared with the
+chat header; opening a card is not required to identify its bot.
+
 Appearance supports a display name, eight shapes, twelve profile hues, automatic color, image upload/removal and generation through that profile's configured image provider. PNG, JPEG and WebP uploads must fit the 2,000,000-byte avatar limit.
 
 Valid edits save automatically after a short pause. Back finishes pending saves; if saving fails, choose Keep editing or Discard. **Reload saved appearance** keeps edited fields while updating untouched ones. A conflict with another client's changes keeps your draft and asks you to reload/review before retrying. Choosing a shape after an uploaded image clears the image.

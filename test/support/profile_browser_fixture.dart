@@ -51,7 +51,10 @@ class ProfileBrowserFixture {
     );
     final session = BotsSession((_) async => [source]);
     try {
-      return await session.appearancesForConversations(keys);
+      return await session.appearancesForConversations(
+        keys,
+        canRead: () => true,
+      );
     } finally {
       session.dispose();
     }
