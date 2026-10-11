@@ -821,6 +821,11 @@
       "feature": "versions-updates",
       "library": "lib/core/screens/backend_update_changes_screen.dart"
     },
+    "lib/core/screens/bots/bot_group_history_screen.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/screens/bots/bot_group_history_screen.dart"
+    },
     "lib/core/screens/bots/bot_group_screen.dart": {
       "role": "view",
       "feature": "bots",
@@ -1075,6 +1080,11 @@
       "role": "data",
       "feature": "bots",
       "library": "lib/core/services/bot_display_client.dart"
+    },
+    "lib/core/services/bot_group_history_session.dart": {
+      "role": "application",
+      "feature": "bots",
+      "library": "lib/core/services/bot_group_history_session.dart"
     },
     "lib/core/services/bot_group_session.dart": {
       "role": "application",
@@ -1575,6 +1585,11 @@
       "role": "data",
       "feature": "scheduled-tasks",
       "library": "lib/core/services/scheduled_tasks_repository.dart"
+    },
+    "lib/core/services/scroll_capture_bridge.dart": {
+      "role": "data",
+      "feature": "conversation",
+      "library": "lib/core/services/scroll_capture_bridge.dart"
     },
     "lib/core/services/security_audit_report.dart": {
       "role": "domain",
@@ -2135,6 +2150,11 @@
       "role": "view",
       "feature": "markdown",
       "library": "lib/core/widgets/retained_markdown_paragraph.dart"
+    },
+    "lib/core/widgets/scroll_capture_viewport.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/scroll_capture_viewport.dart"
     },
     "lib/core/widgets/server_connection_label.dart": {
       "role": "view",

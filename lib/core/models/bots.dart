@@ -156,10 +156,14 @@ class BotGroupEvent {
     required this.sequence,
     required this.kind,
     required this.actor,
+    required this.actorId,
+    required this.actorName,
+    required this.timestamp,
     required this.text,
   });
   final int sequence;
-  final String kind, actor, text;
+  final String kind, actor, actorId, actorName, text;
+  final DateTime timestamp;
   bool get isMessage => kind == 'message.user' || kind == 'message.member';
 }
 

@@ -737,6 +737,7 @@ void main() {
             find.byType(TextField),
             'Please review the plan',
           );
+          await tester.pump();
           await tester.tap(find.byTooltip('Send group message'));
           await tester.pumpAndSettle();
           expect(find.byTooltip('Retry same message'), findsOneWidget);

@@ -451,11 +451,35 @@ void main() {
           await tester.enterText(find.byType(TextField), '@');
           await tester.pump(const Duration(milliseconds: 200));
           await tester.pumpAndSettle();
-          final avatars = tester.widgetList<BotAvatar>(find.byType(BotAvatar));
-          expect(avatars.map((a) => (a.name, a.shape, a.color, a.size)), [
+          final list = find.descendant(
+            of: find.byType(MentionSuggestions),
+            matching: find.byType(ListView),
+          );
+          for (final expected in [
             ('atlas', 'squircle', '#65c7bc', 32.0),
             ('mira', 'hexagon', '#8b5cf6', 32.0),
-          ]);
+          ]) {
+            final avatar = find.byWidgetPredicate(
+              (widget) => widget is BotAvatar && widget.name == expected.$1,
+            );
+            await tester.scrollUntilVisible(
+              avatar,
+              80,
+              scrollable: find.descendant(
+                of: list,
+                matching: find.byType(Scrollable),
+              ),
+            );
+            final rendered = tester.widget<BotAvatar>(avatar);
+            expect((
+              rendered.name,
+              rendered.shape,
+              rendered.color,
+              rendered.size,
+            ), expected);
+          }
+          await tester.drag(list, const Offset(0, 300));
+          await tester.pumpAndSettle();
           expect(find.byIcon(Icons.smart_toy_outlined), findsNothing);
           if (Platform.environment.containsKey('CAPTURE_REFERENCES')) {
             final boundary = tester.renderObject<RenderRepaintBoundary>(
@@ -474,20 +498,27 @@ void main() {
               image.dispose();
             });
           }
-          final list = find.descendant(
-            of: find.byType(MentionSuggestions),
-            matching: find.byType(ListView),
+
+          await tester.scrollUntilVisible(
+            find.text('Everyone'),
+            80,
+            scrollable: find.descendant(
+              of: list,
+              matching: find.byType(Scrollable),
+            ),
           );
-          if (scale == 2) {
-            await tester.drag(list, const Offset(0, -160));
-            await tester.pumpAndSettle();
-          }
+          await tester.pumpAndSettle();
           expect(find.byIcon(Icons.groups_outlined), findsOneWidget);
           expect(find.text('Everyone').hitTestable(), findsOneWidget);
-          if (scale == 2) {
-            await tester.drag(list, const Offset(0, 160));
-            await tester.pumpAndSettle();
-          }
+          await tester.scrollUntilVisible(
+            find.text('Atlas'),
+            -80,
+            scrollable: find.descendant(
+              of: list,
+              matching: find.byType(Scrollable),
+            ),
+          );
+          await tester.pumpAndSettle();
           await tester.tap(find.text('Atlas'));
           await tester.pumpAndSettle();
           expect(

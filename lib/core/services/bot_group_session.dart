@@ -65,6 +65,11 @@ class BotGroupSession extends ChangeNotifier {
   }
 
   final _events = <int, BotGroupEvent>{};
+  BotRecord? appearance(String profile) {
+    final matches = group.members.where((member) => member.profile == profile);
+    return matches.length == 1 ? _appearances[matches.single.id] : null;
+  }
+
   BotGroupRuntime? _runtime;
   BotGroupRuntime? get runtime => _runtime;
   bool _acting = false;
@@ -74,13 +79,18 @@ class BotGroupSession extends ChangeNotifier {
   );
   int _cursor = 0;
   bool _closed = false, _reading = false, _sending = false, _visible = false;
-  bool get loading => _reading;
+  bool get loading => _reading && _runtime == null;
   bool get sending => _sending;
   String? _readError, _actionError;
   String? get error => _actionError ?? _readError;
   (String, String)? _pending;
   String? get pendingText => _pending?.$2;
   Timer? _poll;
+  bool _capturing = false;
+  void setCapturing(bool value) {
+    _capturing = value;
+  }
+
   void setVisible(bool visible) {
     if (_closed || _visible == visible) return;
     _visible = visible;
@@ -95,16 +105,16 @@ class BotGroupSession extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    if (_closed || _reading) return;
+    if (_closed || _reading || _capturing) return;
     _reading = true;
     notifyListeners();
     try {
       final nextRuntime = await repository.groupRuntime(group);
-      if (_closed) return;
+      if (_closed || _capturing) return;
       _runtime = nextRuntime;
       do {
         final page = await repository.groupLog(group, since: _cursor);
-        if (_closed) return;
+        if (_closed || _capturing) return;
         if (page.hasMore && page.cursor == _cursor) {
           throw StateError('Group log did not advance');
         }

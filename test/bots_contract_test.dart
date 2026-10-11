@@ -747,6 +747,7 @@ void main() {
         scope: fixture.repository.scope,
         instance: fixture.repository.instance,
         read: fixture.read,
+        savedHistory: fixture.savedHistory,
         command: fixture.command,
         ownership: fixture.ownership,
         retain: () => retains++,
@@ -864,6 +865,7 @@ void main() {
       ),
       instance: 'Other',
       read: fixture.read,
+      savedHistory: fixture.savedHistory,
       command: fixture.command,
       ownership: fixture.ownership,
     );
@@ -1012,6 +1014,57 @@ void main() {
       expect(await session.send('@everyone'), isTrue);
     },
   );
+  test(
+    'group capture retires held reads and resumes the exact log cursor',
+    () async {
+      final fixture = BotsFixture();
+      final group = (await fixture.repository.groups()).first;
+      fixture.events.add({
+        'room_id': group.id,
+        'seq': 1,
+        'kind': 'message.member',
+        'actor': {
+          'kind': 'member',
+          'id': 'atlas',
+          'profile': 'atlas',
+          'display_name': 'Atlas',
+        },
+        'created_at': 1791756000.5,
+        'payload': {'text': '**Evidence**'},
+      });
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: const [],
+      );
+      addTearDown(session.dispose);
+      final waiting = Completer<void>();
+      final started = Completer<void>();
+      fixture.readHook = (_, method, _) async {
+        if (method == 'groups.log') {
+          if (!started.isCompleted) started.complete();
+          await waiting.future;
+        }
+        return null;
+      };
+      final reading = session.refresh();
+      await started.future;
+      session.setCapturing(true);
+      waiting.complete();
+      await reading;
+      expect(session.events, isEmpty);
+      await session.refresh();
+      expect(session.events, isEmpty);
+      session.setCapturing(false);
+      await session.refresh();
+      final event = session.events.single;
+      expect(event.actorId, 'atlas');
+      expect(event.actorName, 'Atlas');
+      expect(event.timestamp.millisecondsSinceEpoch, 1791756000500);
+      expect(event.text, '**Evidence**');
+    },
+  );
+
   test(
     'lost group-send acknowledgement retries the same frozen id and text exactly once',
     () async {
@@ -1192,6 +1245,7 @@ void main() {
       ),
       instance: 'Other',
       read: fixture.read,
+      savedHistory: fixture.savedHistory,
       command: fixture.command,
       ownership: fixture.ownership,
     );

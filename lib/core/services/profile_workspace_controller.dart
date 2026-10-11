@@ -7484,6 +7484,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String? eventId,
     NotificationFocus? focus,
   }) {
+    // Hosted discussion workers are private implementation sessions. Their
+    // answers and approvals belong to the room, never a UUID-titled chat alert.
+    if (chat.source == 'bot_room') return;
     if (content.category == ChatNotificationCategory.inputNeeded) {
       _publishNotificationInputs(chat, alert: true);
     }
@@ -7718,6 +7721,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
             .toList();
         if (savedOwners.length == 1) {
           final owner = savedOwners.single;
+          if (owner.matches[sessionId]?['source'] == 'bot_room') continue;
           final rawTitle = owner.matches[sessionId]?['title'];
           final title = rawTitle is String ? rawTitle.trim() : '';
           chat = _createChatRecord(

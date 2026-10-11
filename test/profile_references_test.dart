@@ -152,6 +152,7 @@ void main() {
       read: botFixture.read,
       command: botFixture.command,
       ownership: botFixture.ownership,
+      savedHistory: botFixture.savedHistory,
     );
     bots = BotsSession((_) async => [botRepository]);
   });

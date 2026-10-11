@@ -6280,6 +6280,22 @@
       "selector": [
         "setImmersive"
       ]
+    },
+    {
+      "id": "channel-scroll-capture",
+      "kind": "platform-channel",
+      "path": "android/app/src/main/kotlin/com/tarkilhk/wing/ScrollCaptureChannel.kt",
+      "purpose": "Route-scoped Android scroll capture of the Flutter transcript with restored reading position",
+      "source": "lib/core/services/scroll_capture_bridge.dart",
+      "status": "supported",
+      "selector": [
+        "register",
+        "unregister",
+        "metrics",
+        "start",
+        "scroll",
+        "end"
+      ]
     }
   ],
   "files": [
@@ -6517,6 +6533,11 @@
       "path": "android/app/src/main/kotlin/com/tarkilhk/wing/PdfPreviewChannel.kt",
       "area": "android",
       "provenance": "tracked"
+    },
+    {
+      "path": "android/app/src/main/kotlin/com/tarkilhk/wing/ScrollCaptureChannel.kt",
+      "area": "android",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "android/app/src/main/kotlin/com/tarkilhk/wing/VoiceCapture.kt",
@@ -8354,6 +8375,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/screens/bots/bot_group_history_screen.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/screens/bots/bot_group_screen.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -8605,6 +8631,11 @@
     },
     {
       "path": "lib/core/services/bot_display_client.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bot_group_history_session.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
     },
@@ -9097,6 +9128,11 @@
       "path": "lib/core/services/scheduled_tasks_repository.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/services/scroll_capture_bridge.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/services/security_audit_report.dart",
@@ -9652,6 +9688,11 @@
       "path": "lib/core/widgets/retained_markdown_paragraph.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/scroll_capture_viewport.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/server_connection_label.dart",
@@ -10375,6 +10416,21 @@
     },
     {
       "path": "test/bot_exchange_activity_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_group_history_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_group_history_view_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_group_view_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },
@@ -12072,6 +12128,11 @@
       "path": "test/scheduled_tasks_transport_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/scroll_capture_viewport_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/secure_connection_storage_test.dart",

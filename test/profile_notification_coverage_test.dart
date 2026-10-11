@@ -411,6 +411,29 @@ void main() {
     },
   );
 
+  test(
+    'group worker sessions do not produce UUID chat notifications',
+    () async {
+      host.saved['a']!.first.addAll({
+        'source': 'bot_room',
+        'title': 'Group: room-uuid',
+      });
+      host.active = [row('outside-runtime', 'outside', 'working')];
+      host.changed();
+      await waitForReads(host, 1);
+      expect(controller.notificationMonitoringChats, isEmpty);
+      host.history = [
+        {'id': 1, 'role': 'assistant', 'content': 'Group reply'},
+      ];
+      host.active = [row('outside-runtime', 'outside', 'idle', 2)];
+      host.changed();
+      await waitForReads(host, 2);
+      expect(alerts, isEmpty);
+      expect(inputNotices, isEmpty);
+      expect(host.resumeCalls, isEmpty);
+    },
+  );
+
   test('new live request wins over delayed first-request hydration', () async {
     host.active = [row('outside-runtime', 'outside', 'working')];
     host.changed();

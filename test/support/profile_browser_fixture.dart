@@ -39,6 +39,8 @@ class ProfileBrowserFixture {
     final source = BotsRepository(
       scope: workspace,
       instance: 'Test',
+      savedHistory: (_, _, _) async =>
+          throw StateError('Appearance does not read history'),
       read: (profile, method, params) => gateway(
         WorkspaceScope(
           connectionId: workspace.connectionId,

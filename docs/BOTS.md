@@ -43,6 +43,19 @@ Wing pauses the message for correction. Changing its display name is harmless.
 
 An unconfirmed send stays available for review/retry. Interrupted tasks ask for explicit confirmation before retrying. Approvals apply to the request shown in that discussion.
 
+Your messages use the ordinary chat bubbles. Bot replies show the sender's saved
+avatar and name, formatted text, links, code, timestamps and icon-only Copy.
+Member mentions sit beside Send and insert at the cursor. The conversation opens
+at its latest messages; scrolling up keeps your place as replies arrive. The down
+arrow returns to the latest messages.
+
+Internal group workers stay out of the default Chats list and chat notifications,
+so they do not produce `Group: <UUID>` alerts. Read replies and answer approvals
+in the discussion. Wing does not currently send a separate group notification.
+On Android 12 and later, the group transcript supports system scroll capture;
+the composer and keyboard are outside the capture area, and capture restores
+your reading position.
+
 ## Bot screen
 
 Choose **View screen** from a bot’s row menu to watch its live desktop. The bot
@@ -96,3 +109,14 @@ when the outcome is uncertain. Raw details keeps the exact receipts.
 
 An unmatched “Bot delivery process finished” notice stays separate. Expand
 Output to inspect the runner's command and result.
+
+### Bot working histories
+
+Internal group-worker sessions stay out of Recents and ordinary chat notifications.
+To inspect one, open the group, choose **⋯ → Bot working histories**, then select
+a bot. The viewer is read only: it loads saved messages without starting a bot
+turn, and offers Refresh and Load older history. Back returns to the shared group
+and preserves your draft. Send group messages from the group composer.
+
+If no current worker history is available, the viewer says so. A failed read
+shows an error with Refresh; it does not claim the history is empty.
