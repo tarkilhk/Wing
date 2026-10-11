@@ -475,6 +475,7 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
   static const _thumbnailExtent = 76.0;
   final _thumbnails = ScrollController();
   final _providers = <String, Future<ImageProvider>>{};
+  final _navigationByPage = <int, bool>{};
   int _providerCapacity = 12;
   late int _index = widget.initialIndex;
   late final _pages = PageController(initialPage: widget.initialIndex);
@@ -546,12 +547,13 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
   void _pageChanged(int index) {
     setState(() {
       _index = index;
-      _navigationEnabled = true;
+      _navigationEnabled = _navigationByPage[index] ?? true;
     });
     _revealSelectedThumbnail(animate: true);
   }
 
   void _setNavigationEnabled(int index, bool enabled) {
+    _navigationByPage[index] = enabled;
     if (index != _index || enabled == _navigationEnabled) return;
     if (!enabled && _pages.hasClients) {
       // A second finger or a zoom cancels paging already in progress.

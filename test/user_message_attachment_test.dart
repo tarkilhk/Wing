@@ -1080,6 +1080,73 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'returning during a slide retains zoom and correct paging admission',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ProfileMessage(
+              message: TranscriptMessage.fromRow({
+                'role': 'user',
+                'content': '@image:/server/0.png\n@image:/server/1.png',
+              }),
+              loadAttachmentImage: (_) async => bytes,
+            ),
+          ),
+        ),
+      );
+      await settleImages(tester);
+      await tester.tap(find.byType(UserMessageAttachmentTile).first);
+      await settleImages(tester);
+      final pages = find.byKey(const ValueKey('user-image-gallery-pages'));
+      final transform = tester
+          .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+          .transformationController!;
+      transform.value = Matrix4.diagonal3Values(2, 2, 1);
+      await tester.pump();
+      await tester.tap(find.byTooltip('Next image'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(find.text('2 / 2'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('image-thumbnail-0')));
+      await settleImages(tester);
+      expect(find.text('1 / 2'), findsOneWidget);
+      expect(transform.value.getMaxScaleOnAxis(), 2);
+      expect(
+        tester.widget<PageView>(pages).physics,
+        isA<NeverScrollableScrollPhysics>(),
+      );
+      await tester.fling(
+        find.byType(InteractiveViewer),
+        const Offset(-160, 0),
+        600,
+      );
+      await settleImages(tester);
+      expect(find.text('1 / 2'), findsOneWidget);
+
+      // Fully leaving discards the old viewport, so returning creates a normal
+      // image with paging enabled rather than retaining stale zoom admission.
+      await tester.tap(find.byTooltip('Next image'));
+      await settleImages(tester);
+      await tester.tap(find.byTooltip('Previous image'));
+      await settleImages(tester);
+      expect(
+        tester
+            .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+            .transformationController!
+            .value
+            .getMaxScaleOnAxis(),
+        1,
+      );
+      expect(
+        tester.widget<PageView>(pages).physics,
+        isNot(isA<NeverScrollableScrollPhysics>()),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('gallery cards move continuously, $brightness, ${scale}x', (

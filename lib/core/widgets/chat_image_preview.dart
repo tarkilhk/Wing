@@ -85,6 +85,9 @@ class _ChatImageViewportState extends State<ChatImageViewport> {
   void initState() {
     super.initState();
     _transform.addListener(_reportNavigation);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onNavigationEnabled?.call(_navigationEnabled);
+    });
   }
 
   void _reportNavigation() {
