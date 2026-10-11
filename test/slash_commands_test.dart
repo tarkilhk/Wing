@@ -40,6 +40,7 @@ class CommandHost extends Host {
   bool reportYolo = true;
   String warning = '';
   String? yoloSetResult;
+  Future<Map<String, dynamic>> Function(String profile)? readCatalog;
   final List<String> sideQuestionTaskIds = ['side-task-1'];
   final List<String> backgroundTaskIds = ['background-task-1'];
   FutureOr<Map<String, dynamic>> Function(Map<String, dynamic>)?
@@ -113,7 +114,10 @@ class CommandHost extends Host {
           final error = sensitiveResponseError;
           if (error != null) throw error;
         }
-        if (method == 'commands.catalog') return catalog(scope.profileName);
+        if (method == 'commands.catalog') {
+          return await readCatalog?.call(scope.profileName) ??
+              catalog(scope.profileName);
+        }
         if (method == 'skills.reload') {
           return await respond?.call(method, params) ??
               {
@@ -271,6 +275,88 @@ void main() {
     if (!controllerDisposed) controller.dispose();
     appPreferences.dispose();
   });
+
+  for (final retained in [false, true]) {
+    testWidgets(
+      'opening a ${retained ? 'retained' : 'cold'} saved slash draft loads commands after connection',
+      (tester) async {
+        const skill = '/mattpocock-skills:writing-for-agents';
+        host.running = false;
+        host.extraSkillNames.add(skill);
+        final profile = retained ? 'a' : 'b';
+        if (retained) await controller.updateDraft(chat, skill);
+        await draftStore.write(
+          profileName: profile,
+          sessionId: 'same',
+          text: skill,
+          attachments: const [],
+          submissionUncertain: false,
+          queuedPrompts: const [],
+          queuePaused: false,
+        );
+        final connection = Completer<void>();
+        if (retained) {
+          host.resumeDelay = connection;
+          host.runtimeForResume[profile] = '$profile-resumed-runtime';
+        } else {
+          host.connectDelay = connection;
+        }
+        host.readCatalog = (profile) async {
+          if (retained) await connection.future;
+          if (!connection.isCompleted) {
+            throw JsonRpcError(
+              'commands.catalog',
+              'Connection unavailable',
+              reason: 'connection_closed',
+            );
+          }
+          return host.catalog(profile);
+        };
+        final opening = controller.openBrowserSession(
+          ProfileSessionKey(controller.browserResource(profile).scope, 'same'),
+          isCurrentRequest: () => true,
+        );
+        await tester.pumpWidget(
+          MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        );
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(controller.notificationChat!.runtime.opening, isTrue);
+        expect(
+          host.commandCalls.where(
+            (c) => c.$1 == 'commands.catalog' && c.$2['profile'] == profile,
+          ),
+          isEmpty,
+        );
+        connection.complete();
+        var opened = false;
+        unawaited(opening.then((_) => opened = true));
+        for (var i = 0; i < 100 && !opened; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(opened, isTrue);
+        await opening;
+        await tester.pumpAndSettle();
+        expect(find.text('Could not load commands.'), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(SlashCommandSuggestions),
+            matching: find.text(skill),
+          ),
+          findsOneWidget,
+        );
+        expect(controller.current!.chat!.composer.observation.text, skill);
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'skills.reload'),
+          isEmpty,
+        );
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'prompt.submit'),
+          isEmpty,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 
   test(
     'skill refresh reloads Hermes before replacing the cached catalog',

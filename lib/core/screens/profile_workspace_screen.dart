@@ -1931,7 +1931,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (!chat.runtime.commandRunning &&
+              if (!chat.runtime.opening &&
+                  !chat.runtime.offline &&
+                  !chat.runtime.reconnecting &&
+                  !chat.runtime.commandRunning &&
                   chat.composer.observation.editingEntry == null)
                 SlashCommandSuggestions(
                   key: ValueKey(chat.key),
