@@ -768,19 +768,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
-  Widget _conversationHeading(
-    ProfileChat chat,
-    BotRecord? bot,
-    VoidCallback? moveToProject,
-  ) => Tooltip(
-    message: 'Move to project',
-    child: InkWell(
-      borderRadius: WingRadius.card,
-      onTap: moveToProject,
-      child: BotConversationTitle(title: chat.title, bot: bot),
-    ),
-  );
-
   void _syncComposer(ProfileChat? chat) {
     if (_composerKey != chat?.key ||
         _composer.text != (chat?.composer.observation.displayedText ?? '')) {
@@ -929,11 +916,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             tooltip: 'Open navigation menu',
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
-          title: _conversationHeading(
-            chat,
-            bot,
-            canMoveProject ? openProjectPicker : null,
-          ),
+          title: BotConversationTitle(title: chat.title, bot: bot),
           contextHeight: stackChatScope ? 96 : 48,
           contextRow: LayoutBuilder(
             builder: (context, constraints) {

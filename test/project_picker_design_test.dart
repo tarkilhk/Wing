@@ -162,6 +162,13 @@ void main() {
             ),
           );
           semantics.dispose();
+          await tester.tap(find.text(controller.current!.chat!.title));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('chat-project-sheet')),
+            findsNothing,
+          );
+          expect(find.byTooltip('Move to project'), findsNothing);
           await screenshot(tester, 'header-${brightness.name}-$scale');
           // Even the edge of the project's 48 dp target opens the selector.
           await tester.tapAt(
@@ -214,6 +221,20 @@ void main() {
           expect(tester.takeException(), isNull);
           final projectText = find.text('australia-rwc-2027');
           expect(projectText, findsOneWidget);
+          await tester.tap(find.text('Find budget car rental in Perth'));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('chat-project-sheet')),
+            findsNothing,
+          );
+          await tester.tap(projectText);
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('chat-project-sheet')),
+            findsOneWidget,
+          );
+          await tester.tap(find.text('Cancel'));
+          await tester.pumpAndSettle();
           final nameStyle = tester.widget<Text>(projectText).style;
           expect(
             nameStyle?.color,
