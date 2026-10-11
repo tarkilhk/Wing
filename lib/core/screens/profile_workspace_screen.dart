@@ -1991,16 +1991,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               valueListenable: _composer,
               builder: (context, value, child) {
                 final querying =
-                    !(value.isComposingRangeValid &&
-                        !value.composing.isCollapsed) &&
                     MentionQuery.at(
-                          value.text,
-                          value.selection.extentOffset,
-                          collapsed:
-                              value.selection.isValid &&
-                              value.selection.isCollapsed,
-                        ) !=
-                        null;
+                      value.text,
+                      value.selection.extentOffset,
+                      collapsed:
+                          value.selection.isValid &&
+                          value.selection.isCollapsed,
+                    ) !=
+                    null;
                 return ConstrainedBox(
                   constraints: BoxConstraints(
                     maxHeight: constraints.maxHeight * (querying ? .4 : .7),

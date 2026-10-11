@@ -240,7 +240,7 @@ void main() {
       expect(browsed.last, '/work/Design documents');
       await tester.tap(find.byTooltip('Add this folder as context'));
       await tester.pump();
-      expect(saved.single, 'Look @folder:`/work/Design documents`  now');
+      expect(saved.single, 'Look @folder:`/work/Design documents` now');
       expect(focus.hasFocus, isTrue);
       expect(tester.takeException(), isNull);
     },
@@ -318,38 +318,46 @@ void main() {
     },
   );
 
-  testWidgets(
-    'IME composition suppresses selection and skill picker coexists',
-    (tester) async {
-      final composer = SkillComposerController.fromValue(
-        const TextEditingValue(
-          text: '@he',
-          selection: TextSelection.collapsed(offset: 3),
-          composing: TextRange(start: 1, end: 3),
-        ),
-      );
-      final focus = FocusNode();
-      addTearDown(composer.dispose);
-      addTearDown(focus.dispose);
-      var requests = 0;
-      await host(
-        tester,
-        composer,
-        focus,
-        load: (query, directory, canRead) async {
-          requests++;
-          return MentionCompletion(query: query, items: [_agent]);
-        },
-        select: (text, ref) async {},
-      );
-      expect(requests, 0);
-      composer.value = composer.value.copyWith(composing: TextRange.empty);
-      await tester.pump(const Duration(milliseconds: 200));
-      await tester.pump();
-      expect(find.text('Hermes'), findsOneWidget);
-      expect(composer.value.composing, TextRange.empty);
-    },
-  );
+  for (final composing in [false, true]) {
+    testWidgets(
+      'inline reference picker preserves surrounding text with composing=$composing',
+      (tester) async {
+        const prefix = "Hmmm, let's adapt the workflow here, given that ";
+        const suffix = ' should help';
+        const query = '@he';
+        final cursor = prefix.length + query.length;
+        final value = TextEditingValue(
+          text: '$prefix$query$suffix',
+          selection: TextSelection.collapsed(offset: cursor),
+          composing: composing
+              ? TextRange(start: prefix.length, end: cursor)
+              : TextRange.empty,
+        );
+        final composer = SkillComposerController.fromValue(value);
+        final focus = FocusNode();
+        addTearDown(composer.dispose);
+        addTearDown(focus.dispose);
+        String? saved;
+        await host(
+          tester,
+          composer,
+          focus,
+          load: (query, directory, canRead) async =>
+              MentionCompletion(query: query, items: [_agent]),
+          select: (text, ref) async => saved = text,
+        );
+        expect(find.text('Hermes').hitTestable(), findsOneWidget);
+        expect(composer.value, value);
+        await tester.tap(find.text('Hermes'));
+        await tester.pump();
+        expect(composer.text, '$prefix@hermes$suffix');
+        expect(saved, composer.text);
+        expect(composer.selection.extentOffset, prefix.length + 8);
+        expect(composer.value.composing, TextRange.empty);
+        expect(focus.hasFocus, isTrue);
+      },
+    );
+  }
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
@@ -448,7 +456,14 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          await tester.enterText(find.byType(TextField), '@');
+          const prefix = "Let's adapt the workflow, given that ";
+          final input = tester
+              .widget<TextField>(find.byType(TextField))
+              .controller!;
+          await tester.enterText(find.byType(TextField), '$prefix@');
+          input.value = input.value.copyWith(
+            composing: TextRange(start: prefix.length, end: prefix.length + 1),
+          );
           await tester.pump(const Duration(milliseconds: 200));
           await tester.pumpAndSettle();
           final list = find.descendant(
@@ -519,18 +534,43 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
+          const suffix = ' can help';
+          await tester.enterText(find.byType(TextField), '$prefix@atl$suffix');
+          final cursor = prefix.length + 4;
+          input.value = input.value.copyWith(
+            selection: TextSelection.collapsed(offset: cursor),
+            composing: TextRange(start: prefix.length, end: cursor),
+          );
+          await tester.pump(const Duration(milliseconds: 200));
+          await tester.pumpAndSettle();
+          expect(find.text('Atlas').hitTestable(), findsOneWidget);
+          expect(find.text('Mira'), findsNothing);
+          expect(find.text('Everyone'), findsNothing);
+
           await tester.tap(find.text('Atlas'));
           await tester.pumpAndSettle();
           expect(
             tester.widget<TextField>(find.byType(TextField)).controller!.text,
-            '@bot_atlas ',
+            '$prefix@Atlas$suffix',
           );
           await tester.enterText(
             find.byType(TextField),
             'Review\nall\nthis\ntext\ncarefully\n@every',
           );
+          input.value = input.value.copyWith(
+            composing: TextRange(
+              start: input.text.indexOf('@every'),
+              end: input.text.length,
+            ),
+          );
           await tester.pump(const Duration(milliseconds: 200));
           await tester.pumpAndSettle();
+          expect(
+            MentionQuery.at(input.text, input.selection.extentOffset),
+            isNotNull,
+          );
+          expect(find.byType(MentionSuggestions), findsOneWidget);
+          expect(find.byTooltip('Close references'), findsOneWidget);
           expect(
             find.byTooltip('Close references').hitTestable(),
             findsOneWidget,

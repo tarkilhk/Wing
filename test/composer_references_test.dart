@@ -243,6 +243,162 @@ void main() {
       expect(host.reads, ['files:/work']);
     },
   );
+  test(
+    'readable names retain canonical identity through punctuation and dispatch',
+    () async {
+      final host = ReferenceHost();
+      const ref = ComposerReference(
+        kind: ComposerReferenceKind.agent,
+        token: '@HERMES',
+        target: 'hermes',
+      );
+      const text = 'Please ask (@HERMES), then report.';
+      expect(retainComposerReferences(text, [ref]).single.target, 'hermes');
+      final wire = await host.preparation().prepare(
+        text,
+        selected: [ref],
+        cwd: null,
+        contextLimit: null,
+        requireCurrent: () {},
+      );
+      final prepared = PreparedComposerMessage.parse(wire)!;
+      expect(prepared.message, text);
+      expect(prepared.references.single.target, 'hermes');
+      expect(prepared.context, contains('canonical profile hermes'));
+      final query = MentionQuery.at('@her', 4)!;
+      final completion = await host.preparation().complete(
+        query,
+        cwd: null,
+        selected: const [
+          ComposerReference(
+            kind: ComposerReferenceKind.agent,
+            token: '@HERMES',
+            target: 'butler',
+          ),
+        ],
+        requireCurrent: () {},
+      );
+      expect(completion.items.first.reference.token, '@`HERMES (hermes)`');
+    },
+  );
+
+  test(
+    'display names with spaces and quotes remain editable selected references',
+    () {
+      for (final name in ['Client Work', 'Dr. Foo', '大家', 'Foo ` " bar']) {
+        final token = composerAgentToken(name);
+        final ref = ComposerReference(
+          kind: ComposerReferenceKind.agent,
+          token: token,
+          target: 'canonical_foo',
+        );
+        const next = ComposerReference(
+          kind: ComposerReferenceKind.agent,
+          token: '@Other',
+          target: 'other',
+        );
+        final text = 'Ask ($token), then @Other please.';
+        expect(
+          retainComposerReferences(text, [ref, next]).map((ref) => ref.target),
+          ['canonical_foo', 'other'],
+        );
+        expect(
+          composerReferenceSpans(
+            text,
+            selected: [ref, next],
+          ).first.reference.token,
+          token,
+        );
+        expect(retainComposerReferences('Ask somebody else', [ref]), isEmpty);
+      }
+      expect(composerAgentToken('Foo'), '@Foo');
+      expect(composerAgentToken('Client Work'), '@`Client Work`');
+    },
+  );
+
+  test('punctuation delimits mention names like slash skills', () {
+    const separators = [
+      ' ',
+      '\n',
+      ',',
+      '.',
+      '!',
+      '?',
+      ';',
+      ':',
+      '(',
+      ')',
+      '[',
+      ']',
+      '{',
+      '}',
+      '<',
+      '>',
+      '"',
+      "'",
+      '“',
+      '”',
+      '‘',
+      '’',
+      '…',
+      '—',
+      '，',
+      '。',
+      '+',
+      '=',
+      r'$',
+      '😀',
+    ];
+    for (final separator in separators) {
+      final query = 'Use$separator@her';
+      expect(MentionQuery.at(query, query.length)!.term, 'her', reason: query);
+      const reference = ComposerReference(
+        kind: ComposerReferenceKind.agent,
+        token: '@hermes',
+        target: 'hermes',
+      );
+      final text = '$query$separator continuing';
+      final edit = MentionQuery.at(text, query.length)!.insert(reference);
+      expect(edit.text.endsWith('$separator continuing'), isTrue);
+      expect(edit.text.startsWith('Use$separator@hermes'), isTrue);
+      final completed = 'Use$separator@hermes$separator';
+      expect(
+        MentionQuery.at(completed, completed.length),
+        isNull,
+        reason: completed,
+      );
+      final spans = composerReferenceSpans(completed, agentNames: ['hermes']);
+      expect(spans.single.reference.token, '@hermes', reason: completed);
+      expect(
+        completed.substring(spans.single.start, spans.single.end),
+        '@hermes',
+      );
+    }
+    for (final name in ['hermes-more', 'hermes_more']) {
+      expect(MentionQuery.at('@$name', name.length + 1)!.term, name);
+      expect(composerReferenceSpans('@$name', agentNames: ['hermes']), isEmpty);
+    }
+    for (final literal in [
+      'name@hermes',
+      'é@hermes',
+      'name_@hermes',
+      'name-@hermes',
+      '/@hermes',
+      r'\@hermes',
+      'https://example.org/@hermes',
+      '@hermes/path',
+      r'@hermes\path',
+      '@hermes:plugin',
+    ]) {
+      expect(MentionQuery.at(literal, literal.length), isNull, reason: literal);
+      expect(
+        composerReferenceSpans(literal, agentNames: ['hermes']),
+        isEmpty,
+        reason: literal,
+      );
+    }
+  });
+
   test('cursor-relative insertion preserves Unicode prefix and suffix', () {
     const text = '😃 discuss @her with care';
     final query = MentionQuery.at(text, text.indexOf(' with'))!;
@@ -252,7 +408,7 @@ void main() {
       target: 'hermes',
     );
     final selected = query.insert(ref);
-    expect(selected.text, '😃 discuss @hermes  with care');
+    expect(selected.text, '😃 discuss @hermes with care');
     expect(selected.cursor, '😃 discuss @hermes '.length);
     expect(MentionQuery.at('name@host.test', 14), isNull);
     expect(MentionQuery.at('```\n@he', 7), isNull);

@@ -17,33 +17,64 @@ final class ComposerReferencePreparation {
     required String? cwd,
     String? directory,
     String? currentAgent,
+    Iterable<ComposerReference> selected = const [],
+    Future<Map<String, String>> Function(Iterable<String> profiles)?
+    labelsForAgents,
     required void Function() requireCurrent,
   }) async {
     requireCurrent();
     final term = query.term;
     final fileQuery = term.startsWith('file:') || term.startsWith('folder:');
     final items = <MentionCandidate>[];
-    if (directory == null && !fileQuery && !term.contains('/')) {
+    if (directory == null &&
+        !fileQuery &&
+        (!term.contains('/') || query.isQuotedAgent)) {
       final agents = await repository.agents();
       requireCurrent();
+      final labels =
+          await labelsForAgents?.call(agents.map((agent) => agent.name)) ??
+          const <String, String>{};
+      requireCurrent();
+      String label(String name) =>
+          labels[name] ??
+          agents.singleWhere((agent) => agent.name == name).label;
       for (final agent in agents) {
-        if (!agent.name.contains(term.toLowerCase()) &&
-            !agent.label.toLowerCase().contains(term.toLowerCase())) {
+        final search = query.agentSearch.toLowerCase();
+        if (!agent.name.toLowerCase().contains(search) &&
+            !agent.label.toLowerCase().contains(search) &&
+            !label(agent.name).toLowerCase().contains(search)) {
           continue;
         }
+        final base = composerAgentToken(label(agent.name));
+        final duplicate = agents.any(
+          (other) =>
+              other.name != agent.name &&
+              composerAgentToken(label(other.name)).toLowerCase() ==
+                  base.toLowerCase(),
+        );
+        final claimed = selected.any(
+          (ref) => ref.token == base && ref.target != agent.name,
+        );
+        final token = composerAgentToken(
+          label(agent.name),
+          qualifier: duplicate || claimed ? agent.name : null,
+        );
         items.add(
           MentionCandidate(
             reference: ComposerReference(
               kind: ComposerReferenceKind.agent,
-              token: '@${agent.name}',
+              token: token,
               target: agent.name,
             ),
-            label: agent.label,
+            label: label(agent.name),
             detail:
-                '@${agent.name}${agent.name == currentAgent ? ' · Current agent' : ''}',
+                '$token${agent.name == currentAgent ? ' · Current agent' : ''}',
           ),
         );
       }
+    }
+    if (query.isQuotedAgent) {
+      return MentionCompletion(query: query, items: items);
     }
     var path = directory ?? cwd;
     var filter = fileQuery ? term.substring(term.indexOf(':') + 1) : term;

@@ -140,6 +140,8 @@ void main() {
         BotsFixture.profile('hermes', 'Saved Hermes'),
         BotsFixture.profile('butler', 'Saved Butler'),
       ]);
+    botFixture.profiles[0]['ui_meta']['hermes-bots']['title'] = 'Hermes';
+    botFixture.profiles[1]['ui_meta']['hermes-bots']['title'] = 'Butler';
     botFixture.profiles[1]['ui_meta']['hermes-bots']['shape'] = 'hexagon';
     botFixture.profiles[1]['ui_meta']['hermes-bots']['color'] = '#8b5cf6';
     botRepository = BotsRepository(
@@ -199,10 +201,10 @@ void main() {
           canRead: () => true,
         );
         final candidate = completion.items.single;
-        expect(candidate.label, 'HERMES');
-        expect(candidate.reference.token, '@hermes');
+        expect(candidate.label, 'Hermes');
+        expect(candidate.reference.token, '@Hermes');
         expect(candidate.reference.target, 'hermes');
-        expect(candidate.appearance!.title, 'Saved Hermes');
+        expect(candidate.appearance!.title, 'Hermes');
         expect(candidate.appearance!.avatar, base64Decode(photo));
         expect(
           candidate.appearance!.scope.connectionIdentity,
@@ -486,6 +488,36 @@ void main() {
     expect(chat.composer.observation.queue.single.text, 'Read @file:note.md');
   });
 
+  test(
+    'ordinary picker searches the saved bot title with canonical identity',
+    () async {
+      botFixture.profiles.first['ui_meta']['hermes-bots']['title'] =
+          'Research Guide';
+      botFixture.profiles[1]['has_avatar'] = true;
+      var unrelatedAssets = 0;
+      botFixture.readHook = (profile, method, params) async {
+        if (method == 'profiles.get_asset' && profile == 'butler') {
+          unrelatedAssets++;
+        }
+        return null;
+      };
+      const text = '@guide';
+      final completion = await controller.completeMention(
+        chat,
+        MentionQuery.at(text, text.length)!,
+        bots: bots,
+        canRead: () => true,
+      );
+      final candidate = completion.items.singleWhere(
+        (item) => item.reference.kind == ComposerReferenceKind.agent,
+      );
+      expect(candidate.label, 'Research Guide');
+      expect(candidate.reference.token, '@`Research Guide`');
+      expect(candidate.reference.target, 'hermes');
+      expect(unrelatedAssets, 0);
+    },
+  );
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('workspace references ${brightness.name} $scale', (
@@ -539,10 +571,15 @@ void main() {
         }
 
         final input = find.byKey(const Key('profile-message-composer'));
-        await tester.enterText(input, '@');
+        const prefix = "Let's adapt the workflow, given that ";
+        await tester.enterText(input, '$prefix@');
+        final nativeInput = tester.widget<TextField>(input).controller!;
+        nativeInput.value = nativeInput.value.copyWith(
+          composing: TextRange(start: prefix.length, end: prefix.length + 1),
+        );
         await tester.pump(const Duration(milliseconds: 200));
         await tester.pumpAndSettle();
-        expect(find.text('HERMES'), findsOneWidget);
+        expect(find.text('Hermes'), findsOneWidget);
         final picker = find.byType(MentionSuggestions);
         final avatars = tester.widgetList<BotAvatar>(
           find.descendant(of: picker, matching: find.byType(BotAvatar)),
@@ -559,10 +596,12 @@ void main() {
           findsNothing,
         );
         await captureFrame('workspace-avatars');
-        await tester.ensureVisible(find.text('HERMES'));
-        await tester.tap(find.text('HERMES'));
+        await tester.ensureVisible(find.text('Hermes'));
+        await tester.tap(find.text('Hermes'));
         await tester.pumpAndSettle();
         expect(chat.composer.observation.references.single.target, 'hermes');
+        expect(nativeInput.text, '$prefix@Hermes ');
+        expect(nativeInput.value.composing, TextRange.empty);
         await tester.enterText(input, '@');
         await tester.pump(const Duration(milliseconds: 200));
         await tester.pumpAndSettle();

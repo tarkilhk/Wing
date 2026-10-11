@@ -60,6 +60,12 @@ extension _WorkspaceReferences on ProfileWorkspaceController {
       }
     }
 
+    final workspace = chat.key.workspace;
+    WorkspaceScope scope(String profile) => WorkspaceScope(
+      connectionId: workspace.connectionId,
+      connectionIdentity: workspace.connectionIdentity,
+      profileName: profile,
+    );
     final cwd = await _referenceCwd(chat, requireCurrent);
     final completion = await _referencePreparation(chat, requireCurrent)
         .complete(
@@ -67,14 +73,24 @@ extension _WorkspaceReferences on ProfileWorkspaceController {
           cwd: cwd,
           directory: directory,
           currentAgent: chat.key.workspace.profileName,
+          selected: chat.composer.observation.references,
+          labelsForAgents: (profiles) async {
+            final identities = await bots.identitiesForProfiles(
+              profiles.map(scope),
+              canRead: () =>
+                  !_closed &&
+                  canRead() &&
+                  identical(_owned(chat), resource) &&
+                  chat.runtime.runtimeId == runtime,
+            );
+            requireCurrent();
+            return {
+              for (final entry in identities.entries)
+                entry.key.profileName: entry.value.title,
+            };
+          },
           requireCurrent: requireCurrent,
         );
-    final workspace = chat.key.workspace;
-    WorkspaceScope scope(String profile) => WorkspaceScope(
-      connectionId: workspace.connectionId,
-      connectionIdentity: workspace.connectionIdentity,
-      profileName: profile,
-    );
     final profiles = completion.items
         .where((item) => item.reference.kind == ComposerReferenceKind.agent)
         .map((item) => scope(item.reference.target));
