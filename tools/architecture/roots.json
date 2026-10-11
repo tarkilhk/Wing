@@ -6225,6 +6225,33 @@
       "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml: Python unittest discovery",
       "status": "supported",
       "selector": "unittest"
+    },
+    {
+      "id": "host-test-test/composer_references_test.dart",
+      "kind": "host-test",
+      "path": "test/composer_references_test.dart",
+      "purpose": "Composer reference identity, transport, dispatch and Studio picker regressions",
+      "source": "internal/docs/AT_REFERENCES.md; internal/docs/TESTING.md",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/mention_suggestions_test.dart",
+      "kind": "host-test",
+      "path": "test/mention_suggestions_test.dart",
+      "purpose": "Composer reference identity, transport, dispatch and Studio picker regressions",
+      "source": "internal/docs/AT_REFERENCES.md; internal/docs/TESTING.md",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/profile_references_test.dart",
+      "kind": "host-test",
+      "path": "test/profile_references_test.dart",
+      "purpose": "Composer reference identity, transport, dispatch and Studio picker regressions",
+      "source": "internal/docs/AT_REFERENCES.md; internal/docs/TESTING.md",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -14107,6 +14134,51 @@
       "path": "website/workspaces.html",
       "area": "website",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/models/composer_reference.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/models/server_reference.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/composer_reference_preparation.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/composer_reference_repository.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/profile_workspace_references.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/mention_suggestions.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/composer_references_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/mention_suggestions_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/profile_references_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {
@@ -14340,6 +14412,7 @@
         "lib/core/widgets/installed_app_version_card.dart",
         "lib/core/widgets/markdown_code_block.dart",
         "lib/core/widgets/markdown_message_content.dart",
+        "lib/core/widgets/mention_suggestions.dart",
         "lib/core/widgets/model_chooser.dart",
         "lib/core/widgets/notification_approval_review.dart",
         "lib/core/widgets/notification_channel_diagnostics.dart",
@@ -14488,6 +14561,7 @@
         "test/mcp_setup_layout_test.dart",
         "test/mcp_setup_test.dart",
         "test/media_preview_service_test.dart",
+        "test/mention_suggestions_test.dart",
         "test/mermaid_diagram_preview_test.dart",
         "test/message_timestamp_test.dart",
         "test/microphone_permission_test.dart",
@@ -14538,6 +14612,7 @@
         "test/profile_purifier_clarification_test.dart",
         "test/profile_question_delivery_test.dart",
         "test/profile_question_panel_test.dart",
+        "test/profile_references_test.dart",
         "test/profile_review_notice_test.dart",
         "test/profile_row_actions_test.dart",
         "test/profile_selection_repair_view_test.dart",
@@ -14833,6 +14908,7 @@
         "test/image_paste_test.dart",
         "test/internal_message_visibility_test.dart",
         "test/large_chat_outputs_test.dart",
+        "test/mention_suggestions_test.dart",
         "test/microphone_permission_test.dart",
         "test/notification_action_background_test.dart",
         "test/notification_answer_visibility_test.dart",
@@ -14886,6 +14962,7 @@
         "test/profile_queue_submission_ownership_test.dart",
         "test/profile_recents_test.dart",
         "test/profile_recents_visibility_test.dart",
+        "test/profile_references_test.dart",
         "test/profile_reopen_state_test.dart",
         "test/profile_resume_freshness_test.dart",
         "test/profile_review_notice_test.dart",
@@ -15366,6 +15443,7 @@
         "test/composer_action_settings_test.dart",
         "test/composer_draft_record_work_test.dart",
         "test/composer_draft_store_test.dart",
+        "test/composer_references_test.dart",
         "test/config_backup_card_test.dart",
         "test/config_backup_exact_credentials_test.dart",
         "test/config_backup_required_fields_test.dart",
@@ -15454,6 +15532,7 @@
         "test/mcp_setup_view_dependency_guard_test.dart",
         "test/media_preview_service_test.dart",
         "test/memory_view_protocol_guard_test.dart",
+        "test/mention_suggestions_test.dart",
         "test/mermaid_diagram_preview_test.dart",
         "test/message_content_test.dart",
         "test/message_timestamp_test.dart",
@@ -15556,6 +15635,7 @@
         "test/profile_queue_submission_ownership_test.dart",
         "test/profile_recents_test.dart",
         "test/profile_recents_visibility_test.dart",
+        "test/profile_references_test.dart",
         "test/profile_reopen_state_test.dart",
         "test/profile_resume_freshness_test.dart",
         "test/profile_review_notice_test.dart",
@@ -15769,6 +15849,7 @@
     "path": {
       "kind": "dependencies",
       "import_consumers": [
+        "lib/core/models/server_reference.dart",
         "lib/core/services/profile_identity_repository.dart"
       ],
       "status": "retain",

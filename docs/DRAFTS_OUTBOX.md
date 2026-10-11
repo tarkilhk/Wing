@@ -2,6 +2,13 @@
 
 Each conversation has one editable draft and an ordered outbox of unsent messages.
 
+Selected `@` identities stay with their draft or outgoing-message edit. Files
+are read at dispatch, and unavailable selections pause the entire message.
+See [server references](FILES.md#reference-a-file-on-the-hermes-server).
+
+The reference-enabled build uses a new local draft format. Earlier v2 draft and
+outbox records are not migrated; finish or export unsent work before upgrading.
+
 Typing or adding attachments creates a draft. Clearing both removes it. Send saves the current text and attachments into the outbox before contacting Hermes, then clears the composer so you can start another draft. Sending waits for an attachment still being prepared; a failed initial save keeps the editable work and prevents submission.
 
 Offline Send keeps the message on this device. After reconnecting and checking the conversation, messages known to be waiting are sent in order when the chat is idle. Acknowledgement removes only the accepted item; it does not clear newer composer text or other outgoing messages. Acceptance means Hermes received the request, rather than that its answer is finished.

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../services/bot_group_session.dart';
 import '../../models/bots.dart';
+import '../../models/composer_reference.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/studio_error.dart';
 import '../../widgets/wing_app_bar.dart';
+import '../../widgets/mention_suggestions.dart';
+import '../../widgets/slash_command_suggestions.dart';
 
 class BotGroupScreen extends StatefulWidget {
   const BotGroupScreen({super.key, required this.createSession});
@@ -15,12 +18,25 @@ class BotGroupScreen extends StatefulWidget {
 class _BotGroupScreenState extends State<BotGroupScreen>
     with WidgetsBindingObserver {
   late final _session = widget.createSession();
-  final _composer = TextEditingController();
+  final _composer = SkillComposerController();
+  final _composerFocus = FocusNode();
+  bool get _showReferences =>
+      _session.pendingText == null &&
+      !_session.sending &&
+      !(_composer.value.isComposingRangeValid &&
+          !_composer.value.composing.isCollapsed) &&
+      MentionQuery.at(
+            _composer.text,
+            _composer.selection.extentOffset,
+            collapsed: _composer.selection.isCollapsed,
+          ) !=
+          null;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _session.addListener(_changed);
+    _composer.addListener(_changed);
     _session.setVisible(true);
   }
 
@@ -36,7 +52,9 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     WidgetsBinding.instance.removeObserver(this);
     _session.removeListener(_changed);
     _session.dispose();
+    _composer.removeListener(_changed);
     _composer.dispose();
+    _composerFocus.dispose();
     super.dispose();
   }
 
@@ -91,179 +109,184 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       ],
     ),
     body: SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                '${_session.group.instance} · Discussion',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          ),
-          if (_session.loading) const LinearProgressIndicator(),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (_session.error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: StudioError(_session.error!),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Column(
+          children: [
+            if (!_showReferences)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    '${_session.group.instance} · Discussion',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                if (_session.runtime case final runtime?) ...[
-                  if (runtime.working) const Text('Bots are working…'),
-                  if (runtime.blocked && runtime.actions.isEmpty)
-                    const Text(
-                      'Group work is interrupted. Refresh to check its recovery options.',
-                    ),
-                  for (final action in runtime.actions)
+                ),
+              ),
+            if (_session.loading) const LinearProgressIndicator(),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (_session.error != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16),
+                      child: StudioError(_session.error!),
+                    ),
+                  if (_session.runtime case final runtime?) ...[
+                    if (runtime.working) const Text('Bots are working…'),
+                    if (runtime.blocked && runtime.actions.isEmpty)
+                      const Text(
+                        'Group work is interrupted. Refresh to check its recovery options.',
+                      ),
+                    for (final action in runtime.actions)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              action.kind == 'retry'
+                                  ? 'Interrupted work'
+                                  : '${action.member} needs approval',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            if (action.description.isNotEmpty)
+                              Text(action.description),
+                            if (action.command.isNotEmpty)
+                              SelectableText(action.command),
+                            Wrap(
+                              children: [
+                                if (action.kind == 'retry')
+                                  IconButton(
+                                    tooltip: 'Review retry',
+                                    onPressed: _session.acting
+                                        ? null
+                                        : () => _retry(action),
+                                    icon: const Icon(Icons.refresh),
+                                  ),
+                                for (final choice in action.choices)
+                                  IconButton(
+                                    tooltip: choice == 'once'
+                                        ? 'Allow once'
+                                        : 'Deny',
+                                    onPressed: _session.acting
+                                        ? null
+                                        : () => _session.resolve(
+                                            action,
+                                            choice: choice,
+                                          ),
+                                    icon: Icon(
+                                      choice == 'once'
+                                          ? Icons.check
+                                          : Icons.close,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+
+                  if (_session.events.where((event) => event.isMessage).isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Text(
+                        'Start a discussion. Mention a bot to focus the reply, or ask the whole group.',
+                      ),
+                    ),
+                  for (final event in _session.events.where(
+                    (event) => event.isMessage,
+                  ))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            action.kind == 'retry'
-                                ? 'Interrupted work'
-                                : '${action.member} needs approval',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          if (action.description.isNotEmpty)
-                            Text(action.description),
-                          if (action.command.isNotEmpty)
-                            SelectableText(action.command),
-                          Wrap(
-                            children: [
-                              if (action.kind == 'retry')
-                                IconButton(
-                                  tooltip: 'Review retry',
-                                  onPressed: _session.acting
-                                      ? null
-                                      : () => _retry(action),
-                                  icon: const Icon(Icons.refresh),
+                            event.kind == 'message.user' ? 'You' : event.actor,
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
                                 ),
-                              for (final choice in action.choices)
-                                IconButton(
-                                  tooltip: choice == 'once'
-                                      ? 'Allow once'
-                                      : 'Deny',
-                                  onPressed: _session.acting
-                                      ? null
-                                      : () => _session.resolve(
-                                          action,
-                                          choice: choice,
-                                        ),
-                                  icon: Icon(
-                                    choice == 'once'
-                                        ? Icons.check
-                                        : Icons.close,
-                                  ),
-                                ),
-                            ],
                           ),
+                          const SizedBox(height: 4),
+                          SelectableText(event.text),
                         ],
                       ),
                     ),
                 ],
-
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final member in _session.group.members)
-                      ActionChip(
-                        label: Text('@${member.handle}'),
-                        onPressed:
-                            _session.pendingText != null || _session.sending
-                            ? null
-                            : () {
-                                final text =
-                                    '${_composer.text}@${member.handle} ';
-                                _composer.value = TextEditingValue(
-                                  text: text,
-                                  selection: TextSelection.collapsed(
-                                    offset: text.length,
-                                  ),
-                                );
-                              },
-                      ),
-                  ],
+              ),
+            ),
+            if (_showReferences)
+              Flexible(
+                flex: 3,
+                child: MentionSuggestions(
+                  composer: _composer,
+                  composerFocus: _composerFocus,
+                  load: (query, directory) async =>
+                      _session.completeMentions(query),
+                  select: (text, reference) async {
+                    _session.editMentions(text, selected: reference);
+                    _composer.observeReferences(_session.composerReferences);
+                    _changed();
+                  },
                 ),
-                const SizedBox(height: 16),
-                if (_session.events.where((event) => event.isMessage).isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40),
-                    child: Text(
-                      'Start a discussion. Mention a bot to focus the reply, or ask the whole group.',
+              ),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: constraints.maxHeight * .4,
+              ),
+              child: SingleChildScrollView(
+                reverse: true,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: WingTokens.of(context).raised,
+                    border: Border(
+                      top: BorderSide(color: WingTokens.of(context).border),
                     ),
                   ),
-                for (final event in _session.events.where(
-                  (event) => event.isMessage,
-                ))
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(
-                          event.kind == 'message.user' ? 'You' : event.actor,
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
+                        Expanded(
+                          child: TextField(
+                            controller: _composer,
+                            focusNode: _composerFocus,
+                            onChanged: (text) => _session.editMentions(text),
+                            readOnly:
+                                _session.pendingText != null ||
+                                _session.sending,
+                            minLines: 1,
+                            maxLines: 6,
+                            textCapitalization: TextCapitalization.sentences,
+                            decoration: const InputDecoration(
+                              hintText: 'Message the group',
+                            ),
+                          ),
                         ),
-                        const SizedBox(height: 4),
-                        SelectableText(event.text),
+                        IconButton(
+                          tooltip: _session.pendingText == null
+                              ? 'Send group message'
+                              : 'Retry same message',
+                          onPressed: _session.sending ? null : _send,
+                          icon: Icon(
+                            _session.pendingText == null
+                                ? Icons.arrow_upward
+                                : Icons.refresh,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-              ],
-            ),
-          ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: WingTokens.of(context).raised,
-              border: Border(
-                top: BorderSide(color: WingTokens.of(context).border),
+                ),
               ),
             ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _composer,
-                      readOnly:
-                          _session.pendingText != null || _session.sending,
-                      minLines: 1,
-                      maxLines: 6,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        hintText: 'Message the group',
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: _session.pendingText == null
-                        ? 'Send group message'
-                        : 'Retry same message',
-                    onPressed: _session.sending ? null : _send,
-                    icon: Icon(
-                      _session.pendingText == null
-                          ? Icons.arrow_upward
-                          : Icons.refresh,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );

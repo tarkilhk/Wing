@@ -1,0 +1,407 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/models/composer_reference.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/mention_suggestions.dart';
+import 'package:wing/core/widgets/slash_command_suggestions.dart';
+import 'package:wing/core/screens/bots/bot_group_screen.dart';
+import 'package:wing/core/services/bot_group_session.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'support/bots_fixture.dart';
+
+const _captureKey = ValueKey('references-render');
+const _agent = MentionCandidate(
+  label: 'Hermes',
+  detail: '@hermes',
+  reference: ComposerReference(
+    kind: ComposerReferenceKind.agent,
+    token: '@hermes',
+    target: 'hermes',
+  ),
+);
+const _folder = MentionCandidate(
+  label: 'Design documents',
+  detail: 'Folder',
+  reference: ComposerReference(
+    kind: ComposerReferenceKind.folder,
+    token: '@folder:`/work/Design documents`',
+    target: '/work/Design documents',
+  ),
+);
+
+void main() {
+  setUpAll(() async {
+    final fonts = Platform.environment['CAPTURE_REFERENCE_FONTS'];
+    if (fonts == null) return;
+    for (final entry in {
+      'Roboto': ['Roboto-Regular.ttf', 'Roboto-Bold.ttf'],
+      'MaterialIcons': ['MaterialIcons-Regular.otf'],
+    }.entries) {
+      final loader = FontLoader(entry.key);
+      for (final font in entry.value) {
+        loader.addFont(
+          File('$fonts/$font').readAsBytes().then((b) => b.buffer.asByteData()),
+        );
+      }
+      await loader.load();
+    }
+  });
+
+  Future<void> host(
+    WidgetTester tester,
+    SkillComposerController composer,
+    FocusNode focus, {
+    Brightness brightness = Brightness.light,
+    double scale = 1,
+    required Future<MentionCompletion> Function(MentionQuery, String?) load,
+    required Future<void> Function(String, ComposerReference) select,
+  }) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(brightness),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
+        home: RepaintBoundary(
+          key: _captureKey,
+          child: Scaffold(
+            appBar: AppBar(title: const Text('Conversation')),
+            body: LayoutBuilder(
+              builder: (context, constraints) => Column(
+                children: [
+                  const Expanded(child: Center(child: Text('Message'))),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: constraints.maxHeight,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: MentionSuggestions(
+                            composer: composer,
+                            composerFocus: focus,
+                            load: load,
+                            select: select,
+                          ),
+                        ),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: constraints.maxHeight * .7,
+                          ),
+                          child: SingleChildScrollView(
+                            reverse: true,
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: TextField(
+                                controller: composer,
+                                focusNode: focus,
+                                minLines: 1,
+                                maxLines: 4,
+                                decoration: const InputDecoration(
+                                  hintText: 'Message',
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    focus.requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+  }
+
+  testWidgets(
+    'folder browsing keeps text; selection preserves the suffix and focus',
+    (tester) async {
+      final composer = SkillComposerController.fromValue(
+        const TextEditingValue(
+          text: 'Look @ now',
+          selection: TextSelection.collapsed(offset: 6),
+        ),
+      );
+      final focus = FocusNode();
+      addTearDown(composer.dispose);
+      addTearDown(focus.dispose);
+      final browsed = <String?>[], saved = <String>[];
+      await host(
+        tester,
+        composer,
+        focus,
+        load: (query, directory) async {
+          browsed.add(directory);
+          return MentionCompletion(
+            query: query,
+            items: [_agent, _folder],
+            directory: directory ?? '/work',
+            parent: '/',
+          );
+        },
+        select: (text, ref) async {
+          saved.add(text);
+        },
+      );
+      await tester.tap(find.text('Design documents'));
+      await tester.pump();
+      expect(composer.text, 'Look @ now');
+      expect(saved, isEmpty);
+      expect(browsed.last, '/work/Design documents');
+      await tester.tap(find.byTooltip('Add this folder as context'));
+      await tester.pump();
+      expect(saved.single, 'Look @folder:`/work/Design documents`  now');
+      expect(focus.hasFocus, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('dismissal retires a held completion; a fresh query can retry', (
+    tester,
+  ) async {
+    final composer = SkillComposerController(text: '@h');
+    composer.selection = const TextSelection.collapsed(offset: 2);
+    final focus = FocusNode(), held = Completer<MentionCompletion>();
+    MentionQuery? issued;
+    addTearDown(composer.dispose);
+    addTearDown(focus.dispose);
+    await host(
+      tester,
+      composer,
+      focus,
+      load: (query, directory) {
+        issued = query;
+        return held.future;
+      },
+      select: (text, ref) async {},
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    held.complete(MentionCompletion(query: issued!, items: [_agent]));
+    await tester.pump();
+    expect(find.text('Hermes'), findsNothing);
+    expect(composer.text, '@h');
+  });
+
+  testWidgets(
+    'failed completion retries without draft changes; enlarged partial results scroll',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+      addTearDown(tester.view.reset);
+      final composer = SkillComposerController(text: '@h');
+      composer.selection = const TextSelection.collapsed(offset: 2);
+      final focus = FocusNode();
+      addTearDown(composer.dispose);
+      addTearDown(focus.dispose);
+      var calls = 0;
+      await host(
+        tester,
+        composer,
+        focus,
+        scale: 2,
+        load: (query, directory) async {
+          if (++calls == 1) throw StateError('Read failed');
+          return MentionCompletion(
+            query: query,
+            items: [_agent],
+            warning:
+                'Server files are unavailable. Agent references are still available.',
+          );
+        },
+        select: (text, ref) async {},
+      );
+      expect(find.byTooltip('Retry references').hitTestable(), findsOneWidget);
+      final before = composer.value;
+      await tester.tap(find.byTooltip('Retry references'));
+      await tester.pumpAndSettle();
+      expect(calls, 2);
+      expect(composer.value, before);
+      expect(focus.hasFocus, isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'IME composition suppresses selection and skill picker coexists',
+    (tester) async {
+      final composer = SkillComposerController.fromValue(
+        const TextEditingValue(
+          text: '@he',
+          selection: TextSelection.collapsed(offset: 3),
+          composing: TextRange(start: 1, end: 3),
+        ),
+      );
+      final focus = FocusNode();
+      addTearDown(composer.dispose);
+      addTearDown(focus.dispose);
+      var requests = 0;
+      await host(
+        tester,
+        composer,
+        focus,
+        load: (query, directory) async {
+          requests++;
+          return MentionCompletion(query: query, items: [_agent]);
+        },
+        select: (text, ref) async {},
+      );
+      expect(requests, 0);
+      composer.value = composer.value.copyWith(composing: TextRange.empty);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      expect(find.text('Hermes'), findsOneWidget);
+      expect(composer.value.composing, TextRange.empty);
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('references render with keyboard at $scale in $brightness', (
+        tester,
+      ) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+        addTearDown(tester.view.reset);
+        final composer = SkillComposerController(text: '@');
+        composer.selection = const TextSelection.collapsed(offset: 1);
+        final focus = FocusNode();
+        addTearDown(composer.dispose);
+        addTearDown(focus.dispose);
+        await host(
+          tester,
+          composer,
+          focus,
+          brightness: brightness,
+          scale: scale,
+          load: (query, directory) async => MentionCompletion(
+            query: query,
+            items: [
+              _agent,
+              _folder,
+              const MentionCandidate(
+                label: 'A long reference filename that must remain readable.md',
+                detail: '128 bytes',
+                reference: ComposerReference(
+                  kind: ComposerReferenceKind.file,
+                  token: '@file:/work/long.md',
+                  target: '/work/long.md',
+                ),
+              ),
+            ],
+            directory: '/home/user/projects/very-long-workspace-directory',
+            parent: '/home/user/projects',
+          ),
+          select: (text, ref) async {},
+        );
+        expect(tester.takeException(), isNull);
+        for (final button in tester.widgetList<IconButton>(
+          find.byType(IconButton),
+        )) {
+          expect(button.tooltip, isNotEmpty);
+        }
+        if (Platform.environment.containsKey('CAPTURE_REFERENCES')) {
+          final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find.byKey(_captureKey),
+          );
+          await tester.runAsync(() async {
+            final image = await boundary.toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final dir = Directory('build/references-review')
+              ..createSync(recursive: true);
+            await File(
+              '${dir.path}/${brightness.name}-$scale.png',
+            ).writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+      });
+      testWidgets(
+        'group references remain reachable above keyboard at $scale in $brightness',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          tester.view.devicePixelRatio = 1;
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          final group = (await fixture.repository.groups()).first;
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  viewInsets: const EdgeInsets.only(bottom: 280),
+                ),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: _captureKey,
+                child: BotGroupScreen(
+                  createSession: () =>
+                      BotGroupSession(fixture.repository, group),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byType(TextField),
+            'Review\nall\nthis\ntext\ncarefully\n@every',
+          );
+          await tester.pump(const Duration(milliseconds: 200));
+          await tester.pumpAndSettle();
+          expect(
+            find.byTooltip('Close references').hitTestable(),
+            findsOneWidget,
+          );
+          expect(find.text('Everyone'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          if (Platform.environment.containsKey('CAPTURE_REFERENCES')) {
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.byKey(_captureKey),
+            );
+            await tester.runAsync(() async {
+              final image = await boundary.toImage();
+              try {
+                final bytes = await image.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final dir = Directory('build/references-review')
+                  ..createSync(recursive: true);
+                await File(
+                  '${dir.path}/group-${brightness.name}-$scale.png',
+                ).writeAsBytes(bytes!.buffer.asUint8List());
+              } finally {
+                image.dispose();
+              }
+            });
+          }
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+  }
+}

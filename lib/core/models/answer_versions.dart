@@ -1,5 +1,6 @@
 import 'skill_invocation.dart';
 import 'user_message_delivery.dart';
+import 'composer_reference.dart';
 
 /// Text projection for gateway display messages and stored multimodal content.
 String answerMessageText(Map<String, dynamic> message) {
@@ -45,10 +46,13 @@ final _steeringEnvelope = RegExp(
 String answerMessageDisplayText(Map<String, dynamic> message) {
   if (message['role'] != 'user') return answerMessageText(message);
   final steering = steeringMessageText(message);
-  if (steering != null) return steering;
+  if (steering != null) {
+    return PreparedComposerMessage.parse(steering)?.displayMessage ?? steering;
+  }
   final value =
       message['display_content'] ?? message['content'] ?? message['text'];
-  final text = _answerText(value, displayImages: true);
+  final rawText = _answerText(value, displayImages: true);
+  final text = PreparedComposerMessage.parse(rawText)?.displayMessage ?? rawText;
   final invocation = skillInvocationText(text);
   if (invocation != null) return invocation;
   final marker = RegExp(

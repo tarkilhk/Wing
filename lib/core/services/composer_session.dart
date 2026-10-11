@@ -1,3 +1,4 @@
+import '../models/composer_reference.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -62,6 +63,7 @@ class ComposerSession {
   final ComposerRuntimeObservation Function() _runtime;
   final void Function(ComposerChange) _onChanged;
   String _text = '', _editText = '';
+  List<ComposerReference> _references = const [], _editReferences = const [];
   bool _uncertain = false, _paused = false, _saving = false;
   bool _draining = false, _steering = false, _restored = false;
   bool _closed = false, _transferring = false, _draftChanged = false;
@@ -93,6 +95,7 @@ class ComposerSession {
   ComposerQueueObservation _item(_QueueEntry value) => ComposerQueueObservation(
     id: value.id,
     text: value.value.text,
+    references: value.value.references,
     attachments: value.value.attachments.map(_file),
     submissionUncertain: value.value.submissionUncertain,
   );
@@ -100,6 +103,7 @@ class ComposerSession {
   ComposerObservation get observation => ComposerObservation(
     revision: _revision,
     text: _text,
+    references: _editing == null ? _references : _editReferences,
     submissionUncertain: _uncertain,
     attachments: _files.map(_file),
     queue: _queue.map(_item),
@@ -156,10 +160,14 @@ class ComposerSession {
     return editText(text);
   }
 
-  Future<void> editText(String value) {
+  Future<void> editText(String value, {ComposerReference? reference}) {
     _ensure();
     _textRevision++;
     _text = value;
+    _references = retainComposerReferences(value, [
+      ..._references,
+      ?reference,
+    ]);
     _uncertain = false;
     _revision++;
     _changed(ComposerChange.text);
@@ -174,6 +182,7 @@ class ComposerSession {
     if (_acknowledgedDeletion()) return Future.value();
     final outgoing = _submissions.values.where((v) => v.consume).firstOrNull;
     final text = _text;
+    final references = _references;
     final files = [
       for (final file in _files)
         if (outgoing?.value.attachments.contains(file) != true) file,
@@ -191,6 +200,7 @@ class ComposerSession {
         profileName: key.workspace.profileName,
         sessionId: key.sessionId,
         text: text,
+        references: references,
         attachments: files,
         queuedPrompts: queue,
         submissionUncertain: uncertain,
@@ -225,6 +235,7 @@ class ComposerSession {
     );
     _textRevision++;
     _text = '';
+    _references = const [];
     _uncertain = false;
     _files.clear();
     _queue.clear();
@@ -316,11 +327,13 @@ class ComposerSession {
         );
     return ComposerSavedWork(
       text: value.text,
+      references: value.references,
       attachments: value.attachments.map(file),
       queuedPrompts: value.queuedPrompts.map(
         (item) => ComposerQueueObservation(
           id: ComposerQueueId(),
           text: item.text,
+          references: item.references,
           attachments: item.attachments.map(file),
           submissionUncertain: item.submissionUncertain,
         ),
@@ -503,6 +516,7 @@ class ComposerSession {
         destination._install(value!, preserveText: false);
       } else {
         destination._text = _text;
+        destination._references = _references;
         destination._textRevision = _textRevision;
         destination._uncertain = _uncertain;
         destination._files.addAll(_files);
@@ -588,6 +602,7 @@ class ComposerSession {
       if (revision == _revision && !(preserveExisting && _hasWork)) {
         _textRevision++;
         _text = '';
+        _references = const [];
         _uncertain = false;
         _files.clear();
         _queue.clear();
@@ -627,6 +642,7 @@ class ComposerSession {
     if (!preserveText) {
       _textRevision++;
       _text = value.text;
+      _references = value.references;
       _uncertain = value.submissionUncertain;
       _files.addAll(value.attachments);
     }
@@ -992,6 +1008,7 @@ class ComposerSession {
       throw StateError('Queue a message or attachment, not a slash command.');
     }
     final original = _text, uncertain = _uncertain;
+    final originalReferences = _references;
     final moved = _text.trim() == text;
     final outgoing = _submissions.values.where((v) => v.consume).firstOrNull;
     final files = moved
@@ -1005,6 +1022,7 @@ class ComposerSession {
     final item = _QueueEntry(
       QueuedPromptDraft(
         text: fromSend ? rawText : text,
+        references: retainComposerReferences(rawText, originalReferences),
         attachments: files,
         submissionUncertain: moved && uncertain,
       ),
@@ -1014,6 +1032,7 @@ class ComposerSession {
     if (moved) {
       _textRevision++;
       _text = '';
+      _references = const [];
       _uncertain = false;
       _revision++;
     }
@@ -1029,6 +1048,10 @@ class ComposerSession {
         if (moved) {
           _textRevision++;
           _text = _text.isEmpty ? original : _append(original, _text);
+          _references = retainComposerReferences(_text, [
+            ...originalReferences,
+            ..._references,
+          ]);
           _uncertain = uncertain;
         }
         for (final file in files.reversed) {
@@ -1068,14 +1091,19 @@ class ComposerSession {
     }
     _editing = item;
     _editText = item.value.text;
+    _editReferences = item.value.references;
     _changed();
     await _persist();
   }
 
-  void editQueuedText(String text) {
+  void editQueuedText(String text, {ComposerReference? reference}) {
     _ensure();
     if (_editing == null || _saving) return;
     _editText = text;
+    _editReferences = retainComposerReferences(text, [
+      ..._editReferences,
+      ?reference,
+    ]);
     _changed(ComposerChange.text);
   }
 
@@ -1111,6 +1139,10 @@ class ComposerSession {
     _saving = true;
     item.value = QueuedPromptDraft(
       text: text,
+      references: retainComposerReferences(
+        text,
+        identical(_editing, item) ? _editReferences : original.references,
+      ),
       attachments: original.attachments,
       submissionUncertain:
           original.submissionUncertain && text == original.text.trim(),
@@ -1229,18 +1261,28 @@ class ComposerSession {
             ? <AttachmentDraft>[]
             : List<AttachmentDraft>.of(_files));
     final text = prompt ?? item?.value.text ?? _text;
+    final references = retainComposerReferences(
+      text,
+      item?.value.references ?? _references,
+    );
     final ticket = ComposerSubmission(
       text: text,
+      references: references,
       attachments: files.map(_file),
     );
     _submissions[ticket] = _SubmissionWork(
-      value: QueuedPromptDraft(text: text, attachments: files),
+      value: QueuedPromptDraft(
+        text: text,
+        references: references,
+        attachments: files,
+      ),
       queue: item,
       consume: queued == null && !preserveComposer,
     );
     if (queued == null && !preserveComposer) {
       _textRevision++;
       _text = '';
+      _references = const [];
       _uncertain = false;
       _revision++;
     }
@@ -1314,6 +1356,7 @@ class ComposerSession {
     final work = _submission(ticket);
     work.value = QueuedPromptDraft(
       text: work.value.text,
+      references: work.value.references,
       attachments: work.value.attachments,
       submissionUncertain: true,
     );
@@ -1339,6 +1382,7 @@ class ComposerSession {
     } else {
       final value = QueuedPromptDraft(
         text: work.value.text,
+        references: work.value.references,
         attachments: work.value.attachments,
         submissionUncertain: delivery == ComposerDelivery.uncertain,
       );
@@ -1390,6 +1434,7 @@ class ComposerSession {
       if (accepted && consumesDraft && revision == _textRevision) {
         _textRevision++;
         _text = '';
+        _references = const [];
         _uncertain = false;
         _revision++;
         await _persist();
@@ -1512,6 +1557,7 @@ class ComposerSession {
     if (_revision != revision) return;
     _textRevision++;
     _text = prefill ?? '';
+    _references = const [];
     _uncertain = false;
     _revision++;
     await _persist();

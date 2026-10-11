@@ -1,3 +1,4 @@
+import 'package:wing/core/models/composer_reference.dart';
 import 'package:wing/core/models/chat_browser_preferences.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -1725,6 +1726,7 @@ class _FailingDraftStore extends ComposerDraftStore {
     required String profileName,
     required String sessionId,
     required String text,
+    Iterable<ComposerReference> references = const [],
     required Iterable<AttachmentDraft> attachments,
     bool submissionUncertain = false,
     Iterable<QueuedPromptDraft> queuedPrompts = const [],
@@ -1744,6 +1746,7 @@ class _FailingDraftStore extends ComposerDraftStore {
       profileName: profileName,
       sessionId: sessionId,
       text: text,
+      references: references,
       attachments: attachments,
       submissionUncertain: submissionUncertain,
       queuedPrompts: queuedPrompts,

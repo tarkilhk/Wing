@@ -3,6 +3,7 @@ import 'studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/slash_command.dart';
+import '../models/composer_reference.dart';
 
 /// Skill emphasis is a text projection: selection, copy and IME stay native.
 class SkillComposerController extends TextEditingController {
@@ -11,11 +12,17 @@ class SkillComposerController extends TextEditingController {
 
   final _skills = <String>{};
   Object? _scope;
+  List<ComposerReference> _references = const [];
+
+  void observeReferences(Iterable<ComposerReference> references) {
+    _references = List.unmodifiable(references);
+  }
 
   void setScope(Object? scope) {
     if (_scope == scope) return;
     _scope = scope;
     _skills.clear();
+    _references = const [];
   }
 
   void observeCommands(Iterable<SlashCommand> commands) {
@@ -31,6 +38,11 @@ class SkillComposerController extends TextEditingController {
     required bool withComposing,
   }) {
     final skills = SlashSkillReference.inText(text, _skills).toList();
+    final references = composerReferenceSpans(text, selected: _references);
+    final ranges = [
+      for (final skill in skills) (skill.start, skill.end),
+      for (final reference in references) (reference.start, reference.end),
+    ];
     final composing =
         withComposing &&
             value.isComposingRangeValid &&
@@ -40,7 +52,7 @@ class SkillComposerController extends TextEditingController {
     final boundaries = <int>{
       0,
       text.length,
-      for (final skill in skills) ...[skill.start, skill.end],
+      for (final range in ranges) ...[range.$1, range.$2],
       if (composing.isValid) ...[composing.start, composing.end],
     }.toList()..sort();
     return TextSpan(
@@ -51,16 +63,14 @@ class SkillComposerController extends TextEditingController {
             text: text.substring(boundaries[i], boundaries[i + 1]),
             style: TextStyle(
               color:
-                  skills.any(
-                    (s) =>
-                        s.start <= boundaries[i] && s.end >= boundaries[i + 1],
+                  ranges.any(
+                    (s) => s.$1 <= boundaries[i] && s.$2 >= boundaries[i + 1],
                   )
                   ? Theme.of(context).colorScheme.primary
                   : null,
               fontWeight:
-                  skills.any(
-                    (s) =>
-                        s.start <= boundaries[i] && s.end >= boundaries[i + 1],
+                  ranges.any(
+                    (s) => s.$1 <= boundaries[i] && s.$2 >= boundaries[i + 1],
                   )
                   ? FontWeight.w700
                   : null,
@@ -131,7 +141,9 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
     final end = value.selection.isValid
         ? value.selection.extentOffset
         : value.text.length;
-    final query = value.selection.isValid && !value.selection.isCollapsed
+    final query =
+        (value.selection.isValid && !value.selection.isCollapsed) ||
+            MentionQuery.at(value.text, end) != null
         ? ''
         : value.text.substring(0, end);
     if (query == _query) return;

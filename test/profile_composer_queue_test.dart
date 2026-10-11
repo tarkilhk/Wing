@@ -1,3 +1,4 @@
+import 'package:wing/core/models/composer_reference.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/composer_work.dart';
 import 'support/composer_fixture.dart';
@@ -36,6 +37,7 @@ class _FailingDraftStore extends ComposerDraftStore {
     required String profileName,
     required String sessionId,
     required String text,
+    Iterable<ComposerReference> references = const [],
     required Iterable<AttachmentDraft> attachments,
     bool submissionUncertain = false,
     Iterable<QueuedPromptDraft> queuedPrompts = const [],
@@ -57,6 +59,7 @@ class _FailingDraftStore extends ComposerDraftStore {
       profileName: profileName,
       sessionId: sessionId,
       text: text,
+      references: references,
       attachments: attachments,
       submissionUncertain: submissionUncertain,
       queuedPrompts: queued,
@@ -129,6 +132,58 @@ void main() {
       existingDrafts: const [],
     );
   }
+
+  test(
+    'selected identities survive queue edits, restart and failed dispatch',
+    () async {
+      const file = ComposerReference(
+        kind: ComposerReferenceKind.file,
+        token: '@file:/work/note.md',
+        target: '/work/note.md',
+      );
+      const agent = ComposerReference(
+        kind: ComposerReferenceKind.agent,
+        token: '@butler',
+        target: 'butler',
+      );
+      await controller.updateDraft(chat, 'Read ${file.token}', reference: file);
+      await controller.queuePrompt(chat, chat.composer.observation.text);
+      await controller.updateDraft(
+        chat,
+        'Ask ${agent.token}',
+        reference: agent,
+      );
+      final id = chat.composer.observation.queue.single.id;
+      await controller.beginQueuedPromptEdit(chat, id);
+      controller.updateQueuedPromptEdit(chat, 'Review ${file.token} carefully');
+      await controller.saveQueuedPromptEdit(chat);
+      expect(chat.composer.observation.references.single.target, 'butler');
+      expect(
+        (await saved())!.queuedPrompts.single.references.single.target,
+        file.target,
+      );
+      controller.dispose();
+      controller = makeController();
+      await controller.initialize();
+      chat = (await controller.openSession(chat.key))!;
+      expect(chat.composer.observation.references.single.target, 'butler');
+      final queued = chat.composer.observation.queue.single;
+      expect(queued.references.single.target, file.target);
+      final ticket = await chat.composer.beginSubmission(
+        queued: queued.id,
+        preserveComposer: true,
+      );
+      expect(ticket.references.single.target, file.target);
+      await chat.composer.settle(ticket, ComposerDelivery.definitelyUnsent);
+      expect(
+        chat.composer.observation.queue.single.references.single.target,
+        file.target,
+      );
+      expect(chat.composer.observation.references.single.target, 'butler');
+      await controller.updateDraft(chat, 'Ordinary editable text');
+      expect(chat.composer.observation.references, isEmpty);
+    },
+  );
 
   test(
     'two queued messages send exactly once and leave a separate draft alone',

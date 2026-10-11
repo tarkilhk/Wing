@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:wing/core/models/composer_reference.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
@@ -556,6 +557,52 @@ void main() {
       expect(fixture.events.length, 1);
     },
   );
+  test(
+    'group picker uses frozen members; removed identity pauses before stock send',
+    () async {
+      final fixture = BotsFixture();
+      final group = (await fixture.repository.groups()).first;
+      final session = BotGroupSession(fixture.repository, group);
+      addTearDown(session.dispose);
+      final choices = session.completeMentions(MentionQuery.at('@', 1)!).items;
+      expect(choices.map((c) => c.reference.token), [
+        '@bot_atlas',
+        '@bot_mira',
+        '@everyone',
+      ]);
+      final ref = choices.first.reference;
+      session.editMentions('Hello ${ref.token}', selected: ref);
+      (fixture.room['members'] as List).removeAt(0);
+      expect(await session.send('Hello ${ref.token}'), isFalse);
+      expect(session.error, contains('Correct the mention'));
+      expect(fixture.commands.where((c) => c.$2 == 'groups.send'), isEmpty);
+      final everyone = choices.last.reference;
+      session.editMentions('Hello @everyone', selected: everyone);
+      expect(await session.send('Hello @everyone'), isTrue);
+      expect(
+        fixture.commands
+            .lastWhere((c) => c.$2 == 'groups.send')
+            .$3['payload']['text'],
+        'Hello @everyone',
+      );
+    },
+  );
+  test('a member id named everyone is still a selected identity', () async {
+    final fixture = BotsFixture();
+    (fixture.room['members'] as List).first['member_id'] = 'everyone';
+    final group = (await fixture.repository.groups()).first;
+    final session = BotGroupSession(fixture.repository, group);
+    addTearDown(session.dispose);
+    final ref = session
+        .completeMentions(MentionQuery.at('@bot_atlas', 10)!)
+        .items
+        .single
+        .reference;
+    session.editMentions('Hello @bot_atlas', selected: ref);
+    (fixture.room['members'] as List).removeAt(0);
+    expect(await session.send('Hello @bot_atlas'), isFalse);
+    expect(fixture.commands.where((c) => c.$2 == 'groups.send'), isEmpty);
+  });
   test(
     'route retirement revokes dispatch after asynchronous connection preparation',
     () async {

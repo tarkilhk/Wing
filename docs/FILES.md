@@ -16,6 +16,28 @@ Photos are cleaned of private metadata before upload. Large discarded metadata,
 appended capture information and damaged optional orientation metadata do not
 block a photo; unreadable orientation leaves the pixels in their stored position.
 
+## Reference a file on the Hermes server
+
+Type `@` in the composer to choose a server file or folder. Tap a folder row to
+browse it; its plus icon adds folder context. The header's folder icon adds the
+current folder. Selections stay editable text, including in an outgoing-message
+edit. You can also type `@file:/absolute/path` or `@folder:/absolute/path`;
+quote paths with spaces. Files support line ranges such as
+`@file:/work/notes.md:2-8`.
+End a folder query with `/`, such as `@folder:/work/`, to browse its contents.
+
+Wing reads text files when the message dispatches, including after an outbox
+delay. Selected locations survive chat-workspace changes. An unavailable file
+pauses the entire message for correction. Each text file can be up to 4 MiB;
+use at most 16 references and narrow them if they exceed the chat's context limit.
+Folder context includes a recursive, ignore-aware bounded listing and sizes or
+line counts, rather than every file's contents.
+
+Browsing follows the server's managed file permissions. This first version uses
+the host server's POSIX filesystem. Container/SSH workspaces and server-image
+vision references are planned separately; phone Photos/Camera still work as above.
+When the chat's host workspace is unknown, select an absolute server path.
+
 ## Open a result
 
 Tap an assistant file or media result to preview it. Wing supports images, PDFs,

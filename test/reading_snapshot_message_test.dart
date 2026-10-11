@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:wing/core/models/composer_reference.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/answer_versions.dart';
@@ -21,6 +22,58 @@ void main() {
             as Map,
       );
 
+  test(
+    'large prepared context retains authored text, images and reference identity',
+    () {
+      const ref = ComposerReference(
+        kind: ComposerReferenceKind.file,
+        token: '@file:/work/note.md',
+        target: '/work/note.md',
+      );
+      final prepared = PreparedComposerMessage(
+        message: 'Read ${ref.token}',
+        context: 'source' * 20000,
+        references: const [ref],
+      );
+      final saved = roundtrip({
+        'role': 'user',
+        'id': 19,
+        'content': '${prepared.wireText}\n@image:/cache/photo.png',
+      });
+      expect(
+        answerMessageDisplayText(saved),
+        'Read ${ref.token}\n@image:/cache/photo.png',
+      );
+      expect(jsonEncode(saved).length, lessThan(4096));
+      expect(
+        PreparedComposerMessage.fromContent(
+          saved['content'],
+        )!.references.single.target,
+        ref.target,
+      );
+    },
+  );
+
+  test('prepared structured reading retains native image parts', () {
+    final prepared = PreparedComposerMessage(
+      message: 'Read @hermes',
+      context: 'context' * 10000,
+    );
+    final saved = roundtrip({
+      'role': 'user',
+      'content': [
+        {'type': 'text', 'text': prepared.wireText},
+        {
+          'type': 'image_url',
+          'image_url': {'url': '/cache/photo.png'},
+        },
+      ],
+    });
+    final display = UserMessageContent.fromMessage(saved);
+    expect(display.text, 'Read @hermes');
+    expect(display.attachments.single.target, '/cache/photo.png');
+    expect(jsonEncode(saved).length, lessThan(4096));
+  });
   test(
     'tool reading facts survive without timestamps or execution authority',
     () {

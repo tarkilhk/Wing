@@ -20,7 +20,13 @@ Valid edits save automatically after a short pause. Back finishes pending saves;
 
 ## Discussion groups
 
-Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Tap a member's @handle to insert a mention. Rooms offer rename, stop and disband; their member roster is fixed when created.
+Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Type `@` to choose a frozen room member or `@everyone`. Rooms offer rename, stop and disband; their member roster is fixed when created.
+
+In an ordinary chat, `@` offers agents from the same Hermes server. A mention
+identifies the agent to the current conversation; it does not forward your
+message or switch chats. Contact depends on whether the current chat has
+`message_agent`. If a selected profile is removed or renamed before dispatch,
+Wing pauses the message for correction. Changing its display name is harmless.
 
 An unconfirmed send stays available for review/retry. Interrupted tasks ask for explicit confirmation before retrying. Approvals apply to the request shown in that discussion.
 
