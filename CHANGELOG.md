@@ -8,6 +8,8 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Bots and discussions
 
+- Dictate group messages with the same microphone, recording controls and
+  Local/Hermes voice-input settings as normal chats.
 - Default group icons show member bot avatars inside a square frame with a random Hermes palette color.
 - Pinch inward in group discussions to enter the shared Recents cards, preserving
   the group draft, reading position and original Back destination.

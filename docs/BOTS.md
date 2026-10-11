@@ -34,6 +34,12 @@ Valid edits save automatically after a short pause. Back finishes pending saves;
 
 ## Discussion groups
 
+Tap the microphone in the group message box to dictate, using the voice-input
+choice from App settings. Stop finishes the recording; Cancel keeps your draft.
+Recognized text replaces the selected text or inserts at the cursor. Review it
+before sending. Finish or cancel recording before pinching into Recents.
+Leaving the discussion or backgrounding Wing cancels recording.
+
 Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Type `@` anywhere in your message to choose a frozen room member or `@everyone`. Search by the bot's name or Hermes handle; selecting Pace inserts `@Pace`, while Wing retains its canonical Hermes identity. Members show their saved bot avatars when available; Everyone uses a group icon. Tap a group’s icon in the Groups roster to open its editor directly; tap its name or message area to open the discussion. Open **Edit group** from a group’s roster actions or the discussion’s options menu, including discussions opened from Recents, to change its name, icon color or picture. Upload, generate or remove the picture, then use the checkmark to save to Hermes. Membership and the Hermes instance are fixed when created. Rooms also offer stop and disband.
 
 In an ordinary chat, `@` anywhere in your message offers agents from the same Hermes server with their

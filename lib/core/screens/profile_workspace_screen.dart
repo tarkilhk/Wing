@@ -99,6 +99,7 @@ import 'app_settings_content.dart';
 import 'analytics_content.dart';
 import 'workspace_overview_content.dart';
 import '../controllers/voice_input_controller.dart';
+import '../widgets/voice_input_activity.dart';
 import '../models/voice_processing_settings.dart';
 import '../controllers/voice_output_controller.dart';
 import '../services/android_voice.dart';
@@ -343,45 +344,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Widget _voiceActivity() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      if (_voiceInput.active)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Semantics(
-                liveRegion: true,
-                child: Text(switch (_voiceInput.phase) {
-                  VoiceInputPhase.starting => 'Opening microphone…',
-                  VoiceInputPhase.recording =>
-                    'Recording · ${_voiceInput.seconds}s / 120s',
-                  VoiceInputPhase.transcribing => 'Transcribing…',
-                  VoiceInputPhase.idle => '',
-                }),
-              ),
-              if (_voiceInput.partial.isNotEmpty)
-                Text(
-                  _voiceInput.partial,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              Wrap(
-                spacing: 8,
-                children: [
-                  if (_voiceInput.phase == VoiceInputPhase.recording)
-                    TextButton(
-                      onPressed: _voiceInput.stop,
-                      child: const Text('Stop recording'),
-                    ),
-                  TextButton(
-                    onPressed: _voiceInput.cancel,
-                    child: const Text('Cancel recording'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+      VoiceInputActivity(controller: _voiceInput),
       if (_voiceOutput.owner != null)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -399,10 +362,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             ],
           ),
         ),
-      if (_voiceInput.error != null || _voiceOutput.error != null)
+      if (_voiceOutput.error != null)
         Padding(
           padding: const EdgeInsets.all(12),
-          child: StudioError(_voiceInput.error ?? _voiceOutput.error!),
+          child: StudioError(_voiceOutput.error!),
         ),
     ],
   );
@@ -482,6 +445,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               ),
           previewBuilder: _recentPreview,
           child: BotGroupScreen(
+            voiceInputSettings: () =>
+                controller.appPreferences.current.voiceInputSettings,
+            voiceDevice: widget.voiceDevice,
+            stopVoicePlayback: _voiceOutput.stop,
             createSession: () => _bots.openGroup(group),
             onEdit: (group) => openGroupEditor(groupContext, _bots, group),
           ),
@@ -2753,12 +2720,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         );
   }
 
-  Widget _dictationButton(ProfileChat chat) => IconButton(
-    tooltip: 'Dictate message',
-    icon: const Icon(Icons.mic_none),
-    onPressed: _voiceInput.canDictate(controller.canDictate(chat))
-        ? () => _run(() => _requestDictation(chat))
-        : null,
+  Widget _dictationButton(ProfileChat chat) => VoiceInputButton(
+    enabled: _voiceInput.canDictate(controller.canDictate(chat)),
+    onPressed: () => _run(() => _requestDictation(chat)),
   );
 
   Widget _composerActionButton(ProfileChat chat) {

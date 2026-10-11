@@ -9874,6 +9874,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/widgets/voice_input_activity.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
       "path": "lib/core/widgets/voice_preferences_card.dart",
       "area": "lib",
       "provenance": "tracked"

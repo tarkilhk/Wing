@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-import '../models/profile_session_key.dart';
 import '../models/composer_action.dart';
 import '../models/composer_work.dart';
 import 'package:uuid/uuid.dart';
@@ -24,7 +23,7 @@ class VoiceInputController extends ChangeNotifier {
   bool _disposed = false;
   int _commandGeneration = 0;
   int _notificationDepth = 0;
-  ProfileSessionKey? _target;
+  Object? _target;
   RemoteVoice? _remote;
   Timer? _timer;
   VoiceDraft? _draft;
@@ -62,21 +61,21 @@ class VoiceInputController extends ChangeNotifier {
         })
       : composer.unavailable;
 
-  void retainTarget(ProfileSessionKey? target) {
+  void retainTarget(Object? target) {
     if (_target != null && _target != target) {
       unawaited(cancel().catchError((Object _) {}));
     }
   }
 
   /// Recorder admission and completion use the same captured chat and intent.
-  Future<void> dictate({
-    required ProfileSessionKey target,
+  Future<void> dictate<T extends Object>({
+    required T target,
     required VoiceDraft draft,
     required VoiceInputSettings? Function() settings,
     required Future<void> Function() stopPlayback,
-    required bool Function(ProfileSessionKey) admitsTarget,
+    required bool Function(T) admitsTarget,
     required bool Function() admitPresentation,
-    required RemoteVoice Function(ProfileSessionKey) createRemote,
+    required RemoteVoice Function(T) createRemote,
     required Future<void> Function(String) applyDraft,
     required void Function(VoiceDraft) onApplied,
     required void Function(String) onNotice,

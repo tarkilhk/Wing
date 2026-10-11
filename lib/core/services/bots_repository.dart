@@ -11,6 +11,7 @@ import 'bot_display_client.dart';
 import 'profile_gateway.dart';
 import 'connection_diagnostics.dart';
 import 'workspace_connection_failure.dart';
+import 'hermes_voice.dart';
 import '../models/bot_display.dart';
 
 typedef BotsRead =
@@ -782,6 +783,42 @@ class BotsRepository {
     if (group.scope != scope) {
       throw StateError('Group belongs to another instance');
     }
+  }
+
+  /// Groups belong to the instance's default profile, like their stock RPCs.
+  RemoteVoice voiceForGroup(BotGroup group) {
+    _ownsGroup(group);
+    final connection = server;
+    if (connection == null) {
+      throw StateError('This group has no speech connection. Reopen it.');
+    }
+    var closed = false;
+    return HermesVoice(
+      profile: 'default',
+      closeClient: () => closed = true,
+      request: (endpoint, body) async {
+        connection.retain();
+        try {
+          if (closed) throw StateError('Recording canceled.');
+          final result = await connection
+              .ownedMutation(
+                'POST',
+                Uri.parse(endpoint).path,
+                const {'profile': 'default'},
+                body,
+                () => !closed,
+                () {},
+              )
+              .timeout(const Duration(minutes: 3));
+          if (closed) throw StateError('Recording canceled.');
+          return result;
+        } on AdministrationFailure catch (failure) {
+          throw StateError(failure.message);
+        } finally {
+          connection.release();
+        }
+      },
+    );
   }
 
   /// Exact stock worker identity. Discovery never creates or resumes a runtime.

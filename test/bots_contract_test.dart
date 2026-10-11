@@ -27,6 +27,80 @@ class _AvatarPicker extends BotAvatarIo {
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  test(
+    'group dictation requires the captured visit and exact draft revision',
+    () async {
+      final fixture = BotsFixture();
+      final group = (await fixture.repository.groups()).single;
+      BotGroupSession open() => BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: const [],
+        reads: BotGroupReadState(),
+      )..setVisible(true);
+      final session = open();
+      final otherVisit = open();
+      addTearDown(session.dispose);
+      addTearDown(otherVisit.dispose);
+      session.editMentions('Original');
+      final captured = session.captureVoiceDraft();
+      expect(session.voiceTarget.chat, isNull);
+      expect(session.voiceTarget.group, group.key);
+      session.editMentions('Edited');
+      session.editMentions('Original');
+      expect(
+        () => session.applyVoiceDraft(captured, 'Late result'),
+        throwsStateError,
+      );
+      final current = session.captureVoiceDraft();
+      expect(
+        () => otherVisit.applyVoiceDraft(current, 'Wrong visit'),
+        throwsStateError,
+      );
+      await session.applyVoiceDraft(current, 'Original dictated');
+      expect(session.captureVoiceDraft().text, 'Original dictated');
+      session.setVisible(false);
+      expect(() => session.captureVoiceDraft(), throwsStateError);
+      expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test(
+    'group voice uses its captured instance and stock default-profile audio',
+    () async {
+      final server = AdministrationFixture();
+      final fixture = BotsFixture(server: server.server);
+      final group = (await fixture.repository.groups()).single;
+      server.mutationOverride =
+          (method, path, query, body, canDispatch, onDispatched) async {
+            expect(canDispatch(), isTrue);
+            onDispatched();
+            server.requests.add((method, path, query, body));
+            return {'ok': true, 'transcript': 'Spoken group draft'};
+          };
+      final voice = fixture.repository.voiceForGroup(group);
+      expect(
+        await voice.transcribe(Uint8List.fromList([1, 2, 3])),
+        'Spoken group draft',
+      );
+      final request = server.requests.single;
+      expect(request.$1, 'POST');
+      expect(request.$2, 'audio/transcribe');
+      expect(request.$3, {'profile': 'default'});
+      expect(request.$4, {
+        'data_url': 'data:audio/mp4;base64,AQID',
+        'mime_type': 'audio/mp4',
+      });
+      voice.close();
+      await expectLater(
+        voice.transcribe(Uint8List.fromList([1])),
+        throwsStateError,
+      );
+      expect(server.requests, hasLength(1));
+      expect(fixture.commands, isEmpty);
+    },
+  );
   ProfileSessionKey canonical(String name, {String suffix = 'chat'}) =>
       ProfileSessionKey(
         WorkspaceScope(

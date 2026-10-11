@@ -1,3 +1,4 @@
+import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -593,6 +594,9 @@ void main() {
               onOpenGroup: (group) => Navigator.of(context).push<void>(
                 MaterialPageRoute(
                   builder: (_) => BotGroupScreen(
+                    stopVoicePlayback: () async {},
+                    voiceInputSettings: () =>
+                        const LocalVoiceInputSettings(language: ''),
                     createSession: () => session.openGroup(group),
                     onEdit: (group) => openGroupEditor(context, session, group),
                   ),
@@ -1555,6 +1559,9 @@ void main() {
                   onOpenGroup: (group) => Navigator.of(context).push<void>(
                     MaterialPageRoute(
                       builder: (_) => BotGroupScreen(
+                        stopVoicePlayback: () async {},
+                        voiceInputSettings: () =>
+                            const LocalVoiceInputSettings(language: ''),
                         createSession: () => session.openGroup(group),
                         onEdit: (group) =>
                             openGroupEditor(context, session, group),
@@ -1939,6 +1946,9 @@ void main() {
             onOpenGroup: (group) => Navigator.of(context).push<void>(
               MaterialPageRoute(
                 builder: (_) => BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () =>
+                      const LocalVoiceInputSettings(language: ''),
                   createSession: () => session.openGroup(group),
                   onEdit: (group) => openGroupEditor(context, session, group),
                 ),

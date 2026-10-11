@@ -44,6 +44,7 @@ import 'package:wing/core/widgets/recent_conversations/recent_conversation_switc
 
 import 'support/profile_browser_fixture.dart';
 import 'support/bots_fixture.dart';
+import 'support/voice_fixture.dart';
 
 const _export = bool.fromEnvironment('STUDIO_REVIEW');
 
@@ -2356,6 +2357,8 @@ void main() {
       testWidgets(
         'group pinch shares Recents and preserves native Back ${brightness.name} $scale',
         (tester) async {
+          final voiceDevice = VoiceDeviceFixture();
+          addTearDown(voiceDevice.stream.close);
           SharedPreferences.setMockInitialValues({});
           final preferences = await SharedPreferences.getInstance();
           final appPreferences = AppPreferences(preferences);
@@ -2415,6 +2418,7 @@ void main() {
               home: ProfileWorkspaceScreen(
                 controller: controller,
                 initialDestination: AppDestination.bots,
+                voiceDevice: voiceDevice,
                 createBotsSession: () =>
                     bots = BotsSession((_) async => [botFixture.repository]),
               ),
@@ -2438,6 +2442,18 @@ void main() {
           expect(groupKey?.group, bots.observedGroups.single.key);
           expect(groupKey?.chat, isNull);
           expect(visit.modeEnabled, isFalse);
+          await tester.tap(find.byTooltip('Dictate message'));
+          await _finishFrames(tester);
+          expect(voiceDevice.local, isTrue);
+          final recordingSwitcher = tester.widget<RecentConversationSwitcher>(
+            find.byType(RecentConversationSwitcher),
+          );
+          expect(recordingSwitcher.gesturesEnabled, isFalse);
+          expect(recordingSwitcher.nudgesEnabled, isFalse);
+          await _chatGesture(tester);
+          expect(visit.modeEnabled, isFalse);
+          await tester.tap(find.byTooltip('Cancel recording'));
+          await _finishFrames(tester);
           final field = find.byKey(
             const ValueKey('group-message-composer'),
             skipOffstage: false,

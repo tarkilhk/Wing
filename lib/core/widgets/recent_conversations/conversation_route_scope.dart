@@ -23,11 +23,11 @@ class ConversationPresentationScope extends InheritedWidget {
   const ConversationPresentationScope({
     super.key,
     required this.visible,
-    required this.onComposerFocusChanged,
+    required this.onInputActivityChanged,
     required super.child,
   });
   final bool visible;
-  final ValueChanged<bool> onComposerFocusChanged;
+  final ValueChanged<({bool editing, bool recording})> onInputActivityChanged;
   static ConversationPresentationScope? maybeOf(BuildContext context) => context
       .dependOnInheritedWidgetOfExactType<ConversationPresentationScope>();
   @override

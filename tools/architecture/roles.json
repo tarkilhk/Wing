@@ -2296,6 +2296,11 @@
       "feature": "outputs-and-viewers",
       "library": "lib/core/widgets/user_message_attachment.dart"
     },
+    "lib/core/widgets/voice_input_activity.dart": {
+      "role": "view",
+      "feature": "voice",
+      "library": "lib/core/widgets/voice_input_activity.dart"
+    },
     "lib/core/widgets/voice_preferences_card.dart": {
       "role": "view",
       "feature": "voice",
