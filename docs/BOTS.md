@@ -46,6 +46,10 @@ message or switch chats. Contact depends on whether the current chat has
 `message_agent`. If a selected profile is removed or renamed before dispatch,
 Wing pauses the message for correction. Changing its display name is harmless.
 
+In chats and discussions, reference suggestions refresh after a brief pause in
+typing (300 ms). The previous rows stay visible while the next results load,
+keeping the composer steady. Select a row once the refresh finishes.
+
 Tap member rows to add 2–6 bots. Picked bots move into their own strip above
 search, with a remove icon for each. Search by name or @handle to find bots to
 add; removing a picked bot returns it to the list. Leave the

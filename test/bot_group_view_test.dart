@@ -285,7 +285,8 @@ void main() {
           await tester.enterText(input, 'Review @at this evidence');
           final controller = tester.widget<TextField>(input).controller!;
           controller.selection = const TextSelection.collapsed(offset: 10);
-          await tester.pump(const Duration(milliseconds: 200));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
           await tester.pumpAndSettle();
           await tester.tap(
             find.descendant(

@@ -39,7 +39,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
   MentionQuery? _query;
   MentionCompletion? _completion;
   String? _directory, _error;
-  bool _loading = false, _dismissed = false;
+  bool _pending = false, _loading = false, _dismissed = false;
   final _scroll = ScrollController();
   final _rowKeys = <int, GlobalKey>{};
 
@@ -72,18 +72,29 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
     if (_query?.text == next?.text && _query?.end == next?.end) return;
     _debounce?.cancel();
     final generation = ++_generation;
+    final retainCompletion =
+        !_dismissed &&
+        next != null &&
+        _query != null &&
+        next.start == _query!.start &&
+        next.text.substring(0, next.start) ==
+            _query!.text.substring(0, _query!.start);
     setState(() {
       _query = next;
-      _completion = null;
+      if (!retainCompletion) {
+        _completion = null;
+        _rowKeys.clear();
+      }
       _directory = null;
       _highlighted = 0;
       _error = null;
       _dismissed = false;
-      _loading = next != null;
+      _pending = next != null;
+      _loading = false;
     });
     if (next != null) {
       _debounce = Timer(
-        const Duration(milliseconds: 180),
+        const Duration(milliseconds: 300),
         () => _load(next, null, generation),
       );
     }
@@ -94,6 +105,8 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
     String? directory,
     int generation,
   ) async {
+    if (!mounted || generation != _generation || _dismissed) return;
+    setState(() => _loading = true);
     try {
       final completion = await widget.load(
         query,
@@ -103,6 +116,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
       if (!mounted || generation != _generation || _dismissed) return;
       setState(() {
         _completion = completion;
+        _pending = false;
         _loading = false;
         _highlighted = 0;
         _rowKeys.clear();
@@ -111,6 +125,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
       if (!mounted || generation != _generation || _dismissed) return;
       setState(() {
         _error = 'References could not load. Retry or edit the query.';
+        _pending = false;
         _loading = false;
       });
     }
@@ -125,6 +140,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
       _directory = directory;
       _completion = null;
       _error = null;
+      _pending = true;
       _loading = true;
     });
     unawaited(_load(query, directory, generation));
@@ -141,7 +157,8 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
   Future<void> _select(ComposerReference reference) async {
     final query = _query;
     final value = widget.composer.value;
-    if (query == null ||
+    if (_pending ||
+        query == null ||
         query.text != value.text ||
         query.end != value.selection.extentOffset ||
         !value.selection.isCollapsed) {
@@ -177,7 +194,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
       return true;
     }
     final items = _completion?.items ?? const <MentionCandidate>[];
-    if (items.isEmpty || _loading) return false;
+    if (items.isEmpty || _pending) return false;
     if (event.logicalKey == LogicalKeyboardKey.arrowDown ||
         event.logicalKey == LogicalKeyboardKey.arrowUp) {
       setState(() {
@@ -219,7 +236,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
       if (completion?.parent case final parent?)
         IconButton(
           tooltip: 'Browse parent folder',
-          onPressed: _loading ? null : () => _browse(parent),
+          onPressed: _pending ? null : () => _browse(parent),
           icon: const Icon(Icons.arrow_back),
         ),
       Expanded(
@@ -239,7 +256,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
       if (completion?.directory case final directory?)
         IconButton(
           tooltip: 'Add this folder as context',
-          onPressed: _loading
+          onPressed: _pending
               ? null
               : () => _select(
                   ComposerReference(
@@ -256,7 +273,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
       if (_error != null)
         IconButton(
           tooltip: 'Retry references',
-          onPressed: _loading ? null : () => _browse(_directory),
+          onPressed: _pending ? null : () => _browse(_directory),
           icon: const Icon(Icons.refresh),
         ),
       IconButton(
@@ -304,7 +321,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
     final tokens = WingTokens.of(context);
     return InkWell(
       key: _rowKeys.putIfAbsent(index, GlobalKey.new),
-      onTap: _loading
+      onTap: _pending
           ? null
           : () {
               if (folder) {
@@ -350,7 +367,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
             if (folder)
               IconButton(
                 tooltip: 'Add ${item.label} as folder context',
-                onPressed: _loading ? null : () => _select(item.reference),
+                onPressed: _pending ? null : () => _select(item.reference),
                 icon: const Icon(Icons.add),
               ),
             if (!folder) const SizedBox(width: 12),
@@ -368,7 +385,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
     final items = completion?.items ?? const <MentionCandidate>[];
     final notices = [
       ?completion?.warning,
-      if (!_loading && items.isEmpty) 'No matching references. Edit the query.',
+      if (!_pending && items.isEmpty) 'No matching references. Edit the query.',
     ];
     return TextFieldTapRegion(
       child: Padding(
@@ -387,7 +404,10 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _header(completion, compact: constraints.maxHeight < 180),
-                  if (_loading) const LinearProgressIndicator(),
+                  SizedBox(
+                    height: 4,
+                    child: _loading ? const LinearProgressIndicator() : null,
+                  ),
                   if (_error case final error?) _failure(error),
                   if (_error == null &&
                       (items.isNotEmpty || notices.isNotEmpty))

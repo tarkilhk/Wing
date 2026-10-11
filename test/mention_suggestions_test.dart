@@ -199,9 +199,154 @@ void main() {
     );
     focus.requestFocus();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
   }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'typing retains reference rows and composer position at $scale in $brightness',
+        (tester) async {
+          tester.view.devicePixelRatio = 1;
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+          addTearDown(tester.view.reset);
+          final composer = SkillComposerController(text: '@h');
+          composer.selection = const TextSelection.collapsed(offset: 2);
+          final focus = FocusNode();
+          addTearDown(composer.dispose);
+          addTearDown(focus.dispose);
+          final queries = <MentionQuery>[];
+          final refreshed = Completer<MentionCompletion>();
+          final saved = <String>[];
+          Future<void> capture(String state) async {
+            if (!Platform.environment.containsKey('CAPTURE_REFERENCES')) return;
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.byKey(_captureKey),
+            );
+            await tester.runAsync(() async {
+              final image = await boundary.toImage();
+              try {
+                final bytes = await image.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final dir = Directory('build/references-review')
+                  ..createSync(recursive: true);
+                await File(
+                  '${dir.path}/typing-${brightness.name}-$scale-$state.png',
+                ).writeAsBytes(bytes!.buffer.asUint8List());
+              } finally {
+                image.dispose();
+              }
+            });
+          }
+
+          await host(
+            tester,
+            composer,
+            focus,
+            brightness: brightness,
+            scale: scale,
+            load: (query, directory, canRead) {
+              queries.add(query);
+              return queries.length == 1
+                  ? Future.value(
+                      MentionCompletion(query: query, items: [_agent]),
+                    )
+                  : refreshed.future;
+            },
+            select: (text, ref) async => saved.add(text),
+          );
+          final composerPosition = tester.getTopLeft(find.byType(TextField));
+          for (final text in ['@he', '@her', '@herm']) {
+            await tester.enterText(find.byType(TextField), text);
+            await tester.pump(const Duration(milliseconds: 100));
+            expect(find.text('Hermes'), findsOneWidget);
+            expect(tester.getTopLeft(find.byType(TextField)), composerPosition);
+            expect(queries, hasLength(1));
+            expect(find.byType(LinearProgressIndicator), findsNothing);
+          }
+          await capture('waiting');
+          await tester.tap(find.text('Hermes'));
+          await tester.pump();
+          expect(saved, isEmpty);
+          expect(composer.text, '@herm');
+          await tester.pump(const Duration(milliseconds: 199));
+          expect(queries, hasLength(1));
+          await tester.pump(const Duration(milliseconds: 1));
+          expect(queries.map((query) => query.text), ['@h', '@herm']);
+          expect(find.byType(LinearProgressIndicator), findsOneWidget);
+          expect(find.text('Hermes'), findsOneWidget);
+          expect(tester.getTopLeft(find.byType(TextField)), composerPosition);
+          await capture('loading');
+          await tester.tap(find.text('Hermes'));
+          await tester.pump();
+          expect(saved, isEmpty);
+          expect(composer.text, '@herm');
+          refreshed.complete(
+            MentionCompletion(query: queries.last, items: [_agent]),
+          );
+          await tester.pump();
+          expect(tester.getTopLeft(find.byType(TextField)), composerPosition);
+          await tester.tap(find.text('Hermes'));
+          await tester.pump();
+          expect(saved.single, '@hermes ');
+          expect(focus.hasFocus, isTrue);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets('query changes revoke held reads before the debounce expires', (
+    tester,
+  ) async {
+    final composer = SkillComposerController(text: '@h');
+    composer.selection = const TextSelection.collapsed(offset: 2);
+    final focus = FocusNode();
+    addTearDown(composer.dispose);
+    addTearDown(focus.dispose);
+    final queries = <MentionQuery>[];
+    final reads = <bool Function()>[];
+    final pending = <Completer<MentionCompletion>>[];
+    await host(
+      tester,
+      composer,
+      focus,
+      load: (query, directory, canRead) {
+        queries.add(query);
+        reads.add(canRead);
+        final result = Completer<MentionCompletion>();
+        pending.add(result);
+        return result.future;
+      },
+      select: (text, ref) async {},
+    );
+    await tester.enterText(find.byType(TextField), '@he');
+    expect(reads.first(), isFalse);
+    pending.first.complete(
+      MentionCompletion(query: queries.first, items: [_folder]),
+    );
+    await tester.pump(const Duration(milliseconds: 299));
+    expect(find.text('Design documents'), findsNothing);
+    expect(queries, hasLength(1));
+    await tester.pump(const Duration(milliseconds: 1));
+    pending.last.complete(
+      MentionCompletion(query: queries.last, items: [_agent]),
+    );
+    await tester.pump();
+    expect(find.text('Hermes'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '@her');
+    await tester.tap(find.byTooltip('Close references'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(queries, hasLength(2));
+    expect(find.text('Hermes'), findsNothing);
+    await tester.enterText(find.byType(TextField), '@herm');
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+    expect(queries, hasLength(2));
+  });
 
   testWidgets(
     'folder browsing keeps text; selection preserves the suffix and focus',
@@ -464,7 +609,7 @@ void main() {
           input.value = input.value.copyWith(
             composing: TextRange(start: prefix.length, end: prefix.length + 1),
           );
-          await tester.pump(const Duration(milliseconds: 200));
+          await tester.pump(const Duration(milliseconds: 300));
           await tester.pumpAndSettle();
           final list = find.descendant(
             of: find.byType(MentionSuggestions),
@@ -541,7 +686,7 @@ void main() {
             selection: TextSelection.collapsed(offset: cursor),
             composing: TextRange(start: prefix.length, end: cursor),
           );
-          await tester.pump(const Duration(milliseconds: 200));
+          await tester.pump(const Duration(milliseconds: 300));
           await tester.pumpAndSettle();
           expect(find.text('Atlas').hitTestable(), findsOneWidget);
           expect(find.text('Mira'), findsNothing);
@@ -563,7 +708,8 @@ void main() {
               end: input.text.length,
             ),
           );
-          await tester.pump(const Duration(milliseconds: 200));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
           await tester.pumpAndSettle();
           expect(
             MentionQuery.at(input.text, input.selection.extentOffset),

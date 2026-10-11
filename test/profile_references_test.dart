@@ -577,7 +577,7 @@ void main() {
         nativeInput.value = nativeInput.value.copyWith(
           composing: TextRange(start: prefix.length, end: prefix.length + 1),
         );
-        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 300));
         await tester.pumpAndSettle();
         expect(find.text('Hermes'), findsOneWidget);
         final picker = find.byType(MentionSuggestions);
@@ -603,7 +603,7 @@ void main() {
         expect(nativeInput.text, '$prefix@Hermes ');
         expect(nativeInput.value.composing, TextRange.empty);
         await tester.enterText(input, '@');
-        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 300));
         await tester.pumpAndSettle();
         expect(
           find.byTooltip('Close references').hitTestable(),
@@ -614,7 +614,7 @@ void main() {
             '/work/${List.filled(4, 'long-directory').join('/')}/public_paths.py';
         host.references.files[file] = 'reference content';
         await tester.enterText(input, '@file:$file');
-        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 300));
         await tester.pumpAndSettle();
         final candidate = find.text('public_paths.py');
         expect(candidate.hitTestable(), findsOneWidget);
