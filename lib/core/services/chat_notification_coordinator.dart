@@ -246,6 +246,8 @@ class ChatNotificationCoordinator {
 
   NotificationFocus? focusFor(ProfileSessionKey key) =>
       resultFor(jsonEncode(key.toJson()));
+  List<NotificationInput> pendingInputsFor(ProfileSessionKey key) =>
+      List.unmodifiable(_chats[jsonEncode(key.toJson())]?.inputs ?? const []);
   Future<void> readTarget(ProfileSessionKey key, String identity) =>
       read(jsonEncode(key.toJson()), identity);
   NotificationInput? inputFor(String chat) => _chats[chat]?.inputs.firstOrNull;

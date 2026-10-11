@@ -462,6 +462,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   final Future<void> Function(ProfileInputNotification)? onNotificationInputs;
   final Future<void> Function(ProfileSessionKey, String)? onNotificationRead;
   final NotificationFocus? Function(ProfileSessionKey)? notificationResultFor;
+  final List<NotificationInput> Function(ProfileSessionKey)?
+  _notificationInputsFor;
   final _notificationReplayCursors = <String, int>{};
   final Map<WorkspaceScope, ProfileWorkspaceData> _resources = {};
   final Map<ProfileSessionKey, ProfileChat> _recoveredDraftTargets = {};
@@ -754,7 +756,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     this.onNotificationInputs,
     this.onNotificationRead,
     this.notificationResultFor,
-  }) : _gatewayConnection = ProfileGatewayConnection(access),
+    List<NotificationInput> Function(ProfileSessionKey)? notificationInputsFor,
+    // Keep the injected journal reader private behind the workspace boundary.
+    // ignore: prefer_initializing_formals
+  }) : _notificationInputsFor = notificationInputsFor,
+       _gatewayConnection = ProfileGatewayConnection(access),
        _runtimeFactory = runtimeFactory ?? _createRuntime,
        attachments = attachmentService ?? AttachmentDraftService() {
     _factory = gatewayFactory ?? _gatewayConnection.create;
@@ -7981,6 +7987,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final usage = (result['info'] as Map?)?['usage'];
     if (usage is Map) _updateContext(chat, usage);
     chat._notificationInputsQuiet = true;
+    if (result['open_requests'] is List &&
+        _notificationInputsFor?.call(chat.key).isNotEmpty == true) {
+      _publishNotificationInputs(chat, alert: false, confirmedSnapshot: true);
+    }
     _hydrateIntelligence(chat, result);
     chat._fastMode = null;
     unawaited(_observeModelControls(chat));

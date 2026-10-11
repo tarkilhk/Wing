@@ -292,6 +292,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
             onAttention: _chatNotices.receiveNotice,
             onNotificationInputs: _chatNotices.receiveInputs,
             notificationResultFor: _chatNotices.focusFor,
+            notificationInputsFor: _chatNotices.pendingInputsFor,
             onNotificationRead: _chatNotices.readTarget,
           ),
         );

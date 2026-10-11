@@ -102,13 +102,24 @@ extension ProfileNotificationState on ProfileWorkspaceController {
     return result;
   }
 
-  void _publishNotificationInputs(ProfileChat chat, {bool? alert}) {
+  void _publishNotificationInputs(
+    ProfileChat chat, {
+    bool? alert,
+    bool confirmedSnapshot = false,
+  }) {
     final inputs = _notificationInputs(chat);
     final fingerprint = jsonEncode(inputs.map((v) => v.toJson()).toList());
-    if (fingerprint == chat._notificationInputFingerprint) return;
+    final savedInputs = _notificationInputsFor?.call(chat.key) ?? const [];
+    final reconcileSaved =
+        confirmedSnapshot &&
+        savedInputs.isNotEmpty &&
+        fingerprint != jsonEncode(savedInputs.map((v) => v.toJson()).toList());
+    if (fingerprint == chat._notificationInputFingerprint && !reconcileSaved) {
+      return;
+    }
     final established = chat._notificationInputFingerprint != null;
     chat._notificationInputFingerprint = fingerprint;
-    if (!established && inputs.isEmpty) return;
+    if (!established && inputs.isEmpty && !reconcileSaved) return;
     final quiet = chat._notificationInputsQuiet;
     chat._notificationInputsQuiet = false;
     final callback = onNotificationInputs;
@@ -173,7 +184,24 @@ extension ProfileNotificationState on ProfileWorkspaceController {
     Future<Map<String, dynamic>>? activeSnapshot;
     for (final key in keys) {
       if (_closed) return;
-      final chat = findNotificationChat(key);
+      if (!owns(key)) continue;
+      final savedInputs = _notificationInputsFor?.call(key) ?? const [];
+      var chat = findNotificationChat(key);
+      if (chat != null &&
+          (chat.runtime.opening ||
+              chat.runtime.reconnecting ||
+              chat.runtime.approvalResponding ||
+              chat.runtime.secureResponding)) {
+        continue;
+      }
+      if (savedInputs.isNotEmpty && (chat == null || chat.runtime.offline)) {
+        try {
+          chat = await loadNotificationApproval(key);
+        } catch (_) {
+          // An unavailable saved target does not establish remote resolution.
+          continue;
+        }
+      }
       if (chat == null ||
           chat.runtime.offline ||
           chat.runtime.opening ||
@@ -184,11 +212,13 @@ extension ProfileNotificationState on ProfileWorkspaceController {
       }
       if (chat.runtime.approval == null &&
           chat.runtime.questions == null &&
-          chat.runtime.secureInput == null) {
+          chat.runtime.secureInput == null &&
+          _notificationInputsFor?.call(key).isNotEmpty != true) {
         continue;
       }
       final resource = _owned(chat);
       final runtime = chat.runtime.runtimeId;
+      final read = _captureResume(resource, chat, startRead: false);
       final before = jsonEncode(
         _notificationInputs(chat).map((v) => v.toJson()).toList(),
       );
@@ -208,6 +238,7 @@ extension ProfileNotificationState on ProfileWorkspaceController {
           'last_seen': _notificationReplayCursors[runtime] ?? 0,
         });
         if (_closed ||
+            !read.current() ||
             chat.runtime.runtimeId != runtime ||
             snapshot['open_requests'] is! List ||
             before !=
@@ -222,6 +253,7 @@ extension ProfileNotificationState on ProfileWorkspaceController {
         }
         chat._runtime.reconcileOpenRequests(snapshot['open_requests']);
         await _refreshApprovals(chat, notifyNew: true);
+        _publishNotificationInputs(chat, confirmedSnapshot: true);
         _changed();
       } catch (_) {
         // Failure/absence of a valid snapshot leaves the notice and request intact.

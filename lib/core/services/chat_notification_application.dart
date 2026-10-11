@@ -91,6 +91,7 @@ final class _NotificationApplication {
   bool closed = false;
   Timer? _poll;
   bool _polling = false;
+  final _initializedOwners = <ProfileWorkspaceController>{};
   int _openGeneration = 0;
   ProfileSessionKey? _pendingKey;
   NotificationFocus? _pendingFocus;
@@ -211,6 +212,7 @@ final class _NotificationApplication {
         }
       },
     );
+    await _reconcile();
   }
 
   Future<void> receive(ProfileNotification value) async {
@@ -390,6 +392,7 @@ final class _NotificationApplication {
           .toSet();
       for (final owner in registry.controllers.toList()) {
         if (closed) return;
+        if (!owner.initialized) continue;
         await owner.reconcileNotificationRequests(
           keys.where(owner.owns).toSet(),
         );
@@ -401,7 +404,13 @@ final class _NotificationApplication {
 
   void _activityChanged() {
     if (closed) return;
-    for (final owner in registry.controllers) {
+    final owners = registry.controllers.toList();
+    _initializedOwners.retainAll(owners);
+    var initialized = false;
+    for (final owner in owners) {
+      if (owner.initialized && _initializedOwners.add(owner)) {
+        initialized = true;
+      }
       for (final chat in owner.notificationChats) {
         chat.reading.restoreNotificationReadTarget(
           notices.resultFor(jsonEncode(chat.key.toJson())),
@@ -409,6 +418,7 @@ final class _NotificationApplication {
       }
     }
     unawaited(syncMonitoring().catchError((Object _) {}));
+    if (initialized) unawaited(_reconcile().catchError((Object _) {}));
   }
 
   void _preferencesChanged() {
@@ -474,6 +484,7 @@ final class _NotificationApplication {
     _openGeneration++;
     _openingController?.cancelNotificationOpen();
     _poll?.cancel();
+    _initializedOwners.clear();
     registry.removeListener(_activityChanged);
     monitoring.state.removeListener(_monitoringChanged);
     notices.appPreferences.state.removeListener(_preferencesChanged);
