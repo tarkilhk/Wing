@@ -372,16 +372,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('chat menu opens server goal details', (tester) async {
+  testWidgets('Activity Work opens server goal details', (tester) async {
+    await supervision.refreshWork();
     await tester.pumpWidget(
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byTooltip('Chat actions'));
+    await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Chat actions'));
+    final work = find.byKey(const ValueKey(('activity-tab', 'work')));
+    await tester.ensureVisible(work);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Goal').last);
+    await tester.tap(work);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Goal'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Goal'));
     await tester.pumpAndSettle();
     expect(find.text('Ship the release'), findsOneWidget);
     expect(find.byTooltip('Pause'), findsOneWidget);
