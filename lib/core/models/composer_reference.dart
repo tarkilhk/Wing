@@ -188,14 +188,24 @@ List<ComposerReference> retainComposerReferences(
 }
 
 /// Readable authored text; the selected reference retains canonical identity.
-String composerAgentToken(String name, {String? qualifier}) {
+String composerAgentToken(
+  String name, {
+  String? qualifier,
+  String? target,
+  Iterable<ComposerReference> claimed = const [],
+}) {
   final label = name.replaceAll(RegExp(r'\s+'), ' ').trim();
   if (label.isEmpty) throw const FormatException('Missing agent display name.');
-  final value = qualifier == null ? label : '$label ($qualifier)';
-  if (RegExp('^$_mentionNameCharacter+\$', unicode: true).hasMatch(value)) {
-    return '@$value';
+  var value = qualifier == null ? label : '$label ($qualifier)';
+  String token() =>
+      RegExp('^$_mentionNameCharacter+\$', unicode: true).hasMatch(value)
+      ? '@$value'
+      : '@${value.contains('`') ? jsonEncode(value) : '`$value`'}';
+  while (target != null &&
+      claimed.any((ref) => ref.token == token() && ref.target != target)) {
+    value = '$value (${qualifier ?? target})';
   }
-  return '@${value.contains('`') ? jsonEncode(value) : '`$value`'}';
+  return token();
 }
 
 String composerPathToken(ComposerReferenceKind kind, String path) {

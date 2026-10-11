@@ -58,6 +58,8 @@ final class ComposerReferencePreparation {
         final token = composerAgentToken(
           label(agent.name),
           qualifier: duplicate || claimed ? agent.name : null,
+          target: agent.name,
+          claimed: selected,
         );
         items.add(
           MentionCandidate(
