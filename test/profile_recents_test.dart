@@ -7,6 +7,7 @@ import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/foundation.dart';
 import 'package:wing/core/models/recent_conversation.dart';
+import 'package:wing/core/models/session_visibility.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 
@@ -32,6 +33,14 @@ class _RecentsFixture extends ProfileBrowserFixture {
   ];
   @override
   List<Map<String, dynamic>> sessions(String profile) => [
+    if (profile == 'personal')
+      {
+        'id': 'room-worker',
+        'title': 'Group: room-uuid',
+        'profile': profile,
+        'source': 'bot_room',
+        'last_active': now,
+      },
     for (final id in ['empty', 'heartbeat'])
       {'id': id, 'title': id, 'profile': profile, 'last_active': now},
     if (profile == 'personal')
@@ -91,6 +100,42 @@ void main() {
     appPreferences.dispose();
   });
 
+  test('group workers stay out of saved, opened and active Recents', () async {
+    await controller.setSessionVisibility(SessionVisibility.all);
+    await controller.refreshRecents();
+    expect(
+      controller.recentChats().any(
+        (item) => item.key.sessionId == 'room-worker',
+      ),
+      isFalse,
+    );
+    expect(
+      fixture.reads.any((read) => read.$1 == 'sessions/room-worker/messages'),
+      isFalse,
+    );
+    final key = ProfileSessionKey(controller.current!.scope, 'room-worker');
+    final chat = await controller.openSession(key);
+    expect(chat?.source, 'bot_room');
+    fixture.liveSessions[key.workspace.profileName] = [
+      {
+        'id': 'worker-runtime',
+        'session_key': 'room-worker',
+        'status': 'working',
+      },
+    ];
+    await controller.refreshActivity();
+    expect(
+      controller.liveActivity.any((item) => item.sessionId == 'room-worker'),
+      isTrue,
+    );
+    expect(
+      controller.recentChats().any(
+        (item) => item.key.sessionId == 'room-worker',
+      ),
+      isFalse,
+    );
+  });
+
   test(
     'cold passive canonical appearance loads before opening its chat',
     () async {
@@ -115,6 +160,7 @@ void main() {
             scope: controller.current!.scope,
             instance: 'Host',
             read: botFixture.read,
+            savedHistory: botFixture.savedHistory,
             command: (_, _, _, _, _) async => throw StateError('Passive only'),
             ownership: (_, _) async => throw StateError('No runtime reads'),
           ),

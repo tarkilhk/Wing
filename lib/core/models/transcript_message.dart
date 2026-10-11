@@ -62,6 +62,27 @@ final class TranscriptMessage {
   final TranscriptToolResult? tool;
   final List<UserMessageAttachment> attachments;
 
+  /// Hosted discussion events already carry validated sender/time facts.
+  /// They are reading content, without private bot-runtime authority.
+  factory TranscriptMessage.discussion({
+    required Object id,
+    required String text,
+    required DateTime timestamp,
+    String? sender,
+    String? senderHandle,
+  }) => TranscriptMessage._(
+    kind: sender == null
+        ? TranscriptMessageKind.dialogue
+        : TranscriptMessageKind.botMessage,
+    role: sender == null ? 'user' : 'assistant',
+    id: id,
+    text: text,
+    copyText: text,
+    timestamp: timestamp,
+    sender: sender,
+    senderHandle: senderHandle,
+  );
+
   factory TranscriptMessage.fromRow(Map<String, dynamic> row) {
     final role = row['role']?.toString() ?? '';
     final rawId = row['id'];

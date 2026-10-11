@@ -7,6 +7,7 @@ import '../models/profile_session_key.dart';
 import 'administration_repository.dart';
 import 'attachment_image_preflight.dart';
 import 'bot_display_client.dart';
+import 'profile_gateway.dart';
 import '../models/bot_display.dart';
 
 typedef BotsRead =
@@ -27,6 +28,13 @@ typedef BotsCommand =
 typedef BotsOwnership =
     Future<Set<String>> Function(String profile, Iterable<String> sessions);
 
+typedef BotsSavedHistory =
+    Future<ProfileHistoryPage> Function(
+      String profile,
+      String session,
+      int offset,
+    );
+
 /// Stock Hermes wire adapter. It never selects a workspace or owns an editor.
 class BotsRepository {
   BotsRepository({
@@ -35,6 +43,7 @@ class BotsRepository {
     required this._read,
     required this._command,
     required this._ownership,
+    required this._savedHistory,
     this.server,
     this.displayConnect,
     void Function()? retain,
@@ -56,6 +65,21 @@ class BotsRepository {
     displayConnect: server.displayConnect,
     retain: server.retain,
     release: server.release,
+    savedHistory: (profile, session, offset) async {
+      server.retain();
+      try {
+        final gateway = server.gateway(profile);
+        await gateway.requireProfile();
+        return await gateway.history(
+          session,
+          offset: offset,
+          limit: 100,
+          inlineImages: false,
+        );
+      } finally {
+        server.release();
+      }
+    },
     read: (profile, method, params) async {
       server.retain();
       try {
@@ -105,6 +129,7 @@ class BotsRepository {
   final BotsRead _read;
   final BotsCommand _command;
   final BotsOwnership _ownership;
+  final BotsSavedHistory _savedHistory;
   final void Function() _retain, _release;
   void retain() => _retain();
   void release() => _release();
@@ -536,6 +561,58 @@ class BotsRepository {
     }
   }
 
+  /// Exact stock worker identity. Discovery never creates or resumes a runtime.
+  Future<String?> groupMemberSession(
+    BotGroup group,
+    BotGroupMember member,
+  ) async {
+    _ownsGroup(group);
+    if (!group.members.any(
+      (candidate) =>
+          candidate.id == member.id && candidate.profile == member.profile,
+    )) {
+      throw StateError('Bot does not belong to this group');
+    }
+    final title = 'Group: ${group.id}';
+    final result = await _read(member.profile, 'session.list', {
+      'title': title,
+      'include_hidden': true,
+    });
+    final rows = _rows(result['sessions']);
+    if (rows.isEmpty) return null;
+    if (rows.length != 1 ||
+        rows.single['title'] != title ||
+        rows.single['source'] != 'bot_room') {
+      throw const FormatException('Invalid group worker identity');
+    }
+    _requiredText(rows.single['id']);
+    return _requiredText(rows.single['resolved_id']);
+  }
+
+  Future<ProfileHistoryPage> groupMemberHistory(
+    BotGroup group,
+    BotGroupMember member,
+    String session,
+    int offset,
+  ) async {
+    _ownsGroup(group);
+    if (!group.members.any(
+          (candidate) =>
+              candidate.id == member.id && candidate.profile == member.profile,
+        ) ||
+        session.isEmpty ||
+        offset < 0) {
+      throw ArgumentError('Invalid group history owner');
+    }
+    final page = await _savedHistory(member.profile, session, offset);
+    if (page.sessionId != session || page.offset != offset) {
+      throw const FormatException(
+        'Group worker history changed. Refresh to read it.',
+      );
+    }
+    return page;
+  }
+
   Future<BotGroupPage> groupLog(BotGroup group, {int since = 0}) async {
     _ownsGroup(group);
     final result = await _read('default', 'groups.log', {
@@ -567,12 +644,23 @@ class BotsRepository {
         previous = seq;
         final actor = _map(row['actor']);
         final payload = _map(row['payload']);
+        final created = row['created_at'];
+        if (created is! num ||
+            !created.isFinite ||
+            created.abs() > 8640000000000) {
+          throw const FormatException('Invalid group event time');
+        }
         return BotGroupEvent(
           sequence: seq,
           kind: _requiredText(row['kind']),
           actor: _text(actor['profile']).isEmpty
               ? _text(actor['kind'])
               : _text(actor['profile']),
+          actorId: _requiredText(actor['id']),
+          actorName: _text(actor['display_name']),
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            (created * 1000).round(),
+          ),
           text: _text(payload['text']),
         );
       }),

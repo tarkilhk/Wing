@@ -16,6 +16,7 @@ enum SessionVisibility {
     'subagent',
     'kanban',
     'oneshot',
+    'bot_room',
   };
 
   Map<String, String> get queryParameters => switch (this) {

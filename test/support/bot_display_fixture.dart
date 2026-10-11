@@ -155,5 +155,6 @@ class DisplayFixture {
       return client;
     },
     ownership: roster.ownership,
+    savedHistory: roster.savedHistory,
   );
 }

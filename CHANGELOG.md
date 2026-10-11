@@ -6,6 +6,11 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Bots and discussions
 
+- Format Discussion messages with sender avatars, names, timestamps and chat
+  bubbles; improve multiline drafting, mentions and reading-position retention.
+- Keep internal group workers out of Recents and chat alerts. Inspect their
+  read-only histories from the group overflow menu.
+- Enable Android system scroll capture for the group transcript.
 - Add Bots in the side menu, with agents across saved Hermes connections,
   Working and Needs input filters, pins and continuing bot conversations.
 - Edit bot names, shapes, colors and avatars with automatic saving. Create or

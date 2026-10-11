@@ -107,6 +107,7 @@ extension ProfileNotificationState on ProfileWorkspaceController {
     bool? alert,
     bool confirmedSnapshot = false,
   }) {
+    if (chat.source == 'bot_room') return;
     final inputs = _notificationInputs(chat);
     final fingerprint = jsonEncode(inputs.map((v) => v.toJson()).toList());
     final savedInputs = _notificationInputsFor?.call(chat.key) ?? const [];

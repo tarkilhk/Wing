@@ -13,6 +13,9 @@ class BotGroupSession extends ChangeNotifier {
   final BotsRepository repository;
   final BotGroup group;
   final _events = <int, BotGroupEvent>{};
+  Map<String, BotRecord> _appearances = const {};
+  BotRecord? appearance(String profile) => _appearances[profile];
+  bool _appearanceStarted = false;
   BotGroupRuntime? _runtime;
   BotGroupRuntime? get runtime => _runtime;
   bool _acting = false;
@@ -22,18 +25,27 @@ class BotGroupSession extends ChangeNotifier {
   );
   int _cursor = 0;
   bool _closed = false, _reading = false, _sending = false, _visible = false;
-  bool get loading => _reading;
+  bool get loading => _reading && _runtime == null;
   bool get sending => _sending;
   String? _readError, _actionError;
   String? get error => _actionError ?? _readError;
   (String, String)? _pending;
   String? get pendingText => _pending?.$2;
   Timer? _poll;
+  bool _capturing = false;
+  void setCapturing(bool value) {
+    _capturing = value;
+  }
+
   void setVisible(bool visible) {
     if (_closed || _visible == visible) return;
     _visible = visible;
     _poll?.cancel();
     if (visible) {
+      if (!_appearanceStarted) {
+        _appearanceStarted = true;
+        unawaited(_loadAppearance());
+      }
       unawaited(refresh());
       _poll = Timer.periodic(
         const Duration(seconds: 3),
@@ -42,17 +54,41 @@ class BotGroupSession extends ChangeNotifier {
     }
   }
 
+  Future<void> _loadAppearance() async {
+    try {
+      final roster = await repository.bots();
+      if (_closed) return;
+      for (final bot in roster.where(
+        (bot) =>
+            group.members.any((member) => member.profile == bot.profile.name),
+      )) {
+        final saved = await repository.enrich(
+          bot,
+          presence: BotPresence.unknown,
+        );
+        if (_closed) return;
+        _appearances = Map.unmodifiable({
+          ..._appearances,
+          bot.profile.name: saved,
+        });
+        notifyListeners();
+      }
+    } catch (_) {
+      // The room's delivered name/identity remains usable without appearance.
+    }
+  }
+
   Future<void> refresh() async {
-    if (_closed || _reading) return;
+    if (_closed || _reading || _capturing) return;
     _reading = true;
     notifyListeners();
     try {
       final nextRuntime = await repository.groupRuntime(group);
-      if (_closed) return;
+      if (_closed || _capturing) return;
       _runtime = nextRuntime;
       do {
         final page = await repository.groupLog(group, since: _cursor);
-        if (_closed) return;
+        if (_closed || _capturing) return;
         if (page.hasMore && page.cursor == _cursor) {
           throw StateError('Group log did not advance');
         }

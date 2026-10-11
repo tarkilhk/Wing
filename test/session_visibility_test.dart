@@ -24,6 +24,7 @@ class FilterHost extends Host {
     {'id': 'subagent', 'title': 'Delegate run', 'source': 'subagent'},
     {'id': 'kanban', 'title': 'Worker run', 'source': 'kanban'},
     {'id': 'oneshot', 'title': 'Technical run', 'source': 'oneshot'},
+    {'id': 'room-worker', 'title': 'Group: room-uuid', 'source': 'bot_room'},
     {'id': 'chat', 'title': 'My conversation', 'source': 'desktop'},
     {'id': 'unknown', 'title': 'Old conversation', 'source': 'unknown'},
     {'id': 'missing', 'title': 'Unlabelled conversation'},
@@ -194,7 +195,7 @@ void main() {
       ]);
       expect(
         host.listRequests.single.$2['exclude_sources'],
-        'cron,tool,subagent,kanban,oneshot',
+        'cron,tool,subagent,kanban,oneshot,bot_room',
       );
       expect(controller.current!.nextSessionOffset, isNull);
     },
@@ -206,7 +207,7 @@ void main() {
     while (controller.current!.nextSessionOffset != null) {
       await controller.loadMoreSessions();
     }
-    expect(controller.current!.sessions, hasLength(159));
+    expect(controller.current!.sessions, hasLength(160));
     expect(host.listRequests.last.$2.containsKey('exclude_sources'), isFalse);
     expect(host.listRequests.last.$2['offset'], '150');
     await controller.setSessionVisibility(SessionVisibility.all);
