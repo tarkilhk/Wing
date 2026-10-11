@@ -443,7 +443,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         widget.currentActivity.isNotEmpty || widget.activityTabs.isNotEmpty;
     Widget currentActivity() => ProfileActivitySection(
       label: widget.liveToolCount > 0
-          ? 'Using ${widget.liveToolCount} ${widget.liveToolCount == 1 ? 'tool' : 'tools'}'
+          ? 'Activity · ${widget.liveToolCount} ${widget.liveToolCount == 1 ? 'tool' : 'tools'}'
           : 'Activity',
       key: ValueKey(('activity', chat.key)),
       detailsBuilder: (_) => ProfileActivityTabs(

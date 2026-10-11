@@ -1481,9 +1481,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
     await tester.tap(
-      find.textContaining(
-        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-      ),
+      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
     );
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();

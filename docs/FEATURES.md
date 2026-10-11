@@ -1,5 +1,15 @@
 # Explore Wing
 
+Every conversation uses the same chat menu: **View screen**, **Outputs**,
+**Find in chat**, and **Refresh workspace**. Child conversations also offer
+**Parent chat**. Goal, agents and background work are available through the
+conversation's **Activity** entry.
+
+**View screen** opens the remote desktop for the conversation's connection and
+profile, including ordinary chats. Chats in the same profile share that screen.
+Opening it does not start the desktop or create a canonical Bot Chat. Back returns
+to the same conversation.
+
 **Your agent, with you.** Wing keeps Hermes close when you step away from your desk. Start a conversation, check progress, send the next idea and look after your setup from Android. [Get started](GETTING_STARTED.md).
 
 ## Pick up where you left off

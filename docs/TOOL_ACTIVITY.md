@@ -1,6 +1,9 @@
 # Tool activity
 
-Open **Activity** in a conversation to inspect Timeline, Tasks, Agents, and Work.
+Open **Activity** in the conversation for Timeline, Tasks, Agents and Work.
+Only categories with available content appear. Work contains known goals,
+recurring work and processes, including when no tools are running.
+The entry keeps its Activity name and adds the available tool count.
 Expand a row to see what was requested and what Hermes returned. Available
 controls use icons with accessible labels and tooltips. Long content can open
 in a fuller reader; reusable code, commands, and output offer copying and wrap
@@ -39,7 +42,7 @@ output and delivery notifications.
 
 ## Approximate reply time
 
-A saved reply's collapsed Activity header can show "Used 11 tools · 1m 24s".
+A saved reply's collapsed Activity header can show "Activity · 11 tools · 1m 24s".
 This is the interval between the message that started the turn (your prompt or
 an incoming bot message) and the final saved answer,
 including thinking and tool work. It is not the sum of tool durations. Reopening

@@ -1,7 +1,7 @@
 # Subagent supervision
 
-Open a chat's three-dot menu and choose **Subagents**, or open Activity's
-**Agents** tab, to inspect its children. Received activity also shows a compact
+Open **Activity** in the conversation, then **Agents**, to inspect known
+children. Received activity also shows a compact
 expandable roster in the conversation. Saved delegation results show received
 tasks, status, and output; they do not offer controls for past work.
 

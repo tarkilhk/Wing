@@ -285,7 +285,7 @@ void main() {
         ),
       ),
     );
-    expect(find.text('Used 1 tool'), findsOneWidget);
+    expect(find.text('Activity · 1 tool'), findsOneWidget);
     expect(find.text('· 1m 24s'), findsOneWidget);
     expect(find.byTooltip(_explanation), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -337,7 +337,7 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          final count = find.text('Used 11 tools');
+          final count = find.text('Activity · 11 tools');
           final metadata = find.text('· 1m 24s · 1 review');
           expect(count, findsOneWidget);
           expect(metadata, findsOneWidget);

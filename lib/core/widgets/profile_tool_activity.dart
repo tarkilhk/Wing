@@ -123,7 +123,7 @@ class ProfileToolActivitySection extends StatelessWidget {
         section.containsMessage(expandedMessageId!);
     return ProfileActivitySection(
       label: total > 0
-          ? 'Used $total ${total == 1 ? 'tool' : 'tools'}'
+          ? 'Activity · $total ${total == 1 ? 'tool' : 'tools'}'
           : 'Activity',
       trailing: trailing,
       initiallyExpanded: expanded,

@@ -453,14 +453,10 @@ void main() {
           expect(next.bottom, greaterThan(800));
           await capture(tester, boundary, key);
           await tester.ensureVisible(
-            find.textContaining(
-              RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-            ),
+            find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
           );
           await tester.tap(
-            find.textContaining(
-              RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-            ),
+            find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
           );
           await tester.pumpAndSettle();
           expect(find.text('Uses'), findsOneWidget);
@@ -754,9 +750,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           await tester.tap(
-            find.textContaining(
-              RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-            ),
+            find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
           );
           await tester.pumpAndSettle();
           expect(

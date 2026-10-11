@@ -138,9 +138,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           ProfileToolActivitySection(section: timeline.sections.single),
         );
         await tester.tap(
-          find.textContaining(
-            RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-          ),
+          find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
         );
         await tester.pumpAndSettle();
         final toolRows = [
