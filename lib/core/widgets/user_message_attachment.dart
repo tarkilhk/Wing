@@ -470,29 +470,38 @@ class _UserMessageImageGallery extends StatefulWidget {
       _UserMessageImageGalleryState();
 }
 
-class _UserMessageImageGalleryState extends State<_UserMessageImageGallery> {
+class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
+    with SingleTickerProviderStateMixin {
   static const _thumbnailExtent = 76.0;
   final _thumbnails = ScrollController();
   final _providers = <String, Future<ImageProvider>>{};
   int _providerCapacity = 12;
   late int _index = widget.initialIndex;
-  late Future<ImageProvider> _image;
+  late final _pages = PageController(initialPage: widget.initialIndex);
+  bool _navigationEnabled = true;
+  late final AnimationController _jumpFade;
 
   @override
   void initState() {
     super.initState();
+    _jumpFade = AnimationController(
+      vsync: this,
+      duration: WingMotion.standard,
+      value: 1,
+    );
     for (final entry in widget.previewProviders.entries) {
       _providers[entry.key] = Future.value(entry.value);
     }
     if (widget.initialProvider case final provider?) {
       _providers[widget.images[_index].target] = Future.value(provider);
     }
-    _image = _provider(_index);
     _revealSelectedThumbnail();
   }
 
   @override
   void dispose() {
+    _jumpFade.dispose();
+    _pages.dispose();
     _thumbnails.dispose();
     super.dispose();
   }
@@ -516,26 +525,61 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery> {
   }
 
   void _select(int index) {
-    if (index == _index) return;
-    setState(() {
-      _index = index;
-      _image = _provider(index);
-    });
-    _revealSelectedThumbnail();
+    if (!_pages.hasClients || _pages.page == index.toDouble()) return;
+    // Distant thumbnail jumps skip intervening originals rather than fetching
+    // every image crossed by a long animated scroll.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _jumpFade.value = 1;
+      _pages.jumpToPage(index);
+    } else if ((index - _index).abs() > 1) {
+      _pages.jumpToPage(index);
+      _jumpFade.forward(from: 0);
+    } else {
+      _pages.animateToPage(
+        index,
+        duration: WingMotion.standard,
+        curve: WingMotion.curve,
+      );
+    }
   }
 
-  void _retry() => setState(() {
-    _providers.remove(widget.images[_index].target);
-    _image = _provider(_index);
+  void _pageChanged(int index) {
+    setState(() {
+      _index = index;
+      _navigationEnabled = true;
+    });
+    _revealSelectedThumbnail(animate: true);
+  }
+
+  void _setNavigationEnabled(int index, bool enabled) {
+    if (index != _index || enabled == _navigationEnabled) return;
+    if (!enabled && _pages.hasClients) {
+      // A second finger or a zoom cancels paging already in progress.
+      _pages.jumpToPage(_index);
+    }
+    setState(() => _navigationEnabled = enabled);
+  }
+
+  void _retry(int index) => setState(() {
+    _providers.remove(widget.images[index].target);
   });
 
-  void _revealSelectedThumbnail() {
+  void _revealSelectedThumbnail({bool animate = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_thumbnails.hasClients) return;
       final position = _thumbnails.position;
       final offset =
           (_index + .5) * _thumbnailExtent - 4 - position.viewportDimension / 2;
-      _thumbnails.jumpTo(offset.clamp(0.0, position.maxScrollExtent));
+      final target = offset.clamp(0.0, position.maxScrollExtent);
+      if (animate && !MediaQuery.disableAnimationsOf(context)) {
+        _thumbnails.animateTo(
+          target,
+          duration: WingMotion.standard,
+          curve: WingMotion.curve,
+        );
+      } else {
+        _thumbnails.jumpTo(target);
+      }
     });
   }
 
@@ -659,54 +703,65 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery> {
     ),
   );
 
+  Widget _page(int index) => FutureBuilder<ImageProvider>(
+    future: _provider(index),
+    builder: (context, snapshot) {
+      final attachment = widget.images[index];
+      final provider = snapshot.connectionState == ConnectionState.done
+          ? snapshot.data
+          : null;
+      if (provider != null) {
+        return ChatImageViewport(
+          key: ValueKey(attachment.target),
+          title: attachment.name,
+          bytes: provider is MemoryImage ? provider.bytes : null,
+          uri: provider is NetworkImage ? Uri.parse(provider.url) : null,
+          onNavigationEnabled: (enabled) =>
+              _setNavigationEnabled(index, enabled),
+        );
+      }
+      return Center(
+        child:
+            snapshot.connectionState == ConnectionState.done &&
+                snapshot.hasError
+            ? IconButton(
+                tooltip: 'Retry image preview',
+                style: IconButton.styleFrom(
+                  minimumSize: const Size.square(48),
+                  visualDensity: VisualDensity.standard,
+                ),
+                onPressed: () => _retry(index),
+                icon: const Icon(Icons.refresh),
+              )
+            : const CircularProgressIndicator(),
+      );
+    },
+  );
+
   @override
   Widget build(BuildContext context) {
     final visibleCapacity =
         (MediaQuery.sizeOf(context).width / _thumbnailExtent).ceil() + 4;
     _providerCapacity = visibleCapacity < 12 ? 12 : visibleCapacity;
-    return FutureBuilder<ImageProvider>(
-      future: _image,
-      builder: (context, snapshot) {
-        final attachment = widget.images[_index];
-        final provider = snapshot.connectionState == ConnectionState.done
-            ? snapshot.data
-            : null;
-        if (provider != null) {
-          return ChatImagePreview(
-            key: ValueKey(attachment.target),
-            title: attachment.name,
-            bytes: provider is MemoryImage ? provider.bytes : null,
-            uri: provider is NetworkImage ? Uri.parse(provider.url) : null,
-            navigation: _navigation(),
-            onPreviousImage: _index > 0 ? () => _select(_index - 1) : null,
-            onNextImage: _index + 1 < widget.images.length
-                ? () => _select(_index + 1)
-                : null,
-          );
-        }
-        return Scaffold(
-          appBar: ResourceViewerAppBar(
-            context: context,
-            title: attachment.name,
-          ),
-          bottomNavigationBar: _navigation(),
-          body: Center(
-            child:
-                snapshot.connectionState == ConnectionState.done &&
-                    snapshot.hasError
-                ? IconButton(
-                    tooltip: 'Retry image preview',
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size.square(48),
-                      visualDensity: VisualDensity.standard,
-                    ),
-                    onPressed: _retry,
-                    icon: const Icon(Icons.refresh),
-                  )
-                : const CircularProgressIndicator(),
-          ),
-        );
-      },
+    return Scaffold(
+      appBar: ResourceViewerAppBar(
+        context: context,
+        title: widget.images[_index].name,
+      ),
+      bottomNavigationBar: _navigation(),
+      body: FadeTransition(
+        opacity: _jumpFade.drive(CurveTween(curve: WingMotion.curve)),
+        child: PageView.builder(
+          key: const ValueKey('user-image-gallery-pages'),
+          controller: _pages,
+          physics: _navigationEnabled
+              ? null
+              : const NeverScrollableScrollPhysics(),
+          onPageChanged: _pageChanged,
+          itemCount: widget.images.length,
+          itemBuilder: (_, index) => _page(index),
+        ),
+      ),
     );
   }
 }
