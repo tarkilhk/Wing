@@ -11,6 +11,8 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 - Default group icons show member bot avatars inside a square frame with a random Hermes palette color.
 - Pinch inward in group discussions to enter the shared Recents cards, preserving
   the group draft, reading position and original Back destination.
+- Match group chat previews in the Recents switcher to bot chats, with the group
+  icon beside the title.
 
 - Fix generated group pictures and bot avatars with stock Hermes. Add detailed
   device diagnostics while keeping the existing on-screen errors.

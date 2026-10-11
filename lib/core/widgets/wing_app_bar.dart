@@ -1,6 +1,28 @@
 import 'package:flutter/material.dart';
 import 'health_alerts/health_alert_bell.dart';
 
+/// Shared identity geometry for bot chats and passive group previews.
+class WingConversationTitle extends StatelessWidget {
+  const WingConversationTitle({super.key, required this.title, this.avatar});
+
+  final String title;
+  final Widget? avatar;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (avatar case final artwork?) ...[
+        ExcludeSemantics(child: artwork),
+        const SizedBox(width: 8),
+      ],
+      Flexible(
+        child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+    ],
+  );
+}
+
 /// All routes share the Chats density: a 48dp title/action row, followed by
 /// optional scope context. At enlarged text, secondary actions get their own
 /// row; the bell always remains beside the title. No business policy or I/O.

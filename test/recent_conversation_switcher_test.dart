@@ -25,6 +25,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/widgets/bot_avatar.dart';
+import 'package:wing/core/widgets/bot_group_identity.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/recent_conversation_session.dart';
 import 'package:wing/core/services/bots_session.dart';
@@ -358,6 +359,7 @@ void main() {
       ) async {
         final fixture = BotsFixture();
         final roster = await fixture.repository.bots();
+        fixture.room['name'] = 'Build Pace Health Analysis Research team';
         final group = (await fixture.repository.groups()).single;
         final entry = RecentConversationEntry.group(group);
         final frame = GlobalKey();
@@ -411,7 +413,19 @@ void main() {
           ),
         );
         await _finishFrames(tester);
-        expect(find.text('Research team'), findsOneWidget);
+        final title = find.text('Build Pace Health Analysis Research team');
+        expect(title, findsOneWidget);
+        final artwork = find.byType(BotGroupIdentity);
+        expect(artwork, findsOneWidget);
+        final artworkBounds = tester.getRect(artwork);
+        final titleBounds = tester.getRect(title);
+        expect(artworkBounds.size, const Size(32, 32));
+        expect(titleBounds.left - artworkBounds.right, closeTo(8, .01));
+        expect(titleBounds.center.dy, closeTo(artworkBounds.center.dy, .01));
+        expect(
+          titleBounds.right,
+          lessThanOrEqualTo(tester.view.physicalSize.width - 40),
+        );
         expect(find.text('Message the group'), findsOneWidget);
         expect(
           find.text('The research is ready. We can continue here.'),
