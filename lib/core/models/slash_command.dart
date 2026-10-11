@@ -102,6 +102,10 @@ class SlashCatalog {
     final entry = metadata['/$name'];
     final desktop = entry is Map ? entry['desktop'] : null;
     return switch (desktop) {
+      'advanced' =>
+        '/$name is not available as a chat command. Use the relevant management controls or the Hermes terminal.',
+      'settings' =>
+        '/$name is not available as a chat command. Use the relevant settings.',
       'terminal' => '/$name requires the Hermes terminal.',
       'messaging' =>
         '/$name is only available through a Hermes messaging integration.',

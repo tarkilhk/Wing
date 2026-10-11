@@ -5872,7 +5872,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (chat.runtime.changingAnswer) return;
     final invocation = SlashInvocation.parse(chat.composer.observation.text);
     if (invocation == null) {
-      chat._runtime.reportError('Choose a command or enter its name after /.');
+      chat._runtime.reportCommandError(
+        'Choose a command or enter its name after /.',
+      );
       _changed();
       return;
     }
@@ -5910,30 +5912,22 @@ class ProfileWorkspaceController extends ChangeNotifier {
           );
         }
         Map<String, dynamic> result;
+        final runtimeId = chat.runtime.runtimeId;
         chat._runtime.beginCommandDispatch();
         try {
-          try {
-            _commandOwner(chat);
-            result = await resource.gateway.call('command.dispatch', {
-              'session_id': chat.runtime.runtimeId,
-              'name': name,
-              'arg': argument,
-            });
-          } on JsonRpcError catch (e) {
-            // This exact refusal means dispatch did not execute anything. Never
-            // retry a timeout or a command failure through another execution path.
-            if (e.code != 4018 ||
-                !e.message.startsWith(
-                  'not a quick/plugin/bundle/skill command:',
-                )) {
-              rethrow;
-            }
-            _commandOwner(chat);
-            result = await resource.gateway.call('slash.exec', {
-              'session_id': chat.runtime.runtimeId,
-              'command': '/$name${argument.isEmpty ? '' : ' $argument'}',
-            });
-          }
+          result = await resource.gateway.dispatchCommand(
+            sessionId: runtimeId,
+            name: name,
+            argument: argument,
+            canDispatch: () {
+              try {
+                return identical(_commandOwner(chat), resource) &&
+                    chat.runtime.runtimeId == runtimeId;
+              } on StateError {
+                return false;
+              }
+            },
+          );
         } finally {
           chat._runtime.finishCommandDispatch();
         }
@@ -6006,8 +6000,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
         break;
       }
     } catch (e) {
-      chat._runtime.reportError(
-        e is TimeoutException
+      final uncertain = switch (e) {
+        TimeoutException() => true,
+        JsonRpcError(reason: 'request_timeout' || 'connection_closed') => true,
+        JsonRpcError(
+          method: 'slash.exec',
+          code: 5030,
+          message: 'slash worker timed out',
+        ) =>
+          true,
+        _ => false,
+      };
+      chat._runtime.reportCommandError(
+        uncertain
             ? 'Command status is uncertain. It was not retried. Check the session before running it again.'
             : e is FormatException
             ? e.message.toString()
