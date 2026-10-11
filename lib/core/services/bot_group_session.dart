@@ -73,6 +73,8 @@ class BotGroupSession extends ChangeNotifier {
         1;
     return composerAgentToken(
       member.name,
+      target: member.id,
+      claimed: _references,
       qualifier:
           base.toLowerCase() == '@everyone' ||
               duplicate ||

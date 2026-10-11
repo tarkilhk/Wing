@@ -1162,6 +1162,48 @@ void main() {
     },
   );
 
+  test('qualified display names cannot retarget an existing claim', () async {
+    final fixture = BotsFixture();
+    final members = fixture.room['members'] as List;
+    members[0]['display_name'] = 'Foo';
+    members[1]['display_name'] = 'Foo (bot_atlas)';
+    members.add({
+      'member_id': 'forge',
+      'profile': 'forge',
+      'handle': 'bot_forge',
+      'display_name': 'Foo',
+    });
+    final group = (await fixture.repository.groups()).first;
+    final session = BotGroupSession(
+      fixture.repository,
+      group,
+      appearances: const [],
+    );
+    addTearDown(session.dispose);
+    final query = MentionQuery.at('@foo', 4)!;
+    final old = session
+        .completeMentions(query)
+        .items
+        .singleWhere((candidate) => candidate.reference.target == 'mira')
+        .reference;
+    session.editMentions('Ask ${old.token}', selected: old);
+    final next = session
+        .completeMentions(query)
+        .items
+        .singleWhere((candidate) => candidate.reference.target == 'atlas')
+        .reference;
+    expect(next.token, isNot(old.token));
+    final text = 'Ask ${old.token} then ${next.token}.';
+    session.editMentions(text, selected: next);
+    expect(await session.send(text), isTrue);
+    expect(
+      fixture.commands
+          .lastWhere((call) => call.$2 == 'groups.send')
+          .$3['payload']['text'],
+      'Ask @bot_mira then @bot_atlas .',
+    );
+  });
+
   test(
     'group picker uses frozen members; removed identity pauses before stock send',
     () async {
