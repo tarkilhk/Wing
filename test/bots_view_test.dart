@@ -474,6 +474,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Edit group Research team'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BotsCreateScreen), findsOneWidget);
+      expect(find.byType(BotGroupScreen), findsNothing);
+      expect(fixture.commands, isEmpty);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Actions for Research team'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Edit group'));
@@ -1474,7 +1481,19 @@ void main() {
           expect(find.text('Research team'), findsOneWidget);
           expect(find.byTooltip('Create group'), findsOneWidget);
           expect(find.text('Atlas'), findsNothing);
+          final groupIcon = find.byTooltip('Edit group Research team');
+          expect(tester.getSize(groupIcon).width, greaterThanOrEqualTo(48));
+          expect(tester.getSize(groupIcon).height, greaterThanOrEqualTo(48));
           await _capture(tester, frame, 'groups-${brightness.name}-$scale');
+          await tester.tap(groupIcon);
+          await tester.pumpAndSettle();
+          expect(find.byType(BotsCreateScreen), findsOneWidget);
+          expect(find.byType(BotGroupScreen), findsNothing);
+          expect(fixture.commands, isEmpty);
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          expect(find.text('Research team'), findsOneWidget);
+          expect(find.byTooltip('Create group'), findsOneWidget);
           await tester.tap(find.widgetWithText(Tab, 'Bots'));
           await tester.pumpAndSettle();
           final avatar = find.byTooltip('Edit name & appearance for Atlas');

@@ -616,10 +616,16 @@ class _BotsContentState extends State<BotsContent> {
                 ),
               ),
               const SizedBox(width: 12),
-              BotGroupIdentity(
-                group: group,
-                bots: widget.session.state.bots,
-                size: 48,
+              IconButton(
+                tooltip: 'Edit group ${group.name}',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                onPressed: busy ? null : () => _editGroup(group),
+                icon: BotGroupIdentity(
+                  group: group,
+                  bots: widget.session.state.bots,
+                  size: 48,
+                ),
               ),
             ],
           ),
