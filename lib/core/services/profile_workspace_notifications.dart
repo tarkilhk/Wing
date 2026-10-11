@@ -19,6 +19,7 @@ extension ProfileNotificationState on ProfileWorkspaceController {
   Iterable<({String title, String state})>
   get notificationMonitoringChats sync* {
     for (final chat in notificationChats) {
+      if (chat.source == 'bot_room') continue;
       final String? state;
       if (chat.runtime.reconnecting && chat.runtime.blocksTurnAdmission) {
         state = 'reconnecting';
@@ -53,6 +54,19 @@ extension ProfileNotificationState on ProfileWorkspaceController {
       _resources.values.expand((r) => r._chats.values);
   ProfileChat? findNotificationChat(ProfileSessionKey key) =>
       _resources[key.workspace]?._chats[key.sessionId];
+
+  bool _isBotExchangeReply(ProfileChat chat) {
+    for (final message in chat.reading.messages.reversed) {
+      if (message['role'] != 'user' || isHiddenAnswerMessage(message)) continue;
+      final delivery = transcriptUserDelivery(message);
+      if (delivery?.kind == 'agent_message') return true;
+      // Completion notices and model changes do not replace the initiating
+      // message. A later human prompt does: its own answer must still alert.
+      if (transcriptNoticeKind(message) != null) continue;
+      return false;
+    }
+    return false;
+  }
 
   List<NotificationInput> _notificationInputs(ProfileChat chat) {
     final result = <NotificationInput>[];

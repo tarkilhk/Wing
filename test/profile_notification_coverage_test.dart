@@ -96,6 +96,7 @@ class NotificationCoverageHost {
               'total': rows.length,
             };
           }
+          if (path == 'logs') return {'entries': <Map<String, dynamic>>[]};
           await historyDelay?.future;
           if (historyFails) throw StateError('history unavailable');
           return {
@@ -431,6 +432,203 @@ void main() {
       expect(alerts, isEmpty);
       expect(inputNotices, isEmpty);
       expect(host.resumeCalls, isEmpty);
+    },
+  );
+
+  for (final status in ['complete', 'error', 'interrupted']) {
+    test('opened group worker stays silent on live $status', () async {
+      host.saved['a']!.first.addAll({
+        'source': 'bot_room',
+        'title': 'Group: room-uuid',
+        'hidden': true,
+      });
+      await controller.refresh();
+      final chat = await controller.openSession(
+        ProfileSessionKey(controller.current!.scope, 'outside'),
+      );
+      expect(chat!.source, 'bot_room');
+      final gateway = controller.current!.gateway;
+      host.history = [
+        {'id': 1, 'role': 'assistant', 'content': 'Private group reply'},
+      ];
+      gateway.onEvent!(
+        StreamEvent(
+          type: 'message.start',
+          sessionId: 'outside-runtime',
+          data: {},
+        ),
+      );
+      expect(controller.notificationMonitoringChats, isEmpty);
+      gateway.onEvent!(
+        StreamEvent(
+          type: 'message.complete',
+          sessionId: 'outside-runtime',
+          data: {'text': 'Private group reply', 'status': status},
+        ),
+      );
+      for (var tick = 0; tick < 100 && controller.hasActiveChats; tick++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(controller.hasActiveChats, isFalse);
+      expect(chat.runtime.blocksTurnAdmission, isFalse);
+      expect(alerts, isEmpty);
+      expect(inputNotices, isEmpty);
+      expect(controller.notificationMonitoringChats, isEmpty);
+    });
+  }
+
+  test('opened group worker requests stay silent', () async {
+    host.saved['a']!.first.addAll({
+      'source': 'bot_room',
+      'title': 'Group: room-uuid',
+      'hidden': true,
+    });
+    await controller.refresh();
+    final chat = await controller.openSession(
+      ProfileSessionKey(controller.current!.scope, 'outside'),
+    );
+    final gateway = controller.current!.gateway;
+    gateway.onEvent!(
+      StreamEvent(
+        type: 'clarify',
+        sessionId: 'outside-runtime',
+        data: {'request_id': 'worker-question', 'question': 'Continue?'},
+      ),
+    );
+    gateway.onEvent!(
+      StreamEvent(
+        type: 'approval',
+        sessionId: 'outside-runtime',
+        data: {
+          'request_id': 'worker-approval',
+          'command': 'private command',
+          'choices': ['once', 'deny'],
+        },
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(chat!.runtime.pendingQuestion, isNotNull);
+    expect(alerts, isEmpty);
+    expect(inputNotices, isEmpty);
+    expect(controller.notificationMonitoringChats, isEmpty);
+  });
+
+  for (final botMessage in [true, false]) {
+    for (final loaded in [true, false]) {
+      test(
+        '${loaded ? 'loaded' : 'unopened'} Bot Chat ${botMessage ? 'bot exchange stays silent' : 'human reply still alerts'}',
+        () async {
+          host.saved['a']!.first['title'] = 'Bot Chat';
+          host.history = [
+            {
+              'id': 0,
+              'role': 'user',
+              'content': botMessage
+                  ? 'Earlier human message'
+                  : 'Message from 🤖 Default (@default): Earlier bot message',
+            },
+            {
+              'id': 1,
+              'role': 'user',
+              'content': botMessage
+                  ? 'Message from 🤖 Default (@default): Please review the group plan.'
+                  : 'Please review the group plan.',
+            },
+            {
+              'id': 2,
+              'role': 'user',
+              'content': 'Private reminder',
+              'display_kind': 'hidden',
+            },
+            {
+              'id': 3,
+              'role': 'user',
+              'content': 'Model changed',
+              'display_kind': 'model_switch',
+            },
+            {'id': 4, 'role': 'assistant', 'content': 'Here is my review.'},
+          ];
+          if (loaded) {
+            await controller.openSession(
+              ProfileSessionKey(controller.current!.scope, 'outside'),
+            );
+            final gateway = controller.current!.gateway;
+            gateway.onEvent!(
+              StreamEvent(
+                type: 'message.start',
+                sessionId: 'outside-runtime',
+                data: {},
+              ),
+            );
+            gateway.onEvent!(
+              StreamEvent(
+                type: 'message.complete',
+                sessionId: 'outside-runtime',
+                data: {'text': 'Here is my review.'},
+              ),
+            );
+            for (
+              var tick = 0;
+              tick < 100 && controller.hasActiveChats;
+              tick++
+            ) {
+              await Future<void>.delayed(Duration.zero);
+            }
+            expect(controller.hasActiveChats, isFalse);
+          } else {
+            host.active = [row('outside-runtime', 'outside', 'working')];
+            host.changed();
+            await waitForReads(host, 1);
+            host.active = [row('outside-runtime', 'outside', 'idle', 2)];
+            host.changed();
+            await waitForReads(host, 2);
+          }
+          expect(alerts, hasLength(botMessage ? 0 : 1));
+          expect(previews, botMessage ? isEmpty : ['Here is my review.']);
+        },
+      );
+    }
+  }
+
+  test(
+    'bot exchange keeps attention and user side-task notifications',
+    () async {
+      host.history = [
+        {
+          'id': 1,
+          'role': 'user',
+          'content':
+              'Message from 🤖 Default (@default): Review the group plan.',
+        },
+      ];
+      await controller.openSession(
+        ProfileSessionKey(controller.current!.scope, 'outside'),
+      );
+      final gateway = controller.current!.gateway;
+      gateway.onEvent!(
+        StreamEvent(
+          type: 'clarify',
+          sessionId: 'outside-runtime',
+          data: {'request_id': 'question', 'question': 'Allow this action?'},
+        ),
+      );
+      for (final kind in ['btw.complete', 'background.complete']) {
+        gateway.onEvent!(
+          StreamEvent(
+            type: kind,
+            sessionId: 'outside-runtime',
+            data: {'task_id': kind, 'text': 'User task: $kind'},
+          ),
+        );
+      }
+      await Future<void>.delayed(Duration.zero);
+      expect(alerts, hasLength(3));
+      expect(alerts.first.input, isTrue);
+      expect(previews.skip(1), [
+        'User task: btw.complete',
+        'User task: background.complete',
+      ]);
+      expect(inputNotices.single.inputs.single.focus.id, 'question');
     },
   );
 

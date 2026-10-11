@@ -36,6 +36,7 @@ import '../models/context_occupancy.dart';
 import '../models/chat_notification_content.dart';
 import '../models/session_visibility.dart';
 import '../models/answer_versions.dart';
+import '../models/transcript_notice.dart';
 import '../models/hermes_profile.dart';
 import '../models/gateway_insight.dart';
 import '../models/gateway_process.dart';
@@ -7571,6 +7572,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat,
     ProfileNotification notification,
   ) {
+    // Live completion reaches this boundary directly, without _notify. Keep
+    // private workers silent across both live and recovered delivery paths.
+    if (chat.source == 'bot_room' ||
+        (!notification.content.needsAttention &&
+            notification.focus?.kind != 'side' &&
+            notification.focus?.kind != 'background' &&
+            _isBotExchangeReply(chat))) {
+      return;
+    }
     if (notification.focus != null &&
         notification.content.category != ChatNotificationCategory.inputNeeded) {
       chat.reading.recordNotificationResult(notification.focus);
