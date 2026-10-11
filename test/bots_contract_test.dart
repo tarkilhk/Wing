@@ -467,6 +467,56 @@ void main() {
     },
   );
   test(
+    'editor shape preview yields to draft and acknowledged photos',
+    () async {
+      final fixture = BotsFixture();
+      fixture.profiles.first['ui_meta']['hermes-bots']['imageKind'] = 'shape';
+      final bot = (await fixture.repository.bots()).first.withAvatar(
+        base64Decode(_avatarPng),
+      );
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        bot,
+        avatarIo: _AvatarPicker(),
+      );
+      addTearDown(edit.dispose);
+      expect(edit.image, isNull);
+      expect(edit.dirty, false);
+      edit.change(color: '#123456');
+      expect(edit.image, isNull);
+      expect(await edit.flush(), true);
+      expect(edit.image, isNull);
+      expect(edit.bot.avatar, orderedEquals(base64Decode(_avatarPng)));
+      expect(fixture.commands.single.$2, 'profiles.configure');
+      await edit.pickImage();
+      expect(edit.image, orderedEquals(base64Decode(_avatarPng)));
+      expect(await edit.flush(), true);
+      expect(edit.bot.metadata['imageKind'], 'photo');
+      expect(edit.image, orderedEquals(base64Decode(_avatarPng)));
+      final reopened = BotProfileEditSession(fixture.repository, edit.bot);
+      expect(reopened.image, orderedEquals(base64Decode(_avatarPng)));
+      reopened.dispose();
+    },
+  );
+  for (final kind in [null, 'photo', 'unexpected']) {
+    test('editor retains saved images with image kind $kind', () async {
+      final fixture = BotsFixture();
+      final meta = fixture.profiles.first['ui_meta']['hermes-bots'];
+      if (kind != null) meta['imageKind'] = kind;
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        (await fixture.repository.bots()).first.withAvatar(
+          base64Decode(_avatarPng),
+        ),
+      );
+      addTearDown(edit.dispose);
+      edit.change(color: '#123456');
+      expect(edit.image, orderedEquals(base64Decode(_avatarPng)));
+      expect(await edit.flush(), true);
+      expect(edit.image, orderedEquals(base64Decode(_avatarPng)));
+    });
+  }
+  test(
     'avatar acknowledgement preserves edits arriving during an asset write',
     () async {
       final fixture = BotsFixture();

@@ -24,8 +24,13 @@ class BotProfileEditSession extends ChangeNotifier {
   String get shape => _shape;
   String get color => _color;
   Uint8List? _image;
-  Uint8List? get image =>
-      _assetDirty || _imageMetadataPending ? _image : _bot.avatar;
+  Uint8List? get image {
+    if (_assetDirty || _imageMetadataPending) return _image;
+    // A saved classic shape may also have a desktop-rendered raster asset.
+    // Preview the editable shape so its draft color is visible immediately.
+    return _bot.hasExplicitClassicShape ? null : _bot.avatar;
+  }
+
   int _assetVersion = 0;
   Timer? _autosave;
   Completer<bool>? _pending;

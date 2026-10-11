@@ -19,6 +19,8 @@ import 'package:wing/core/screens/bots/bot_profile_editor.dart';
 import 'package:wing/core/screens/bots/bot_settings_screen.dart';
 import 'package:wing/core/screens/bots/bots_create_screen.dart';
 import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/services/bot_profile_edit_session.dart';
+import 'package:wing/core/theme/profile_colors.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/bots_fixture.dart';
 import 'support/composer_fixture.dart' show emitChatEvent;
@@ -118,6 +120,91 @@ void main() {
           .load();
     }
   });
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'color taps repaint the saved shape preview before autosave in ${brightness.name}',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = BotsFixture();
+        final meta = fixture.profiles.first['ui_meta']['hermes-bots'];
+        meta['shape'] = 'cloud';
+        meta['imageKind'] = 'shape';
+        const png =
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=';
+        final bot = (await fixture.repository.bots()).first.withAvatar(
+          base64Decode(png),
+        );
+        final frame = GlobalKey();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            home: RepaintBoundary(
+              key: frame,
+              child: BotProfileEditor(
+                createSession: () =>
+                    BotProfileEditSession(fixture.repository, bot),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final preview = find.byWidgetPredicate(
+          (widget) => widget is BotAvatar && widget.size == 88,
+        );
+        Future<void> expectPreviewColor(Color expected) async {
+          final rect = tester.getRect(preview);
+          final sample = Offset(rect.center.dx, rect.top + rect.height * .65);
+          final rendered = await tester.runAsync(() async {
+            final boundary =
+                frame.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary;
+            final image = await boundary.toImage();
+            final rgba = await image.toByteData(
+              format: ui.ImageByteFormat.rawRgba,
+            );
+            final offset =
+                (sample.dy.floor() * image.width + sample.dx.floor()) * 4;
+            final color = Color.fromARGB(
+              rgba!.getUint8(offset + 3),
+              rgba.getUint8(offset),
+              rgba.getUint8(offset + 1),
+              rgba.getUint8(offset + 2),
+            );
+            image.dispose();
+            return color;
+          });
+          expect(rendered!.toARGB32(), expected.toARGB32());
+          expect(tester.widget<BotAvatar>(preview).image, isNull);
+        }
+
+        for (final index in [0, 8, 7]) {
+          await tester.tap(find.byTooltip('Color ${index + 1}'));
+          await tester.pump();
+          expect(
+            fixture.commands,
+            isEmpty,
+            reason: 'Preview precedes autosave',
+          );
+          await expectPreviewColor(desktopProfileSwatches[index]);
+        }
+        await tester.tap(find.byTooltip('Match profile color'));
+        await tester.pump();
+        await expectPreviewColor(BotAvatar.resolveColor('', bot.profile.name));
+        await tester.pump(const Duration(milliseconds: 450));
+        await tester.pumpAndSettle();
+        await expectPreviewColor(BotAvatar.resolveColor('', bot.profile.name));
+        expect(
+          fixture.commands.single.$3['ui_meta']['hermes-bots']['color'],
+          '',
+        );
+        await _capture(tester, frame, 'editor-live-color-${brightness.name}');
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
   testWidgets(
     'settings reopens acknowledged avatar after save, removal and shape selection',
     (tester) async {
