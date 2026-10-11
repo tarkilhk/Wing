@@ -4,6 +4,8 @@
 
 In the composer, choose **Camera**, **Photos** or **Files**. You can also share text, a link, an image or a file from another Android app into Wing. Incoming shares open a review so you can choose the connection, profile and chat. Nothing is sent until you tap **Send** in the chat.
 
+With **Camera**, confirm the picture to add it to your current draft while keeping the chat open. You can take another picture to add it alongside the first. Cancelling the camera leaves the draft unchanged.
+
 With **Photos** or **Files**, select several items in the picker and confirm to add them together. Tap an image thumbnail in the draft to open a full-screen preview; pinch to zoom, then go back to continue composing. The × removes that attachment.
 
 Sent images show up to five previews in a compact two-column grid. An unpaired image fills the last row. With more than five images, the fifth preview shows **+N** for the remaining images. Tap any preview to open the full-resolution viewer; swipe left or right, or use the arrow icons, to browse every image. Images follow your swipe and snap into place, while the controls stay steady. A scrollable thumbnail strip at the bottom lets you jump directly to any image and highlights the current one. Nearby selections slide; distant jumps briefly fade in without scrolling through every image. Images have no number labels; the counter shows your position. Pinch to zoom; dragging while zoomed pans the current image. Unavailable previews retry when you return to Wing or the connection recovers, and the retry icon remains available.

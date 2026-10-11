@@ -3438,6 +3438,29 @@ class ProfileWorkspaceController extends ChangeNotifier {
     isCurrentRequest: isCurrentRequest,
   );
 
+  /// Camera intake borrows a mounted draft without navigation or server reads.
+  /// An absent destination still uses the exact saved-chat recovery workflow.
+  Future<({ProfileChat chat, bool retainWorkspace})?> prepareSharedDraftTarget(
+    ProfileSessionKey key,
+  ) async {
+    if (!owns(key)) throw ArgumentError('Wrong connection settings or host');
+    if (_closed) return null;
+    final retained = _resources[key.workspace]?._chats[key.sessionId];
+    final replacement = retained?._replacementCompletion;
+    if (replacement != null) await replacement.future;
+    if (_closed) return null;
+    final chat = _recoveredDraftTarget(key) ?? retained;
+    if (chat != null &&
+        !switching &&
+        hasMountedRoutes &&
+        identical(current?.chat, chat)) {
+      _commandOwner(chat);
+      return (chat: chat, retainWorkspace: true);
+    }
+    final opened = await openSession(key, recoverExpiredDraft: true);
+    return opened == null ? null : (chat: opened, retainWorkspace: false);
+  }
+
   Future<ProfileChat?> _openSession(
     ProfileSessionKey key, {
     bool recoverExpiredDraft = false,

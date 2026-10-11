@@ -1426,6 +1426,56 @@ void main() {
   );
 
   test(
+    'mounted camera intake keeps the draft without a session resume',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      controller.setRouteMounted(Object(), true);
+      final start = host.calls.length;
+
+      final destination = await controller.prepareSharedDraftTarget(chat.key);
+
+      expect(destination?.chat, same(chat));
+      expect(destination?.retainWorkspace, isTrue);
+      expect(host.calls.skip(start), isEmpty);
+    },
+  );
+
+  test('mounted camera intake joins background draft replacement', () async {
+    final chat = await controller.createChat(canDispatch: () => true);
+    final capturedKey = chat.key;
+    await controller.updateDraft(chat, 'camera draft');
+    controller.setRouteMounted(Object(), true);
+    host
+      ..expireUnsubmittedResume = true
+      ..replacementCreateStarted = Completer<void>()
+      ..replacementCreateDelay = Completer<void>();
+    final reconnecting = controller.reconnect(capturedKey.workspace);
+    await host.replacementCreateStarted!.future;
+    final destination = controller.prepareSharedDraftTarget(capturedKey);
+
+    host.replacementCreateDelay!.complete();
+    await reconnecting;
+
+    final prepared = await destination;
+    expect(prepared?.chat, same(chat));
+    expect(prepared?.retainWorkspace, isTrue);
+    expect(chat.key.sessionId, 'replacement');
+    expect(chat.composer.observation.text, 'camera draft');
+    expect(
+      host.calls.where((call) => call.$2 == 'session.resume'),
+      hasLength(1),
+    );
+    expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+    final later = await controller.prepareSharedDraftTarget(capturedKey);
+    expect(later?.chat, same(chat));
+    expect(later?.retainWorkspace, isTrue);
+    expect(
+      host.calls.where((call) => call.$2 == 'session.resume'),
+      hasLength(1),
+    );
+  });
+
+  test(
     'explicit recovery waits for an in-flight replacement of its captured key',
     () async {
       final chat = await controller.createChat(canDispatch: () => true);
