@@ -252,10 +252,12 @@ void main() {
           );
           expect(tester.widget<IconButton>(save).onPressed, isNull);
           expect(find.text('Search bots'), findsNothing);
-          expect(
-            find.text('Members are fixed when the group is created.'),
-            findsOneWidget,
+          final memberNote = find.text(
+            'Members are fixed when the group is created.',
           );
+          await _revealGroup(tester, memberNote);
+          expect(memberNote, findsOneWidget);
+          await _revealGroup(tester, name, delta: -120);
           await tester.runAsync(
             () => precacheImage(
               MemoryImage(photo),

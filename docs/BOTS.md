@@ -81,8 +81,8 @@ arrow returns to the latest messages with the same motion as normal chats.
 Tap the instance and bot count under the title for a compact member list
 anchored beneath that row, with saved names and avatars. Tap outside or use Back
 to dismiss it. The conversation uses a group icon when no picture is saved.
-The ellipsis menu contains working histories, Refresh and Stop. Refresh rereads
-messages, activity and approval state; it does not restart the bots. Wing also
+The ellipsis menu contains Edit group, working histories, Refresh and Stop.
+Refresh rereads messages, activity and approval state; it does not restart the bots. Wing also
 refreshes this state automatically. Recognized bot mentions display as bold,
 colored `@Name` text. Copy preserves the original message.
 While work is active, the empty composer offers Stop; entering a draft offers
