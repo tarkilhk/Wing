@@ -53,7 +53,6 @@ import '../presentation/attachment_preview_image.dart';
 import '../services/owned_remote_files.dart';
 import '../widgets/profile_message.dart';
 import '../widgets/profile_transcript_disclosure.dart';
-import '../widgets/anchored_expansion_tile.dart';
 import '../widgets/profile_activity_tabs.dart';
 import '../models/gateway_todo.dart';
 import '../widgets/profile_queued_messages.dart';
@@ -154,6 +153,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   ProfileWorkspaceController get controller => widget.controller;
   BotsSession? _botsOwner;
   BotsViewState _botsView = const BotsViewState();
+  final _senderAppearances =
+      <(ProfileSessionKey, String), Future<BotRecord?>>{};
   int _botNavigation = 0;
   BotsSession get _bots => _botsOwner ??=
       widget.createBotsSession?.call() ??
@@ -784,7 +785,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     if (_composerKey != chat?.key ||
         _composer.text != (chat?.composer.observation.displayedText ?? '')) {
       final changedChat = _composerKey != chat?.key;
-      if (changedChat) _conversationBot = null;
+      if (changedChat) {
+        _conversationBot = null;
+        _senderAppearances.clear();
+      }
       if (changedChat && _recentVisit?.active == true && _composerKey != null) {
         _composerSelections[_composerKey!] = _composer.selection;
       }
@@ -1289,34 +1293,24 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     // Resolve only the captured immutable input used by existing runtime commands.
     // The ordinal itself never admits an execution or a replacement chat.
     final message = displayedHistory[entry.sourceIndex];
-    final reasoning = entry.reasoning;
-    final sender = entry.interAgentSender;
-    if (sender != null) {
-      return AnchoredExpansionTile(
-        key: ValueKey(('agent-reply', entry.savedMessageId)),
-        title: Text(
-          'Replied to $sender',
-          style: Theme.of(context).textTheme.bodySmall,
+    if (entry.message.kind == TranscriptMessageKind.botMessage) {
+      final handle = entry.message.senderHandle;
+      final appearance = handle == null
+          ? null
+          : _senderAppearances.putIfAbsent((
+              chat.key,
+              handle,
+            ), () => _bots.appearanceForSender(chat.key.workspace, handle));
+      return FutureBuilder<BotRecord?>(
+        key: ValueKey((chat.key, entry.presentationId, handle)),
+        future: appearance,
+        builder: (context, snapshot) => ProfileMessage(
+          message: entry.message,
+          senderAppearance: snapshot.data,
+          loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
+          onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
+          onDownloadRemoteFile: (output) => _downloadAnswerOutput(chat, output),
         ),
-        subtitle: const Text('Show reply'),
-        shape: const Border(),
-        children: [
-          if (reasoning.isNotEmpty) ProfileReasoningDisclosure(text: reasoning),
-          ProfileMessage(
-            key: ValueKey(entry.presentationId),
-            message: entry.message,
-            loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
-            attachmentImagesAvailable:
-                controller.connectionStatus.access ==
-                    ConnectionAvailability.available &&
-                controller.connectionStatus.phase !=
-                    ServerConnectionPhase.reconnecting,
-            onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
-            onShareRemoteFile: (output) => _shareToolResource(chat, output),
-            onDownloadRemoteFile: (output) =>
-                _downloadAnswerOutput(chat, output),
-          ),
-        ],
       );
     }
     final savedPrompt = allowSavedActions && entry.editablePrompt;
@@ -1653,7 +1647,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           !section.hasLatestReview &&
           !next.isActivity &&
           reply.role == 'assistant' &&
-          reply.interAgentSender == null &&
           reply.message.kind == TranscriptMessageKind.dialogue) {
         activityReplies[section.presentationIds.last] = reply;
       }

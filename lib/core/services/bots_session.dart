@@ -189,6 +189,44 @@ class BotsSession extends ChangeNotifier {
     ], canRead: () => !_closed))[key];
   }
 
+  /// Resolve a delivered sender by the stock @handle within its receiving
+  /// instance. Display names alone carry no identity or asset-read authority.
+  Future<BotRecord?> appearanceForSender(
+    WorkspaceScope scope,
+    String handle,
+  ) async {
+    bool current() => !_closed;
+    if (!current()) return null;
+    try {
+      final sources = await _sources(current);
+      if (!current()) return null;
+      for (final source in sources) {
+        if (source.scope.connectionId != scope.connectionId ||
+            source.scope.connectionIdentity != scope.connectionIdentity) {
+          continue;
+        }
+        source.retain();
+        try {
+          final roster = await source.bots();
+          if (!current()) return null;
+          final matches = roster.where(
+            (bot) =>
+                (bot.profile.name == 'default' ? 'hermes' : bot.profile.name) ==
+                handle,
+          );
+          if (matches.length != 1) return null;
+          final appearance = await source.enrich(matches.single);
+          return current() ? appearance : null;
+        } finally {
+          source.release();
+        }
+      }
+    } catch (_) {
+      // An unavailable appearance must never prevent reading the delivery.
+    }
+    return null;
+  }
+
   /// Shared passive roster and bounded avatar cache. Only exact canonical
   /// root/tip keys admit assets. Physical admission is checked after each wait.
   Future<Map<ProfileSessionKey, BotRecord>> appearancesForConversations(

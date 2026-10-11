@@ -35,3 +35,18 @@ View screen periodically refreshes the selected profile's screen while visible. 
 Screen preview is read-only; it has no keyboard or pointer control. Wing does not currently configure RoomLink peer groups, desktop Direct conversations, pet avatars or automatic screen opening. Hosted groups use bots from one instance, although the bot roster and ordinary settings work across saved instances.
 
 See [Administration](ADMINISTRATION.md) for profile configuration and [Chats](CHATS.md) for conversation actions.
+
+Messages from other bots appear on the left with their name, avatar when available,
+formatted text and time. Copy copies the message body. Replies from the bot you
+are talking to stay visible as normal answers. Received bot instructions cannot
+be edited or restored as your own prompts.
+
+In Activity, **Message agent** shows the sent **Message** and its **Queued**
+acknowledgment. When Hermes returns the matching delivery result, Wing appends
+**Exchange complete** with the reply below it. Each available timestamp appears
+on the right in your local time. Queued means handed off, not delivered.
+Pending, unknown and failed outcomes retain their own labels; avoid resending
+when the outcome is uncertain. Raw details keeps the exact receipts.
+
+An unmatched “Bot delivery process finished” notice stays separate. Expand
+Output to inspect the runner's command and result.

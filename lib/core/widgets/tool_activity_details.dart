@@ -172,7 +172,20 @@ class ToolActivityDetailsView extends StatelessWidget {
       ToolCallOutcome.running => Icons.timelapse_outlined,
       _ => Icons.check_circle_outline,
     };
-    final blocks = [...details.request, ...details.response];
+    final queuedExchange =
+        call.name == 'message_agent' && details.receiptStatus == 'Queued';
+    final blocks = [
+      ...details.request,
+      ...details.response,
+      for (final receipt in call.exchangeReceipts)
+        ToolDetailBlock(
+          label: receipt.label,
+          text: receipt.text,
+          markdown: true,
+          copyable: true,
+          timestamp: receipt.timestamp,
+        ),
+    ];
     final readContent = blocks
         .where((block) => block.isReadContent)
         .firstOrNull;
@@ -247,7 +260,30 @@ class ToolActivityDetailsView extends StatelessWidget {
                   blocks[i].resourceTarget != null &&
                   details.resourceFor(blocks[i].resourceTarget!) != null &&
                   onOpenResource != null,
-              headerBuilder: blocks[i].resourceTarget == null
+              headerBuilder: queuedExchange && i >= details.request.length
+                  ? (context, actions) {
+                      final receiptIndex =
+                          i - details.request.length - details.response.length;
+                      final receipt = receiptIndex < 0
+                          ? null
+                          : call.exchangeReceipts[receiptIndex];
+                      return _ActivityReceiptHeader(
+                        label: blocks[i].label,
+                        timestamp: blocks[i].timestamp,
+                        timeDescription: receipt == null
+                            ? 'Queued at'
+                            : 'Received at',
+                        icon: receipt?.failed == true
+                            ? Icons.error_outline
+                            : receipt?.uncertain == true
+                            ? Icons.schedule_outlined
+                            : Icons.check_circle_outline,
+                        error: receipt?.failed == true,
+                        warning: receipt?.uncertain == true,
+                        actions: actions,
+                      );
+                    }
+                  : blocks[i].resourceTarget == null
                   ? null
                   : (context, actions) => _ToolResourceRow(
                       target: blocks[i].resourceTarget!,
@@ -273,21 +309,179 @@ class ToolActivityDetailsView extends StatelessWidget {
           ActivityDetailFacts(facts: details.headerFacts),
         if (details.metadata.isNotEmpty)
           ActivityDetailFacts(facts: details.metadata),
-        ActivityDetailStatus(
-          label: call.status,
-          icon: statusIcon,
-          error: call.outcome == ToolCallOutcome.error,
-          warning: call.outcome == ToolCallOutcome.warning,
-          contextFacts: [
-            if (details.nativeVision && call.outcome != ToolCallOutcome.error)
-              'Image loaded for the agent',
-            if (details.exitCode != null &&
-                call.outcome != ToolCallOutcome.running &&
-                call.outcome != ToolCallOutcome.error)
-              'Exit ${details.exitCode}',
-          ],
-        ),
+        if (!queuedExchange)
+          ActivityDetailStatus(
+            label: call.status,
+            icon: statusIcon,
+            error: call.outcome == ToolCallOutcome.error,
+            warning: call.outcome == ToolCallOutcome.warning,
+            contextFacts: [
+              if (details.nativeVision && call.outcome != ToolCallOutcome.error)
+                'Image loaded for the agent',
+              if (details.exitCode != null &&
+                  call.outcome != ToolCallOutcome.running &&
+                  call.outcome != ToolCallOutcome.error)
+                'Exit ${details.exitCode}',
+            ],
+          ),
       ],
+    );
+  }
+}
+
+/// The shared receipt title/actions with a producer timestamp on its right.
+/// Enlarged text moves metadata and actions below the title to retain reach.
+class _ActivityReceiptHeader extends StatelessWidget {
+  const _ActivityReceiptHeader({
+    required this.label,
+    required this.timestamp,
+    required this.timeDescription,
+    required this.icon,
+    this.error = false,
+    this.warning = false,
+    required this.actions,
+  });
+  final String label, timeDescription;
+  final DateTime? timestamp;
+  final IconData icon;
+  final bool error, warning;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WingTokens.of(context);
+    final enlarged = MediaQuery.textScalerOf(context).scale(12) > 18;
+    final color = error
+        ? colors.danger
+        : warning
+        ? colors.warning
+        : colors.muted;
+    final title = Text(
+      label,
+      style: colors.typography.label.copyWith(
+        color: error || warning ? color : colors.onSurface,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+    Widget leading({required bool stack}) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: WingSpacing.sm),
+        if (stack) Flexible(child: title) else title,
+      ],
+    );
+    final date = timestamp?.toLocal();
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final formatted = date == null
+        ? null
+        : '${date.day.toString().padLeft(2, '0')} ${months[date.month - 1]}, '
+              '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}:${date.second.toString().padLeft(2, '0')}';
+    final time = formatted == null
+        ? const SizedBox.shrink()
+        : Tooltip(
+            message:
+                '$timeDescription ${date!.toIso8601String()} (${date.timeZoneName})',
+            excludeFromSemantics: true,
+            child: Text(
+              formatted,
+              textAlign: TextAlign.right,
+              semanticsLabel: '$timeDescription $formatted',
+              style: colors.typography.label.copyWith(
+                color: colors.muted,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          );
+    double width(String text) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: colors.typography.label),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      final value = painter.width;
+      painter.dispose();
+      return value;
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stack =
+            enlarged ||
+            width(label) +
+                    width(formatted ?? '') +
+                    16 +
+                    WingSpacing.sm * 3 +
+                    actions.length * 32 >
+                constraints.maxWidth;
+        return Container(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: colors.border)),
+          ),
+          padding: _toolHorizontalInsets,
+          child: stack
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        0,
+                        WingSpacing.sm,
+                        WingSpacing.sm,
+                        0,
+                      ),
+                      child: leading(stack: true),
+                    ),
+                    if (formatted != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          24,
+                          WingSpacing.xs,
+                          WingSpacing.sm,
+                          WingSpacing.xs,
+                        ),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: time,
+                        ),
+                      ),
+                    if (actions.isNotEmpty)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: actions,
+                        ),
+                      ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Padding(
+                      padding: _toolVerticalInsets,
+                      child: leading(stack: false),
+                    ),
+                    const SizedBox(width: WingSpacing.sm),
+                    Expanded(child: time),
+                    if (actions.isEmpty) const SizedBox(width: WingSpacing.sm),
+                    ...actions,
+                  ],
+                ),
+        );
+      },
     );
   }
 }

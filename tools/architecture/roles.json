@@ -56,6 +56,11 @@
       "feature": "versions-updates",
       "library": "lib/core/models/backend_update.dart"
     },
+    "lib/core/models/bot_exchange.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/bot_exchange.dart"
+    },
     "lib/core/models/bots.dart": {
       "role": "domain",
       "feature": "bots",
@@ -450,6 +455,11 @@
       "role": "domain",
       "feature": "conversation",
       "library": "lib/core/models/slash_command.dart"
+    },
+    "lib/core/models/tool_payload.dart": {
+      "role": "domain",
+      "feature": "chat-activity",
+      "library": "lib/core/models/tool_payload.dart"
     },
     "lib/core/models/transcript_message.dart": {
       "role": "domain",

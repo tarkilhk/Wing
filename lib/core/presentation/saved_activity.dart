@@ -1,6 +1,6 @@
+import '../models/tool_payload.dart';
 import '../models/gateway_todo.dart';
 import '../models/transcript_message.dart';
-import 'tool_call_presentation.dart';
 
 /// Passive facts from one loaded Activity section. Never grants runtime control.
 final class SavedActivity {

@@ -23,30 +23,6 @@ const _noticeKinds = {
   'personality_switch',
 };
 
-/// Desktop walks back to the preceding displayed user or assistant, skipping
-/// system/tool rows. Only the first settled reply belongs to the exchange.
-String? interAgentReplySender(List<Map<String, dynamic>> messages, int index) {
-  if (index < 0 ||
-      index >= messages.length ||
-      messages[index]['role'] != 'assistant') {
-    return null;
-  }
-  for (var i = index - 1; i >= 0; i--) {
-    final previous = messages[i];
-    if (isHiddenAnswerMessage(previous) ||
-        _noticeKinds.contains(previous['display_kind'])) {
-      continue;
-    }
-    if (previous['role'] == 'assistant') return null;
-    if (previous['role'] != 'user') continue;
-    final delivery = transcriptUserDelivery(previous);
-    return delivery?.kind == 'agent_message'
-        ? delivery!.headline.substring('Message from '.length)
-        : null;
-  }
-  return null;
-}
-
 String? transcriptNoticeText(Map<String, dynamic> message) {
   switch (transcriptNoticeKind(message)) {
     case 'model_switch':
@@ -67,6 +43,8 @@ String? transcriptNoticeText(Map<String, dynamic> message) {
           ? '${count.toInt()} background agent${count == 1 ? '' : 's'} finished'
           : 'Background agent work finished';
     case 'process_complete':
+      final process = processCompletionDelivery(answerMessageText(message));
+      if (process?.botDelivery == true) return process!.headline;
       final display = answerMessageDisplayMetadata(message)['display_text'];
       return display is String && display.trim().isNotEmpty
           ? display.trim()
