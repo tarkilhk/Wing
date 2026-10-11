@@ -1,9 +1,12 @@
 // Punctuation and symbols delimit prose references. Hyphens and underscores
-// belong to names; slashes and backslashes keep paths and URLs literal.
+// belong to names; a colon joins plugin and skill names. Slashes and backslashes
+// keep paths and URLs literal.
 const _slashNameCharacter = r'[\p{L}\p{M}\p{N}_-]';
-const _slashSeparator = r'(?![-_/\\])[\s\p{P}\p{S}]';
+const _slashName = '$_slashNameCharacter+(?::$_slashNameCharacter+)?';
+const _slashQueryName = '(?:$_slashNameCharacter+(?::$_slashNameCharacter*)?)?';
+const _slashSeparator = '(?![-_/\\\\]|:$_slashNameCharacter)[\\s\\p{P}\\p{S}]';
 final _slashReferencePattern = RegExp(
-  '(^|$_slashSeparator)(/$_slashNameCharacter+)(?=$_slashSeparator|\$)',
+  '(^|$_slashSeparator)(/$_slashName)(?=$_slashSeparator|\$)',
   unicode: true,
 );
 final _slashLiteralPrefixPattern = RegExp(
@@ -26,7 +29,7 @@ class SlashInvocation {
 
   static SlashInvocation? parse(String text) {
     final match = RegExp(
-      '^/($_slashNameCharacter+)(?:$_slashSeparator\\s*([\\s\\S]*))?\$',
+      '^/($_slashName)(?:$_slashSeparator\\s*([\\s\\S]*))?\$',
       unicode: true,
     ).firstMatch(text.trim());
     return match == null ? null : SlashInvocation(match[1]!, match[2] ?? '');
@@ -172,7 +175,7 @@ class SlashCompletion {
   /// The active inline token, or the leading command and its arguments.
   static String? queryToken(String prefix) {
     final inline = RegExp(
-      '(^|$_slashSeparator)(/$_slashNameCharacter*)\$',
+      '(^|$_slashSeparator)(/$_slashQueryName)\$',
       unicode: true,
     ).firstMatch(prefix);
     if (inline != null &&
@@ -180,7 +183,7 @@ class SlashCompletion {
       return inline[2];
     }
     if (RegExp(
-      '^/$_slashNameCharacter+(?:\\s[\\s\\S]*)\$',
+      '^/$_slashName(?:\\s[\\s\\S]*)\$',
       unicode: true,
     ).hasMatch(prefix)) {
       return prefix;
