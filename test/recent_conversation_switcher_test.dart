@@ -346,7 +346,7 @@ void main() {
             ? {
                 'found': true,
                 'data':
-                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=',
+                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGO4Odf1PwAGyQK7B3JGZQAAAABJRU5ErkJggg==',
               }
             : null;
         final owner = BotsSession((_) async => [fixture.repository]);
@@ -403,10 +403,17 @@ void main() {
         expect(
           avatar.image,
           base64Decode(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=',
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGO4Odf1PwAGyQK7B3JGZQAAAABJRU5ErkJggg==',
           ),
         );
         expect(avatar.size, 32);
+        final savedImage = tester.renderObject<RenderImage>(
+          find.descendant(
+            of: find.byType(BotAvatar),
+            matching: find.byType(RawImage),
+          ),
+        );
+        expect(savedImage.image, isNotNull);
         final bounds = tester.getRect(find.byType(BotConversationTitle));
         expect(
           bounds.right,

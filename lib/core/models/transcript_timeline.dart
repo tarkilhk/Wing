@@ -2,6 +2,8 @@ import 'answer_versions.dart';
 import 'review_notice.dart';
 import 'transcript_message.dart';
 import 'transcript_notice.dart';
+import 'bot_exchange.dart';
+import 'user_message_delivery.dart';
 
 /// A transient, pure projection of the existing owner's immutable reading rows.
 /// Ordinals identify presentation inputs, never runtime or command authority.
@@ -56,29 +58,44 @@ final class TranscriptTimeline {
         }
       }
     }
+    final readingRows = <Map<String, dynamic>>[
+      for (final row in rows)
+        if (row['role'] == 'tool' && calls[row['tool_call_id']] != null)
+          {
+            ...row,
+            if (row['tool_name'] == null)
+              'tool_name': calls[row['tool_call_id']]!['name'],
+            if (row['args'] == null)
+              'args': calls[row['tool_call_id']]!['arguments'],
+            if (row['labels'] == null &&
+                callLabels[row['tool_call_id']] != null)
+              'labels': callLabels[row['tool_call_id']],
+          }
+        else
+          row,
+    ];
+    final exchanges = _joinBotExchanges(readingRows);
+    var humanReplay = false;
     for (var index = 0; index < rows.length; index++) {
       final row = rows[index];
-      final call = row['role'] == 'tool' ? calls[row['tool_call_id']] : null;
-      final readingRow = call == null
-          ? row
-          : <String, dynamic>{
-              ...row,
-              if (row['tool_name'] == null) 'tool_name': call['name'],
-              if (row['args'] == null) 'args': call['arguments'],
-              if (row['labels'] == null &&
-                  callLabels[row['tool_call_id']] != null)
-                'labels': callLabels[row['tool_call_id']],
-            };
+      final readingRow = exchanges.remaining[index] ?? readingRows[index];
       final hidden = isHiddenAnswerMessage(row);
+      if (!hidden && row['role'] == 'user') {
+        if (transcriptUserDelivery(row)?.kind == 'agent_message' ||
+            _isProcessReceipt(row)) {
+          humanReplay = false;
+        } else if (isAnswerPrompt(row)) {
+          humanReplay = isHumanAnswerPrompt(row);
+        }
+      }
       final streaming = index == liveMessageIndex;
-      final sender = streaming ? null : interAgentReplySender(rows, index);
       final savedId = answerMessageId(row);
       final display = row['display_content'] ?? row['content'] ?? '';
       final branchAnswer =
           row['role'] == 'assistant' &&
           savedId != null &&
           isBranchMessage(row) &&
-          sender == null;
+          humanReplay;
       entries.add(
         TranscriptTimelineEntry._(
           sourceIndex: index,
@@ -87,20 +104,20 @@ final class TranscriptTimeline {
           review:
               row['role'] == 'system' &&
               answerMessageText(row).startsWith('review:'),
-          suppressed: hidden,
+          suppressed: hidden || exchanges.consumed.contains(index),
+          exchangeReceipts: exchanges.receipts[index] ?? const [],
           emptyAssistant:
               row['role'] == 'assistant' &&
               display is String &&
               display.isEmpty,
           streaming: streaming,
           hasReasoning: _hasReasoning(row),
-          interAgentSender: sender,
           savedMessageId: savedId,
           branchAnswer: branchAnswer,
           sharedAnswerMessageId:
               index > 0 &&
                   transcriptNoticeKind(row) == 'async_delegation_complete' &&
-                  _branchAnswer(rows, index - 1)
+                  entries[index - 1].branchAnswer
               ? answerMessageId(rows[index - 1])
               : null,
           followedByResultNotice:
@@ -159,6 +176,86 @@ final class TranscriptTimeline {
   }
 }
 
+/// Rebuild from the complete loaded reading on each observation. History stays
+/// untouched; even a completion beyond Find's neighborhood enriches its call.
+({
+  Map<int, List<BotExchangeReceipt>> receipts,
+  Set<int> consumed,
+  Map<int, Map<String, dynamic>> remaining,
+})
+_joinBotExchanges(List<Map<String, dynamic>> rows) {
+  final queues = <String, ({int index, BotExchangeQueue queue})>{};
+  final ambiguous = <String>{};
+  for (var i = 0; i < rows.length; i++) {
+    final row = rows[i];
+    if (row['role'] != 'tool' ||
+        row['tool_name'] != 'message_agent' ||
+        isHiddenAnswerMessage(row)) {
+      continue;
+    }
+    final queue = BotExchangeQueue.fromResult(answerMessageText(row));
+    if (queue == null) continue;
+    if (queues.containsKey(queue.processId)) ambiguous.add(queue.processId);
+    queues[queue.processId] = (index: i, queue: queue);
+  }
+  final receipts = <int, List<BotExchangeReceipt>>{};
+  final consumed = <int>{};
+  final remaining = <int, Map<String, dynamic>>{};
+  for (var i = 0; i < rows.length; i++) {
+    final row = rows[i];
+    // Only producer notices carry process authority. Never inspect quoted
+    // assistant/tool output or user prose to establish an exchange receipt.
+    if (row['role'] != 'user' ||
+        isHiddenAnswerMessage(row) ||
+        (row['display_kind'] != null &&
+            row['display_kind'] != 'process_complete')) {
+      continue;
+    }
+    final delivery = processCompletionDelivery(answerMessageText(row));
+    if (delivery == null || delivery.processes.isEmpty) continue;
+    final unmatched = <ProcessCompletion>[];
+    final seconds = _savedTimestamp(row['timestamp']);
+    final timestamp = seconds == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round());
+    for (final process in delivery.processes) {
+      final owner = queues[process.id];
+      final receipt =
+          owner == null || owner.index >= i || ambiguous.contains(process.id)
+          ? null
+          : owner.queue.receive(process, timestamp);
+      if (receipt == null) {
+        unmatched.add(process);
+      } else {
+        final values = receipts.putIfAbsent(owner!.index, () => []);
+        if (!values.any((value) => value.raw == receipt.raw)) {
+          values.add(receipt);
+        }
+      }
+    }
+    if (unmatched.isEmpty) {
+      consumed.add(i);
+    } else if (unmatched.length != delivery.processes.length) {
+      final content = unmatched.length == 1
+          ? unmatched.single.raw
+          : '[IMPORTANT: ${unmatched.length} background processes completed.]\n\n${unmatched.map((p) => p.raw).join('\n\n')}';
+      remaining[i] = {
+        ...row,
+        'content': content,
+        'display_content': content,
+        'display_metadata': const <String, dynamic>{},
+      };
+    }
+  }
+  return (
+    receipts: {
+      for (final e in receipts.entries) e.key: List.unmodifiable(e.value),
+    },
+    consumed: consumed,
+    remaining: remaining,
+  );
+}
+
 final class TranscriptTimelineEntry {
   TranscriptTimelineEntry._({
     required this.sourceIndex,
@@ -169,11 +266,11 @@ final class TranscriptTimelineEntry {
     required this.emptyAssistant,
     required this.streaming,
     required this.hasReasoning,
-    required this.interAgentSender,
     required this.savedMessageId,
     required this.branchAnswer,
     required this.sharedAnswerMessageId,
     required this.followedByResultNotice,
+    required this.exchangeReceipts,
   }) : _row = row,
        isReview = review,
        role = row['role']?.toString() ?? '',
@@ -190,15 +287,15 @@ final class TranscriptTimelineEntry {
   final bool isReview;
   late final TranscriptMessage message = TranscriptMessage.fromRow(_row);
   late final TranscriptToolResult? tool = role == 'tool'
-      ? message.tool ?? TranscriptToolResult.fromRow(_row)
+      ? TranscriptToolResult.fromRow(_row, exchangeReceipts: exchangeReceipts)
       : null;
+  final List<BotExchangeReceipt> exchangeReceipts;
   late final String? reviewText = isReview ? reviewMessageText(_row) : null;
   final bool suppressed;
   final bool emptyAssistant;
   final bool streaming;
   final bool hasReasoning;
   late final String reasoning = _reasoning(_row);
-  final String? interAgentSender;
   final int? savedMessageId;
   late final bool editablePrompt =
       savedMessageId != null && isHumanAnswerPrompt(_row);
@@ -269,7 +366,7 @@ List<TranscriptTimelineGroup> _groupRows(
 
   for (final entry in entries) {
     if (entry.suppressed) continue;
-    if (entry.hasReasoning && entry.interAgentSender == null) {
+    if (entry.hasReasoning) {
       flushTools();
       groups.add(TranscriptTimelineGroup._([entry], isReasoning: true));
     }
@@ -288,6 +385,13 @@ List<TranscriptTimelineGroup> _groupRows(
   flushTools();
   return List.unmodifiable(groups);
 }
+
+bool _isProcessReceipt(Map<String, dynamic> row) =>
+    row['role'] == 'user' &&
+    const {
+      'process_complete',
+      'process_notification',
+    }.contains(transcriptNoticeKind(row));
 
 List<TranscriptTimelineSection> _groupSections(
   List<TranscriptTimelineGroup> groups,
@@ -345,14 +449,24 @@ Map<Object, Duration> _savedReplyDurations(
   }
 
   for (final entry in entries) {
+    // Folding a process receipt changes visibility, never the original turn's
+    // timing boundary. A response to this internal trigger is a separate turn.
+    if (!isHiddenAnswerMessage(entry._row) && _isProcessReceipt(entry._row)) {
+      record();
+      prompt = null;
+      reply = null;
+      continue;
+    }
     if (entry.suppressed) continue;
-    if (entry.role == 'user' && isHumanAnswerPrompt(entry._row)) {
+    if (entry.role == 'user' &&
+        (isHumanAnswerPrompt(entry._row) ||
+            transcriptUserDelivery(entry._row)?.kind == 'agent_message')) {
       record();
       prompt = entry;
       reply = null;
     } else if (entry.role == 'tool' || entry.emptyAssistant) {
       reply = null;
-    } else if (entry.role == 'assistant' && entry.interAgentSender == null) {
+    } else if (entry.role == 'assistant') {
       final calls = entry._row['tool_calls'];
       reply =
           calls is List && calls.isNotEmpty ||
@@ -369,12 +483,6 @@ double? _savedTimestamp(Object? value) =>
     value is num && value.isFinite && value > 0 && value <= 8640000000000
     ? value.toDouble()
     : null;
-
-bool _branchAnswer(List<Map<String, dynamic>> rows, int index) =>
-    rows[index]['role'] == 'assistant' &&
-    answerMessageId(rows[index]) != null &&
-    isBranchMessage(rows[index]) &&
-    interAgentReplySender(rows, index) == null;
 
 bool _hasReasoning(Map<String, dynamic> row) {
   for (final key in const [

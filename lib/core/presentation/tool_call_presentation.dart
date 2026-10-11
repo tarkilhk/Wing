@@ -1,5 +1,5 @@
-import 'dart:convert';
-
+import '../models/tool_payload.dart';
+import '../models/bot_exchange.dart';
 import '../models/gateway_activity.dart';
 import '../models/transcript_message.dart';
 import 'desktop_tool_labels.dart';
@@ -27,6 +27,7 @@ final class ToolCallPresentation {
     this.durationSeconds,
     this.startedAt,
     this.filenameTarget,
+    this.exchangeReceipts = const [],
   });
 
   final String name;
@@ -38,6 +39,7 @@ final class ToolCallPresentation {
   final String status;
   final ToolCallOutcome outcome;
   final ToolActivityDetails activityDetails;
+  final List<BotExchangeReceipt> exchangeReceipts;
 
   /// Exact supplied resource for inspecting a compact filename subtitle.
   final String? filenameTarget;
@@ -104,6 +106,7 @@ final class ToolCallPresentation {
     durationSeconds: result.durationSeconds,
     context: result.context,
     summary: result.summary,
+    exchangeReceipts: result.exchangeReceipts,
   );
 
   static ToolCallPresentation _project({
@@ -117,6 +120,7 @@ final class ToolCallPresentation {
     Duration? startedAt,
     String? context,
     String? summary,
+    List<BotExchangeReceipt> exchangeReceipts = const [],
   }) {
     final input = decodeToolPayload(arguments);
     final output = decodeToolPayload(result);
@@ -234,6 +238,7 @@ final class ToolCallPresentation {
       labels: labels,
       durationSeconds: durationSeconds,
       startedAt: completed ? null : startedAt,
+      exchangeReceipts: exchangeReceipts,
     );
   }
 }
@@ -347,62 +352,6 @@ String _inputDetail(
   final deliveredTarget = _firstText(data, const ['url', 'file_path', 'path']);
   if (deliveredTarget != null) return display(deliveredTarget);
   return 'No input details supplied';
-}
-
-/// Decode delivered JSON for presentation, preserving raw output at its source.
-Object? decodeToolPayload(String? raw) {
-  if (raw == null) return null;
-  var text = raw.trim();
-  // Stock Hermes wraps external output with a security preamble. Preserve the
-  // exact wrapper in raw details; extract only its enclosed data for display.
-  if (text.startsWith('<untrusted_tool_result ') &&
-      text.endsWith('</untrusted_tool_result>')) {
-    final start = RegExp(r'^\s*[{\[]', multiLine: true).firstMatch(text);
-    if (start != null) {
-      text = text
-          .substring(start.start, text.lastIndexOf('</untrusted_tool_result>'))
-          .trim();
-    }
-  }
-  try {
-    return jsonDecode(text);
-  } on FormatException {
-    return _decodeBeforeHermesAdvisories(text) ?? raw;
-  }
-}
-
-// Temporary, user-approved workaround for stock Hermes appending plain-text
-// runtime advisories to JSON receipts:
-// https://github.com/NousResearch/hermes-agent/issues/136238
-// https://github.com/NousResearch/hermes-agent/pull/136241
-// Check their status regularly during tool-parser maintenance. Once the upstream
-// fix is implemented, verify stock Hermes preserves JSON and remove this helper,
-// its matcher and the trailer-specific regression cases. Keep raw-preservation
-// coverage. Never replace a recorded receipt with a fresh skills API read.
-final _hermesAdvisoryTrailer = RegExp(
-  r'\r?\n\r?\n\[(?:'
-  r'Tool loop (?:warning|hard stop): [a-z_]+; count=\d+; [^\r\n]+'
-  r'|hermes note: (?:this is the \d+(?:st|nd|rd|th) consecutive identical call to '
-  r'|the last \d+ rounds repeated the same cycle of \d+ tool calls )[^\r\n]+'
-  r')\]$',
-);
-
-Map? _decodeBeforeHermesAdvisories(String text) {
-  var body = text;
-  while (true) {
-    final trailer = _hermesAdvisoryTrailer.firstMatch(body);
-    if (trailer == null) break;
-    body = body.substring(0, trailer.start).trimRight();
-  }
-  if (body == text) return null;
-  // Only a complete JSON object qualifies; damaged JSON or unrelated trailing
-  // text remains raw. The source receipt still includes every advisory byte.
-  try {
-    final decoded = jsonDecode(body);
-    return decoded is Map ? decoded : null;
-  } on FormatException {
-    return null;
-  }
 }
 
 String? _firstText(Map data, List<String> keys) {
