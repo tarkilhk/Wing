@@ -1,4 +1,6 @@
 import '../../widgets/bot_mention_scope.dart';
+import '../../widgets/recent_conversations/conversation_gestures.dart';
+import '../../widgets/recent_conversations/conversation_route_scope.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/bot_group_session.dart';
@@ -49,13 +51,52 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   final _rowHeights = <int, double>{};
   bool _following = true, _capturing = false, _foreground = true;
   bool _inspectingDetails = false;
+  bool _presentationVisible = true, _restoreComposerFocus = false;
+  bool get _visible =>
+      _presentationVisible &&
+      _foreground &&
+      !_capturing &&
+      !_inspectingDetails &&
+      ModalRoute.isCurrentOf(context) != false;
+  void _syncVisibility() => _session.setVisible(_visible);
+  void _composerFocusChanged() {
+    ConversationPresentationScope.maybeOf(
+      context,
+    )?.onComposerFocusChanged(_focus.hasFocus);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final presentation = ConversationPresentationScope.maybeOf(context);
+    final visible = presentation?.visible ?? true;
+    if (_presentationVisible && !visible && _focus.hasFocus) {
+      _restoreComposerFocus = MediaQuery.viewInsetsOf(context).bottom > 0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_presentationVisible) _focus.unfocus();
+      });
+    }
+    final revealed = !_presentationVisible && visible;
+    _presentationVisible = visible;
+    _syncVisibility();
+    if (revealed) {
+      _acknowledgeLatest();
+      if (_restoreComposerFocus) {
+        _restoreComposerFocus = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _visible) _focus.requestFocus();
+        });
+      }
+    }
+  }
+
   bool _scrollScheduled = false;
   bool _jumpingToLatest = false;
 
   void _acknowledgeLatest() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
-          !_foreground ||
+          !_visible ||
           ModalRoute.of(context)?.isCurrent != true ||
           _capturing ||
           _inspectingDetails ||
@@ -105,7 +146,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   void _captureChanged(bool active) {
     _capturing = active;
     _session.setCapturing(active);
-    _session.setVisible(!active && _foreground && !_inspectingDetails);
+    _syncVisibility();
   }
 
   Widget _message(BotGroupEvent event) {
@@ -143,6 +184,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     _session.addListener(_changed);
     _composer.addListener(_changed);
     _scroll.addListener(_scrollChanged);
+    _focus.addListener(_composerFocusChanged);
     _session.setVisible(true);
   }
 
@@ -312,7 +354,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
-    _session.setVisible(_foreground && !_capturing && !_inspectingDetails);
+    _syncVisibility();
     if (_foreground) _acknowledgeLatest();
   }
 
@@ -323,6 +365,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     _session.dispose();
     _composer.removeListener(_changed);
     _composer.dispose();
+    _focus.removeListener(_composerFocusChanged);
     _focus.dispose();
     _scroll.dispose();
     super.dispose();
@@ -377,7 +420,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       );
     } finally {
       _inspectingDetails = false;
-      if (mounted) _session.setVisible(_foreground && !_capturing);
+      if (mounted) _syncVisibility();
     }
   }
 
@@ -427,7 +470,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                   } finally {
                     _inspectingDetails = false;
                     if (mounted) {
-                      _session.setVisible(_foreground && !_capturing);
+                      _syncVisibility();
                     }
                   }
               }
@@ -512,116 +555,125 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                       onCaptureChanged: _captureChanged,
                       child: LayoutBuilder(
                         builder: (context, constraints) {
-                          return ListView.builder(
-                            key: const ValueKey('group-transcript'),
-                            controller: _scroll,
-                            padding: const EdgeInsets.all(16),
-                            keyboardDismissBehavior:
-                                ScrollViewKeyboardDismissBehavior.onDrag,
-                            itemCount: messages.length + 1,
-                            itemBuilder: (context, index) {
-                              if (index < messages.length) {
-                                final event = messages[index];
-                                return TranscriptScrollAnchor(
-                                  key: ValueKey(('group-row', event.sequence)),
-                                  initialHeight:
-                                      _rowHeights[event.sequence] ?? 0,
-                                  onHeightChanged: (_, height) {
-                                    if (_rowHeights[event.sequence] == height) {
-                                      return;
-                                    }
-                                    _rowHeights[event.sequence] = height;
-                                    _followLatest();
-                                  },
-                                  child: _message(event),
-                                );
-                              }
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (_session.error != null)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 12,
-                                      ),
-                                      child: StudioError(_session.error!),
-                                    ),
-                                  if (!_session.loading && messages.isEmpty)
-                                    const Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        vertical: 24,
-                                      ),
-                                      child: Text(
-                                        'Start a discussion. Mention a bot to focus the reply, or ask the whole group.',
-                                      ),
-                                    ),
-                                  if (_session.runtime case final runtime?) ...[
-                                    if (runtime.blocked &&
-                                        runtime.actions.isEmpty)
-                                      const Text(
-                                        'Group work is interrupted. Refresh to check its recovery options.',
-                                      ),
-                                    for (final action in runtime.actions)
+                          return ConversationGestureBoundary(
+                            child: ListView.builder(
+                              key: const ValueKey('group-transcript'),
+                              controller: _scroll,
+                              padding: const EdgeInsets.all(16),
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              itemCount: messages.length + 1,
+                              itemBuilder: (context, index) {
+                                if (index < messages.length) {
+                                  final event = messages[index];
+                                  return TranscriptScrollAnchor(
+                                    key: ValueKey((
+                                      'group-row',
+                                      event.sequence,
+                                    )),
+                                    initialHeight:
+                                        _rowHeights[event.sequence] ?? 0,
+                                    onHeightChanged: (_, height) {
+                                      if (_rowHeights[event.sequence] ==
+                                          height) {
+                                        return;
+                                      }
+                                      _rowHeights[event.sequence] = height;
+                                      _followLatest();
+                                    },
+                                    child: _message(event),
+                                  );
+                                }
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (_session.error != null)
                                       Padding(
-                                        padding: const EdgeInsets.only(
-                                          bottom: 16,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
                                         ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              action.kind == 'retry'
-                                                  ? 'Interrupted work'
-                                                  : '${_session.group.members.where((m) => m.id == action.member).firstOrNull?.name ?? 'A bot'} needs approval',
-                                              style: Theme.of(
-                                                context,
-                                              ).textTheme.titleSmall,
-                                            ),
-                                            if (action.description.isNotEmpty)
-                                              Text(action.description),
-                                            if (action.command.isNotEmpty)
-                                              SelectableText(action.command),
-                                            Wrap(
-                                              children: [
-                                                if (action.kind == 'retry')
-                                                  IconButton(
-                                                    tooltip: 'Review retry',
-                                                    onPressed: _session.acting
-                                                        ? null
-                                                        : () => _retry(action),
-                                                    icon: const Icon(
-                                                      Icons.refresh,
-                                                    ),
-                                                  ),
-                                                for (final choice
-                                                    in action.choices)
-                                                  IconButton(
-                                                    tooltip: choice == 'once'
-                                                        ? 'Allow once'
-                                                        : 'Deny',
-                                                    onPressed: _session.acting
-                                                        ? null
-                                                        : () =>
-                                                              _session.resolve(
-                                                                action,
-                                                                choice: choice,
-                                                              ),
-                                                    icon: Icon(
-                                                      choice == 'once'
-                                                          ? Icons.check
-                                                          : Icons.close,
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ],
+                                        child: StudioError(_session.error!),
+                                      ),
+                                    if (!_session.loading && messages.isEmpty)
+                                      const Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: 24,
+                                        ),
+                                        child: Text(
+                                          'Start a discussion. Mention a bot to focus the reply, or ask the whole group.',
                                         ),
                                       ),
+                                    if (_session.runtime
+                                        case final runtime?) ...[
+                                      if (runtime.blocked &&
+                                          runtime.actions.isEmpty)
+                                        const Text(
+                                          'Group work is interrupted. Refresh to check its recovery options.',
+                                        ),
+                                      for (final action in runtime.actions)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 16,
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                action.kind == 'retry'
+                                                    ? 'Interrupted work'
+                                                    : '${_session.group.members.where((m) => m.id == action.member).firstOrNull?.name ?? 'A bot'} needs approval',
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.titleSmall,
+                                              ),
+                                              if (action.description.isNotEmpty)
+                                                Text(action.description),
+                                              if (action.command.isNotEmpty)
+                                                SelectableText(action.command),
+                                              Wrap(
+                                                children: [
+                                                  if (action.kind == 'retry')
+                                                    IconButton(
+                                                      tooltip: 'Review retry',
+                                                      onPressed: _session.acting
+                                                          ? null
+                                                          : () =>
+                                                                _retry(action),
+                                                      icon: const Icon(
+                                                        Icons.refresh,
+                                                      ),
+                                                    ),
+                                                  for (final choice
+                                                      in action.choices)
+                                                    IconButton(
+                                                      tooltip: choice == 'once'
+                                                          ? 'Allow once'
+                                                          : 'Deny',
+                                                      onPressed: _session.acting
+                                                          ? null
+                                                          : () => _session
+                                                                .resolve(
+                                                                  action,
+                                                                  choice:
+                                                                      choice,
+                                                                ),
+                                                      icon: Icon(
+                                                        choice == 'once'
+                                                            ? Icons.check
+                                                            : Icons.close,
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
                                   ],
-                                ],
-                              );
-                            },
+                                );
+                              },
+                            ),
                           );
                         },
                       ),

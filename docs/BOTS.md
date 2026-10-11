@@ -82,6 +82,12 @@ member; the picker inserts at the cursor. The conversation opens
 at its latest messages; scrolling up keeps your place as replies arrive. The down
 arrow returns to the latest messages with the same motion as normal chats.
 
+Pinch inward on the discussion to open the same cards as normal chat Recents.
+The group remains mounted with its draft and reading position. Tap its card or
+use Back to return; Back again returns to the screen that opened the group.
+Opening another conversation uses its normal chat window; Back restores the
+group's cards. Cards do not mark group messages as read.
+
 Tap the instance and bot count under the title for a compact member list
 anchored beneath that row, with saved names and avatars. Tap outside or use Back
 to dismiss it. The conversation uses a group icon when no picture is saved.

@@ -9759,6 +9759,16 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/widgets/recent_conversations/conversation_route_scope.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/recent_conversations/group_conversation_switcher.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/recent_conversations/recent_conversation_switcher.dart",
       "area": "lib",
       "provenance": "intentional-untracked"

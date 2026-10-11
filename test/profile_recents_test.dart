@@ -435,6 +435,74 @@ void main() {
     },
   );
 
+  for (final outcome in ['closed', 'failed', 'retired']) {
+    final rejectRoute = outcome == 'failed';
+    final retired = outcome == 'retired';
+    test(
+      'group-origin Recents fences selection after $outcome normal route',
+      () async {
+        final botFixture = BotsFixture();
+        final bots = BotsSession((_) async => [botFixture.repository]);
+        addTearDown(bots.dispose);
+        await bots.refresh();
+        await controller.openSession(
+          ProfileSessionKey(controller.current!.scope, 'shared-id'),
+        );
+        final original = controller.current!.chat!;
+        final activity = ValueNotifier<ChatNoticeActivity?>(null);
+        addTearDown(activity.dispose);
+        final closed = Completer<void>();
+        RecentConversationKey? opened;
+        final group = bots.observedGroups.single;
+        final visit = controller.groupRecentConversationSession(
+          group: group,
+          bots: bots,
+          onOpenGroup: (_) async {},
+          onOpenChat: (key) async {
+            opened = key;
+            await closed.future;
+            if (rejectRoute) throw StateError('Route unavailable');
+          },
+          activity: () => activity,
+        );
+        addTearDown(visit.dispose);
+        final origin = RecentConversationEntry.group(group).key;
+        expect(visit.selected, origin);
+        expect(visit.modeEnabled, isFalse);
+        visit.activate();
+        await Future<void>.delayed(Duration.zero);
+        final target = visit.entries
+            .firstWhere(
+              (entry) =>
+                  entry.key.chat?.sessionId == 'recent-5' &&
+                  entry.key.chat?.workspace.profileName == 'personal',
+            )
+            .key;
+        expect(visit.opensRoute(target), isTrue);
+        final opening = visit.select(target);
+        for (var i = 0; i < 20 && opened == null; i++) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(opened, target);
+        expect(controller.current!.chat!.key, target.chat);
+        expect(visit.selected, origin);
+        expect(visit.selecting, isTrue);
+        if (retired) visit.dispose();
+        closed.complete();
+        expect(await opening, !rejectRoute && !retired);
+        if (retired) {
+          expect(controller.current!.chat!.key, target.chat);
+          expect(visit.active, isFalse);
+        } else {
+          expect(controller.current!.chat, same(original));
+          expect(visit.selected, origin);
+          expect(visit.modeEnabled, isTrue);
+        }
+        expect(botFixture.commands, isEmpty);
+      },
+    );
+  }
+
   test('simultaneous Recents consumers share the physical refresh', () async {
     final delay = Completer<void>();
     fixture.pageDelays[('personal', 0)] = delay;

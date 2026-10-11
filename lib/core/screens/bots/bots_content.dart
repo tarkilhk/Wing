@@ -10,7 +10,6 @@ import '../../widgets/bot_avatar.dart';
 import '../../widgets/studio_error.dart';
 import '../../widgets/wing_app_bar.dart';
 import '../../widgets/workspace_action_menu.dart';
-import 'bot_group_screen.dart';
 import 'bot_profile_editor.dart';
 import 'bot_screen_view.dart';
 import 'bot_settings_screen.dart';
@@ -35,6 +34,7 @@ class BotsContent extends StatefulWidget {
     required this.onViewChanged,
     required this.onOpenMenu,
     required this.onOpenChat,
+    required this.onOpenGroup,
   });
   final BotsSession session;
   final Widget instanceHeader;
@@ -42,6 +42,7 @@ class BotsContent extends StatefulWidget {
   final ValueChanged<BotsViewState> onViewChanged;
   final VoidCallback onOpenMenu;
   final Future<void> Function(ProfileSessionKey) onOpenChat;
+  final Future<void> Function(BotGroup) onOpenGroup;
   @override
   State<BotsContent> createState() => _BotsContentState();
 }
@@ -208,12 +209,15 @@ class _BotsContentState extends State<BotsContent> {
     }
   }
 
-  Future<void> _openGroup(BotGroup group) => _push(
-    BotGroupScreen(
-      createSession: () => widget.session.openGroup(group),
-      onEdit: (group) => _editGroup(group, fromDiscussion: true),
-    ),
-  );
+  Future<void> _openGroup(BotGroup group) async {
+    widget.session.setVisible(false);
+    try {
+      await widget.onOpenGroup(group);
+    } finally {
+      if (mounted) widget.session.setVisible(true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.session,

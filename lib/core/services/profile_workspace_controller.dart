@@ -1044,7 +1044,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     required ValueListenable<ChatNoticeActivity?> activity,
   }) => RecentConversationSession.fromRecents(
     entries: entries,
-    source: _WorkspaceRecentConversationSource(this, bots, onOpenGroup),
+    source: _WorkspaceRecentConversationSource(
+      this,
+      bots,
+      onOpenGroup,
+      routeOrigin: null,
+      onOpenChat: null,
+    ),
     activity: activity,
   );
 
@@ -1055,7 +1061,31 @@ class ProfileWorkspaceController extends ChangeNotifier {
     required ValueListenable<ChatNoticeActivity?> Function() activity,
   }) => RecentConversationSession.fromChat(
     chat: RecentConversationEntry.chat(key: chat.key, title: chat.title),
-    source: _WorkspaceRecentConversationSource(this, bots, onOpenGroup),
+    source: _WorkspaceRecentConversationSource(
+      this,
+      bots,
+      onOpenGroup,
+      routeOrigin: null,
+      onOpenChat: null,
+    ),
+    activity: activity,
+  );
+
+  RecentConversationSession groupRecentConversationSession({
+    required BotGroup group,
+    required BotsSession bots,
+    required Future<void> Function(BotGroup) onOpenGroup,
+    required Future<void> Function(RecentConversationKey) onOpenChat,
+    required ValueListenable<ChatNoticeActivity?> Function() activity,
+  }) => RecentConversationSession.fromChat(
+    chat: RecentConversationEntry.group(group),
+    source: _WorkspaceRecentConversationSource(
+      this,
+      bots,
+      onOpenGroup,
+      routeOrigin: RecentConversationEntry.group(group).key,
+      onOpenChat: onOpenChat,
+    ),
     activity: activity,
   );
 

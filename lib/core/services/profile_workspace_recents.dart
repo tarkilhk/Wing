@@ -60,8 +60,12 @@ final class _WorkspaceRecentConversationSource
   _WorkspaceRecentConversationSource(
     this.controller,
     this.bots,
-    this.onOpenGroup,
-  );
+    this.onOpenGroup, {
+    required this.routeOrigin,
+    required this.onOpenChat,
+  });
+  final RecentConversationKey? routeOrigin;
+  final Future<void> Function(RecentConversationKey)? onOpenChat;
   final Future<void> Function(BotGroup) onOpenGroup;
   BotGroup? _group(RecentConversationKey key) =>
       key.group == null ? null : bots.groupForKey(key.group!);
@@ -95,9 +99,15 @@ final class _WorkspaceRecentConversationSource
   );
 
   @override
-  bool get current => !controller._closed;
+  bool get current =>
+      !controller._closed &&
+      (routeOrigin == null || _group(routeOrigin!) != null);
   @override
-  RecentConversationKey? get selected {
+  bool opensRoute(RecentConversationKey key) =>
+      routeOrigin != null || key.group != null;
+  @override
+  RecentConversationKey? get selected => routeOrigin ?? _selectedChat;
+  RecentConversationKey? get _selectedChat {
     final key = (controller.notificationChat ?? controller.current?.chat)?.key;
     return key == null ? null : RecentConversationKey.chat(key);
   }
@@ -330,6 +340,7 @@ final class _WorkspaceRecentConversationSource
     final previous = controller._current;
     final previousSession = previous?._selectedSession;
     final navigation = controller._navigationGeneration + 1;
+    var borrowedRoute = false;
     try {
       if (controller._resources[key.workspace]?.offlineSnapshot == true ||
           controller.recovering) {
@@ -341,26 +352,39 @@ final class _WorkspaceRecentConversationSource
         // operation keeps checking the runtime and authoritative history.
         await Future.any([revealed.future, refresh]);
       }
+      if (routeOrigin != null && isCurrent() && _selectedChat == target) {
+        borrowedRoute = true;
+        await onOpenChat!(target);
+      }
     } finally {
-      // A failed cross-profile resume may have selected the profile but no chat.
-      // Restore only this command's former selection, never a newer navigation.
-      if (isCurrent() &&
+      final failedSelection =
           controller._navigationGeneration == navigation &&
-          selected != RecentConversationKey.chat(key) &&
-          previous != null &&
-          previousSession != null &&
-          !previous.blocksSession(previousSession) &&
-          previous._chats.containsKey(previousSession)) {
+          _selectedChat != RecentConversationKey.chat(key);
+      final restore = routeOrigin == null
+          ? failedSelection && previousSession != null
+          : borrowedRoute || failedSelection;
+      // A borrowed route and a failed resume return to their captured owner.
+      // Retired visits and removed chats cannot restore it; failed resumes
+      // also check their navigation generation.
+      if (restore &&
+          isCurrent() &&
+          (previous == null ||
+              controller._resources[previous.scope] == previous) &&
+          (previousSession == null ||
+              (!previous!.blocksSession(previousSession) &&
+                  previous._chats.containsKey(previousSession)))) {
         controller._current = previous;
-        previous._selectedSession = previousSession;
+        previous?._selectedSession = previousSession;
         controller._changed();
-        controller.appPreferences.admitProfileSelection(
-          controller.connectionIdentity,
-          previous.scope.profileName,
-        );
-        await controller.appPreferences.settleProfileSelection(
-          controller.connectionIdentity,
-        );
+        if (previous != null) {
+          controller.appPreferences.admitProfileSelection(
+            controller.connectionIdentity,
+            previous.scope.profileName,
+          );
+          await controller.appPreferences.settleProfileSelection(
+            controller.connectionIdentity,
+          );
+        }
       }
     }
   }

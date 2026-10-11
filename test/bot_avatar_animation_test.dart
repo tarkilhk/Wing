@@ -388,6 +388,7 @@ void main() {
                   onViewChanged: (next) => setState(() => view = next),
                   onOpenMenu: () {},
                   onOpenChat: (key) async => opened.add(key.sessionId),
+                  onOpenGroup: (_) async {},
                 ),
               ),
             ),

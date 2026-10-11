@@ -71,6 +71,8 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   @override
   bool current = true;
   @override
+  bool opensRoute(RecentConversationKey key) => key.group != null;
+  @override
   late RecentConversationKey selected;
   final opens = <RecentConversationKey>[];
   final waitingPreviews =
@@ -278,7 +280,10 @@ Future<void> _twoContacts(
 }
 
 Future<void> _chatGesture(WidgetTester tester, {bool pinch = true}) async {
-  final rect = tester.getRect(find.byType(ProfileTranscript));
+  final group = find.byKey(const ValueKey('group-transcript'));
+  final rect = tester.getRect(
+    group.evaluate().isEmpty ? find.byType(ProfileTranscript) : group,
+  );
   final fractions = pinch ? [.24, .76] : [.16, .38];
   for (var y = rect.top + 24; y < rect.bottom - 24; y += 12) {
     if (!fractions.every(
@@ -2326,6 +2331,206 @@ void main() {
             frame,
             'passive-card-${brightness.name}-$scale',
           );
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group pinch shares Recents and preserves native Back ${brightness.name} $scale',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          final preferences = await SharedPreferences.getInstance();
+          final appPreferences = AppPreferences(preferences);
+          final fixture = _ScreenFixture();
+          final controller = ProfileWorkspaceController(
+            access: ConnectionAccess(
+              connection: SavedConnection(
+                id: 'host',
+                label: 'Home server',
+                host: 'localhost',
+                port: 1,
+                apiKey: '',
+              ),
+              dashboardOAuth: null,
+            ),
+            connectionIdentity: 'group-entry-ui',
+            preferences: preferences,
+            appPreferences: appPreferences,
+            gatewayFactory: fixture.gateway,
+          );
+          addTearDown(controller.dispose);
+          addTearDown(appPreferences.dispose);
+          await controller.initialize();
+          final botFixture = BotsFixture();
+          for (var seq = 1; seq <= 8; seq++) {
+            botFixture.events.add({
+              'room_id': 'room-1',
+              'seq': seq,
+              'kind': 'message.member',
+              'created_at': fixture.now - 60 + seq,
+              'actor': {'kind': 'member', 'id': 'atlas'},
+              'payload': {
+                'text':
+                    'Group reply $seq. Keep the discussion and its reading position when switching conversations.',
+              },
+            });
+          }
+          late BotsSession bots;
+          final activity = ValueNotifier<ChatNoticeActivity?>(null);
+          addTearDown(activity.dispose);
+          final frame = GlobalKey();
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 800);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: ChatNoticeActivityScope(
+                  activity: activity,
+                  child: RepaintBoundary(key: frame, child: child!),
+                ),
+              ),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                initialDestination: AppDestination.bots,
+                createBotsSession: () =>
+                    bots = BotsSession((_) async => [botFixture.repository]),
+              ),
+            ),
+          );
+          await _finishFrames(tester);
+          await tester.tap(find.text('Groups').first);
+          await _finishFrames(tester);
+          await tester.tap(find.text('Research team').first);
+          await _finishFrames(tester);
+          expect(find.byType(BotGroupScreen), findsOneWidget);
+          final switcherState = tester.state<RecentConversationSwitcherState>(
+            find.byType(RecentConversationSwitcher),
+          );
+          final visit = tester
+              .widget<RecentConversationSwitcher>(
+                find.byType(RecentConversationSwitcher),
+              )
+              .session;
+          final groupKey = visit.selected;
+          expect(groupKey?.group, bots.observedGroups.single.key);
+          expect(groupKey?.chat, isNull);
+          expect(visit.modeEnabled, isFalse);
+          final field = find.byKey(
+            const ValueKey('group-message-composer'),
+            skipOffstage: false,
+          );
+          await tester.enterText(field, 'Keep this group draft');
+          await tester.pump();
+          FocusManager.instance.primaryFocus?.unfocus();
+          await tester.pump();
+          final list = tester.widget<ListView>(
+            find.byKey(const ValueKey('group-transcript')),
+          );
+          list.controller!.jumpTo(0);
+          await tester.pump();
+          final readingPosition = list.controller!.offset;
+          final commands = List.of(botFixture.commands);
+          final resumes = fixture.calls
+              .where((call) => call.$2 == 'session.resume')
+              .length;
+          await _chatGesture(tester, pinch: false);
+          expect(visit.modeEnabled, isFalse);
+          await _chatGesture(tester);
+          expect(visit.modeEnabled, isTrue);
+          await _capture(
+            tester,
+            frame,
+            'group-recents-${brightness.name}-$scale',
+          );
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          await tester.showKeyboard(field);
+          tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+          await tester.pump();
+          final composerFocus = tester.widget<TextField>(field).focusNode!;
+          expect(composerFocus.hasFocus, isTrue);
+          await _chatGesture(tester);
+          expect(composerFocus.hasFocus, isFalse);
+          tester.view.viewInsets = FakeViewPadding.zero;
+          await _finishFrames(tester);
+          expect(visit.modeEnabled, isTrue);
+          expect(visit.selected, groupKey);
+          expect(botFixture.commands, commands);
+          expect(
+            fixture.calls.where((call) => call.$2 == 'session.resume'),
+            hasLength(resumes),
+          );
+          await _capture(
+            tester,
+            frame,
+            'group-recents-keyboard-${brightness.name}-$scale',
+          );
+          // A hidden discussion cannot clear a fresh reply's device read receipt.
+          final room = bots.observedGroups.single;
+          final receipt = bots.groupReads.sequence(room);
+          botFixture.events.add({
+            'room_id': 'room-1',
+            'seq': 9,
+            'kind': 'message.member',
+            'created_at': fixture.now,
+            'actor': {'kind': 'member', 'id': 'atlas'},
+            'payload': {'text': 'A reply received while viewing cards'},
+          });
+          await bots.refresh();
+          await _finishFrames(tester);
+          expect(bots.groupReads.sequence(room), receipt);
+          final normal = visit.entries.indexWhere(
+            (entry) => entry.key.chat?.workspace.profileName == 'personal',
+          );
+          expect(normal, greaterThanOrEqualTo(0));
+          final opened = switcherState.selectAdjacent(
+            normal - visit.selectedIndex,
+          );
+          await _finishFrames(tester);
+          expect(find.byType(ProfileTranscript), findsOneWidget);
+          expect(find.byType(BotGroupScreen), findsNothing);
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          await opened;
+          // The shared stack deliberately keeps its live discussion offstage.
+          expect(
+            find.byType(BotGroupScreen, skipOffstage: false),
+            findsOneWidget,
+          );
+          expect(visit.active, isTrue);
+          expect(visit.selected, groupKey);
+          expect(controller.current?.chat, isNull);
+          expect(list.controller!.offset, readingPosition);
+          expect(
+            tester.widget<TextField>(field).controller!.text,
+            'Keep this group draft',
+          );
+          // Selecting the current group expands the mounted room without a route.
+          await switcherState.selectAdjacent(0);
+          await _finishFrames(tester);
+          expect(composerFocus.hasFocus, isTrue);
+          expect(find.byType(BotGroupScreen), findsOneWidget);
+          expect(list.controller!.offset, readingPosition);
+          await _chatGesture(tester);
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          expect(find.byType(BotGroupScreen), findsOneWidget);
+          expect(visit.modeEnabled, isTrue);
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          expect(find.byKey(const ValueKey('bots-search')), findsOneWidget);
+          expect(visit.active, isFalse);
+          expect(botFixture.commands, commands);
+          expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
         },
       );

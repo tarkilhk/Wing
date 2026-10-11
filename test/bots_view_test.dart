@@ -589,6 +589,14 @@ void main() {
               onViewChanged: (next) => setState(() => state = next),
               onOpenMenu: () {},
               onOpenChat: (_) async {},
+              onOpenGroup: (group) => Navigator.of(context).push<void>(
+                MaterialPageRoute(
+                  builder: (_) => BotGroupScreen(
+                    createSession: () => session.openGroup(group),
+                    onEdit: (group) => openGroupEditor(context, session, group),
+                  ),
+                ),
+              ),
               instanceHeader: const Align(
                 alignment: Alignment.centerLeft,
                 child: ServerConnectionLabel(label: 'Home server'),
@@ -1543,6 +1551,15 @@ void main() {
                   onViewChanged: (next) => setState(() => view = next),
                   onOpenMenu: () {},
                   onOpenChat: (key) async => opened.add(key.sessionId),
+                  onOpenGroup: (group) => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => BotGroupScreen(
+                        createSession: () => session.openGroup(group),
+                        onEdit: (group) =>
+                            openGroupEditor(context, session, group),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1918,6 +1935,14 @@ void main() {
             onViewChanged: (next) => setState(() => view = next),
             onOpenMenu: () {},
             onOpenChat: (_) async {},
+            onOpenGroup: (group) => Navigator.of(context).push<void>(
+              MaterialPageRoute(
+                builder: (_) => BotGroupScreen(
+                  createSession: () => session.openGroup(group),
+                  onEdit: (group) => openGroupEditor(context, session, group),
+                ),
+              ),
+            ),
           ),
         ),
       ),
