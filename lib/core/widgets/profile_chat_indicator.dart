@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/profile_live_activity.dart';
 import '../services/profile_workspace_controller.dart';
 import '../theme/wing_theme.dart';
+import 'conversation_activity_status.dart';
 
 /// Precise state comes from the owned runtime and its active children.
 class ProfileChatIndicator extends StatelessWidget {
@@ -56,16 +57,10 @@ class ProfileChatIndicator extends StatelessWidget {
       message: label,
       child: Semantics(
         label: label,
-        child: SizedBox(
-          width: 18,
-          height: 18,
-          child: spinning && !MediaQuery.disableAnimationsOf(context)
-              ? CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: color,
-                  semanticsLabel: label,
-                )
-              : Icon(icon, size: 18, color: color),
+        child: ConversationStatusIndicator(
+          running: spinning,
+          icon: icon,
+          color: color,
         ),
       ),
     );

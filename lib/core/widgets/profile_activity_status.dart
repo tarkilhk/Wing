@@ -5,9 +5,8 @@ import '../models/gateway_activity.dart';
 import '../models/profile_live_activity.dart';
 import '../theme/wing_theme.dart';
 import '../services/profile_workspace_controller.dart';
-import 'activity_shimmer.dart';
+import 'conversation_activity_status.dart';
 import 'profile_chat_indicator.dart';
-import 'status_transition.dart';
 
 /// A current activity summary, independent of the scrollable transcript.
 class ProfileActivityStatus extends StatelessWidget {
@@ -76,12 +75,6 @@ class ProfileActivityStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = label;
-    return StatusTransition(
-      child: text == null ? null : _status(context, text),
-    );
-  }
-
-  Widget _status(BuildContext context, String text) {
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
     final active =
         !chat.runtime.needsInput &&
@@ -94,69 +87,37 @@ class ProfileActivityStatus extends StatelessWidget {
                   ),
                 ) ==
                 ProfileLiveActivityState.running);
-    return Semantics(
-      container: true,
-      liveRegion: true,
+    final Widget leading;
+    if (chat.runtime.compacting &&
+        !chat.runtime.needsInput &&
+        !chat.runtime.reconnecting) {
+      leading = Icon(
+        Icons.compress_rounded,
+        size: 18,
+        color: WingTokens.of(context).running,
+      );
+    } else if (chat.runtime.commandRunning &&
+        !chat.runtime.needsInput &&
+        !chat.runtime.reconnecting) {
+      leading = ConversationStatusIndicator(
+        running: true,
+        icon: Icons.pending_outlined,
+        color: color,
+      );
+    } else if (chat.runtime.execution == ChatExecution.idle &&
+        chat.runtime.activity(
+              backgroundWorking: chat.subagents.any((item) => !item.isTerminal),
+            ) ==
+            null) {
+      leading = Icon(Icons.chat_bubble_outline, size: 18, color: color);
+    } else {
+      leading = ProfileChatIndicator(chat: chat);
+    }
+    return ConversationActivityStatus(
       label: text,
-      child: ExcludeSemantics(
-        child: Tooltip(
-          message: text,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                if (chat.runtime.compacting &&
-                    !chat.runtime.needsInput &&
-                    !chat.runtime.reconnecting)
-                  Icon(
-                    Icons.compress_rounded,
-                    size: 18,
-                    color: WingTokens.of(context).running,
-                  )
-                else if (chat.runtime.commandRunning &&
-                    !chat.runtime.needsInput &&
-                    !chat.runtime.reconnecting)
-                  SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: MediaQuery.disableAnimationsOf(context)
-                        ? Icon(Icons.pending_outlined, size: 18, color: color)
-                        : CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: color,
-                          ),
-                  )
-                else if (chat.runtime.execution == ChatExecution.idle &&
-                    chat.runtime.activity(
-                          backgroundWorking: chat.subagents.any(
-                            (item) => !item.isTerminal,
-                          ),
-                        ) ==
-                        null)
-                  Icon(Icons.chat_bubble_outline, size: 18, color: color)
-                else
-                  ProfileChatIndicator(chat: chat),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ActivityShimmer(
-                    active: active,
-                    child: Text(
-                      text,
-                      maxLines: chat.runtime.compacting ? null : 1,
-                      overflow: chat.runtime.compacting
-                          ? TextOverflow.visible
-                          : TextOverflow.ellipsis,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelMedium?.copyWith(color: color),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      leading: leading,
+      active: active,
+      wrap: chat.runtime.compacting,
     );
   }
 }

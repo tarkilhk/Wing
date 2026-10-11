@@ -312,15 +312,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     _cancelMarkdownRestoration();
     _scroll.releaseExpansionAnchor();
     _jumping = true;
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _scroll.jumpTo(0);
-    } else {
-      await _scroll.animateTo(
-        0,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
-    }
+    await scrollToTranscriptLatest(context, _scroll, offset: 0);
     _jumping = false;
     _updateJump();
   }

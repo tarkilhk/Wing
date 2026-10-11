@@ -1916,6 +1916,11 @@
       "feature": "attachments-and-sharing",
       "library": "lib/core/widgets/composer_attachment_tile.dart"
     },
+    "lib/core/widgets/composer_icon_button.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/composer_icon_button.dart"
+    },
     "lib/core/widgets/config_backup_actions.dart": {
       "role": "view",
       "feature": "app-preferences-backup",
@@ -1935,6 +1940,11 @@
       "role": "view",
       "feature": "chat-activity",
       "library": "lib/core/widgets/context_ring.dart"
+    },
+    "lib/core/widgets/conversation_activity_status.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/conversation_activity_status.dart"
     },
     "lib/core/widgets/deleted_chat_recovery_notice.dart": {
       "role": "view",
