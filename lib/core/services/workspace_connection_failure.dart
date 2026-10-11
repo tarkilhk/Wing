@@ -95,6 +95,8 @@ Map<String, Object?> workspaceFailureDiagnostic(Object error) {
     if (error is JsonRpcError) ...{
       'rpc_method': error.method,
       if (error.code != null) 'rpc_code': error.code,
+      if ({4000, -32602}.contains(error.code)) 'rpc_failure': 'invalid_params',
+      if (error.code == -32601) 'rpc_failure': 'method_not_found',
       if ({'connection_closed', 'request_timeout'}.contains(error.reason))
         'rpc_reason': error.reason,
     },

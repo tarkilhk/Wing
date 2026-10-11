@@ -173,6 +173,7 @@ class ProfileGateway {
     Map<String, dynamic> params,
   ) async {
     final command = const {'command.dispatch', 'slash.exec'}.contains(method);
+    final elapsed = Stopwatch()..start();
     try {
       final request = _rpcRequest(method, params);
       return await (command ? request.timeout(commandTimeout) : request);
@@ -183,6 +184,9 @@ class ProfileGateway {
           'connection': scope.connectionId,
           'profile': scope.profileName,
           'operation': method,
+          'elapsed_ms': elapsed.elapsedMilliseconds,
+          'parameter_count': params.length,
+          'profile_parameter': params.containsKey('profile'),
           ...workspaceFailureDiagnostic(failure),
         },
         error: failure,
@@ -1335,6 +1339,9 @@ class ProfileGateway {
       );
     }
     onDispatched();
+    // Image generation is connection-wide; the stock schema forbids profile.
+    // Keep the captured transport and admission without adding scoped params.
+    if (method == 'image.generate') return _rpc(method, params);
     return call(method, params);
   }
 

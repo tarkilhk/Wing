@@ -6,6 +6,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:image/image.dart' as image;
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/services/bots_repository.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_diagnostics.dart';
@@ -16,6 +22,30 @@ import 'package:wing/core/services/ws_client.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
+import 'support/bots_fixture.dart';
+
+BotsRepository _imageRepository(ScopedRpc rpc) => BotsRepository.forServer(
+  AdministrationRepository(
+    connectionId: 'host',
+    connectionIdentity: 'instance-1',
+    connectionLabel: 'Home server',
+    request: (_, _, _, _) async => throw StateError('Unexpected HTTP read'),
+    settingsWrite: (_, _, _, _) async =>
+        throw StateError('Unexpected settings'),
+    ownedMutation: (_, _, _, _, _, _) async =>
+        throw StateError('Unexpected write'),
+    gateway: (profile) => ProfileGateway(
+      scope: WorkspaceScope(connectionId: 'host', profileName: profile),
+      get: (_, _) async => throw StateError('Unexpected profile read'),
+      rpc: rpc,
+      discover: () async => const ProfileDiscovery(
+        profiles: [],
+        currentName: null,
+        activeName: null,
+      ),
+    ),
+  ),
+);
 
 void main() {
   late DebugPrintCallback previousPrint;
@@ -59,6 +89,169 @@ void main() {
     appPreferences.dispose();
     debugPrint = previousPrint;
   });
+
+  test(
+    'group and avatar generation pass the strict stock image schema',
+    () async {
+      final bytes = image.encodePng(image.Image(width: 16, height: 16));
+      final calls = <Map<String, dynamic>>[];
+      final repository = _imageRepository((method, params) async {
+        expect(method, 'image.generate');
+        calls.add(params);
+        const allowed = {'prompt', 'aspect_ratio', 'max_bytes', 'probe'};
+        if (params.keys.any((key) => !allowed.contains(key))) {
+          throw JsonRpcError(
+            method,
+            'invalid params: profile: Extra inputs are not permitted',
+            code: 4000,
+          );
+        }
+        return {
+          'available': true,
+          'success': true,
+          'image_data': base64Encode(bytes),
+        };
+      });
+      expect(
+        await repository.generateGroupPicture('Team emblem', () => true, () {}),
+        bytes,
+      );
+      final bot = (await BotsFixture().repository.bots()).first;
+      expect(
+        await repository.generateAvatar(bot, 'Bot emblem', () => true, () {}),
+        bytes,
+      );
+      expect(calls, [
+        {
+          'prompt': 'Team emblem',
+          'aspect_ratio': 'square',
+          'max_bytes': 2000000,
+        },
+        {
+          'prompt': 'Bot emblem',
+          'aspect_ratio': 'square',
+          'max_bytes': 2000000,
+        },
+      ]);
+    },
+  );
+
+  test(
+    'bot metadata commands retain profile scope and retired images are not sent',
+    () async {
+      final calls = <Map<String, dynamic>>[];
+      final gateway = ProfileGateway(
+        scope: WorkspaceScope(connectionId: 'host', profileName: 'atlas'),
+        get: (_, _) async => {},
+        rpc: (_, params) async {
+          calls.add(params);
+          return {};
+        },
+        discover: () async => const ProfileDiscovery(
+          profiles: [],
+          currentName: null,
+          activeName: null,
+        ),
+      );
+      await gateway.botCommand(
+        'profiles.configure',
+        {'name': 'atlas'},
+        canDispatch: () => true,
+        onDispatched: () {},
+      );
+      expect(calls.single, {'name': 'atlas', 'profile': 'atlas'});
+      await expectLater(
+        gateway.botCommand(
+          'image.generate',
+          {'prompt': 'Unsent'},
+          canDispatch: () => false,
+          onDispatched: () => fail('Retired command dispatched'),
+        ),
+        throwsA(isA<DashboardRequestNotSentException>()),
+      );
+      expect(calls, hasLength(1));
+    },
+  );
+
+  test(
+    'RPC failure logs explain schema and timing without exposing payloads',
+    () async {
+      const secret = 'SECRET_NEVER_LOG';
+      final repository = _imageRepository(
+        (method, _) async => throw JsonRpcError(
+          method,
+          secret,
+          code: 4000,
+          data: {'token': secret},
+        ),
+      );
+      await expectLater(
+        repository.generateGroupPicture(secret, () => true, () {}),
+        throwsA(isA<JsonRpcError>()),
+      );
+      final rpc = events().singleWhere(
+        (event) => event['event'] == 'gateway.rpc_failed',
+      );
+      expect(rpc['rpc_failure'], 'invalid_params');
+      expect(rpc['parameter_count'], 3);
+      expect(rpc['profile_parameter'], false);
+      expect(rpc['elapsed_ms'], isA<int>());
+      final preparation = events().singleWhere(
+        (event) => event['event'] == 'bots.image_generation_failed',
+      );
+      expect(preparation['stage'], 'request');
+      expect(preparation['operation'], 'group_picture');
+      expect(preparation['rpc_code'], 4000);
+      expect(lines.join(), isNot(contains(secret)));
+    },
+  );
+
+  test(
+    'image logs distinguish provider, transfer and decoding failures',
+    () async {
+      const secret = 'SECRET_NEVER_LOG';
+      for (final scenario in [
+        (
+          {'available': false, 'success': false, 'error': secret},
+          'provider',
+          'provider_unavailable',
+        ),
+        (
+          {'available': true, 'success': false, 'error': secret},
+          'provider',
+          'generation_failed',
+        ),
+        (
+          {
+            'available': true,
+            'success': true,
+            'image': 'https://host/?token=$secret',
+          },
+          'transfer',
+          'image_data_missing',
+        ),
+        (
+          {'available': true, 'success': true, 'image_data': secret},
+          'decode',
+          'invalid_image_data',
+        ),
+      ]) {
+        lines.clear();
+        final repository = _imageRepository((_, _) async => scenario.$1);
+        await expectLater(
+          repository.generateGroupPicture(secret, () => true, () {}),
+          throwsA(anyOf(isA<Exception>(), isA<Error>())),
+        );
+        final event = events().singleWhere(
+          (event) => event['event'] == 'bots.image_generation_failed',
+        );
+        expect(event['stage'], scenario.$2);
+        expect(event['failure'], scenario.$3);
+        expect(event['elapsed_ms'], isA<int>());
+        expect(lines.join(), isNot(contains(secret)));
+      }
+    },
+  );
 
   testWidgets(
     'recovery logs retain failure, retry exhaustion and successful resume',

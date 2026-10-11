@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -503,6 +503,78 @@ void main() {
       draft.removePicture();
       expect(draft.picture, isNull);
       expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test(
+    'picture preparation logs its stage while preserving the existing banner',
+    () async {
+      final previousPrint = debugPrint;
+      final lines = <String>[];
+      debugPrint = (message, {wrapWidth}) {
+        if (message != null) lines.add(message);
+      };
+      addTearDown(() => debugPrint = previousPrint);
+      final (_, session) = await roster();
+      Uint8List? next = _photo();
+      var readFails = false;
+      final draft = BotGroupDraftSession(
+        session,
+        pictureIo: _Picker(() async {
+          if (readFails) throw StateError('SECRET_NEVER_LOG');
+          return next;
+        }),
+      );
+      addTearDown(draft.dispose);
+      await draft.pickPicture(canUse: () => true);
+      final saved = draft.picture;
+      for (final thumbnailFailure in [false, true]) {
+        lines.clear();
+        readFails = !thumbnailFailure;
+        next = Uint8List.fromList([1, 2, 3]);
+        await draft.pickPicture(canUse: () => true);
+        expect(draft.picture, same(saved));
+        expect(draft.pictureBusy, false);
+        expect(
+          draft.error,
+          'Room picture could not be prepared. Try another image or generate again.',
+        );
+        final record = jsonDecode(
+          lines
+              .singleWhere((line) => line.contains('bots.group_picture_failed'))
+              .substring('[WingConnection] '.length),
+        );
+        expect(record['operation'], 'upload');
+        expect(record['stage'], thumbnailFailure ? 'thumbnail' : 'read');
+        expect(record['elapsed_ms'], isA<int>());
+        expect(record['retired'], false);
+        if (thumbnailFailure) expect(record['input_bytes'], 3);
+        expect(lines.join(), isNot(contains('SECRET_NEVER_LOG')));
+      }
+    },
+  );
+
+  test(
+    'picture diagnostic printer failure leaves recovery and the banner unchanged',
+    () async {
+      final (_, session) = await roster();
+      final draft = BotGroupDraftSession(
+        session,
+        pictureIo: _Picker(() async => throw StateError('Unreadable image')),
+      );
+      addTearDown(draft.dispose);
+      final previousPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) => throw StateError('Printer failed');
+      try {
+        await draft.pickPicture(canUse: () => true);
+        expect(draft.pictureBusy, false);
+        expect(
+          draft.error,
+          'Room picture could not be prepared. Try another image or generate again.',
+        );
+      } finally {
+        debugPrint = previousPrint;
+      }
     },
   );
 

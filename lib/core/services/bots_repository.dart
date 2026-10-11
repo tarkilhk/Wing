@@ -9,6 +9,8 @@ import 'administration_repository.dart';
 import 'attachment_image_preflight.dart';
 import 'bot_display_client.dart';
 import 'profile_gateway.dart';
+import 'connection_diagnostics.dart';
+import 'workspace_connection_failure.dart';
 import '../models/bot_display.dart';
 
 typedef BotsRead =
@@ -388,35 +390,84 @@ class BotsRepository {
     void Function() onDispatched,
   ) async {
     _owns(bot);
-    final result = await _command(
+    return _generateImage(
       bot.profile.name,
-      'image.generate',
-      {'prompt': prompt, 'aspect_ratio': 'square', 'max_bytes': 2000000},
+      prompt,
+      'bot_avatar',
+      'Image generation did not complete',
       canDispatch,
       onDispatched,
     );
-    if (result['success'] != true) {
-      throw StateError('Image generation did not complete');
-    }
-    return _image(result['image_data']);
   }
 
   Future<Uint8List> generateGroupPicture(
     String prompt,
     bool Function() canDispatch,
     void Function() onDispatched,
+  ) => _generateImage(
+    'default',
+    prompt,
+    'group_picture',
+    'Room picture generation did not complete',
+    canDispatch,
+    onDispatched,
+  );
+
+  Future<Uint8List> _generateImage(
+    String profile,
+    String prompt,
+    String operation,
+    String failureMessage,
+    bool Function() canDispatch,
+    void Function() onDispatched,
   ) async {
-    final result = await _command(
-      'default',
-      'image.generate',
-      {'prompt': prompt, 'aspect_ratio': 'square', 'max_bytes': 2000000},
-      canDispatch,
-      onDispatched,
-    );
-    if (result['success'] != true) {
-      throw StateError('Room picture generation did not complete');
+    final elapsed = Stopwatch()..start();
+    var stage = 'request', failure = 'request_failed';
+    Map<String, dynamic>? result;
+    try {
+      result = await _command(
+        profile,
+        'image.generate',
+        {'prompt': prompt, 'aspect_ratio': 'square', 'max_bytes': 2000000},
+        canDispatch,
+        onDispatched,
+      );
+      stage = 'provider';
+      failure = result['available'] == false
+          ? 'provider_unavailable'
+          : 'generation_failed';
+      if (result['success'] != true) throw StateError(failureMessage);
+      stage = 'transfer';
+      failure = 'image_data_missing';
+      final data = result['image_data'];
+      if (data is String && data.trim().isNotEmpty) {
+        stage = 'decode';
+        failure = 'invalid_image_data';
+      }
+      return _image(data);
+    } catch (error, stack) {
+      logConnectionDiagnostic(
+        'bots.image_generation_failed',
+        details: {
+          'connection': scope.connectionId,
+          'profile': profile,
+          'operation': operation,
+          'stage': stage,
+          'failure': failure,
+          'elapsed_ms': elapsed.elapsedMilliseconds,
+          if (result?['available'] is bool) 'available': result!['available'],
+          if (result?['success'] is bool) 'success': result!['success'],
+          if (result != null) ...{
+            'image_data_present': result['image_data'] is String,
+            'image_reference_present': result['image'] is String,
+          },
+          ...workspaceFailureDiagnostic(error),
+        },
+        error: error,
+        stackTrace: stack,
+      );
+      rethrow;
     }
-    return _image(result['image_data']);
   }
 
   Future<ProfileSessionKey> openChat(
