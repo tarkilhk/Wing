@@ -1470,6 +1470,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   /// Establish the destination synchronously, before any network operation.
   Future<void> openNotification(
     ProfileSessionKey key, {
+    String? title,
     bool Function()? isCurrent,
   }) {
     if (!owns(key)) throw ArgumentError('Wrong connection settings or host');
@@ -1478,6 +1479,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _notificationIsCurrent = isCurrent;
     _notificationAttempts = 0;
     final resource = _resource(key.workspace.profileName);
+    // A chat destination supersedes older profile-list publication immediately.
+    // Its connection and history load are owned by this opening, not the browser.
+    ++_generation;
+    _cancelOlderLoads();
+    if (_current != null) _invalidateSessionLoad(_current!);
+    if (_current != resource) _invalidateSessionLoad(resource);
+    _pendingProfile = null;
     final row = resource._sessions
         .where((r) => r['id'] == key.sessionId)
         .firstOrNull;
@@ -1486,9 +1494,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
       () => _createChatRecord(
         key: key,
         runtimeId: key.sessionId,
-        title: row?['title'] as String? ?? 'Chat',
+        title: title ?? row?['title'] as String? ?? 'Chat',
       ).._runtime.installOfflineReading(),
     );
+    if (title != null) chat._title = title;
     chat._runtime.beginOpening();
     connectionStatus.beginRecovery('notification');
     _changed();
@@ -1565,6 +1574,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         throw _initializationFailure ?? TimeoutException('Connecting');
       }
       chat._runtime.recovered();
+      _resource(key.workspace.profileName)._offlineSnapshot = false;
       final row = _resource(
         key.workspace.profileName,
       ).sessions.where((row) => row['id'] == key.sessionId).firstOrNull;
@@ -3357,17 +3367,62 @@ class ProfileWorkspaceController extends ChangeNotifier {
   /// mutable workspace owner. Recovery policy stays with the connection owner.
   Future<void> openBrowserSession(
     ProfileSessionKey key, {
+    String? title,
     required bool Function() isCurrentRequest,
   }) async {
     if (_closed || !isCurrentRequest()) return;
     if (!owns(key)) throw ArgumentError('Wrong connection settings or host');
-    if (_resources[key.workspace]?.offlineSnapshot == true || recovering) {
-      // Publishing the destination replaces and disposes the browser. Its
-      // request authority admits this handoff; the controller's generation
-      // owns recovery until Back or a newer destination cancels it.
-      await openNotification(key);
-    } else {
-      await openSession(key, isCurrentRequest: isCurrentRequest);
+    // Publish every explicit destination before I/O, including during profile
+    // refresh. Browser disposal transfers authority to the opening generation;
+    // Back or a newer destination can still cancel its connection/history reads.
+    await openNotification(key, title: title);
+  }
+
+  /// A saved chat needs a validated profile and transport, not a list/tree.
+  /// Keep the existing browser snapshot while the exact destination is opened.
+  Future<bool> _selectChatProfile(
+    WorkspaceScope scope,
+    bool Function()? isCurrentRequest,
+  ) async {
+    final generation = ++_generation;
+    final resource = _resource(scope.profileName);
+    _cancelOlderLoads();
+    if (_current != null) _invalidateSessionLoad(_current!);
+    if (_current != resource) _invalidateSessionLoad(resource);
+    _pendingProfile = null;
+    bool valid() =>
+        !_closed &&
+        generation == _generation &&
+        (isCurrentRequest?.call() ?? true);
+    try {
+      final profiles = await resource.gateway.discover();
+      if (!valid()) return false;
+      if (profiles.named(scope.profileName) == null) {
+        throw StateError('Profile ${scope.profileName} is no longer available');
+      }
+      await resource.gateway.connect();
+      if (!valid()) return false;
+      _adoptDiscovery(profiles);
+      _current = resource;
+      _error = null;
+      _failedSwitchProfile = null;
+      _failedSwitchError = null;
+      appPreferences.admitProfileSelection(
+        connectionIdentity,
+        scope.profileName,
+      );
+      unawaited(appPreferences.settleProfileSelection(connectionIdentity));
+      return true;
+    } catch (failure) {
+      if (!valid()) return false;
+      _initializationFailure = failure;
+      _error = failure is StateError
+          ? failure.message.toString()
+          : workspaceFailureMessage(failure);
+      _failedSwitchProfile = scope.profileName;
+      _failedSwitchError = _error;
+      _changed();
+      return false;
     }
   }
 
@@ -3445,7 +3500,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     // A newer selection must supersede an unfinished switch even when the
     // user chooses a chat in the profile that is still on screen.
     if ((_current?.scope != key.workspace || switching) &&
-        !await switchProfile(key.workspace.profileName)) {
+        !await _selectChatProfile(key.workspace, isCurrentRequest)) {
       return null;
     }
     if (isCurrentRequest?.call() == false) return null;

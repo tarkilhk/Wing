@@ -115,6 +115,91 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final sameProfile in [true, false]) {
+    testWidgets(
+      sameProfile
+          ? 'saved chat opens before same-profile refresh completes'
+          : 'saved chat opens before profile loading completes',
+      (tester) async {
+        fixture.recoveryHistory = [
+          {'id': 1, 'role': 'assistant', 'content': 'Selected saved answer'},
+        ];
+        await show(tester);
+        await tester.pumpAndSettle();
+        final profile = sameProfile ? 'personal' : 'work';
+        final gate = Completer<void>();
+        fixture.pageDelays[(profile, 0)] = gate;
+        addTearDown(() {
+          if (!gate.isCompleted) gate.complete();
+        });
+        Future<void>? refreshing;
+        if (sameProfile) {
+          refreshing = controller.refresh();
+        } else {
+          await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+        }
+        await tester.pump();
+        await tester.tap(find.byKey(ValueKey('chat-$profile-newest')));
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const ValueKey('chat-filter-profile')), findsNothing);
+        for (
+          var attempt = 0;
+          attempt < 80 &&
+              (controller.notificationChat != null ||
+                  find
+                      .textContaining(
+                        'Selected saved answer',
+                        findRichText: true,
+                      )
+                      .evaluate()
+                      .isEmpty);
+          attempt++
+        ) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        expect(gate.isCompleted, isFalse);
+        expect(controller.notificationChat, isNull);
+        expect(controller.current?.chat?.key.workspace.profileName, profile);
+        expect(controller.current?.chat?.key.sessionId, 'newest');
+        expect(
+          controller.current?.chat?.title,
+          sameProfile ? 'Improve the conversation list' : 'Work chat',
+        );
+        expect(
+          find.textContaining('Selected saved answer', findRichText: true),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('conversation-composer')),
+          findsOneWidget,
+        );
+        final resumeCalls = fixture.calls
+            .where((call) => call.$2 == 'session.resume')
+            .length;
+        expect(resumeCalls, 1);
+        gate.complete();
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump();
+        if (refreshing != null) await refreshing;
+        expect(controller.current?.chat?.key.workspace.profileName, profile);
+        expect(controller.current?.chat?.key.sessionId, 'newest');
+        expect(
+          find.textContaining('Selected saved answer', findRichText: true),
+          findsOneWidget,
+        );
+        expect(
+          fixture.calls.where((call) => call.$2 == 'prompt.submit'),
+          isEmpty,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final leaveChat in [false, true]) {
     testWidgets(
       leaveChat

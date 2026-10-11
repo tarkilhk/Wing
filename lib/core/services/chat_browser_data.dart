@@ -457,6 +457,7 @@ final class ChatBrowserData extends ChangeNotifier {
     try {
       await _controller.openBrowserSession(
         entry.sessionKey,
+        title: entry.title,
         isCurrentRequest: active,
       );
     } catch (error) {
