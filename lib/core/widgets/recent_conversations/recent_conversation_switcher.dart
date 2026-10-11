@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
-import '../../models/profile_session_key.dart';
 import '../../models/recent_conversation.dart';
 import '../../services/recent_conversation_session.dart';
 import '../studio_error.dart';
@@ -31,7 +30,7 @@ class RecentConversationSwitcher extends StatefulWidget {
     required this.onPresentationChanged,
   });
   final RecentConversationSession session;
-  final ProfileSessionKey chatKey;
+  final RecentConversationKey chatKey;
   final Widget child;
   final Widget Function(RecentConversationCard) previewBuilder;
   final bool gesturesEnabled, nudgesEnabled;
@@ -59,11 +58,11 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   final _stackFooter = GlobalKey();
   double _footerHeight = 0;
   bool _footerMeasurementPending = false;
-  final _placeholders = <ProfileSessionKey, Widget>{};
+  final _placeholders = <RecentConversationKey, Widget>{};
   Widget? _stagingView;
-  final _failures = <ProfileSessionKey, Object>{};
-  final _initialBatch = <ProfileSessionKey>{};
-  final _completed = <ProfileSessionKey>{};
+  final _failures = <RecentConversationKey, Object>{};
+  final _initialBatch = <RecentConversationKey>{};
+  final _completed = <RecentConversationKey>{};
   Timer? _batchTimer;
   Completer<void>? _preparationCancel;
   Future<void>? _liveCapture;
@@ -75,7 +74,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   Completer<void>? _selectionCompletion;
   Completer<void>? _expansionCompletion;
   Widget? _selectionChild;
-  ProfileSessionKey? _openingKey;
+  RecentConversationKey? _openingKey;
   bool _paintingSelected = false, _selectionPainted = false;
   bool _expansionFinished = false;
   bool get _moving => _gesture != null || _motion.animating || _selecting;
@@ -101,7 +100,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   List<int> get _cardOffsets =>
       widget.session.entries.length == 1 ? [0] : [-1, 0, 1];
   int get _focusedIndex => _base - _motion.position.round();
-  int _indexOf(ProfileSessionKey key) =>
+  int _indexOf(RecentConversationKey key) =>
       widget.session.entries.indexWhere((entry) => entry.key == key);
 
   @override
@@ -179,7 +178,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       _membership = widget.session.entries;
       // Adding entries changes modulo arithmetic after a circular lap. Rebase
       // the settled stack on its identity before exposing the expanded ring.
-      _base = _indexOf(focused);
+      _base = math.max(0, _indexOf(focused));
       _motion.jump(position: 0, lift: _motion.lift, zoom: _motion.zoom);
       if (_stack) _beginBatch();
     }
@@ -267,7 +266,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     });
   }
 
-  void _completeCard(ProfileSessionKey key) {
+  void _completeCard(RecentConversationKey key) {
     if (_initialBatch.contains(key)) _completed.add(key);
   }
 
@@ -323,7 +322,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       }
       if (!current()) return;
       final neighborhood = widget.session.keysAround(_focusedIndex, limit: 3);
-      final order = <ProfileSessionKey>{
+      final order = <RecentConversationKey>{
         ...neighborhood,
         ..._initialBatch.where((key) => !_completed.contains(key)),
       };
@@ -334,7 +333,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
           .toList();
       _failures.removeWhere((key, _) => !priorities.contains(key));
       _snapshots.retain(neighborhood.toSet());
-      final needed = <ProfileSessionKey>[];
+      final needed = <RecentConversationKey>[];
       for (final key in priorities) {
         final revision = _snapshotRevision(key);
         if (_snapshots.imageFor(key) != null &&
@@ -476,7 +475,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   int _captureBytes(double ratio) =>
       (_size.width * ratio).ceil() * (_size.height * ratio).ceil() * 4;
 
-  Object _snapshotRevision(ProfileSessionKey key) => _snapshots.isLive(key)
+  Object _snapshotRevision(RecentConversationKey key) => _snapshots.isLive(key)
       ? widget.session.previewRevision(key)
       : widget.session.cardRevision(key);
 
@@ -731,7 +730,9 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
 
   Future<void> _select(int index) {
     if (_selecting || !widget.session.active) return Future.value();
-    final key = widget.session.entryAt(index).key;
+    final entry = widget.session.entryAt(index);
+    final key = entry.key;
+    if (entry.group != null) return _selectGroup(key);
     if (key == widget.session.selected) {
       _returnToChat(cardIndex: index);
       return Future.value();
@@ -764,6 +765,26 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     );
     unawaited(_openSelected(index, fromStack, completion, expansion.future));
     return completion.future;
+  }
+
+  Future<void> _selectGroup(RecentConversationKey key) async {
+    final fromStack = _stack;
+    _endBatch();
+    ++_captureGeneration;
+    _motion.stop();
+    setState(() => _selecting = true);
+    _syncCueAdmission();
+    final session = widget.session;
+    await session.select(key);
+    if (!mounted || widget.session != session || !session.active) return;
+    setState(() => _selecting = false);
+    if (fromStack) {
+      _beginBatch();
+      _syncCueAdmission();
+      _queueIdleWork();
+    } else {
+      _returnToChat();
+    }
   }
 
   void _tryReveal(Completer<void> completion) {
@@ -1043,7 +1064,11 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     );
   }
 
-  Widget _preparedCard(int index, ProfileSessionKey key, ui.Image? capture) {
+  Widget _preparedCard(
+    int index,
+    RecentConversationKey key,
+    ui.Image? capture,
+  ) {
     if (capture != null) {
       return RawImage(
         key: ValueKey((key, 'snapshot')),

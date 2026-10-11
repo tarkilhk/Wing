@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../models/recent_conversation.dart';
 import '../bot_avatar.dart';
+import '../bot_group_identity.dart';
 import '../../models/transcript_message.dart';
 import '../../models/connection.dart';
 import '../../services/server_connection_status.dart';
@@ -31,12 +32,14 @@ class ConversationPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final preview = card.preview;
     final rows = preview?.reading.messages ?? const <Map<String, dynamic>>[];
-    final messages = rows
-        .map(TranscriptMessage.fromRow)
-        .where((message) => message.kind == TranscriptMessageKind.dialogue)
-        .toList()
-        .reversed
-        .toList();
+    final messages =
+        card.preview?.group?.messages.reversed.toList() ??
+        rows
+            .map(TranscriptMessage.fromRow)
+            .where((message) => message.kind == TranscriptMessageKind.dialogue)
+            .toList()
+            .reversed
+            .toList();
     final colors = Theme.of(context).colorScheme;
     final stackedScope =
         MediaQuery.textScalerOf(context).scale(12) > 18 &&
@@ -52,11 +55,20 @@ class ConversationPreview extends StatelessWidget {
       style: scopeStyle,
     );
     final project = Text(
-      preview?.scopeLabel ?? card.entry.key.workspace.profileName,
+      preview?.scopeLabel ??
+          card.entry.key.chat?.workspace.profileName ??
+          'Bot group',
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: scopeStyle,
     );
+    final groupIdentity = card.entry.group == null
+        ? null
+        : BotGroupIdentity(
+            group: card.entry.group!,
+            bots: preview?.group?.appearances.values ?? const [],
+            size: 32,
+          );
     return IgnorePointer(
       child: Scaffold(
         appBar: WingAppBar(
@@ -66,11 +78,17 @@ class ConversationPreview extends StatelessWidget {
             icon: Icon(Icons.menu),
             tooltip: 'Open navigation menu',
           ),
-          title: BotConversationTitle(
-            title: preview?.entry.title ?? card.entry.title,
-            bot: card.bot,
-            mood: null,
-          ),
+          title: card.entry.group != null
+              ? Text(
+                  card.entry.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                )
+              : BotConversationTitle(
+                  title: preview?.entry.title ?? card.entry.title,
+                  bot: card.bot,
+                  mood: null,
+                ),
           contextHeight: stackedScope ? 96 : 48,
           contextRow: stackedScope
               ? Column(
@@ -81,7 +99,12 @@ class ConversationPreview extends StatelessWidget {
                       height: 48,
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: project,
+                        child: Row(
+                          children: [
+                            Expanded(child: project),
+                            ?groupIdentity,
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -100,6 +123,7 @@ class ConversationPreview extends StatelessWidget {
                         child: Text('·', style: scopeStyle),
                       ),
                       Expanded(child: project),
+                      ?groupIdentity,
                     ],
                   ),
                 ),
@@ -130,6 +154,8 @@ class ConversationPreview extends StatelessWidget {
                     child: ProfileMessage(
                       message: message,
                       loadImages: false,
+                      senderAppearance:
+                          preview?.group?.appearances[message.senderHandle],
                       showEditAction: message.role == 'user',
                       showRestoreAction: message.role == 'user',
                     ),
@@ -162,6 +188,8 @@ class ConversationPreview extends StatelessWidget {
                                 child: Text(
                                   preview?.draft.isNotEmpty == true
                                       ? preview!.draft
+                                      : card.entry.group != null
+                                      ? 'Message the group'
                                       : 'Message Hermes or type /',
                                   maxLines: 3,
                                   overflow: TextOverflow.ellipsis,

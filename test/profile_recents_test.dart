@@ -1,6 +1,7 @@
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'dart:async';
+import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -12,6 +13,7 @@ import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/models/session_visibility.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/workspace_recents_session.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
@@ -260,31 +262,40 @@ void main() {
       final activity = ValueNotifier<ChatNoticeActivity?>(null);
       addTearDown(activity.dispose);
       final visit = controller.recentConversationSession(
+        onOpenGroup: (_) async {},
         entries: [
           for (final key in keys)
-            RecentConversationEntry(key: key, title: 'Saved title'),
+            RecentConversationEntry.chat(key: key, title: 'Saved title'),
         ],
         bots: bots,
         activity: activity,
       );
       addTearDown(visit.dispose);
       final calls = fixture.calls.length;
-      visit.prepare(keys.take(3));
+      visit.prepare(keys.take(3).map(RecentConversationKey.chat));
       await Future<void>.delayed(Duration.zero);
       expect(visit.cardAt(0).bot!.title, 'Canonical assistant');
       expect(visit.cardAt(0).bot!.describesConversation(target), isTrue);
       expect(fixture.calls.length, calls);
       expect(botFixture.commands, isEmpty);
       final reading = visit.cardAt(0).preview;
-      final revision = visit.previewRevision(target),
-          pixels = visit.cardRevision(target);
+      final revision = visit.previewRevision(
+            RecentConversationKey.chat(target),
+          ),
+          pixels = visit.cardRevision(RecentConversationKey.chat(target));
       row['ui_meta'] = {
         'hermes-bots': {'title': 'Renamed assistant'},
       };
       row['ui_meta_revisions'] = {'hermes-bots': 3};
       await bots.refresh();
-      expect(visit.previewRevision(target), revision);
-      expect(visit.cardRevision(target), isNot(pixels));
+      expect(
+        visit.previewRevision(RecentConversationKey.chat(target)),
+        revision,
+      );
+      expect(
+        visit.cardRevision(RecentConversationKey.chat(target)),
+        isNot(pixels),
+      );
       expect(visit.cardAt(0).preview, same(reading));
       expect(visit.cardAt(0).bot!.title, 'Renamed assistant');
     },
@@ -301,24 +312,29 @@ void main() {
       await controller.updateDraft(chat, 'Unsent work');
       final activity = ValueNotifier<ChatNoticeActivity?>(null);
       final visit = controller.chatRecentConversationSession(
+        onOpenGroup: (_) async {},
         bots: BotsSession((_) async => const []),
         chat: chat,
         activity: () => activity,
       );
       addTearDown(visit.dispose);
       addTearDown(activity.dispose);
-      final reads = fixture.reads.length, calls = fixture.calls.length;
+      final resumes = fixture.calls
+          .where((call) => call.$2 == 'session.resume')
+          .length;
       expect(visit.modeEnabled, isFalse);
-      expect(visit.selected, chat.key);
+      expect(visit.selected, RecentConversationKey.chat(chat.key));
       visit.activate();
       await Future<void>.delayed(Duration.zero);
-      expect(visit.entries.first.key, chat.key);
+      expect(visit.entries.last.key, RecentConversationKey.chat(chat.key));
       expect(
-        visit.entries.where((entry) => entry.key == chat.key),
+        visit.entries.where((entry) => entry.key.chat == chat.key),
         hasLength(1),
       );
       expect(
-        visit.entries.any((entry) => entry.key.workspace.profileName == 'work'),
+        visit.entries.any(
+          (entry) => entry.key.chat!.workspace.profileName == 'work',
+        ),
         isTrue,
       );
       expect(
@@ -326,8 +342,96 @@ void main() {
         isFalse,
       );
       expect(chat.composer.observation.displayedText, 'Unsent work');
-      expect(fixture.calls, hasLength(calls));
-      expect(fixture.reads, hasLength(reads));
+      expect(
+        fixture.calls.where((call) => call.$2 == 'session.resume'),
+        hasLength(resumes),
+      );
+    },
+  );
+
+  test(
+    'pinch catalog matches merged Recents freshness order including rooms',
+    () async {
+      final botFixture = BotsFixture();
+      for (var seq = 1; seq <= 120; seq++) {
+        botFixture.events.add({
+          'room_id': 'room-1',
+          'seq': seq,
+          'kind': 'message.member',
+          'created_at': fixture.now - 150 + seq,
+          'actor': {'kind': 'member', 'id': 'atlas'},
+          'payload': {'text': 'Group answer $seq'},
+        });
+      }
+      final bots = BotsSession((_) async => [botFixture.repository]);
+      addTearDown(bots.dispose);
+      await bots.refresh();
+      await controller.openSession(
+        ProfileSessionKey(controller.current!.scope, 'recent-5'),
+      );
+      await controller.refreshRecents();
+      final merged = WorkspaceRecentsSession(controller, bots);
+      addTearDown(merged.dispose);
+      final expected = merged
+          .items()
+          .map((item) => item.group?.name ?? item.chat!.title)
+          .toList();
+      expect(expected, contains('Research team'));
+      final activity = ValueNotifier<ChatNoticeActivity?>(null);
+      addTearDown(activity.dispose);
+      BotGroup? openedGroup;
+      final closeRoom = Completer<void>();
+      final visit = controller.chatRecentConversationSession(
+        onOpenGroup: (group) async {
+          openedGroup = group;
+          botFixture.room['name'] = 'Renamed research team';
+          await bots.refresh();
+          await closeRoom.future;
+        },
+        bots: bots,
+        chat: controller.current!.chat!,
+        activity: () => activity,
+      );
+      addTearDown(visit.dispose);
+      visit.activate();
+      await Future<void>.delayed(Duration.zero);
+      expect(visit.catalogLoading, isFalse);
+      expect(visit.entries.map((entry) => entry.title), expected);
+      final room = visit.entries.singleWhere((entry) => entry.group != null);
+      final selected = visit.selected;
+      final revision = visit.previewRevision(room.key);
+      final commands = List.of(botFixture.commands);
+      final chatCalls = List.of(fixture.calls);
+      expect(bots.groupReads.unread(room.group!), isTrue);
+      visit.prepare([room.key]);
+      await Future<void>.delayed(Duration.zero);
+      final index = visit.entries.indexOf(room);
+      expect(
+        visit.cardAt(index).preview!.group!.messages.map((m) => m.text),
+        List.generate(6, (i) => 'Group answer ${115 + i}'),
+      );
+      expect(
+        visit.cardAt(index).preview!.group!.appearances.keys,
+        contains('bot_atlas'),
+      );
+      expect(visit.previewRevision(room.key), revision);
+      expect(bots.groupReads.unread(room.group!), isTrue);
+      expect(botFixture.commands, commands);
+      expect(fixture.calls, chatCalls);
+      final opening = visit.select(room.key);
+      await Future<void>.delayed(Duration.zero);
+      expect(openedGroup?.key, room.key.group);
+      expect(visit.selecting, isTrue);
+      expect(visit.selected, selected);
+      closeRoom.complete();
+      expect(await opening, isTrue);
+      expect(
+        visit.entries.singleWhere((entry) => entry.key == room.key).title,
+        'Renamed research team',
+      );
+      expect(visit.selected, selected);
+      expect(controller.current!.chat!.key, selected!.chat);
+      expect(botFixture.commands, commands);
     },
   );
 

@@ -19,7 +19,7 @@ class WorkspaceActivityContent extends StatefulWidget {
   final ProfileWorkspaceController controller;
   final BotsSession bots;
   final bool visible;
-  final void Function(ProfileRecentChat, List<ProfileRecentChat>) onOpen;
+  final void Function(ProfileRecentChat, List<WorkspaceRecentItem>) onOpen;
   final Future<void> Function(BotGroup) onOpenGroup;
   @override
   State<WorkspaceActivityContent> createState() =>
@@ -84,9 +84,6 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final items = _session.items();
-    final chats = List<ProfileRecentChat>.unmodifiable(
-      items.map((item) => item.chat).whereType<ProfileRecentChat>(),
-    );
     final now = DateTime.now();
     final colors = controller.appPreferences.profileColorsFor(
       controller.connectionIdentity,
@@ -148,7 +145,7 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
                       if (item.group case final group?) {
                         _openGroup(group);
                       } else {
-                        widget.onOpen(item.chat!, chats);
+                        widget.onOpen(item.chat!, items);
                       }
                     },
             ),

@@ -28,10 +28,13 @@ While Hermes is working, the composer can **Steer**, **Queue** or **Stop**. The 
 
 ## Revisit the result
 
-Open a chat from **Recents** to switch between that visit's conversations with a
-two-finger horizontal swipe. Pinch inward to open the card stack; its icon-only
-controls also support keyboard and accessibility navigation. Android Back
-returns from the stack to the conversation, then to Recents.
+Inside a chat, pinch inward to open the same conversations shown in **Recents**,
+including bot groups. Cards follow message freshness: left is newer, right is
+older, with the oldest and newest linked in a circle. Once enabled, a two-finger
+horizontal swipe switches to the adjacent conversation. Icon-only controls also
+support keyboard and accessibility navigation. Opening a group shows its group
+chat; Back returns to the cards. Back from the cards returns to the conversation,
+then to its original Chats, Bots or Recents screen.
 When you return to
 a conversation already loaded in this workspace, its retained messages appear
 while Wing refreshes from Hermes. The thin bar at the top stays visible during

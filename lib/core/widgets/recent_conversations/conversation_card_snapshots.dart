@@ -1,6 +1,6 @@
 import 'dart:ui' as ui;
 
-import '../../models/profile_session_key.dart';
+import '../../models/recent_conversation.dart';
 
 /// Disposable viewport pixels for one Recents visit, without transcript owners.
 /// Reads never capture, decode, load history or acquire execution authority.
@@ -9,14 +9,14 @@ final class ConversationCardSnapshots {
 
   final int byteLimit;
   final _images =
-      <ProfileSessionKey, ({ui.Image image, bool live, Object revision})>{};
+      <RecentConversationKey, ({ui.Image image, bool live, Object revision})>{};
   int _bytes = 0;
   int _reserved = 0;
-  Set<ProfileSessionKey> _neighborhood = {};
+  Set<RecentConversationKey> _neighborhood = {};
 
-  ui.Image? imageFor(ProfileSessionKey key) => _images[key]?.image;
-  bool isLive(ProfileSessionKey key) => _images[key]?.live ?? false;
-  Object? revisionFor(ProfileSessionKey key) => _images[key]?.revision;
+  ui.Image? imageFor(RecentConversationKey key) => _images[key]?.image;
+  bool isLive(RecentConversationKey key) => _images[key]?.live ?? false;
+  Object? revisionFor(RecentConversationKey key) => _images[key]?.revision;
 
   /// Includes readback in flight in the same memory budget as retained pixels.
   void reserve(int bytes) {
@@ -25,7 +25,7 @@ final class ConversationCardSnapshots {
   }
 
   void release(int bytes) => _reserved -= bytes;
-  void invalidate(ProfileSessionKey key) => _remove(key);
+  void invalidate(RecentConversationKey key) => _remove(key);
 
   void _evictToFit(int bytes) {
     while (_bytes + _reserved + bytes > byteLimit && _images.isNotEmpty) {
@@ -39,7 +39,7 @@ final class ConversationCardSnapshots {
 
   /// Takes ownership, including disposal when the image exceeds the budget.
   void record(
-    ProfileSessionKey key,
+    RecentConversationKey key,
     ui.Image image, {
     required bool live,
     required Object revision,
@@ -55,7 +55,7 @@ final class ConversationCardSnapshots {
     _bytes += bytes;
   }
 
-  void retain(Set<ProfileSessionKey> keys) {
+  void retain(Set<RecentConversationKey> keys) {
     _neighborhood = Set.of(keys);
     // Both genuine and prepared images survive neighborhood changes. Byte
     // eviction favors the visible cards without undoing outward preparation.
@@ -65,7 +65,7 @@ final class ConversationCardSnapshots {
     }
   }
 
-  void _remove(ProfileSessionKey key) {
+  void _remove(RecentConversationKey key) {
     final entry = _images.remove(key);
     if (entry == null) return;
     _bytes -= entry.image.width * entry.image.height * 4;

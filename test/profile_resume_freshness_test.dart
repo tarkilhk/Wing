@@ -47,9 +47,11 @@ void main() {
   RecentConversationSession recentVisit(Iterable<ProfileChat> chats) {
     final activity = ValueNotifier<ChatNoticeActivity?>(null);
     final visit = controller.recentConversationSession(
+      onOpenGroup: (_) async {},
       bots: BotsSession((_) async => const []),
       entries: chats.map(
-        (chat) => RecentConversationEntry(key: chat.key, title: chat.title),
+        (chat) =>
+            RecentConversationEntry.chat(key: chat.key, title: chat.title),
       ),
       activity: activity,
     );
@@ -87,7 +89,7 @@ void main() {
         await controller.resumeQueue(chat);
       case 'recents':
         await controller.refreshHistory(chat);
-        await recentVisit([chat]).select(chat.key);
+        await recentVisit([chat]).select(RecentConversationKey.chat(chat.key));
         await refreshed(chat);
     }
   }
@@ -109,7 +111,9 @@ void main() {
       ..resumeStarted = Completer<void>()
       ..resumeDelay = delay;
     bool? opened;
-    final selection = visit.select(chat.key).then((value) => opened = value);
+    final selection = visit
+        .select(RecentConversationKey.chat(chat.key))
+        .then((value) => opened = value);
     await host.resumeStarted!.future;
     await Future<void>.delayed(Duration.zero);
     expect(controller.current!.chat, same(chat));
@@ -153,7 +157,7 @@ void main() {
         ..resumeStarted = Completer<void>()
         ..resumeDelay = delay;
       final readsBefore = host.reads.length;
-      expect(await visit.select(chat.key), isTrue);
+      expect(await visit.select(RecentConversationKey.chat(chat.key)), isTrue);
       await host.resumeStarted!.future;
       expect(controller.current!.scope, personalScope);
       expect(controller.current!.chat, same(chat));
@@ -175,7 +179,7 @@ void main() {
     await controller.refreshHistory(chat);
     final visit = recentVisit([chat]);
     host.resumeFailures = 1;
-    expect(await visit.select(chat.key), isTrue);
+    expect(await visit.select(RecentConversationKey.chat(chat.key)), isTrue);
     await refreshed(chat);
     expect(chat.reading.messages.single['content'], 'a completed');
     expect(chat.refreshingConversation, isFalse);
@@ -201,7 +205,7 @@ void main() {
         ..heldHistoryFailure = const FormatException(
           'Invalid refreshed history',
         );
-      expect(await visit.select(chat.key), isTrue);
+      expect(await visit.select(RecentConversationKey.chat(chat.key)), isTrue);
       await host.heldHistoryStarted!.future;
       delay.complete();
       await refreshed(chat);
@@ -209,7 +213,7 @@ void main() {
       expect(chat.reading.historyError, isNotNull);
       expect(chat.runtime.openingError, isNotNull);
       host.heldHistoryFailure = null;
-      expect(await visit.select(chat.key), isTrue);
+      expect(await visit.select(RecentConversationKey.chat(chat.key)), isTrue);
       await refreshed(chat);
       expect(chat.reading.historyError, isNull);
       expect(chat.runtime.openingError, isNull);
@@ -219,6 +223,14 @@ void main() {
   test(
     'rapid Recents selection fences older refresh and loading completion',
     () async {
+      host.historyMessages = [
+        {
+          'id': 1,
+          'role': 'assistant',
+          'content': 'Recent saved reply',
+          'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
+        },
+      ];
       await controller.refreshHistory(chat);
       final other = (await controller.openSession(
         ProfileSessionKey(chat.key.workspace, 'other'),
@@ -234,15 +246,15 @@ void main() {
         ..running = true
         ..resumeStarted = Completer<void>()
         ..resumeDelay = olderDelay;
-      expect(await visit.select(chat.key), isTrue);
+      expect(await visit.select(RecentConversationKey.chat(chat.key)), isTrue);
       await host.resumeStarted!.future;
-      expect(await visit.select(other.key), isTrue);
+      expect(await visit.select(RecentConversationKey.chat(other.key)), isTrue);
       await refreshed(other);
       host
         ..running = false
         ..resumeStarted = Completer<void>()
         ..resumeDelay = newerDelay;
-      expect(await visit.select(chat.key), isTrue);
+      expect(await visit.select(RecentConversationKey.chat(chat.key)), isTrue);
       await host.resumeStarted!.future;
       olderDelay.complete();
       await Future<void>.delayed(Duration.zero);

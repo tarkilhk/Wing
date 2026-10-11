@@ -3,28 +3,31 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
-import '../models/profile_session_key.dart';
 import '../models/bots.dart';
 import '../models/recent_conversation.dart';
 
 /// Captured workspace reads and commands. Preview reads grant no runtime lease.
 abstract interface class RecentConversationSource implements Listenable {
   bool get current;
-  ProfileSessionKey? get selected;
-  bool admits(ProfileSessionKey key);
-  Object previewRevision(ProfileSessionKey key);
-  BotRecord? appearanceFor(ProfileSessionKey key);
+  RecentConversationKey? get selected;
+  bool admits(RecentConversationKey key);
+  Object previewRevision(RecentConversationKey key);
+  BotRecord? appearanceFor(RecentConversationKey key);
   Future<void> prepareAppearances(
-    Iterable<ProfileSessionKey> keys,
+    Iterable<RecentConversationKey> keys,
     bool Function() canRead,
   );
   RecentConversationPreview? cachedPreview(RecentConversationEntry entry);
-  Future<RecentConversationPreview> loadPreview(RecentConversationEntry entry);
-  Future<void> open(ProfileSessionKey key, bool Function() isCurrent);
+  Future<RecentConversationPreview> loadPreview(
+    RecentConversationEntry entry,
+    bool Function() canRead,
+  );
+  Future<void> open(RecentConversationKey key, bool Function() isCurrent);
+  RecentConversationCatalog get catalog;
   Future<RecentConversationCatalog> loadRecents({required bool refresh});
 }
 
-/// Owns one Recents visit: frozen membership, provisional reads, fenced
+/// Owns one Recents visit: ordered membership, provisional reads, fenced
 /// selection, and coalesced cues borrowed from the notification journal.
 /// Gesture geometry, rendered captures and springs belong to the view.
 final class RecentConversationSession extends ChangeNotifier {
@@ -37,7 +40,7 @@ final class RecentConversationSession extends ChangeNotifier {
          source: source,
          activity: activity,
          activitySource: null,
-         catalogEnabled: false,
+         modeEnabled: true,
        );
 
   RecentConversationSession.fromChat({
@@ -49,7 +52,7 @@ final class RecentConversationSession extends ChangeNotifier {
          source: source,
          activity: null,
          activitySource: activity,
-         catalogEnabled: true,
+         modeEnabled: false,
        );
 
   RecentConversationSession._({
@@ -57,10 +60,8 @@ final class RecentConversationSession extends ChangeNotifier {
     required this._source,
     required this._activity,
     required this._activitySource,
-    required bool catalogEnabled,
-  }) : _entries = List.unmodifiable(entries),
-       _catalogEnabled = catalogEnabled,
-       _modeEnabled = !catalogEnabled {
+    required this._modeEnabled,
+  }) : _entries = List.unmodifiable(entries) {
     if (this.entries.map((entry) => entry.key).toSet().length !=
         this.entries.length) {
       throw ArgumentError('Recents membership must have unique scoped keys');
@@ -77,7 +78,6 @@ final class RecentConversationSession extends ChangeNotifier {
 
   List<RecentConversationEntry> _entries;
   List<RecentConversationEntry> get entries => _entries;
-  final bool _catalogEnabled;
   bool _modeEnabled;
   bool get modeEnabled => active && _modeEnabled;
   bool _catalogReading = false, _membershipPaused = false;
@@ -89,16 +89,16 @@ final class RecentConversationSession extends ChangeNotifier {
   final RecentConversationSource _source;
   ValueListenable<ChatNoticeActivity?>? _activity;
   final ValueListenable<ChatNoticeActivity?> Function()? _activitySource;
-  final _cards = <ProfileSessionKey, RecentConversationCard>{};
-  final _reads = <ProfileSessionKey, int>{};
-  final _wanted = <ProfileSessionKey>[];
-  final _revisions = <ProfileSessionKey, Object>{};
-  final _readTimers = <ProfileSessionKey, Timer>{};
+  final _cards = <RecentConversationKey, RecentConversationCard>{};
+  final _reads = <RecentConversationKey, int>{};
+  final _wanted = <RecentConversationKey>[];
+  final _revisions = <RecentConversationKey, Object>{};
+  final _readTimers = <RecentConversationKey, Timer>{};
   final _nudge = ValueNotifier<ConversationNudge?>(null);
   ValueListenable<ConversationNudge?> get nudges => _nudge;
-  ProfileSessionKey? _selected;
-  ProfileSessionKey? get selected => _selected;
-  ProfileSessionKey? _opening;
+  RecentConversationKey? _selected;
+  RecentConversationKey? get selected => _selected;
+  RecentConversationKey? _opening;
   bool get selecting => _opening != null;
   String? _error;
   String? get error => _error;
@@ -106,7 +106,7 @@ final class RecentConversationSession extends ChangeNotifier {
   bool _retired = false;
   bool get active => !_closed && !_retired && _source.current;
   bool _interactive = false;
-  ProfileSessionKey? _cueOrigin;
+  RecentConversationKey? _cueOrigin;
   bool _disposedNotifier = false;
   int _notificationDepth = 0;
   int _selectionGeneration = 0, _readGeneration = 0, _lastActivity = 0;
@@ -115,27 +115,28 @@ final class RecentConversationSession extends ChangeNotifier {
   Timer? _cueTimer;
   ChatNoticeActivity? _pendingCue;
 
-  /// A completed entry intent enables switching and admits the first catalog.
-  /// Adopting the mounted chat never reopens it or changes its recency.
+  /// Each stack entry refreshes the shared catalog; mode activation is lazy.
+  /// Repeated intents coalesce while the catalog is being read or presented.
   void activate() {
-    if (!active || _modeEnabled) return;
-    final activity = _activity = _activitySource!();
-    activity.addListener(_activityChanged);
-    _modeEnabled = true;
-    _lastActivity = activity.value?.sequence ?? 0;
-    _discardCue();
-    if (_catalogEnabled) unawaited(_loadCatalog(refresh: false));
+    if (!active) return;
+    if (!_modeEnabled) {
+      final activity = _activity = _activitySource!();
+      activity.addListener(_activityChanged);
+      _modeEnabled = true;
+      _lastActivity = activity.value?.sequence ?? 0;
+      _discardCue();
+    }
+    if (!catalogLoading) unawaited(_loadCatalog(refresh: false));
     _emit();
   }
 
   void retryCatalog() {
-    if (modeEnabled && _catalogEnabled && !catalogLoading) {
+    if (modeEnabled && !catalogLoading) {
       unawaited(_loadCatalog(refresh: true));
     }
   }
 
-  /// Membership publication waits for presentation to settle. New entries append
-  /// once, preserving every existing card's physical index for this visit.
+  /// Publish canonical order after motion settles, retaining focus by identity.
   void setMembershipPaused(bool paused) {
     _membershipPaused = paused;
     if (!paused && active && _pendingCatalog != null) _adoptCatalog();
@@ -168,16 +169,28 @@ final class RecentConversationSession extends ChangeNotifier {
     }
   }
 
+  List<RecentConversationEntry> _orderedEntries(
+    RecentConversationCatalog catalog,
+  ) {
+    final keys = <RecentConversationKey>{};
+    final anchor = entries.where((entry) => entry.key == _selected);
+    return List.unmodifiable([
+      for (final entry in catalog.entries)
+        if (keys.add(entry.key)) entry,
+      for (final entry in catalog.error == null ? anchor : entries)
+        if (keys.add(entry.key)) entry,
+    ]);
+  }
+
   void _adoptCatalog() {
     final catalog = _pendingCatalog!;
     _pendingCatalog = null;
+    _entries = _orderedEntries(catalog);
     final keys = entries.map((entry) => entry.key).toSet();
-    _entries = List.unmodifiable([
-      ...entries,
-      for (final entry in catalog.entries)
-        if (keys.add(entry.key)) entry,
-    ]);
     _catalogError = catalog.error;
+    _wanted.removeWhere((key) => !keys.contains(key));
+    _cards.removeWhere((key, _) => !keys.contains(key));
+    _revisions.removeWhere((key, _) => !keys.contains(key));
     _emit();
   }
 
@@ -196,19 +209,20 @@ final class RecentConversationSession extends ChangeNotifier {
     );
   }
 
-  Object previewRevision(ProfileSessionKey key) => _source.previewRevision(key);
+  Object previewRevision(RecentConversationKey key) =>
+      _source.previewRevision(key);
 
   /// Appearance changes affect passive pixels, never saved-history admission.
-  Object cardRevision(ProfileSessionKey key) =>
+  Object cardRevision(RecentConversationKey key) =>
       (previewRevision(key), _source.appearanceFor(key));
 
   /// Unique center-outward priority, bounded independently of ring size.
-  List<ProfileSessionKey> keysAround(
+  List<RecentConversationKey> keysAround(
     int index, {
     int limit = preparationLimit,
   }) {
     if (limit < 0) throw ArgumentError.value(limit, 'limit');
-    final result = <ProfileSessionKey>{};
+    final result = <RecentConversationKey>{};
     for (
       var distance = 0;
       result.length < math.min(limit, entries.length);
@@ -222,7 +236,7 @@ final class RecentConversationSession extends ChangeNotifier {
     return result.toList();
   }
 
-  Future<bool> select(ProfileSessionKey key) async {
+  Future<bool> select(RecentConversationKey key) async {
     if (!active || !entries.any((entry) => entry.key == key)) return false;
     if (!_source.admits(key)) {
       _error = 'This conversation is no longer available.';
@@ -238,7 +252,9 @@ final class RecentConversationSession extends ChangeNotifier {
     if (!current()) return false;
     try {
       await _source.open(key, current);
-      if (!current() || _source.selected != key) return false;
+      if (!current()) return false;
+      if (key.group != null) return true;
+      if (_source.selected != key) return false;
       _selected = key;
       return true;
     } catch (_) {
@@ -252,13 +268,13 @@ final class RecentConversationSession extends ChangeNotifier {
         } else if (_selected != null && _source.selected != _selected) {
           _retired = true;
         }
-        _emit();
+        _sourceChanged();
       }
     }
   }
 
   /// Admit a bounded priority list. Reads retain no execution authority.
-  void prepare(Iterable<ProfileSessionKey> priorities) {
+  void prepare(Iterable<RecentConversationKey> priorities) {
     if (!active || entries.isEmpty) return;
     final wanted = priorities.toSet();
     if (wanted.length > preparationLimit ||
@@ -297,7 +313,7 @@ final class RecentConversationSession extends ChangeNotifier {
 
   bool _pumpPreviews() {
     var changed = false;
-    for (final key in List<ProfileSessionKey>.of(_wanted)) {
+    for (final key in List<RecentConversationKey>.of(_wanted)) {
       if (!active) return changed;
       if (!_wanted.contains(key)) continue;
       final entry = entries.firstWhere((entry) => entry.key == key);
@@ -344,7 +360,15 @@ final class RecentConversationSession extends ChangeNotifier {
       }
     });
     try {
-      final preview = await _source.loadPreview(entry);
+      final preview = await _source.loadPreview(
+        entry,
+        () =>
+            active &&
+            !timedOut &&
+            _reads[entry.key] == generation &&
+            _wanted.contains(entry.key) &&
+            revision == previewRevision(entry.key),
+      );
       if (!active ||
           timedOut ||
           _reads[entry.key] != generation ||
@@ -382,7 +406,7 @@ final class RecentConversationSession extends ChangeNotifier {
     }
   }
 
-  void setInteractive(bool value, {required ProfileSessionKey? origin}) {
+  void setInteractive(bool value, {required RecentConversationKey? origin}) {
     _interactive = value && modeEnabled;
     _cueOrigin = origin;
     if (!_interactive) _discardCue();
@@ -395,6 +419,25 @@ final class RecentConversationSession extends ChangeNotifier {
       _retired = true;
       ++_selectionGeneration;
       _discardCue();
+    }
+    if (modeEnabled &&
+        !selecting &&
+        !_catalogReading &&
+        _catalogError == null) {
+      final catalog = _source.catalog;
+      final canonical = _orderedEntries(catalog);
+      final matches =
+          canonical.length == entries.length &&
+          Iterable.generate(canonical.length).every(
+            (index) =>
+                canonical[index].key == entries[index].key &&
+                canonical[index].title == entries[index].title &&
+                canonical[index].group == entries[index].group,
+          );
+      if (!matches) {
+        _pendingCatalog = catalog;
+        if (!_membershipPaused) _adoptCatalog();
+      }
     }
     for (final key in _revisions.keys.toList()) {
       if (_revisions[key] != previewRevision(key)) {
@@ -413,7 +456,7 @@ final class RecentConversationSession extends ChangeNotifier {
     final direction = recentConversationDirection(
       entries,
       _cueOrigin!,
-      activity.key,
+      RecentConversationKey.chat(activity.key),
     );
     if (direction == null) return;
     if (_pendingCue?.kind != ConversationActivityKind.inputNeeded ||
@@ -434,7 +477,7 @@ final class RecentConversationSession extends ChangeNotifier {
       final direction = recentConversationDirection(
         entries,
         _cueOrigin!,
-        pending.key,
+        RecentConversationKey.chat(pending.key),
       );
       if (direction == null) return;
       ++_notificationDepth;

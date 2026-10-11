@@ -5,28 +5,6 @@ import '../models/profile_session_key.dart';
 import 'bots_session.dart';
 import 'profile_workspace_controller.dart';
 
-/// One globally ordered list, with distinct chat and room navigation targets.
-class WorkspaceRecentItem {
-  WorkspaceRecentItem.chat(ProfileRecentChat value, this.bot)
-    : chat = value,
-      group = null,
-      unread = value.unread;
-  const WorkspaceRecentItem.group(BotGroup value, this.unread)
-    : group = value,
-      chat = null,
-      bot = null;
-  final ProfileRecentChat? chat;
-  final BotRecord? bot;
-  final BotGroup? group;
-  final bool unread;
-  double get lastMessage =>
-      chat?.lastActive ??
-      (group?.lastMessageAt?.millisecondsSinceEpoch ?? 0) / 1000;
-  String get identity =>
-      group?.key ??
-      '${chat!.key.workspace.connectionIdentity}/${chat!.key.workspace.profileName}/${chat!.key.sessionId}';
-}
-
 /// Route-owned passive Recents reads. Polling and appearance admission live here;
 /// views only render observations and forward navigation/retry intent.
 class WorkspaceRecentsSession extends ChangeNotifier {
@@ -59,26 +37,12 @@ class WorkspaceRecentsSession extends ChangeNotifier {
   }
 
   List<WorkspaceRecentItem> items({DateTime? now}) {
-    final cutoff =
-        (now ?? DateTime.now()).millisecondsSinceEpoch / 1000 - 86400;
-    final result =
-        [
-          for (final chat in controller.recentChats(now: now))
-            WorkspaceRecentItem.chat(
-              chat,
-              bots.cachedAppearance(chat.key) ?? _appearances[chat.key],
-            ),
-          for (final group in bots.state.groups)
-            if (group.working ||
-                group.blocked ||
-                (group.lastMessageAt?.millisecondsSinceEpoch ?? 0) / 1000 >=
-                    cutoff)
-              WorkspaceRecentItem.group(group, bots.groupReads.unread(group)),
-        ]..sort((a, b) {
-          final time = b.lastMessage.compareTo(a.lastMessage);
-          return time != 0 ? time : a.identity.compareTo(b.identity);
-        });
-    return List.unmodifiable(result);
+    return workspaceRecentItems(
+      controller,
+      bots,
+      appearances: _appearances,
+      now: now,
+    );
   }
 
   Future<void> refresh() async {

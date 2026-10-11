@@ -433,20 +433,29 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _composerSelections.clear();
   }
 
+  Future<void> _openRecentGroup(BotGroup group) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => BotGroupScreen(
+            createSession: () => _bots.openGroup(group),
+            onEdit: (group) => openGroupEditor(context, _bots, group),
+          ),
+        ),
+      );
+
   Future<void> _openRecentConversation(
     ProfileRecentChat item,
-    List<ProfileRecentChat> displayed,
+    List<WorkspaceRecentItem> displayed,
   ) async {
     _pendingRecentVisit?.dispose();
     final visit = controller.recentConversationSession(
       bots: _bots,
-      entries: displayed.map(
-        (chat) => RecentConversationEntry(key: chat.key, title: chat.title),
-      ),
+      entries: displayed.map((item) => item.conversation),
+      onOpenGroup: _openRecentGroup,
       activity: ChatNoticeActivityScope.of(context),
     );
     _pendingRecentVisit = visit;
-    final opened = await visit.select(item.key);
+    final opened = await visit.select(RecentConversationKey.chat(item.key));
     if (!mounted || _pendingRecentVisit != visit) {
       visit.dispose();
       return;
@@ -475,6 +484,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       _recentVisit = controller.chatRecentConversationSession(
         bots: _bots,
         chat: chat,
+        onOpenGroup: _openRecentGroup,
         activity: () => ChatNoticeActivityScope.of(context),
       );
       _recentRenderedChat = chat;
@@ -486,7 +496,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       builder: (context, editing, conversation) => RecentConversationSwitcher(
         key: _recentSwitcher,
         session: visit,
-        chatKey: chat.key,
+        chatKey: RecentConversationKey.chat(chat.key),
         previewBuilder: (card) => ConversationPreview(
           card: card,
           connectionLabel: controller.connection.label,
@@ -3188,17 +3198,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 controller: controller,
                 bots: _bots,
                 visible: _appIsActive && _routeIsCurrent,
-                onOpenGroup: (group) async {
-                  await Navigator.of(context).push<void>(
-                    MaterialPageRoute(
-                      builder: (_) => BotGroupScreen(
-                        createSession: () => _bots.openGroup(group),
-                        onEdit: (group) =>
-                            openGroupEditor(context, _bots, group),
-                      ),
-                    ),
-                  );
-                },
+                onOpenGroup: _openRecentGroup,
                 onOpen: (item, displayed) => unawaited(
                   _run(() => _openRecentConversation(item, displayed)),
                 ),

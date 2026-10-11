@@ -14,7 +14,7 @@ final _scope = WorkspaceScope(
   connectionIdentity: 'owner',
   profileName: 'personal',
 );
-RecentConversationEntry _entry(int index) => RecentConversationEntry(
+RecentConversationEntry _entry(int index) => RecentConversationEntry.chat(
   key: ProfileSessionKey(_scope, '$index'),
   title: 'Chat $index',
 );
@@ -23,7 +23,7 @@ RecentConversationPreview _preview(RecentConversationEntry entry) =>
       entry: entry,
       reading: TranscriptReadingSnapshot(
         messages: const [],
-        historySessionId: entry.key.sessionId,
+        historySessionId: entry.key.chat!.sessionId,
       ),
       draft: '',
       scopeLabel: 'personal',
@@ -33,51 +33,58 @@ class _Source extends ChangeNotifier implements RecentConversationSource {
   @override
   bool current = true;
   @override
-  ProfileSessionKey? selected;
-  final opens = <ProfileSessionKey>[];
-  final reads = <ProfileSessionKey, Completer<RecentConversationPreview>>{};
+  RecentConversationKey? selected;
+  final opens = <RecentConversationKey>[];
+  final reads = <RecentConversationKey, Completer<RecentConversationPreview>>{};
   Completer<void>? heldOpen;
   bool failOpen = false, cached = false;
-  final denied = <ProfileSessionKey>{};
+  final denied = <RecentConversationKey>{};
   Completer<RecentConversationCatalog>? catalogRead;
   int catalogReads = 0;
+  List<RecentConversationEntry> currentEntries = List.generate(8, _entry);
+  @override
+  RecentConversationCatalog get catalog =>
+      RecentConversationCatalog(entries: currentEntries, error: null);
   @override
   Future<RecentConversationCatalog> loadRecents({required bool refresh}) {
     catalogReads++;
     return catalogRead?.future ??
         Future.value(
-          RecentConversationCatalog(
-            entries: List.generate(8, _entry),
-            error: null,
-          ),
+          RecentConversationCatalog(entries: currentEntries, error: null),
         );
   }
 
   @override
-  bool admits(ProfileSessionKey key) => current && !denied.contains(key);
+  bool admits(RecentConversationKey key) => current && !denied.contains(key);
   @override
-  BotRecord? appearanceFor(ProfileSessionKey key) => null;
+  BotRecord? appearanceFor(RecentConversationKey key) => null;
   @override
   Future<void> prepareAppearances(
-    Iterable<ProfileSessionKey> keys,
+    Iterable<RecentConversationKey> keys,
     bool Function() canRead,
   ) async {}
 
   @override
-  Object previewRevision(ProfileSessionKey key) => revisions[key] ?? 0;
-  final revisions = <ProfileSessionKey, int>{};
+  Object previewRevision(RecentConversationKey key) => revisions[key] ?? 0;
+  final revisions = <RecentConversationKey, int>{};
   @override
   RecentConversationPreview? cachedPreview(RecentConversationEntry entry) =>
       cached ? _preview(entry) : null;
   @override
-  Future<RecentConversationPreview> loadPreview(RecentConversationEntry entry) {
+  Future<RecentConversationPreview> loadPreview(
+    RecentConversationEntry entry,
+    bool Function() canRead,
+  ) {
     final read = Completer<RecentConversationPreview>();
     reads[entry.key] = read;
     return read.future;
   }
 
   @override
-  Future<void> open(ProfileSessionKey key, bool Function() isCurrent) async {
+  Future<void> open(
+    RecentConversationKey key,
+    bool Function() isCurrent,
+  ) async {
     opens.add(key);
     await heldOpen?.future;
     if (!isCurrent()) return;
@@ -130,7 +137,7 @@ void main() {
       expect(session.entries, hasLength(1));
       session.setInteractive(true, origin: source.selected);
       activity.value = ChatNoticeActivity(
-        key: _entry(1).key,
+        key: _entry(1).key.chat!,
         kind: ConversationActivityKind.reply,
         identity: 'old',
         sequence: 1,
@@ -166,8 +173,8 @@ void main() {
       expect(session.catalogLoading, isTrue);
       session.setMembershipPaused(false);
       expect(session.entries.map((entry) => entry.key), [
-        _entry(0).key,
         _entry(1).key,
+        _entry(0).key,
         _entry(2).key,
       ]);
       expect(session.catalogLoading, isFalse);
@@ -176,7 +183,7 @@ void main() {
   );
 
   test(
-    'empty catalog retains current card and partial failure retry appends',
+    'empty catalog retains current card and recovery restores canonical order',
     () async {
       enterChat();
       source.catalogRead = Completer();
@@ -199,8 +206,8 @@ void main() {
       );
       await Future<void>.delayed(Duration.zero);
       expect(session.entries.map((entry) => entry.key), [
-        _entry(0).key,
         _entry(1).key,
+        _entry(0).key,
       ]);
       expect(session.catalogError, isNotNull);
       source.catalogRead = Completer();
@@ -213,9 +220,9 @@ void main() {
       );
       await Future<void>.delayed(Duration.zero);
       expect(session.entries.map((entry) => entry.key), [
-        _entry(0).key,
-        _entry(1).key,
         _entry(2).key,
+        _entry(1).key,
+        _entry(0).key,
       ]);
       expect(session.catalogError, isNull);
     },
@@ -257,7 +264,34 @@ void main() {
     expect(session.catalogError, isNull);
   });
 
-  test('freezes scoped membership and wraps both ends', () {
+  test(
+    'canonical updates settle by identity and every entry point refreshes',
+    () async {
+      await session.select(_entry(2).key);
+      session.setMembershipPaused(true);
+      source.currentEntries = [_entry(3), _entry(2), _entry(0)];
+      source.notifyListeners();
+      expect(session.entries, hasLength(8));
+      source.currentEntries = [_entry(0), _entry(3), _entry(2)];
+      source.notifyListeners();
+      session.setMembershipPaused(false);
+      expect(session.entries.map((entry) => entry.key), [
+        _entry(0).key,
+        _entry(3).key,
+        _entry(2).key,
+      ]);
+      expect(session.selected, _entry(2).key);
+      expect(session.selectedIndex, 2);
+      session.activate();
+      await Future<void>.delayed(Duration.zero);
+      expect(source.catalogReads, 1);
+      session.activate();
+      await Future<void>.delayed(Duration.zero);
+      expect(source.catalogReads, 2);
+    },
+  );
+
+  test('immutable scoped membership wraps both ends', () {
     expect(session.entryAt(-1).key, _entry(7).key);
     expect(session.entryAt(8).key, _entry(0).key);
     expect(() => session.entries.clear(), throwsUnsupportedError);
@@ -270,7 +304,11 @@ void main() {
       '1',
     );
     expect(
-      recentConversationDirection(session.entries, _entry(0).key, other),
+      recentConversationDirection(
+        session.entries,
+        _entry(0).key,
+        RecentConversationKey.chat(other),
+      ),
       isNull,
     );
     expect(
@@ -302,7 +340,9 @@ void main() {
       expect(source.opens, isEmpty);
       final old = source.reads.keys.toList();
       for (final key in old) {
-        source.reads[key]!.complete(_preview(_entry(int.parse(key.sessionId))));
+        source.reads[key]!.complete(
+          _preview(_entry(int.parse(key.chat!.sessionId))),
+        );
       }
       await Future<void>.delayed(Duration.zero);
       expect(source.reads.keys.toSet(), {
@@ -326,7 +366,7 @@ void main() {
       source: source,
       activity: activity,
     );
-    expect(session.keysAround(0).map((key) => key.sessionId), [
+    expect(session.keysAround(0).map((key) => key.chat!.sessionId), [
       '0',
       '99',
       '1',
@@ -339,7 +379,11 @@ void main() {
       '95',
     ]);
     session.prepare(session.keysAround(0));
-    expect(source.reads.keys.map((key) => key.sessionId), ['0', '99', '1']);
+    expect(source.reads.keys.map((key) => key.chat!.sessionId), [
+      '0',
+      '99',
+      '1',
+    ]);
     expect(
       () => session.prepare(List.generate(11, (i) => _entry(i).key)),
       throwsArgumentError,
@@ -357,7 +401,9 @@ void main() {
       expect(source.reads, hasLength(3));
       session.pausePreparation();
       for (final key in first) {
-        source.reads[key]!.complete(_preview(_entry(int.parse(key.sessionId))));
+        source.reads[key]!.complete(
+          _preview(_entry(int.parse(key.chat!.sessionId))),
+        );
       }
       await tester.pump();
       expect(
@@ -423,7 +469,9 @@ void main() {
     session.addListener(() => changes++);
     session.dispose();
     for (final entry in source.reads.entries) {
-      entry.value.complete(_preview(_entry(int.parse(entry.key.sessionId))));
+      entry.value.complete(
+        _preview(_entry(int.parse(entry.key.chat!.sessionId))),
+      );
     }
     await Future<void>.delayed(Duration.zero);
     expect(changes, 0);
@@ -475,7 +523,7 @@ void main() {
         session.dispose();
       });
       activity.value = ChatNoticeActivity(
-        key: _entry(5).key,
+        key: _entry(5).key.chat!,
         kind: ConversationActivityKind.reply,
         identity: 'answer:5',
         sequence: 1,
@@ -493,7 +541,7 @@ void main() {
       var sequence = 0;
       void signal(int index, ConversationActivityKind kind) =>
           activity.value = ChatNoticeActivity(
-            key: _entry(index).key,
+            key: _entry(index).key.chat!,
             kind: kind,
             identity: '$sequence',
             sequence: ++sequence,

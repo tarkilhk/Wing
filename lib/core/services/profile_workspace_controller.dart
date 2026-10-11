@@ -3,6 +3,7 @@ import '../models/composer_reference.dart';
 import 'composer_reference_repository.dart';
 import 'composer_reference_preparation.dart';
 import '../models/recent_conversation.dart';
+import '../models/transcript_message.dart';
 import 'recent_conversation_session.dart';
 import 'bots_session.dart';
 import '../models/bots.dart';
@@ -1038,20 +1039,22 @@ class ProfileWorkspaceController extends ChangeNotifier {
   RecentConversationSession recentConversationSession({
     required Iterable<RecentConversationEntry> entries,
     required BotsSession bots,
+    required Future<void> Function(BotGroup) onOpenGroup,
     required ValueListenable<ChatNoticeActivity?> activity,
   }) => RecentConversationSession.fromRecents(
     entries: entries,
-    source: _WorkspaceRecentConversationSource(this, bots),
+    source: _WorkspaceRecentConversationSource(this, bots, onOpenGroup),
     activity: activity,
   );
 
   RecentConversationSession chatRecentConversationSession({
     required ProfileChat chat,
     required BotsSession bots,
+    required Future<void> Function(BotGroup) onOpenGroup,
     required ValueListenable<ChatNoticeActivity?> Function() activity,
   }) => RecentConversationSession.fromChat(
-    chat: RecentConversationEntry(key: chat.key, title: chat.title),
-    source: _WorkspaceRecentConversationSource(this, bots),
+    chat: RecentConversationEntry.chat(key: chat.key, title: chat.title),
+    source: _WorkspaceRecentConversationSource(this, bots, onOpenGroup),
     activity: activity,
   );
 

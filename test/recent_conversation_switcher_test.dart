@@ -15,7 +15,9 @@ import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/models/transcript_reading.dart';
+import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/screens/bots/bot_group_screen.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -58,7 +60,7 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
     );
     entries = List.generate(
       count,
-      (i) => RecentConversationEntry(
+      (i) => RecentConversationEntry.chat(
         key: ProfileSessionKey(scope, '$i'),
         title: 'Chat $i',
       ),
@@ -69,16 +71,19 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   @override
   bool current = true;
   @override
-  late ProfileSessionKey selected;
-  final opens = <ProfileSessionKey>[];
+  late RecentConversationKey selected;
+  final opens = <RecentConversationKey>[];
   final waitingPreviews =
-      <ProfileSessionKey, Completer<RecentConversationPreview>>{};
+      <RecentConversationKey, Completer<RecentConversationPreview>>{};
   bool rejectOpen = false;
   Completer<void>? waitingOpen;
   int previewReads = 0, historyReads = 0;
-  final previewOrder = <ProfileSessionKey>[];
+  final previewOrder = <RecentConversationKey>[];
   Completer<RecentConversationCatalog>? catalogRead;
   int catalogReads = 0;
+  @override
+  RecentConversationCatalog get catalog =>
+      RecentConversationCatalog(entries: entries, error: null);
   @override
   Future<RecentConversationCatalog> loadRecents({required bool refresh}) {
     catalogReads++;
@@ -87,22 +92,22 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   }
 
   @override
-  bool admits(ProfileSessionKey key) => current;
-  final appearances = <ProfileSessionKey, BotRecord>{};
+  bool admits(RecentConversationKey key) => current;
+  final appearances = <RecentConversationKey, BotRecord>{};
   int appearancePreparations = 0;
   @override
-  BotRecord? appearanceFor(ProfileSessionKey key) => appearances[key];
+  BotRecord? appearanceFor(RecentConversationKey key) => appearances[key];
   @override
   Future<void> prepareAppearances(
-    Iterable<ProfileSessionKey> keys,
+    Iterable<RecentConversationKey> keys,
     bool Function() canRead,
   ) async {
     if (canRead()) appearancePreparations++;
   }
 
   @override
-  Object previewRevision(ProfileSessionKey key) => revisions[key] ?? 0;
-  final revisions = <ProfileSessionKey, int>{};
+  Object previewRevision(RecentConversationKey key) => revisions[key] ?? 0;
+  final revisions = <RecentConversationKey, int>{};
   @override
   RecentConversationPreview? cachedPreview(RecentConversationEntry entry) {
     previewReads++;
@@ -115,7 +120,7 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
         entry: entry,
         reading: TranscriptReadingSnapshot(
           messages: const [],
-          historySessionId: entry.key.sessionId,
+          historySessionId: entry.key.chat?.sessionId,
         ),
         draft: '',
         scopeLabel: 'personal',
@@ -123,33 +128,39 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   @override
   Future<RecentConversationPreview> loadPreview(
     RecentConversationEntry entry,
+    bool Function() canRead,
   ) async {
     historyReads++;
     return waitingPreviews[entry.key]?.future ?? _readyPreview(entry);
   }
 
   @override
-  Future<void> open(ProfileSessionKey key, bool Function() isCurrent) async {
+  Future<void> open(
+    RecentConversationKey key,
+    bool Function() isCurrent,
+  ) async {
     if (!isCurrent()) return;
     if (rejectOpen) throw StateError('Owned fixture resume rejection');
     opens.add(key);
     await waitingOpen?.future;
     if (!isCurrent()) return;
-    selected = key;
-    notifyListeners();
+    if (key.group == null) {
+      selected = key;
+      notifyListeners();
+    }
   }
 }
 
 class _MountedCard extends StatefulWidget {
   const _MountedCard({required this.owner, required this.child});
-  final ProfileSessionKey owner;
+  final RecentConversationKey owner;
   final Widget child;
   @override
   State<_MountedCard> createState() => _MountedCardState();
 }
 
 class _MountedCardState extends State<_MountedCard> {
-  late final ProfileSessionKey initialOwner;
+  late final RecentConversationKey initialOwner;
   @override
   void initState() {
     super.initState();
@@ -337,6 +348,80 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('group passive card ${brightness.name} $scale', (
+        tester,
+      ) async {
+        final fixture = BotsFixture();
+        final roster = await fixture.repository.bots();
+        final group = (await fixture.repository.groups()).single;
+        final entry = RecentConversationEntry.group(group);
+        final frame = GlobalKey();
+        tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: RepaintBoundary(
+              key: frame,
+              child: ConversationPreview(
+                connectionLabel: 'Home server',
+                card: RecentConversationCard(
+                  entry: entry,
+                  preview: RecentConversationPreview(
+                    entry: entry,
+                    reading: TranscriptReadingSnapshot(
+                      messages: const [],
+                      historySessionId: null,
+                    ),
+                    draft: '',
+                    scopeLabel: 'Bot group',
+                    group: GroupConversationPreview(
+                      messages: [
+                        TranscriptMessage.discussion(
+                          id: 'room-1:1',
+                          text: 'The research is ready. We can continue here.',
+                          sender: 'Atlas',
+                          senderHandle: 'bot_atlas',
+                          timestamp: DateTime(2026, 10, 12),
+                        ),
+                      ],
+                      appearances: {
+                        for (final member in group.members)
+                          member.handle: roster.singleWhere(
+                            (bot) => bot.profile.name == member.profile,
+                          ),
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await _finishFrames(tester);
+        expect(find.text('Research team'), findsOneWidget);
+        expect(find.text('Message the group'), findsOneWidget);
+        expect(
+          find.text('The research is ready. We can continue here.'),
+          findsOneWidget,
+        );
+        expect(fixture.commands, isEmpty);
+        expect(tester.takeException(), isNull);
+        await _capture(
+          tester,
+          frame,
+          'group-passive-${brightness.name}-$scale',
+        );
+        await tester.pumpWidget(const SizedBox());
+      });
+
       testWidgets('canonical bot passive header ${brightness.name} $scale', (
         tester,
       ) async {
@@ -362,7 +447,7 @@ void main() {
         );
         final bot = await owner.botForConversation(key);
         expect(fixture.commands, isEmpty);
-        final entry = RecentConversationEntry(key: key, title: 'Bot Chat');
+        final entry = RecentConversationEntry.chat(key: key, title: 'Bot Chat');
         final frame = GlobalKey();
         tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
         tester.view.devicePixelRatio = 1;
@@ -559,7 +644,7 @@ void main() {
                       child: Column(
                         children: [
                           Text(
-                            'Mounted conversation ${source.selected.sessionId}',
+                            'Mounted conversation ${source.selected.chat!.sessionId}',
                           ),
                           const ConversationGestureBoundary(
                             blocked: true,
@@ -587,6 +672,60 @@ void main() {
     }
 
     testWidgets(
+      'mixed circle has fresher left, older right and endpoint wrap',
+      (tester) async {
+        final room = RecentConversationEntry.group(
+          BotGroup(
+            scope: source.entries[0].key.chat!.workspace,
+            instance: 'Host',
+            id: 'room-1',
+            name: 'Research team',
+            members: const [],
+          ),
+        );
+        source.entries[1] = room;
+        source.selected = source.entries[0].key;
+        session.dispose();
+        session = RecentConversationSession.fromRecents(
+          entries: source.entries,
+          source: source,
+          activity: activity,
+        );
+        source.selected = source.entries[0].key;
+        await mount(tester, accessible: true);
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        await tester.tap(find.byTooltip('Next conversation'));
+        await _finishFrames(tester);
+        double x(RecentConversationKey key) =>
+            tester.getCenter(find.byKey(ValueKey((key, 'snapshot')))).dx;
+        expect(x(source.entries[0].key), lessThan(x(room.key)));
+        expect(x(source.entries[2].key), greaterThan(x(room.key)));
+        expect(source.opens, isEmpty);
+        await tester.tap(find.byTooltip('Next conversation'));
+        await _finishFrames(tester);
+        expect(x(room.key), lessThan(x(source.entries[2].key)));
+        expect(x(source.entries[0].key), greaterThan(x(source.entries[2].key)));
+        await tester.tap(find.byTooltip('Next conversation'));
+        await _finishFrames(tester);
+        expect(x(source.entries[2].key), lessThan(x(source.entries[0].key)));
+        expect(x(room.key), greaterThan(x(source.entries[0].key)));
+        await tester.tap(find.byTooltip('Next conversation'));
+        await _finishFrames(tester);
+        source.waitingOpen = Completer<void>();
+        await tester.tap(find.byTooltip('Open conversation'));
+        await tester.pump();
+        expect(source.opens, [room.key]);
+        expect(source.selected, source.entries[0].key);
+        source.waitingOpen!.complete();
+        await _finishFrames(tester);
+        expect(find.text('Choose a conversation'), findsOneWidget);
+        expect(session.selected, source.entries[0].key);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       'ten-card batch publishes outward and reuses captures on reopening',
       (tester) async {
         session.dispose();
@@ -597,7 +736,7 @@ void main() {
           source: source,
           activity: activity,
         );
-        final built = <ProfileSessionKey>[];
+        final built = <RecentConversationKey>[];
         await mount(
           tester,
           buildPreview: (card) {
@@ -659,7 +798,7 @@ void main() {
     testWidgets('menu switching retains the departing genuine viewport', (
       tester,
     ) async {
-      final built = <ProfileSessionKey>[];
+      final built = <RecentConversationKey>[];
       await mount(
         tester,
         buildPreview: (card) {
@@ -686,7 +825,7 @@ void main() {
     testWidgets('equivalent workspace themes preserve prepared images', (
       tester,
     ) async {
-      final built = <ProfileSessionKey>[];
+      final built = <RecentConversationKey>[];
       await mount(
         tester,
         buildPreview: (card) {
@@ -744,7 +883,7 @@ void main() {
     testWidgets('a changed conversation revision replaces only its image', (
       tester,
     ) async {
-      final built = <ProfileSessionKey>[];
+      final built = <RecentConversationKey>[];
       await mount(
         tester,
         buildPreview: (card) {
@@ -915,7 +1054,7 @@ void main() {
           entry: entry,
           reading: TranscriptReadingSnapshot(
             messages: const [],
-            historySessionId: entry.key.sessionId,
+            historySessionId: entry.key.chat?.sessionId,
           ),
           draft: '',
           scopeLabel: 'Loaded saved conversation',
@@ -971,7 +1110,7 @@ void main() {
                             '- First task\n- Second task',
                       },
                   ],
-                  historySessionId: card.entry.key.sessionId,
+                  historySessionId: card.entry.key.chat!.sessionId,
                 ),
                 draft: '',
                 scopeLabel: 'personal',
@@ -1119,7 +1258,7 @@ void main() {
             expect(title.top, lessThan(48));
             expect(title.left, greaterThanOrEqualTo(16));
             expect(
-              find.text(source.entries[1].key.workspace.profileName),
+              find.text(source.entries[1].key.chat!.workspace.profileName),
               findsNothing,
             );
             await _captureCurrent(
@@ -1937,9 +2076,11 @@ void main() {
       (tester) async {
         final key = source.entries[1].key;
         BotRecord appearance(String title) => BotRecord(
-          scope: key.workspace,
+          scope: key.chat!.workspace,
           instance: 'Host',
-          profile: HermesProfile.fromJson({'name': key.workspace.profileName}),
+          profile: HermesProfile.fromJson({
+            'name': key.chat!.workspace.profileName,
+          }),
           title: title,
           shape: 'squircle',
           color: '#65c7bc',
@@ -1948,7 +2089,7 @@ void main() {
           hasAvatar: false,
           revision: 1,
           metadata: const {},
-          chat: key,
+          chat: key.chat!,
         );
         source.appearances[key] = appearance('Atlas');
         final frame = GlobalKey();
@@ -1960,7 +2101,7 @@ void main() {
         );
         switcher.currentState!.openStack();
         await _finishFrames(tester);
-        ui.Image pixels(ProfileSessionKey key) => tester
+        ui.Image pixels(RecentConversationKey key) => tester
             .widget<RawImage>(find.byKey(ValueKey((key, 'snapshot'))))
             .image!;
         final genuine = pixels(source.selected),
@@ -2071,7 +2212,7 @@ void main() {
         await mount(tester, brightness: brightness);
         for (final kind in ConversationActivityKind.values) {
           activity.value = ChatNoticeActivity(
-            key: source.entries[1].key,
+            key: source.entries[1].key.chat!,
             kind: kind,
             identity: kind.name,
             sequence: kind.index + 1,
@@ -2134,7 +2275,7 @@ void main() {
                         '![Reference image](https://example.invalid/image.png)',
                   },
                 ],
-                historySessionId: entry.key.sessionId,
+                historySessionId: entry.key.chat?.sessionId,
               ),
               draft: '',
               scopeLabel: 'Unassigned',
@@ -2268,7 +2409,7 @@ void main() {
           );
         }
         expect(visit.modeEnabled, isTrue);
-        expect(visit.entries.first.key, chat.key);
+        expect(visit.selected?.chat, chat.key);
         if (!botEntry) {
           expect(find.text('No other recent chats.'), findsOneWidget);
           expect(controller.recentChats(), isEmpty);
@@ -2320,6 +2461,15 @@ void main() {
           await controller.openSession(
             ProfileSessionKey(controller.current!.scope, 'chat-0'),
           );
+          final botFixture = BotsFixture();
+          botFixture.events.add({
+            'room_id': 'room-1',
+            'seq': 1,
+            'kind': 'message.member',
+            'created_at': fixture.now - 30,
+            'actor': {'kind': 'member', 'id': 'atlas'},
+            'payload': {'text': 'Fresh group answer'},
+          });
           final original = controller.current!.chat!;
           await controller.updateDraft(original, 'Keep this draft');
           final activity = ValueNotifier<ChatNoticeActivity?>(null);
@@ -2340,7 +2490,11 @@ void main() {
                   child: RepaintBoundary(key: frame, child: child!),
                 ),
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () =>
+                    BotsSession((_) async => [botFixture.repository]),
+              ),
             ),
           );
           await _finishFrames(tester);
@@ -2375,10 +2529,10 @@ void main() {
           );
           hold.complete();
           await _finishFrames(tester);
-          expect(visit.entries.first.key, original.key);
+          expect(visit.selected?.chat, original.key);
           expect(
             visit.entries.any(
-              (entry) => entry.key.workspace.profileName == 'work',
+              (entry) => entry.key.chat?.workspace.profileName == 'work',
             ),
             isTrue,
           );
@@ -2388,6 +2542,26 @@ void main() {
             frame,
             'entry-workspace-${brightness.name}-$scale',
           );
+          final roomIndex = visit.entries.indexWhere(
+            (entry) => entry.group != null,
+          );
+          expect(roomIndex, greaterThanOrEqualTo(0));
+          final switcherState = tester.state<RecentConversationSwitcherState>(
+            find.byType(RecentConversationSwitcher),
+          );
+          final roomVisit = switcherState.selectAdjacent(
+            roomIndex - visit.selectedIndex,
+          );
+          await _finishFrames(tester);
+          expect(find.byType(BotGroupScreen), findsOneWidget);
+          expect(find.text('Research team'), findsOneWidget);
+          expect(controller.current!.chat, same(original));
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          await roomVisit;
+          expect(find.byType(BotGroupScreen), findsNothing);
+          expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+          expect(controller.current!.chat, same(original));
           await tester.binding.handlePopRoute();
           await _finishFrames(tester);
           expect(visit.modeEnabled, isTrue);
@@ -2414,7 +2588,7 @@ void main() {
           await tester.pump();
           final other = visit.entries.last.key;
           activity.value = ChatNoticeActivity(
-            key: other,
+            key: other.chat!,
             kind: ConversationActivityKind.reply,
             identity: 'background',
             sequence: 1,
@@ -2441,7 +2615,7 @@ void main() {
             findsNothing,
           );
           activity.value = ChatNoticeActivity(
-            key: other,
+            key: other.chat!,
             kind: ConversationActivityKind.reply,
             identity: 'fresh',
             sequence: 2,
@@ -2453,7 +2627,7 @@ void main() {
             findsOneWidget,
           );
           await _chatGesture(tester, pinch: false);
-          expect(controller.current!.chat!.key, other);
+          expect(controller.current!.chat!.key, other.chat);
           await tester.binding.handlePopRoute();
           await _finishFrames(tester);
           expect(visit.active, isFalse);
@@ -2572,9 +2746,9 @@ void main() {
                 )
                 .session;
             final other = visit.entries.firstWhere(
-              (entry) => entry.key.workspace != first.key.workspace,
+              (entry) => entry.key.chat!.workspace != first.key.workspace,
             );
-            fixture.failedResume = other.key;
+            fixture.failedResume = other.key.chat!;
             expect(await visit.select(other.key), isFalse);
             await _finishFrames(tester);
             expect(controller.current!.chat!.key, first.key);

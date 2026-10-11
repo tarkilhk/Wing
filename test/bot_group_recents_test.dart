@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/bots.dart';
@@ -140,4 +141,58 @@ void main() {
     await session.acknowledgeVisibleMessages(1);
     expect(reads.unread(group), isFalse);
   });
+  test(
+    'retired passive tail stops paging without receipts or commands',
+    () async {
+      final fixture = BotsFixture();
+      final base = (await fixture.repository.groups()).single;
+      final group = BotGroup(
+        scope: base.scope,
+        instance: base.instance,
+        id: base.id,
+        name: base.name,
+        members: base.members,
+        lastMessageSequence: 201,
+        lastAnswerSequence: 201,
+      );
+      final reads = BotGroupReadState();
+      addTearDown(reads.dispose);
+      await reads.load();
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: const [],
+        reads: reads,
+      );
+      addTearDown(session.dispose);
+      final started = Completer<void>(), released = Completer<void>();
+      var allowed = true, pages = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method != 'groups.log') return null;
+        pages++;
+        started.complete();
+        await released.future;
+        return {
+          'events': [],
+          'cursor': 201,
+          'latest_seq': 201,
+          'has_more': false,
+          'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+        };
+      };
+      final preview = session.readRecentMessages(
+        limit: 6,
+        canRead: () => allowed,
+      );
+      final failure = expectLater(preview, throwsStateError);
+      await started.future;
+      allowed = false;
+      released.complete();
+      await failure;
+      expect(pages, 1);
+      expect(reads.unread(group), isTrue);
+      expect(fixture.commands, isEmpty);
+      expect(session.events, isEmpty);
+    },
+  );
 }
