@@ -240,6 +240,14 @@ void main() {
       }
       await loader.load();
     }
+    final mono = Platform.environment['CAPTURE_SKILL_COMPOSER_MONO_FONT'];
+    if (mono != null) {
+      final loader = FontLoader('monospace');
+      loader.addFont(
+        File(mono).readAsBytes().then((b) => b.buffer.asByteData()),
+      );
+      await loader.load();
+    }
   });
   setUp(() async {
     controllerDisposed = false;
@@ -1882,6 +1890,72 @@ void main() {
     },
   );
 
+  testWidgets('native command emphasis keeps arguments plain and IME native', (
+    tester,
+  ) async {
+    final input = SkillComposerController(text: '/reload-mcp now use /a-skill');
+    addTearDown(input.dispose);
+    input.observeCommands(const [
+      SlashCommand('/reload-mcp', 'Reload MCP servers', 'Tools & Skills'),
+      SlashCommand('/a-skill', '', 'Skills'),
+    ]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: TextField(controller: input)),
+      ),
+    );
+    final context = tester.element(find.byType(EditableText));
+    List<TextSpan> spans() => input
+        .buildTextSpan(context: context, withComposing: true)
+        .children!
+        .whereType<TextSpan>()
+        .toList();
+    final command = spans().singleWhere((s) => s.text == '/reload-mcp');
+    expect(command.style!.fontFamily, 'monospace');
+    expect(command.style!.fontWeight, FontWeight.w400);
+    expect(command.style!.color, Theme.of(context).colorScheme.primary);
+    final skill = spans().singleWhere((s) => s.text == '/a-skill');
+    expect(skill.style!.fontWeight, FontWeight.w700);
+    expect(skill.style!.fontFamily, isNull);
+    expect(
+      spans().singleWhere((s) => s.text == ' now use ').style!.color,
+      isNull,
+    );
+    input.value = input.value.copyWith(
+      selection: const TextSelection.collapsed(offset: 11),
+      composing: const TextRange(start: 8, end: 11),
+    );
+    expect(
+      spans()
+          .where((s) => s.style!.decoration == TextDecoration.underline)
+          .map((s) => s.text)
+          .join(),
+      'mcp',
+    );
+    expect(
+      input.buildTextSpan(context: context, withComposing: false).toPlainText(),
+      input.text,
+    );
+    expect(input.selection, const TextSelection.collapsed(offset: 11));
+    for (final literal in [
+      'Use /reload-mcp now',
+      '/reload-mc now',
+      '/reload-mcp/path',
+      'https://example.com/reload-mcp',
+    ]) {
+      input.text = literal;
+      expect(spans().where((s) => s.style!.fontFamily == 'monospace'), isEmpty);
+    }
+    input.text = '  /reload-mcp now';
+    expect(
+      spans().singleWhere((s) => s.text == '/reload-mcp').style!.fontFamily,
+      'monospace',
+    );
+    input.setScope('another profile');
+    expect(spans().where((s) => s.style!.color != null), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('plugin skill emphasis covers the full qualified name', (
     tester,
   ) async {
@@ -1979,6 +2053,135 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('command and skill distinction ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final captureKey = GlobalKey();
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: captureKey,
+            child: MaterialApp(
+              theme: wingTheme(brightness),
+              debugShowCheckedModeBanner: false,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  viewInsets: EdgeInsets.only(bottom: scale == 1 ? 280 : 0),
+                ),
+                child: child!,
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          ),
+        );
+        Future<void> capture(String state) async {
+          if (!Platform.environment.containsKey('CAPTURE_SKILL_COMPOSER')) {
+            return;
+          }
+          await tester.runAsync(() async {
+            final render =
+                captureKey.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary;
+            final image = await render.toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final file = File(
+              'build/skill-composer/${brightness.name}-$scale-distinction-$state.png',
+            );
+            await file.parent.create(recursive: true);
+            await file.writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+
+        final composer = find.byKey(const Key('profile-message-composer'));
+        await tester.enterText(composer, '/');
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pumpAndSettle();
+        final skillRow = find.ancestor(
+          of: find.text('/a-skill'),
+          matching: find.byType(ListTile),
+        );
+        final commandRow = find.ancestor(
+          of: find.text('/model'),
+          matching: find.byType(ListTile),
+        );
+        expect(
+          find.descendant(
+            of: skillRow,
+            matching: find.text('Skill · Profile a skill'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: commandRow,
+            matching: find.text('Command · Choose model'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byTooltip('Inspect /a-skill').hitTestable(),
+          findsOneWidget,
+        );
+        expect(find.byTooltip('Inspect /model'), findsNothing);
+        await tester.ensureVisible(find.text('/model'));
+        await tester.pumpAndSettle();
+        expect(find.text('/model').hitTestable(), findsOneWidget);
+        await capture('picker');
+        await tester.tap(find.text('/model'));
+        await tester.pumpAndSettle();
+        final input = tester.widget<TextField>(composer).controller!;
+        expect(input.text, '/model ');
+        await tester.enterText(composer, '/model use /a-skill');
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pumpAndSettle();
+        final span = input.buildTextSpan(
+          context: tester.element(composer),
+          withComposing: true,
+        );
+        expect(span.toPlainText(), '/model use /a-skill');
+        expect(
+          span.children!
+              .whereType<TextSpan>()
+              .singleWhere((s) => s.text == '/model')
+              .style!
+              .fontFamily,
+          'monospace',
+        );
+        expect(
+          span.children!
+              .whereType<TextSpan>()
+              .singleWhere((s) => s.text == '/a-skill')
+              .style!
+              .fontWeight,
+          FontWeight.w700,
+        );
+        expect(
+          tester
+              .widget<EditableText>(
+                find.descendant(
+                  of: composer,
+                  matching: find.byType(EditableText),
+                ),
+              )
+              .focusNode
+              .hasFocus,
+          isTrue,
+        );
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'prompt.submit'),
+          isEmpty,
+        );
+        expect(tester.takeException(), isNull);
+        await capture('composer');
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+
       testWidgets('manual skill refresh ${brightness.name} $scale', (
         tester,
       ) async {
