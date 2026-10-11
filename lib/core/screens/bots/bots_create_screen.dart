@@ -521,7 +521,16 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.titleSmall,
                             ),
-                            Text(hint, style: theme.textTheme.bodySmall),
+                            Text(
+                              hint,
+                              maxLines:
+                                  draft.memberCount >= 2 &&
+                                      (!draft.frozen || draft.saving)
+                                  ? 1
+                                  : null,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall,
+                            ),
                           ],
                         ),
                       ),
