@@ -8,6 +8,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Bots and discussions
 
+- Use normal Wing activity animation and composer controls in groups, with
+  distinct user/bot alignment, a simpler header and tap-to-view members.
+
 - Redesign group creation with picked bots above search, optional names,
   palette-colored letter icons and room pictures saved on Hermes.
 - Format Discussion messages with sender avatars, names, timestamps and chat

@@ -118,7 +118,9 @@ class ProfileMessage extends StatelessWidget {
         final inset = enlarged ? 20.0 : bounds.maxWidth * .17;
         final bubbleWidth = math.max(
           1.0,
-          discussion ? bounds.maxWidth - 44 : bounds.maxWidth - 44 - inset,
+          discussion
+              ? bounds.maxWidth - 8 - math.max(56.0, inset)
+              : bounds.maxWidth - 44 - inset,
         );
         return Align(
           alignment: Alignment.centerRight,
@@ -147,9 +149,9 @@ class ProfileMessage extends StatelessWidget {
                               ),
                             if (content.isNotEmpty)
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(
+                                padding: EdgeInsets.fromLTRB(
                                   10,
-                                  10,
+                                  discussion ? 0 : 10,
                                   10,
                                   4,
                                 ),
@@ -230,7 +232,7 @@ class ProfileMessage extends StatelessWidget {
         builder: (context, bounds) {
           final enlarged = MediaQuery.textScalerOf(context).scale(12) > 18;
           final inset = message.kind == TranscriptMessageKind.discussion
-              ? 8.0
+              ? WingSpacing.xl
               : enlarged
               ? 12.0
               : bounds.maxWidth * .12;

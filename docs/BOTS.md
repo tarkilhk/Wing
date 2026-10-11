@@ -76,7 +76,15 @@ show the sender's saved avatar and name, formatted text, links, code and
 timestamps, with Copy in the same header. Type `@` in the composer to choose a
 member; the picker inserts at the cursor. The conversation opens
 at its latest messages; scrolling up keeps your place as replies arrive. The down
-arrow returns to the latest messages.
+arrow returns to the latest messages with the same motion as normal chats.
+
+Tap the instance and bot count under the title to see the group’s members and
+saved avatars. The conversation uses a group icon when no picture is saved.
+The ellipsis menu contains member details, working histories, Refresh and Stop.
+While work is active, the empty composer offers Stop; entering a draft offers
+Send. A compact status above the composer shows sending, loading, work or
+approval needs. Hermes currently exposes group activity rather than individual
+bots typing, so Wing displays “Bots are working…”.
 
 Internal group workers stay out of the default Chats list and chat notifications,
 so they do not produce `Group: <UUID>` alerts. Read replies and answer approvals

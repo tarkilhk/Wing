@@ -14427,6 +14427,16 @@
       "path": "website/workspaces.html",
       "area": "website",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/composer_icon_button.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/conversation_activity_status.dart",
+      "area": "lib",
+      "provenance": "tracked"
     }
   ],
   "direct_dependencies": {
