@@ -43,6 +43,7 @@ class ChatImagePreview extends StatelessWidget {
       uri: uri,
       bytes: bytes,
       title: title,
+      imageDecoration: const BoxDecoration(),
       onOpenExternal: onOpenExternal,
       actionLabel: actionLabel,
       actionIcon: actionIcon,
@@ -57,6 +58,7 @@ class ChatImageViewport extends StatefulWidget {
     this.uri,
     this.bytes,
     required this.title,
+    required this.imageDecoration,
     this.onOpenExternal,
     this.actionLabel = 'Open in browser',
     this.actionIcon = Icons.open_in_new,
@@ -66,6 +68,7 @@ class ChatImageViewport extends StatefulWidget {
   final Uri? uri;
   final Uint8List? bytes;
   final String title;
+  final BoxDecoration imageDecoration;
   final VoidCallback? onOpenExternal;
   final String actionLabel;
   final IconData actionIcon;
@@ -126,30 +129,50 @@ class _ChatImageViewportState extends State<ChatImageViewport> {
         panEnabled: _zoomed,
         minScale: 0.5,
         maxScale: 5,
-        child: Image(
-          image: widget.bytes == null
-              ? NetworkImage(widget.uri.toString())
-              : MemoryImage(widget.bytes!),
-          semanticLabel: widget.title,
-          fit: BoxFit.contain,
-          loadingBuilder: (context, child, progress) => progress == null
-              ? child
-              : const Center(child: CircularProgressIndicator()),
-          errorBuilder: (context, error, stack) => SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const StudioError('This image could not be previewed.'),
-                if (widget.onOpenExternal != null) ...[
-                  const SizedBox(height: 12),
-                  ResourceViewerAction(
-                    onPressed: widget.onOpenExternal,
-                    icon: widget.actionIcon,
-                    label: widget.actionLabel,
+        child: Padding(
+          padding: widget.imageDecoration.boxShadow?.isNotEmpty == true
+              ? const EdgeInsets.all(8)
+              : EdgeInsets.zero,
+          child: DecoratedBox(
+            decoration: _zoomed
+                ? const BoxDecoration()
+                : widget.imageDecoration,
+            child: ClipRRect(
+              borderRadius: _zoomed
+                  ? BorderRadius.zero
+                  : (widget.imageDecoration.borderRadius ?? BorderRadius.zero)
+                        .resolve(Directionality.of(context)),
+              child: Image(
+                image: widget.bytes == null
+                    ? NetworkImage(widget.uri.toString())
+                    : MemoryImage(widget.bytes!),
+                semanticLabel: widget.title,
+                fit: BoxFit.contain,
+                frameBuilder: (context, child, frame, synchronouslyLoaded) =>
+                    frame != null || synchronouslyLoaded
+                    ? child
+                    : const Center(child: CircularProgressIndicator()),
+                loadingBuilder: (context, child, progress) => progress == null
+                    ? child
+                    : const Center(child: CircularProgressIndicator()),
+                errorBuilder: (context, error, stack) => SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const StudioError('This image could not be previewed.'),
+                      if (widget.onOpenExternal != null) ...[
+                        const SizedBox(height: 12),
+                        ResourceViewerAction(
+                          onPressed: widget.onOpenExternal,
+                          icon: widget.actionIcon,
+                          label: widget.actionLabel,
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ],
+                ),
+              ),
             ),
           ),
         ),

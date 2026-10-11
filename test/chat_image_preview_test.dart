@@ -43,6 +43,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(thumbnail, findsOneWidget);
     await tester.tap(thumbnail);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    final original = find.descendant(
+      of: find.byType(ChatImagePreview),
+      matching: find.byType(Image),
+    );
+    await tester.runAsync(
+      () => precacheImage(
+        tester.widget<Image>(original).image,
+        tester.element(original),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(ChatImagePreview), findsOneWidget);
     expect(find.byType(InteractiveViewer), findsOneWidget);

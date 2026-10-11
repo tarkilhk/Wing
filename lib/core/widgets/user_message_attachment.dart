@@ -497,6 +497,7 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
       _providers[widget.images[_index].target] = Future.value(provider);
     }
     _revealSelectedThumbnail();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prepareNeighbors());
   }
 
   @override
@@ -550,6 +551,20 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
       _navigationEnabled = _navigationByPage[index] ?? true;
     });
     _revealSelectedThumbnail(animate: true);
+    _prepareNeighbors();
+  }
+
+  void _prepareNeighbors() {
+    if (!mounted) return;
+    for (final index in [_index - 1, _index + 1]) {
+      if (index < 0 || index >= widget.images.length) continue;
+      _provider(index).then((provider) {
+        if (!mounted || (index - _index).abs() > 1) return;
+        // Preparing only the immediate originals makes the incoming card
+        // visible throughout the swipe without eagerly decoding an album.
+        precacheImage(provider, context, onError: (_, _) {});
+      }, onError: (Object _, StackTrace _) {});
+    }
   }
 
   void _setNavigationEnabled(int index, bool enabled) {
@@ -599,47 +614,57 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
         label: attachment.name,
         child: Tooltip(
           message: attachment.name,
-          child: Material(
-            color: index == _index
-                ? colors.primary
-                : colors.surfaceContainerHigh,
-            borderRadius: WingRadius.card,
-            child: InkWell(
-              key: ValueKey('image-thumbnail-$index'),
+          child: AnimatedScale(
+            scale: index == _index ? 1 : .94,
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : WingMotion.fast,
+            curve: WingMotion.curve,
+            child: Material(
+              color: index == _index
+                  ? colors.primary
+                  : colors.surfaceContainerHigh,
+              animationDuration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : WingMotion.fast,
               borderRadius: WingRadius.card,
-              onTap: () => _select(index),
-              child: Padding(
-                padding: const EdgeInsets.all(3),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: ExcludeSemantics(
-                    child: FutureBuilder<ImageProvider>(
-                      future: _provider(index),
-                      builder: (context, snapshot) {
-                        final provider =
-                            snapshot.connectionState == ConnectionState.done
-                            ? snapshot.data
-                            : null;
-                        if (provider != null) {
-                          return Image(
-                            image: ResizeImage(
-                              provider,
-                              width: 144,
-                              height: 144,
-                              policy: ResizeImagePolicy.fit,
-                            ),
-                            fit: BoxFit.cover,
-                            alignment: Alignment.topCenter,
-                            errorBuilder: (_, _, _) =>
-                                const Icon(Icons.broken_image_outlined),
+              child: InkWell(
+                key: ValueKey('image-thumbnail-$index'),
+                borderRadius: WingRadius.card,
+                onTap: () => _select(index),
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: ExcludeSemantics(
+                      child: FutureBuilder<ImageProvider>(
+                        future: _provider(index),
+                        builder: (context, snapshot) {
+                          final provider =
+                              snapshot.connectionState == ConnectionState.done
+                              ? snapshot.data
+                              : null;
+                          if (provider != null) {
+                            return Image(
+                              image: ResizeImage(
+                                provider,
+                                width: 144,
+                                height: 144,
+                                policy: ResizeImagePolicy.fit,
+                              ),
+                              fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
+                              errorBuilder: (_, _, _) =>
+                                  const Icon(Icons.broken_image_outlined),
+                            );
+                          }
+                          return Icon(
+                            snapshot.hasError
+                                ? Icons.broken_image_outlined
+                                : Icons.image_outlined,
                           );
-                        }
-                        return Icon(
-                          snapshot.hasError
-                              ? Icons.broken_image_outlined
-                              : Icons.image_outlined,
-                        );
-                      },
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -719,6 +744,18 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
         return ChatImageViewport(
           key: ValueKey(attachment.target),
           title: attachment.name,
+          imageDecoration: BoxDecoration(
+            borderRadius: WingRadius.card,
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(
+                  context,
+                ).colorScheme.shadow.withValues(alpha: .18),
+                offset: const Offset(0, 6),
+                blurRadius: 18,
+              ),
+            ],
+          ),
           bytes: provider is MemoryImage ? provider.bytes : null,
           uri: provider is NetworkImage ? Uri.parse(provider.url) : null,
           onNavigationEnabled: (enabled) =>
@@ -743,6 +780,36 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
     },
   );
 
+  Widget _cardPage(int index) => LayoutBuilder(
+    builder: (context, constraints) => AnimatedBuilder(
+      animation: _pages,
+      child: _page(index),
+      builder: (context, child) {
+        final page = _pages.hasClients && _pages.position.hasContentDimensions
+            ? _pages.page ?? _index.toDouble()
+            : _index.toDouble();
+        final distance = (index - page).clamp(-1.0, 1.0);
+        final travel = distance.abs();
+        if (MediaQuery.disableAnimationsOf(context)) return child!;
+        // Compress the travel between fitted originals, so portrait images
+        // exchange as neighboring cards rather than crossing a wide blank gap.
+        final direction = Directionality.of(context) == TextDirection.rtl
+            ? -1.0
+            : 1.0;
+        final inset =
+            -distance * direction * (1 - travel) * constraints.maxWidth * .5;
+        return Transform.translate(
+          offset: Offset(inset, travel * 8),
+          child: Transform.scale(
+            key: ValueKey('gallery-card-motion-$index'),
+            scale: 1 - travel * .12,
+            child: Opacity(opacity: 1 - travel * .12, child: child),
+          ),
+        );
+      },
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final visibleCapacity =
@@ -754,17 +821,28 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
         title: widget.images[_index].name,
       ),
       bottomNavigationBar: _navigation(),
-      body: FadeTransition(
-        opacity: _jumpFade.drive(CurveTween(curve: WingMotion.curve)),
-        child: PageView.builder(
-          key: const ValueKey('user-image-gallery-pages'),
-          controller: _pages,
-          physics: _navigationEnabled
-              ? null
-              : const NeverScrollableScrollPhysics(),
-          onPageChanged: _pageChanged,
-          itemCount: widget.images.length,
-          itemBuilder: (_, index) => _page(index),
+      body: Padding(
+        padding: const EdgeInsets.all(4),
+        child: FadeTransition(
+          opacity: _jumpFade.drive(CurveTween(curve: WingMotion.curve)),
+          child: ScaleTransition(
+            scale: _jumpFade.drive(
+              Tween(
+                begin: .97,
+                end: 1.0,
+              ).chain(CurveTween(curve: WingMotion.curve)),
+            ),
+            child: PageView.builder(
+              key: const ValueKey('user-image-gallery-pages'),
+              controller: _pages,
+              physics: _navigationEnabled
+                  ? null
+                  : const NeverScrollableScrollPhysics(),
+              onPageChanged: _pageChanged,
+              itemCount: widget.images.length,
+              itemBuilder: (_, index) => _cardPage(index),
+            ),
+          ),
         ),
       ),
     );

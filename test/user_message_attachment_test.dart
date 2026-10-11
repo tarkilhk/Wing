@@ -26,6 +26,14 @@ Future<void> settleImages(WidgetTester tester) async {
       () => precacheImage(image.image, element, onError: (_, _) {}),
     );
   }
+  // A provider may resolve during the preceding decode and only insert its
+  // full-size Image on the next frame. Allow that codec to deliver its frame
+  // before settling animations, including the viewer's loading indicator.
+  await tester.pump();
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 20)),
+  );
+  await tester.pump();
   await tester.pumpAndSettle();
 }
 
@@ -806,6 +814,86 @@ void main() {
     },
   );
 
+  testWidgets('the next original is decoded before a forty-image swipe', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    // Different byte identities give every original an independent codec key;
+    // a cached thumbnail must not masquerade as a prepared full-size image.
+    final originals = List.generate(40, (_) => Uint8List.fromList(bytes));
+    final requests = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProfileMessage(
+            message: TranscriptMessage.fromRow({
+              'role': 'user',
+              'content': List.generate(
+                40,
+                (index) => '@image:/server/$index.png',
+              ).join('\n'),
+            }),
+            loadAttachmentImage: (path) async {
+              requests.add(path);
+              return originals[int.parse(
+                path.split('/').last.split('.').first,
+              )];
+            },
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+    await tester.tapAt(tester.getCenter(find.text('+35')));
+    await settleImages(tester);
+    expect(find.text('5 / 40'), findsOneWidget);
+    final cache = PaintingBinding.instance.imageCache;
+    final nextThumbnail = tester.widget<Image>(
+      find.descendant(
+        of: find.byKey(const ValueKey('image-thumbnail-5')),
+        matching: find.byType(Image),
+      ),
+    );
+    // Acquisition copies into an immutable resource. Inspect that issued
+    // original provider, rather than the loader's different byte identity.
+    final nextOriginal = (nextThumbnail.image as ResizeImage).imageProvider;
+    for (
+      var attempt = 0;
+      attempt < 20 && !cache.statusForKey(nextOriginal).keepAlive;
+      attempt++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(cache.statusForKey(nextOriginal).keepAlive, isTrue);
+    expect(cache.statusForKey(nextOriginal).pending, isFalse);
+    expect(requests, isNot(contains('/server/39.png')));
+    expect(requests.length, lessThan(12));
+
+    final pages = find.byKey(const ValueKey('user-image-gallery-pages'));
+    final finger = await tester.startGesture(tester.getCenter(pages));
+    await finger.moveBy(const Offset(-30, 0));
+    await tester.pump();
+    await finger.moveBy(const Offset(-60, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    // Admit the newly mounted page's already-resolved provider; no native
+    // decode wait or precache is performed after the drag begins.
+    await tester.pump();
+    final incoming = find.descendant(
+      of: find.byKey(const ValueKey('/server/5.png')),
+      matching: find.byType(RawImage),
+    );
+    expect(incoming, findsOneWidget);
+    expect(tester.widget<RawImage>(incoming).image, isNotNull);
+    await finger.up();
+    await settleImages(tester);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'thumbnail scrolling preserves selection and tapping jumps to image forty',
     (tester) async {
@@ -1217,6 +1305,35 @@ void main() {
         );
         final stripRect = tester.getRect(strip);
         final viewportWidth = tester.getSize(pages).width;
+
+        // Optional native frame sequences allow visual comparison of the
+        // complete transition, rather than judging motion from a still image.
+        if (scale == 1 &&
+            const bool.fromEnvironment('CAPTURE_GALLERY_MOTION')) {
+          const root = String.fromEnvironment('GALLERY_MOTION_DIR');
+          final directory = Directory('$root/${brightness.name}-$scale');
+          await tester.runAsync(() => directory.create(recursive: true));
+          for (var frame = 0; frame < 132; frame++) {
+            if (frame == 30) await tester.tap(find.byTooltip('Next image'));
+            if (frame == 90) await tester.tap(find.byTooltip('Previous image'));
+            await tester.pump(const Duration(microseconds: 16667));
+            await tester.runAsync(() async {
+              final render =
+                  boundary.currentContext!.findRenderObject()!
+                      as RenderRepaintBoundary;
+              final image = await render.toImage();
+              final data = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              await File(
+                '${directory.path}/${frame.toString().padLeft(3, '0')}.png',
+              ).writeAsBytes(data!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
+          await settleImages(tester);
+          expect(find.text('1 / 3'), findsOneWidget);
+        }
 
         // The held drag moves actual image cards before release, in either
         // direction, while the surrounding viewer controls stay put.
