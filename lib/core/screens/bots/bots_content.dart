@@ -289,7 +289,12 @@ class _BotsContentState extends State<BotsContent> {
                   ],
                 ),
                 if (state.loading || state.busy)
-                  const LinearProgressIndicator(),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: LinearProgressIndicator(
+                      semanticsLabel: 'Loading bots and groups',
+                    ),
+                  ),
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),

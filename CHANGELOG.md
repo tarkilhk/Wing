@@ -8,6 +8,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Bots and discussions
 
+- Fix generated group pictures and bot avatars with stock Hermes. Add detailed
+  device diagnostics while keeping the existing on-screen errors.
+
 - Edit existing group names, icon colors and pictures from the roster or discussion.
 - Use normal Wing activity animation and composer controls in groups, with
   distinct user/bot alignment, a simpler header and a compact anchored member list.

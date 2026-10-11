@@ -159,6 +159,91 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
+        'roster refresh stays clear of tabs in ${brightness.name} at $scale',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          final fixture = BotsFixture();
+          final session = BotsSession((_) async => [fixture.repository]);
+          addTearDown(session.dispose);
+          await session.refresh();
+          final held = Completer<Map<String, dynamic>?>();
+          fixture.readHook = (_, method, _) async =>
+              method == 'profiles.list' ? held.future : null;
+          final refresh = session.refresh();
+          var view = const BotsViewState();
+          final frame = GlobalKey();
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: StatefulBuilder(
+                builder: (context, setState) => BotsContent(
+                  instanceHeader: const Align(
+                    alignment: Alignment.centerLeft,
+                    child: ServerConnectionLabel(label: 'Home server'),
+                  ),
+                  session: session,
+                  viewState: view,
+                  onViewChanged: (next) => setState(() => view = next),
+                  onOpenMenu: () {},
+                  onOpenChat: (_) async {},
+                ),
+              ),
+            ),
+          );
+          for (final tab in ['Bots', 'Groups']) {
+            await tester.tap(find.widgetWithText(Tab, tab));
+            await tester.pump(const Duration(milliseconds: 300));
+            final progress = find.byType(LinearProgressIndicator);
+            expect(progress, findsOneWidget);
+            expect(
+              tester.getTopLeft(progress).dy -
+                  tester.getBottomLeft(find.byType(TabBar)).dy,
+              greaterThanOrEqualTo(8),
+            );
+            expect(
+              tester.getTopLeft(find.byKey(const ValueKey('bots-search'))).dy -
+                  tester.getBottomLeft(progress).dy,
+              greaterThanOrEqualTo(16),
+            );
+            expect(
+              tester.widget<LinearProgressIndicator>(progress).semanticsLabel,
+              'Loading bots and groups',
+            );
+            expect(
+              find.text(tab == 'Bots' ? 'Atlas' : 'Research team'),
+              findsOneWidget,
+            );
+            await _capture(
+              tester,
+              frame,
+              'loading-${tab.toLowerCase()}-${brightness.name}-$scale',
+              motion: true,
+            );
+            expect(tester.takeException(), isNull);
+          }
+          held.complete(null);
+          await refresh;
+          await tester.pumpAndSettle();
+          expect(find.byType(LinearProgressIndicator), findsNothing);
+          expect(find.text('Research team'), findsOneWidget);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
         'group editing saved details, palette and keyboard ${brightness.name} $scale',
         (tester) async {
           SharedPreferences.setMockInitialValues({});

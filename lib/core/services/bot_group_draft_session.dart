@@ -7,6 +7,8 @@ import 'attachment_image_worker.dart';
 import 'bot_avatar_io.dart';
 import 'bots_session.dart';
 import 'bots_repository.dart';
+import 'connection_diagnostics.dart';
+import 'workspace_connection_failure.dart';
 
 /// Owns new and existing room drafts, picture preparation and immutable retries.
 class BotGroupDraftSession extends ChangeNotifier {
@@ -175,7 +177,11 @@ class BotGroupDraftSession extends ChangeNotifier {
       'Friendly minimal emblem, bold flat illustration, solid color background, centered, no text.';
 
   Future<void> pickPicture({required bool Function() canUse}) =>
-      _preparePicture(() => _pictureIo.pick(), canUse: canUse);
+      _preparePicture(
+        () => _pictureIo.pick(),
+        operation: 'upload',
+        canUse: canUse,
+      );
   Future<void> generatePicture(
     String prompt, {
     required bool Function() canUse,
@@ -188,16 +194,22 @@ class BotGroupDraftSession extends ChangeNotifier {
         prompt.trim(),
         canUse: () => !_closed && identity == _identity && canUse(),
       ),
+      operation: 'generate',
       canUse: canUse,
     );
   }
 
   Future<void> _preparePicture(
     Future<Uint8List?> Function() read, {
+    required String operation,
     required bool Function() canUse,
   }) async {
     if (!editable || _pictureBusy || !canUse()) return;
     final generation = ++_pictureGeneration;
+    final identity = _identity;
+    final elapsed = Stopwatch()..start();
+    var stage = 'read';
+    int? inputBytes;
     bool alive() => !_closed && generation == _pictureGeneration;
     bool current() => alive() && canUse();
     _pictureBusy = true;
@@ -206,12 +218,40 @@ class BotGroupDraftSession extends ChangeNotifier {
     try {
       final bytes = await read();
       if (!current() || bytes == null) return;
+      inputBytes = bytes.lengthInBytes;
+      stage = 'thumbnail';
       final thumbnail = await compute(encodeRoomThumbnail, (
         bytes,
         BotsRepository.groupPictureMaxBytes,
       ));
-      if (current()) _picture = thumbnail.asUnmodifiableView();
-    } catch (_) {
+      if (current()) {
+        _picture = thumbnail.asUnmodifiableView();
+        logConnectionDiagnostic(
+          'bots.group_picture_prepared',
+          details: {
+            'connection_identity': identity,
+            'operation': operation,
+            'input_bytes': inputBytes,
+            'output_bytes': thumbnail.lengthInBytes,
+            'elapsed_ms': elapsed.elapsedMilliseconds,
+          },
+        );
+      }
+    } catch (error, stack) {
+      logConnectionDiagnostic(
+        'bots.group_picture_failed',
+        details: {
+          'connection_identity': identity,
+          'operation': operation,
+          'stage': stage,
+          'elapsed_ms': elapsed.elapsedMilliseconds,
+          'retired': !current(),
+          'input_bytes': ?inputBytes,
+          ...workspaceFailureDiagnostic(error),
+        },
+        error: error,
+        stackTrace: stack,
+      );
       if (current()) {
         _error =
             'Room picture could not be prepared. Try another image or generate again.';
