@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/bot_avatar.dart';
+import 'package:wing/core/widgets/bot_group_picture.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -138,7 +139,9 @@ void main() {
               'I’ll review the scientific assumptions before implementation. The comparison windows and missing-data rules need your approval.',
             ),
           ]);
-          final group = (await fixture.repository.groups()).first;
+          final group = (await fixture.repository.groups()).first.withIcon(
+            picture: File('assets/icon/icon.png').readAsBytesSync(),
+          );
           final frame = GlobalKey();
           final keyboard = ValueNotifier<bool>(false);
           addTearDown(keyboard.dispose);
@@ -167,6 +170,10 @@ void main() {
           );
           await tester.pumpAndSettle();
           await _settleGroupMarkdown(tester);
+          expect(
+            tester.widget<BotGroupPicture>(find.byType(BotGroupPicture)).image,
+            group.picture,
+          );
           expect(tester.takeException(), isNull);
           expect(find.byType(BotAvatar), findsWidgets);
           final input = find.byKey(const ValueKey('group-message-composer'));

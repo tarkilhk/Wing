@@ -34,6 +34,29 @@ Valid edits save automatically after a short pause. Back finishes pending saves;
 
 Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Tap a member's @handle to insert a mention. Rooms offer rename, stop and disband; their member roster is fixed when created.
 
+Tap member rows to add 2–6 bots. Picked bots move into their own strip above
+search, with a remove icon for each. Search by name or @handle to find bots to
+add; removing a picked bot returns it to the list. Leave the
+name blank to use the selected bots' names, or enter a name of up to 64 characters.
+Choose a Hermes instance when several are ready.
+
+The default room icon uses the first letter of its name and a random color from
+Hermes/Wing's usual color palette. The color stays fixed while you edit and is
+saved on Hermes.
+
+Upload a room picture, generate one from a description, or remove it. Generation
+uses the chosen instance's default profile image provider. Uploads accept PNG,
+JPEG and WebP up to 2 MB. Wing crops a 256 px square thumbnail and compresses it
+to at most 45 KB for upload. Creating the group saves its picture on the chosen
+Hermes backend; another Wing device connected to that backend can load it.
+Removing a picture restores the letter icon. Icons appear in the group list and
+conversation header. Desktop uses a
+separate room format and does not currently display Wing's hosted-room pictures.
+
+The bottom dock previews your room and keeps Create group above the keyboard.
+Creation becomes available with at least two members. If it cannot be confirmed,
+the form fixes the room details so you can retry the same group.
+
 An unconfirmed send stays available for review/retry. Interrupted tasks ask for explicit confirmation before retrying. Approvals apply to the request shown in that discussion.
 
 Your messages use the ordinary chat bubbles. Bot replies show the sender's saved

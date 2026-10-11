@@ -1,7 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Group pins are device preferences, matching desktop's room-record pinning.
-/// Keys include the captured authenticated instance identity and stable room ID.
+/// Device-owned room pins, scoped by authenticated instance and room ID.
 class BotsPreferences {
   BotsPreferences(this._preferences);
   final SharedPreferences _preferences;

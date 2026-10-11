@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/bots.dart';
+import '../models/profile_colors.dart';
 import '../models/hermes_profile.dart';
 import '../models/profile_session_key.dart';
 import 'bots_repository.dart';
@@ -597,17 +598,34 @@ class BotsSession extends ChangeNotifier {
     String name,
     List<BotRecord> members, {
     required bool Function() canUse,
+    Uint8List? picture,
+    required ProfileColorChoice iconColor,
   }) async =>
       await _mutate((active, sent) async {
         if (!_ready.contains(identity)) {
           throw StateError('Group driver is unavailable');
         }
-        await repository(
-          identity,
-        ).createGroup(roomId, name, members, active, sent);
+        final source = repository(identity);
+        await source.createGroup(roomId, name, members, active, sent);
+        if (!active()) return false;
+        await source.saveGroupIcon(roomId, iconColor, picture, active, sent);
         return true;
       }, canUse: canUse) ==
       true;
+  Future<Uint8List> generateGroupPicture(
+    String identity,
+    String prompt, {
+    required bool Function() canUse,
+  }) async {
+    final source = repository(identity);
+    source.retain();
+    try {
+      return await source.generateGroupPicture(prompt, canUse, () {});
+    } finally {
+      source.release();
+    }
+  }
+
   String newRoomId() => const Uuid().v4();
   Future<bool> groupAction(
     BotGroup group,

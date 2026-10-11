@@ -6269,6 +6269,15 @@
         "scroll",
         "end"
       ]
+    },
+    {
+      "id": "host-test-test/bot_group_create_session_test.dart",
+      "kind": "host-test",
+      "path": "test/bot_group_create_session_test.dart",
+      "purpose": "Room draft, random palette icons, stock picture generation, backend CAS/readback and immutable retry lifetime",
+      "source": "internal/docs/TESTING.md; test/bot_group_create_session_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -8608,6 +8617,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/services/bot_group_create_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/bot_group_history_session.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -9319,6 +9333,11 @@
     },
     {
       "path": "lib/core/widgets/bot_display_viewport.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/bot_group_picture.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
     },
@@ -10389,6 +10408,11 @@
     },
     {
       "path": "test/bot_exchange_activity_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_group_create_session_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },

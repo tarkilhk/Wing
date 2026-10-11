@@ -19,6 +19,9 @@ import 'package:wing/core/screens/bots/bot_profile_editor.dart';
 import 'package:wing/core/screens/bots/bot_settings_screen.dart';
 import 'package:wing/core/screens/bots/bots_create_screen.dart';
 import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/services/bot_group_create_session.dart';
+import 'package:wing/core/services/bot_avatar_io.dart';
+import 'package:wing/core/widgets/bot_group_picture.dart';
 import 'package:wing/core/services/bot_screen_window.dart';
 import 'package:wing/core/services/bot_profile_edit_session.dart';
 import 'package:wing/core/theme/profile_colors.dart';
@@ -74,6 +77,11 @@ class _BotConversationBrowser extends ProfileBrowserFixture {
   ];
 }
 
+class _RoomPicturePicker extends BotAvatarIo {
+  @override
+  Future<Uint8List?> pick() => File('assets/icon/icon.png').readAsBytes();
+}
+
 class _ReviewBinding extends AutomatedTestWidgetsFlutterBinding {
   @override
   bool get disableShadows => false;
@@ -105,6 +113,27 @@ Future<void> _capture(
   });
 }
 
+Future<void> _revealGroup(
+  WidgetTester tester,
+  Finder target, {
+  double delta = 120,
+}) async {
+  if (target.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      target,
+      delta,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+  }
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   if (_export) _ReviewBinding();
   setUpAll(() async {
@@ -123,6 +152,550 @@ void main() {
           .load();
     }
   });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('group creation layout ${brightness.name} $scale', (
+        tester,
+      ) async {
+        SharedPreferences.setMockInitialValues({});
+        final semantics = tester.ensureSemantics();
+        final size = scale == 1 ? const Size(390, 844) : const Size(320, 640);
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = BotsFixture();
+        fixture.profiles.addAll([
+          BotsFixture.profile('pace', 'Pace'),
+          BotsFixture.profile('butler', 'Butler'),
+          BotsFixture.profile('reminder', 'Reminder inbox'),
+        ]);
+        for (var index = 0; index < fixture.profiles.length; index++) {
+          fixture.profiles[index]['ui_meta']['hermes-bots']['shape'] =
+              botShapes[index];
+        }
+        if (scale == 2) {
+          fixture.profiles.last['ui_meta']['hermes-bots']['title'] =
+              'Reminder inbox with a long name';
+        }
+        final session = BotsSession((_) async => [fixture.repository]);
+        addTearDown(session.dispose);
+        await session.refresh();
+        final frame = GlobalKey();
+        var keyboard = false;
+        late StateSetter setMedia;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => StatefulBuilder(
+              builder: (context, setState) {
+                setMedia = setState;
+                return MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(scale),
+                    viewInsets: EdgeInsets.only(bottom: keyboard ? 240 : 0),
+                  ),
+                  child: RepaintBoundary(key: frame, child: child),
+                );
+              },
+            ),
+            home: BotsCreateScreen(session: session, group: true),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final action = find.byKey(const ValueKey('group-create'));
+        IconButton create() => tester.widget<IconButton>(action);
+        expect(create().onPressed, isNull);
+        expect(find.byType(CheckboxListTile), findsNothing);
+        expect(
+          tester
+              .widget<TextField>(find.byKey(const ValueKey('group-name')))
+              .autofocus,
+          false,
+        );
+        await _capture(
+          tester,
+          frame,
+          'group-creation-empty-${brightness.name}-$scale',
+        );
+        await _revealGroup(tester, find.text('0 of 6 selected'));
+        expect(find.text('0 of 6 selected'), findsOneWidget);
+        await _revealGroup(
+          tester,
+          find.byKey(const ValueKey('group-name')),
+          delta: -120,
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('group-name')),
+          'Launch team',
+        );
+        for (final profile in ['atlas', 'mira']) {
+          final row = find.byKey(ValueKey('group-member-instance-1/$profile'));
+          await _revealGroup(tester, row);
+          await tester.pumpAndSettle();
+          await tester.tapAt(
+            tester
+                .getRect(row)
+                .intersect(tester.getRect(find.byType(ListView)))
+                .center,
+          );
+          await tester.pumpAndSettle();
+          expect(row, findsNothing);
+          final picked = find.byKey(
+            ValueKey('group-picked-instance-1/$profile'),
+          );
+          await _revealGroup(tester, picked, delta: -120);
+          expect(picked, findsOneWidget);
+          expect(
+            tester.getSemantics(picked).flagsCollection.isSelected,
+            ui.Tristate.isTrue,
+          );
+          final remove = find.byTooltip(
+            'Remove ${profile == 'atlas' ? 'Atlas' : 'Mira'}',
+          );
+          expect(tester.getSize(remove).height, greaterThanOrEqualTo(48));
+          final search = find.byKey(
+            const ValueKey('group-member-search-instance-1'),
+          );
+          expect(
+            tester.getRect(picked).bottom,
+            lessThanOrEqualTo(tester.getRect(search).top),
+          );
+        }
+        expect(create().onPressed, isNotNull);
+        final icon = tester.widget<BotGroupPicture>(
+          find.byType(BotGroupPicture).last,
+        );
+        expect(icon.name, 'Launch team');
+        expect(icon.color?.slot, isNotNull);
+        expect(
+          find.descendant(
+            of: find.byType(BotGroupPicture).last,
+            matching: find.text('L'),
+          ),
+          findsOneWidget,
+        );
+        await _revealGroup(tester, find.text('Members'), delta: -120);
+        expect(find.text('2 of 6 selected'), findsOneWidget);
+        expect(tester.getSize(action).width, greaterThanOrEqualTo(48));
+        expect(tester.getSize(action).height, greaterThanOrEqualTo(48));
+        await _revealGroup(
+          tester,
+          find.byKey(const ValueKey('group-member-instance-1/reminder')),
+        );
+        await _capture(
+          tester,
+          frame,
+          'group-creation-members-${brightness.name}-$scale',
+        );
+        await tester.drag(find.byType(ListView), const Offset(0, 1400));
+        await tester.pumpAndSettle();
+        await _capture(
+          tester,
+          frame,
+          'group-creation-selected-${brightness.name}-$scale',
+        );
+        setMedia(() => keyboard = true);
+        await tester.pumpAndSettle();
+        expect(
+          tester.getRect(action).bottom,
+          lessThanOrEqualTo(size.height - 240),
+        );
+        await _capture(
+          tester,
+          frame,
+          'group-creation-keyboard-${brightness.name}-$scale',
+        );
+        expect(tester.takeException(), isNull);
+        semantics.dispose();
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+  }
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('group creation picture options ${brightness.name} $scale', (
+        tester,
+      ) async {
+        SharedPreferences.setMockInitialValues({});
+        tester.view.physicalSize = scale == 1
+            ? const Size(390, 844)
+            : const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = BotsFixture();
+        final session = BotsSession((_) async => [fixture.repository]);
+        addTearDown(session.dispose);
+        await session.refresh();
+        final draft = BotGroupCreateSession(
+          session,
+          pictureIo: _RoomPicturePicker(),
+        );
+        for (final bot in draft.bots.take(2)) {
+          draft.select(bot, true);
+        }
+        final frame = GlobalKey();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: RepaintBoundary(key: frame, child: child),
+            ),
+            home: BotsCreateScreen(
+              session: session,
+              group: true,
+              createGroupSession: () => draft,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<IconButton>(find.byKey(const ValueKey('group-create')))
+              .onPressed,
+          isNotNull,
+        );
+        expect(
+          tester
+              .widget<TextField>(find.byKey(const ValueKey('group-name')))
+              .controller!
+              .text,
+          isEmpty,
+        );
+        await tester.runAsync(() async {
+          await tester.tap(find.byTooltip('Upload room picture'));
+          while (draft.pictureBusy) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+          }
+        });
+        await tester.pumpAndSettle();
+        expect(draft.picture, isNotNull);
+        await tester.runAsync(
+          () => precacheImage(
+            MemoryImage(draft.picture!),
+            tester.element(find.byType(BotGroupPicture).first),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widgetList<BotGroupPicture>(find.byType(BotGroupPicture))
+              .every((picture) => picture.image != null),
+          true,
+        );
+        expect(find.byTooltip('Remove room picture'), findsOneWidget);
+        await _capture(
+          tester,
+          frame,
+          'group-creation-picture-${brightness.name}-$scale',
+        );
+        await tester.tap(find.byTooltip('Generate room picture'));
+        await tester.pumpAndSettle();
+        expect(find.text('Room picture'), findsOneWidget);
+        expect(
+          tester.widget<TextFormField>(find.byType(TextFormField)).initialValue,
+          contains('Atlas, Mira'),
+        );
+        await _capture(
+          tester,
+          frame,
+          'group-creation-prompt-${brightness.name}-$scale',
+        );
+        await tester.tap(find.byTooltip('Cancel'));
+        await tester.pumpAndSettle();
+        await _revealGroup(tester, find.byTooltip('Remove Atlas'));
+        await tester.tap(find.byTooltip('Remove Atlas'));
+        await tester.pumpAndSettle();
+        expect(draft.selected.single.title, 'Mira');
+        expect(
+          tester
+              .widget<IconButton>(find.byKey(const ValueKey('group-create')))
+              .onPressed,
+          isNull,
+        );
+        await _revealGroup(
+          tester,
+          find.byTooltip('Remove room picture'),
+          delta: -120,
+        );
+        await tester.tap(find.byTooltip('Remove room picture'));
+        await tester.pumpAndSettle();
+        expect(draft.picture, isNull);
+        expect(fixture.commands, isEmpty);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+  }
+  testWidgets(
+    'group creation search retains selection and enforces six members',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final fixture = BotsFixture();
+      fixture.profiles.addAll([
+        for (final name in ['pace', 'butler', 'reminder', 'memory'])
+          BotsFixture.profile(
+            name,
+            name == 'reminder' ? 'Reminder inbox with a long name' : name,
+          ),
+      ]);
+      final session = BotsSession((_) async => [fixture.repository]);
+      addTearDown(session.dispose);
+      await session.refresh();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: BotsCreateScreen(session: session, group: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final search = find.byKey(
+        const ValueKey('group-member-search-instance-1'),
+      );
+      for (final profile in [
+        'atlas',
+        'mira',
+        'forge',
+        'pace',
+        'butler',
+        'reminder',
+      ]) {
+        final row = find.byKey(ValueKey('group-member-instance-1/$profile'));
+        await _revealGroup(tester, row);
+        await tester.pumpAndSettle();
+        await tester.tapAt(
+          tester
+              .getRect(row)
+              .intersect(tester.getRect(find.byType(ListView)))
+              .center,
+        );
+        await tester.pumpAndSettle();
+      }
+      await _revealGroup(tester, find.text('Members'), delta: -120);
+      expect(find.text('6 of 6 selected'), findsOneWidget);
+      final extra = find.byKey(
+        const ValueKey('group-member-instance-1/memory'),
+      );
+      await _revealGroup(tester, extra);
+      expect(tester.widget<ListTile>(extra).onTap, isNull);
+      await _revealGroup(tester, search, delta: -120);
+      await tester.enterText(search, '@bot_atlas');
+      await tester.pumpAndSettle();
+      final atlas = find.byKey(const ValueKey('group-member-instance-1/atlas'));
+      expect(atlas, findsNothing);
+      final pickedAtlas = find.byKey(
+        const ValueKey('group-picked-instance-1/atlas'),
+      );
+      expect(pickedAtlas, findsOneWidget);
+      await _revealGroup(tester, find.byTooltip('Remove Atlas'), delta: -120);
+      await tester.tap(find.byTooltip('Remove Atlas'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<ListTile>(atlas).selected, false);
+      expect(tester.widget<ListTile>(atlas).onTap, isNotNull);
+      expect(find.text('5 of 6 selected'), findsOneWidget);
+      await tester.enterText(search, 'no matching bot');
+      await tester.pumpAndSettle();
+      expect(find.text('No bots match your search.'), findsOneWidget);
+      expect(find.text('5 of 6 selected'), findsOneWidget);
+      await tester.enterText(search, 'memory');
+      await tester.pumpAndSettle();
+      expect(tester.widget<ListTile>(extra).onTap, isNotNull);
+      await tester.tap(extra);
+      await tester.pumpAndSettle();
+      expect(find.text('6 of 6 selected'), findsOneWidget);
+      expect(fixture.commands, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group creation holds inputs and retries the same room ${brightness.name} $scale',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          tester.view.physicalSize = scale == 1
+              ? const Size(390, 844)
+              : const Size(320, 640);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          final held = Completer<Map<String, dynamic>>();
+          final iconMeta = <String, dynamic>{};
+          final iconRevisions = <String, int>{};
+          fixture.readHook = (_, method, params) async =>
+              method == 'profiles.list' && params['include_sessions'] == false
+              ? {
+                  'profiles': [
+                    {
+                      'name': 'default',
+                      'ui_meta': iconMeta,
+                      'ui_meta_revisions': iconRevisions,
+                    },
+                  ],
+                }
+              : null;
+          Future<Map<String, dynamic>?> saveIcon(
+            String _,
+            String method,
+            Map<String, dynamic> params,
+          ) async {
+            if (method != 'profiles.configure') return null;
+            final incoming = params['ui_meta'] as Map;
+            final expected = params['ui_meta_expected_revisions'] as Map;
+            final written = <String, int>{};
+            for (final key in incoming.keys.cast<String>()) {
+              expect(expected[key], iconRevisions[key] ?? 0);
+              iconMeta[key] = incoming[key];
+              written[key] = iconRevisions[key] = (iconRevisions[key] ?? 0) + 1;
+            }
+            return {
+              'applied': {'ui_meta': true, 'ui_meta_revisions': written},
+            };
+          }
+
+          fixture.commandHook = (profile, method, params) async =>
+              method == 'groups.create'
+              ? held.future
+              : saveIcon(profile, method, params);
+          final session = BotsSession((_) async => [fixture.repository]);
+          addTearDown(session.dispose);
+          await session.refresh();
+          final frame = GlobalKey();
+          bool? result;
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(key: frame, child: child),
+              ),
+              home: Builder(
+                builder: (context) => Scaffold(
+                  body: TextButton(
+                    child: const Text('Open group'),
+                    onPressed: () async =>
+                        result = await Navigator.of(context).push<bool>(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                BotsCreateScreen(session: session, group: true),
+                          ),
+                        ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.text('Open group'));
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byKey(const ValueKey('group-name')),
+            'Launch team',
+          );
+          for (final profile in ['atlas', 'mira']) {
+            final row = find.byKey(
+              ValueKey('group-member-instance-1/$profile'),
+            );
+            await _revealGroup(tester, row);
+            await tester.pumpAndSettle();
+            await tester.tapAt(
+              tester
+                  .getRect(row)
+                  .intersect(tester.getRect(find.byType(ListView)))
+                  .center,
+            );
+            await tester.pumpAndSettle();
+          }
+          await tester.tap(find.byTooltip('Create group'));
+          await tester.pump();
+          await tester.drag(find.byType(ListView), const Offset(0, 1400));
+          await tester.pump();
+          expect(find.byType(CircularProgressIndicator), findsOneWidget);
+          expect(
+            tester
+                .widget<IconButton>(find.byKey(const ValueKey('group-create')))
+                .onPressed,
+            isNull,
+          );
+          expect(
+            tester
+                .widget<TextField>(find.byKey(const ValueKey('group-name')))
+                .enabled,
+            false,
+          );
+          expect(
+            tester
+                .widgetList<ListTile>(find.byType(ListTile))
+                .every((row) => row.onTap == null),
+            true,
+          );
+          await tester.drag(find.byType(ListView), const Offset(0, 1400));
+          await tester.pump();
+          await _capture(
+            tester,
+            frame,
+            'group-creation-pending-${brightness.name}-$scale',
+            motion: true,
+          );
+          held.completeError(StateError('Connection lost before confirmation'));
+          await tester.pumpAndSettle();
+          expect(find.byType(CircularProgressIndicator), findsNothing);
+          expect(find.text(session.state.errors.first), findsOneWidget);
+          expect(
+            tester
+                .widget<IconButton>(find.byKey(const ValueKey('group-create')))
+                .onPressed,
+            isNotNull,
+          );
+          await tester.scrollUntilVisible(
+            find.byKey(const ValueKey('group-name')),
+            200,
+            scrollable: find
+                .descendant(
+                  of: find.byType(ListView),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          );
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .widget<TextField>(find.byKey(const ValueKey('group-name')))
+                .enabled,
+            false,
+          );
+          await tester.drag(find.byType(ListView), const Offset(0, 1400));
+          await tester.pumpAndSettle();
+          await _capture(
+            tester,
+            frame,
+            'group-creation-failed-${brightness.name}-$scale',
+          );
+          fixture.commandHook = saveIcon;
+          await tester.tap(find.byTooltip('Create group'));
+          await tester.pumpAndSettle();
+          final creates = fixture.commands
+              .where((c) => c.$2 == 'groups.create')
+              .toList();
+          expect(creates, hasLength(2));
+          expect(creates.last.$3, creates.first.$3);
+          expect(creates.first.$3['name'], 'Launch team');
+          expect(
+            (creates.first.$3['members'] as List).map((m) => m['profile']),
+            ['atlas', 'mira'],
+          );
+          expect(result, true);
+          expect(find.text('Open group'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
   for (final brightness in Brightness.values) {
     testWidgets(
       'color taps repaint the saved shape preview before autosave in ${brightness.name}',

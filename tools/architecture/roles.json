@@ -1071,6 +1071,11 @@
       "feature": "bots",
       "library": "lib/core/services/bot_display_client.dart"
     },
+    "lib/core/services/bot_group_create_session.dart": {
+      "role": "application",
+      "feature": "bots",
+      "library": "lib/core/services/bot_group_create_session.dart"
+    },
     "lib/core/services/bot_group_history_session.dart": {
       "role": "application",
       "feature": "bots",
@@ -1780,6 +1785,11 @@
       "role": "view",
       "feature": "bots",
       "library": "lib/core/widgets/bot_display_viewport.dart"
+    },
+    "lib/core/widgets/bot_group_picture.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/widgets/bot_group_picture.dart"
     },
     "lib/core/widgets/chat_find_sheet.dart": {
       "role": "view",

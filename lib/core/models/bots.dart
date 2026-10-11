@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'hermes_profile.dart';
 import 'profile_session_key.dart';
+import 'profile_colors.dart';
 
 enum BotPresence { idle, working, needsInput, unknown }
 
@@ -131,12 +132,17 @@ class BotGroup {
     this.preview = '',
     this.working = false,
     this.pinned = false,
-  }) : members = List.unmodifiable(members);
+    this.iconColor,
+    Uint8List? picture,
+  }) : members = List.unmodifiable(members),
+       picture = picture?.asUnmodifiableView();
   final WorkspaceScope scope;
   final String instance, id, name, preview;
   final List<BotGroupMember> members;
   final bool working;
   final bool pinned;
+  final Uint8List? picture;
+  final ProfileColorChoice? iconColor;
   String get key => '${scope.connectionIdentity}/$id';
   BotGroup withPinned(bool value) => BotGroup(
     scope: scope,
@@ -147,7 +153,22 @@ class BotGroup {
     preview: preview,
     working: working,
     pinned: value,
+    picture: picture,
+    iconColor: iconColor,
   );
+  BotGroup withIcon({Uint8List? picture, ProfileColorChoice? color}) =>
+      BotGroup(
+        scope: scope,
+        instance: instance,
+        id: id,
+        name: name,
+        members: members,
+        preview: preview,
+        working: working,
+        pinned: pinned,
+        picture: picture,
+        iconColor: color,
+      );
 }
 
 @immutable
@@ -233,6 +254,7 @@ class BotInstance {
   final String identity, label;
 }
 
+@immutable
 class BotMetadataConflict implements Exception {
   const BotMetadataConflict();
   @override

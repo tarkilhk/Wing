@@ -4,6 +4,7 @@ import '../../services/bot_group_session.dart';
 import '../../services/bot_group_history_session.dart';
 import 'bot_group_history_screen.dart';
 import '../../models/bots.dart';
+import '../../widgets/bot_group_picture.dart';
 import '../../models/transcript_message.dart';
 import '../../widgets/profile_message.dart';
 import '../../widgets/scroll_capture_viewport.dart';
@@ -239,6 +240,13 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Row(
                   children: [
+                    BotGroupPicture(
+                      name: _session.group.name,
+                      color: _session.group.iconColor,
+                      image: _session.group.picture,
+                      size: 32,
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         '${_session.group.instance} · ${_session.group.members.length} bots',

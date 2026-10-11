@@ -6,6 +6,8 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Bots and discussions
 
+- Redesign group creation with picked bots above search, optional names,
+  palette-colored letter icons and room pictures saved on Hermes.
 - Format Discussion messages with sender avatars, names, timestamps and chat
   bubbles; improve multiline drafting, mentions and reading-position retention.
 - Keep internal group workers out of Recents and chat alerts. Inspect their

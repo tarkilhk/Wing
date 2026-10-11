@@ -328,3 +328,40 @@ final class AttachmentImageWorker {
     }
   }
 }
+
+/// Pure isolate entry point for a room icon; callers never import image codecs.
+Uint8List encodeRoomThumbnail((Uint8List, int) input) {
+  final (bytes, maxBytes) = input;
+  if (bytes.length > 2000000) throw StateError('Picture exceeds 2 MB');
+  final inspection = inspectAttachmentImage(bytes);
+  final source = attachmentImageCodecSource(bytes, inspection);
+  final decoded = switch (inspection.format) {
+    AttachmentImageFormat.jpeg => image_lib.decodeJpg(source),
+    AttachmentImageFormat.png => image_lib.decodePng(source),
+    AttachmentImageFormat.webp => decodeBoundedAttachmentWebP(
+      source,
+      inspection,
+    ).image,
+  };
+  if (decoded == null) throw const FormatException('Invalid room picture');
+  final frame = decoded.frames.first;
+  frame.exif.imageIfd.orientation = inspection.orientation;
+  final square = image_lib.copyResizeCropSquare(
+    image_lib.bakeOrientation(frame),
+    size: 256,
+  );
+  square.exif.clear();
+  square.iccProfile = null;
+  square.textData = null;
+  final png = image_lib.encodePng(square);
+  if (png.length <= maxBytes) return png;
+  for (final quality in [85, 70, 50]) {
+    final jpeg = image_lib.encodeJpg(
+      square,
+      quality: quality,
+      chroma: image_lib.JpegChroma.yuv420,
+    );
+    if (jpeg.length <= maxBytes) return jpeg;
+  }
+  throw StateError('Room picture could not fit the upload limit');
+}

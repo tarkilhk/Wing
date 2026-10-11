@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/bots.dart';
 import '../../models/profile_session_key.dart';
 import '../../services/bot_group_session.dart';
+import '../../widgets/bot_group_picture.dart';
 import '../../services/bot_profile_edit_session.dart';
 import '../../services/bot_screen_session.dart';
 import '../../services/bots_session.dart';
@@ -463,8 +464,10 @@ class _BotsContentState extends State<BotsContent> {
     key: 'group-${group.key}',
     title: group.name,
     pinned: group.pinned,
-    leading: const ExcludeSemantics(
-      child: SizedBox.square(dimension: 40, child: Icon(Icons.forum_outlined)),
+    leading: BotGroupPicture(
+      name: group.name,
+      color: group.iconColor,
+      image: group.picture,
     ),
     subtitle:
         '${group.instance} · ${group.members.length} bots${group.working ? ' · Working' : ''}',

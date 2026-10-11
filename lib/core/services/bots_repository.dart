@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../models/bots.dart';
+import '../models/profile_colors.dart';
 import '../models/hermes_profile.dart';
 import '../models/profile_session_key.dart';
 import 'administration_repository.dart';
@@ -400,6 +401,24 @@ class BotsRepository {
     return _image(result['image_data']);
   }
 
+  Future<Uint8List> generateGroupPicture(
+    String prompt,
+    bool Function() canDispatch,
+    void Function() onDispatched,
+  ) async {
+    final result = await _command(
+      'default',
+      'image.generate',
+      {'prompt': prompt, 'aspect_ratio': 'square', 'max_bytes': 2000000},
+      canDispatch,
+      onDispatched,
+    );
+    if (result['success'] != true) {
+      throw StateError('Room picture generation did not complete');
+    }
+    return _image(result['image_data']);
+  }
+
   Future<ProfileSessionKey> openChat(
     BotRecord bot,
     bool Function() canDispatch,
@@ -486,6 +505,93 @@ class BotsRepository {
 
   Future<bool> groupsReady() async =>
       (await _read('default', 'groups.capabilities', {}))['driver'] == true;
+
+  // Stock profiles.configure caps each incoming ui_meta document at 65,536
+  // Python JSON characters. 45 KB leaves room for base64 and the ASCII envelope.
+  static const groupPictureMaxBytes = 45000;
+  static const _groupIconPrefix = 'wing-group-icon:';
+  static bool _sameGroupIcon(Object? value, Map<String, Object> expected) =>
+      value is Map &&
+      value['version'] == 1 &&
+      value['color'] == expected['color'] &&
+      value['data'] == expected['data'];
+
+  Future<Map<String, dynamic>?> _groupIconProfile() async {
+    final result = await _read('default', 'profiles.list', {
+      'include_sessions': false,
+    });
+    return _rows(
+      result['profiles'],
+    ).where((row) => row['name'] == 'default').firstOrNull;
+  }
+
+  /// Persist a hosted room's palette color and optional picture on Hermes.
+  /// The initial is rendered from its current name. Each room has its own CAS
+  /// key so other rooms are not rewritten. A retry confirms an already saved
+  /// icon without another upload. Nothing is persisted on the device.
+  Future<void> saveGroupIcon(
+    String roomId,
+    ProfileColorChoice color,
+    Uint8List? picture,
+    bool Function() canDispatch,
+    void Function() onDispatched,
+  ) async {
+    if ((picture?.length ?? 0) > groupPictureMaxBytes ||
+        roomId.length > 128 ||
+        color.slot == null) {
+      throw ArgumentError('Room picture exceeds the backend upload limit');
+    }
+    if (picture != null) inspectAttachmentImage(picture);
+    if (!canDispatch()) throw StateError('Room creation is no longer active');
+    final key = '$_groupIconPrefix$roomId';
+    final value = <String, Object>{
+      'version': 1,
+      'color': color.slot!,
+      if (picture != null) 'data': base64Encode(picture),
+    };
+    final row = await _groupIconProfile();
+    if (!canDispatch()) throw StateError('Room creation is no longer active');
+    if (row == null) throw StateError('Hermes default profile is unavailable');
+    final meta = row['ui_meta'] == null
+        ? <String, dynamic>{}
+        : _map(row['ui_meta']);
+    if (meta[key] != null) {
+      if (_sameGroupIcon(meta[key], value)) return;
+      throw StateError('This room already has a different icon');
+    }
+    final revisions = _map(row['ui_meta_revisions']);
+    final revision = revisions[key] ?? 0;
+    if (revision is! int || revision < 0) {
+      throw const FormatException('Invalid room picture revision');
+    }
+    final result = await _command(
+      'default',
+      'profiles.configure',
+      {
+        'name': 'default',
+        'ui_meta': {key: value},
+        'ui_meta_expected_revisions': {key: revision},
+      },
+      canDispatch,
+      onDispatched,
+    );
+    final applied = _map(result['applied']);
+    if (applied['ui_meta_conflicts'] != null) {
+      throw StateError('Room picture changed on Hermes. Retry to confirm it.');
+    }
+    if (applied['ui_meta'] != true ||
+        _map(applied['ui_meta_revisions'])[key] != revision + 1) {
+      throw StateError('Room picture was not saved to Hermes');
+    }
+    if (!canDispatch()) throw StateError('Room creation is no longer active');
+    final saved = await _groupIconProfile();
+    if (saved == null ||
+        _map(saved['ui_meta_revisions'])[key] != revision + 1 ||
+        !_sameGroupIcon(_map(saved['ui_meta'])[key], value)) {
+      throw StateError('Room picture could not be confirmed on Hermes');
+    }
+  }
+
   Future<List<BotGroup>> groups() async {
     final groups = <BotGroup>[];
     var offset = 0;
@@ -536,7 +642,41 @@ class BotsRepository {
       }
       offset = next;
     } while (true);
-    return List.unmodifiable(groups);
+    if (groups.isEmpty) return const [];
+    try {
+      final row = await _groupIconProfile();
+      final meta = row?['ui_meta'] == null
+          ? <String, dynamic>{}
+          : _map(row!['ui_meta']);
+      return List.unmodifiable(
+        groups.map((room) {
+          try {
+            final value = meta['$_groupIconPrefix${room.id}'];
+            if (value == null) return room;
+            final picture = _map(value);
+            final data = picture['data'];
+            final slot = picture['color'];
+            if (picture['version'] != 1 ||
+                slot is! int ||
+                slot < 0 ||
+                slot >= 12 ||
+                (data != null && (data is! String || data.length > 60000))) {
+              return room;
+            }
+            return room.withIcon(
+              picture: data == null ? null : _image(data),
+              color: ProfileColorChoice.values[slot + 1],
+            );
+          } catch (_) {
+            // Invalid decoration cannot prevent access to the hosted room.
+            return room;
+          }
+        }),
+      );
+    } catch (_) {
+      // The next roster refresh re-reads server pictures; no disk cache exists.
+      return List.unmodifiable(groups);
+    }
   }
 
   BotGroup _group(Map<String, dynamic> row) => BotGroup(
