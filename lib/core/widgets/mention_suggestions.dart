@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../models/composer_reference.dart';
 import '../theme/wing_theme.dart';
 import 'studio_error.dart';
+import 'bot_avatar.dart';
 
 /// Cursor, focus and popup lifetime are presentation state. All discovery and
 /// draft mutation pass through captured feature commands.
@@ -273,6 +274,29 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
     ),
   );
 
+  Widget _leading(MentionCandidate item) {
+    if (item.appearance case final bot?) {
+      return BotAvatar(
+        name: bot.profile.name,
+        shape: bot.shape,
+        color: bot.color,
+        image: bot.avatar,
+        size: 32,
+      );
+    }
+    return Icon(
+      item.isCollective
+          ? Icons.groups_outlined
+          : item.reference.kind == ComposerReferenceKind.folder
+          ? Icons.folder_outlined
+          : item.reference.kind == ComposerReferenceKind.agent
+          ? Icons.smart_toy_outlined
+          : Icons.insert_drive_file_outlined,
+      size: item.isCollective ? 24 : 20,
+      color: Theme.of(context).colorScheme.primary,
+    );
+  }
+
   Widget _row(MentionCandidate item, int index) {
     final folder = item.reference.kind == ComposerReferenceKind.folder;
     final tokens = WingTokens.of(context);
@@ -295,14 +319,9 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
         padding: const EdgeInsetsDirectional.only(start: 12),
         child: Row(
           children: [
-            Icon(
-              folder
-                  ? Icons.folder_outlined
-                  : item.reference.kind == ComposerReferenceKind.agent
-                  ? Icons.smart_toy_outlined
-                  : Icons.insert_drive_file_outlined,
-              size: 20,
-              color: Theme.of(context).colorScheme.primary,
+            SizedBox.square(
+              dimension: 32,
+              child: Center(child: _leading(item)),
             ),
             const SizedBox(width: 12),
             Expanded(

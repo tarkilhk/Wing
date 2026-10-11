@@ -8,11 +8,25 @@ import '../models/composer_reference.dart';
 /// The stock gateway drives group discussion, including while Wing is away.
 /// This owner replays its log and retains one immutable idempotent send attempt.
 class BotGroupSession extends ChangeNotifier {
-  BotGroupSession(this.repository, this.group) {
+  BotGroupSession(
+    this.repository,
+    this.group, {
+    required Iterable<BotRecord> appearances,
+  }) {
     repository.retain();
+    for (final member in group.members) {
+      final matches = appearances.where(
+        (bot) =>
+            bot.scope.connectionId == group.scope.connectionId &&
+            bot.scope.connectionIdentity == group.scope.connectionIdentity &&
+            bot.profile.name == member.profile,
+      );
+      if (matches.length == 1) _appearances[member.id] = matches.single;
+    }
   }
   final BotsRepository repository;
   final BotGroup group;
+  final _appearances = <String, BotRecord>{};
   List<ComposerReference> _references = const [];
   List<ComposerReference> get composerReferences => _references;
 
@@ -25,6 +39,7 @@ class BotGroupSession extends ChangeNotifier {
           MentionCandidate(
             label: member.name,
             detail: '@${member.handle}',
+            appearance: _appearances[member.id],
             reference: ComposerReference(
               kind: ComposerReferenceKind.agent,
               token: '@${member.handle}',
@@ -35,6 +50,7 @@ class BotGroupSession extends ChangeNotifier {
         const MentionCandidate(
           label: 'Everyone',
           detail: 'All room members',
+          isCollective: true,
           reference: ComposerReference(
             kind: ComposerReferenceKind.agent,
             token: '@everyone',

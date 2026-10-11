@@ -12,7 +12,8 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/mention_suggestions.dart';
 import 'package:wing/core/widgets/slash_command_suggestions.dart';
 import 'package:wing/core/screens/bots/bot_group_screen.dart';
-import 'package:wing/core/services/bot_group_session.dart';
+import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/widgets/bot_avatar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'support/bots_fixture.dart';
 
@@ -413,7 +414,12 @@ void main() {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
           addTearDown(tester.view.reset);
           final fixture = BotsFixture();
-          final group = (await fixture.repository.groups()).first;
+          fixture.profiles[1]['ui_meta']['hermes-bots']['shape'] = 'hexagon';
+          fixture.profiles[1]['ui_meta']['hermes-bots']['color'] = '#8b5cf6';
+          final owner = BotsSession((_) async => [fixture.repository]);
+          addTearDown(owner.dispose);
+          await owner.refresh();
+          final group = owner.state.groups.first;
           await tester.pumpWidget(
             MaterialApp(
               theme: wingTheme(brightness),
@@ -427,13 +433,58 @@ void main() {
               home: RepaintBoundary(
                 key: _captureKey,
                 child: BotGroupScreen(
-                  createSession: () =>
-                      BotGroupSession(fixture.repository, group),
+                  createSession: () => owner.openGroup(group),
                 ),
               ),
             ),
           );
           await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField), '@');
+          await tester.pump(const Duration(milliseconds: 200));
+          await tester.pumpAndSettle();
+          final avatars = tester.widgetList<BotAvatar>(find.byType(BotAvatar));
+          expect(avatars.map((a) => (a.name, a.shape, a.color, a.size)), [
+            ('atlas', 'squircle', '#65c7bc', 32.0),
+            ('mira', 'hexagon', '#8b5cf6', 32.0),
+          ]);
+          expect(find.byIcon(Icons.smart_toy_outlined), findsNothing);
+          if (Platform.environment.containsKey('CAPTURE_REFERENCES')) {
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.byKey(_captureKey),
+            );
+            await tester.runAsync(() async {
+              final image = await boundary.toImage();
+              final bytes = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final dir = Directory('build/references-review');
+              await dir.create(recursive: true);
+              await File(
+                '${dir.path}/group-avatars-${brightness.name}-$scale.png',
+              ).writeAsBytes(bytes!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
+          final list = find.descendant(
+            of: find.byType(MentionSuggestions),
+            matching: find.byType(ListView),
+          );
+          if (scale == 2) {
+            await tester.drag(list, const Offset(0, -160));
+            await tester.pumpAndSettle();
+          }
+          expect(find.byIcon(Icons.groups_outlined), findsOneWidget);
+          expect(find.text('Everyone').hitTestable(), findsOneWidget);
+          if (scale == 2) {
+            await tester.drag(list, const Offset(0, 160));
+            await tester.pumpAndSettle();
+          }
+          await tester.tap(find.text('Atlas'));
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<TextField>(find.byType(TextField)).controller!.text,
+            '@bot_atlas ',
+          );
           await tester.enterText(
             find.byType(TextField),
             'Review\nall\nthis\ntext\ncarefully\n@every',
@@ -445,6 +496,7 @@ void main() {
             findsOneWidget,
           );
           expect(find.text('Everyone'), findsOneWidget);
+          expect(find.byIcon(Icons.groups_outlined), findsOneWidget);
           expect(tester.takeException(), isNull);
           if (Platform.environment.containsKey('CAPTURE_REFERENCES')) {
             final boundary = tester.renderObject<RenderRepaintBoundary>(

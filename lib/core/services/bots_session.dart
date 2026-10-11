@@ -9,6 +9,7 @@ import '../models/profile_session_key.dart';
 import 'bots_repository.dart';
 import 'bots_preferences.dart';
 import 'bot_screen_session.dart';
+import 'bot_group_session.dart';
 
 typedef BotsSources =
     Future<List<BotsRepository>> Function(bool Function() canUse);
@@ -166,6 +167,14 @@ class BotsSession extends ChangeNotifier {
     if (repository == null) throw StateError('Instance is unavailable');
     return repository;
   }
+
+  /// Capture already enriched roster appearance for this room visit. Typing
+  /// references never starts another roster or avatar read.
+  BotGroupSession openGroup(BotGroup group) => BotGroupSession(
+    repository(group.scope.connectionIdentity),
+    group,
+    appearances: _bots[group.scope.connectionIdentity] ?? const [],
+  );
 
   /// Screen identity is the profile, independent of its canonical conversation.
   /// Resolve actual roster metadata from the captured instance; opening a screen

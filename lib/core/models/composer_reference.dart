@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'bots.dart';
+
 enum ComposerReferenceKind { agent, file, folder }
 
 /// An identity selected in authored text. Editing the token retires the claim.
@@ -258,10 +260,16 @@ final class MentionCandidate {
     required this.reference,
     required this.label,
     this.detail = '',
+    this.appearance,
+    this.isCollective = false,
   });
   final ComposerReference reference;
   final String label;
   final String detail;
+
+  /// Detached display facts; they never replace the selected target or token.
+  final BotRecord? appearance;
+  final bool isCollective;
 }
 
 final class MentionCompletion {

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/bots.dart';
 import '../../models/profile_session_key.dart';
-import '../../services/bot_group_session.dart';
 import '../../services/bot_profile_edit_session.dart';
 import '../../services/bot_screen_session.dart';
 import '../../services/bots_session.dart';
@@ -218,12 +217,7 @@ class _BotsContentState extends State<BotsContent> {
   }
 
   Future<void> _openGroup(BotGroup group) => _push(
-    BotGroupScreen(
-      createSession: () => BotGroupSession(
-        widget.session.repository(group.scope.connectionIdentity),
-        group,
-      ),
-    ),
+    BotGroupScreen(createSession: () => widget.session.openGroup(group)),
   );
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
