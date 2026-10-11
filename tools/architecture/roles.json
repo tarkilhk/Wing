@@ -1156,6 +1156,11 @@
       "feature": "connection-authentication",
       "library": "lib/core/services/connection_access.dart"
     },
+    "lib/core/services/connection_diagnostics.dart": {
+      "role": "platform",
+      "feature": "connections",
+      "library": "lib/core/services/connection_diagnostics.dart"
+    },
     "lib/core/services/connection_manager.dart": {
       "role": "application",
       "feature": "connections",

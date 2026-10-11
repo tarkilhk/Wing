@@ -18,6 +18,7 @@ import 'profile_gateway.dart'
     show ProjectFolderSuggestion, ProfileCanonicalBotChat;
 import 'connection_manager.dart' show DashboardRequestNotSentException;
 import 'workspace_connection_failure.dart';
+import 'connection_diagnostics.dart';
 
 typedef _BrowserSources = ({
   List<Object> snapshots,
@@ -1216,8 +1217,19 @@ final class ChatBrowserData extends ChangeNotifier {
           _completeSnapshots.add(profile);
           _errors.remove(profile);
           _retryableProfiles.remove(profile);
-        } catch (error) {
+        } catch (error, stack) {
           if (active()) {
+            logConnectionDiagnostic(
+              'browser.profile_load_failed',
+              details: {
+                'connection': _controller.connection.id,
+                'profile': profile,
+                'partial_rows': fetched.length,
+                ...workspaceFailureDiagnostic(error),
+              },
+              error: error,
+              stackTrace: stack,
+            );
             if (!hadRows && fetched.isNotEmpty) {
               _rows[profile] = _BrowserPage(fetched.values);
             }

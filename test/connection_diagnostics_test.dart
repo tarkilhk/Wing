@@ -1,0 +1,261 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/services/connection_diagnostics.dart';
+import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/workspace_connection_failure.dart';
+import 'package:wing/core/services/ws_client.dart';
+
+import 'profile_connection_identity_test.dart' show identityTestConnection;
+import 'profile_workspace_controller_test.dart' show Host;
+
+void main() {
+  late DebugPrintCallback previousPrint;
+  late List<String> lines;
+  late Host host;
+  late ProfileWorkspaceController controller;
+  late AppPreferences appPreferences;
+  List<Map<String, dynamic>> events() => lines
+      .where((line) => line.startsWith('[WingConnection] '))
+      .map(
+        (line) =>
+            jsonDecode(line.substring('[WingConnection] '.length))
+                as Map<String, dynamic>,
+      )
+      .toList();
+  setUp(() async {
+    previousPrint = debugPrint;
+    lines = [];
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) lines.add(message);
+    };
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
+    host = Host();
+    controller = ProfileWorkspaceController(
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
+      connectionIdentity: 'diagnostic-test',
+      preferences: preferences,
+      appPreferences: appPreferences,
+      gatewayFactory: host.gateway,
+    );
+    await controller.initialize();
+    lines.clear();
+  });
+  tearDown(() {
+    controller.dispose();
+    appPreferences.dispose();
+    debugPrint = previousPrint;
+  });
+
+  testWidgets(
+    'recovery logs retain failure, retry exhaustion and successful resume',
+    (tester) async {
+      host.connectFailures = 5;
+      host.gateways['a']!.onConnectionChanged!(false);
+      for (final seconds in [1, 2, 4, 8, 16]) {
+        await tester.pump(Duration(seconds: seconds));
+      }
+      final failures = events().where(
+        (event) => event['event'] == 'workspace.recovery_failed',
+      );
+      expect(failures, hasLength(5));
+      expect(failures.first, containsPair('retryable', true));
+      expect(failures.first['causes'], [
+        {'type': 'TimeoutException'},
+      ]);
+      expect(events().last['event'], 'workspace.recovery_exhausted');
+      expect(controller.error, isNull);
+      await tester.runAsync(controller.resumeConnection);
+      await tester.pump();
+      expect(events().last['event'], 'workspace.recovered');
+      expect(controller.connectionStatus.liveAvailable('a'), isTrue);
+      debugPrint = tester.binding.debugPrintOverride;
+    },
+  );
+
+  test('technical errors omit prose, payloads, URLs and secrets', () {
+    const secret = 'SECRET_NEVER_LOG';
+    final failures = <Object>[
+      FormatException(secret, '{"password":"$secret"}', 3),
+      StateError(secret),
+      SocketException(
+        'https://user:$secret@host/?ticket=$secret',
+        osError: OSError(secret, 111),
+      ),
+      WebSocketChannelException.from(
+        SocketException(secret, osError: OSError(secret, 101)),
+      ),
+      JsonRpcError(
+        'session.resume',
+        secret,
+        code: -32603,
+        reason: secret,
+        data: {'token': secret},
+      ),
+      DashboardRequestNotSentException(
+        const DashboardHttpException(401, 'sessions/$secret?token=$secret'),
+      ),
+    ];
+    for (final failure in failures) {
+      logConnectionDiagnostic(
+        'test.failure',
+        error: failure,
+        details: workspaceFailureDiagnostic(failure),
+        stackTrace: StackTrace.current,
+      );
+    }
+    expect(lines.join(), isNot(contains(secret)));
+    final logged = events();
+    expect(logged[0]['causes'], [
+      {'type': 'FormatException', 'offset': 3},
+    ]);
+    expect(logged[2]['causes'], [
+      {'type': 'SocketException', 'os_error_code': 111},
+    ]);
+    expect(logged[3]['causes'], [
+      {'type': 'WebSocketChannelException'},
+      {'type': 'SocketException', 'os_error_code': 101},
+    ]);
+    expect(logged[4]['rpc_code'], -32603);
+    expect(logged[4]['rpc_method'], 'session.resume');
+    expect(logged[5]['request_sent'], isFalse);
+    expect(logged[5]['http_status'], 401);
+    expect(
+      workspaceFailureMessage(failures[4]),
+      'Couldn’t open this workspace. Check the connection settings and try again.',
+    );
+    expect(
+      connectionDiagnosticEndpoint(
+        'https://user:$secret@host/api/sessions/$secret?token=$secret',
+      ),
+      'sessions/…',
+    );
+  });
+
+  test(
+    'a responsive server can close only the socket and logs retain its close code',
+    () async {
+      await HttpOverrides.runWithHttpOverrides(() async {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final socketReady = Completer<WebSocket>();
+        server.listen((request) async {
+          if (WebSocketTransformer.isUpgradeRequest(request)) {
+            socketReady.complete(await WebSocketTransformer.upgrade(request));
+          } else {
+            request.response.write('healthy');
+            await request.response.close();
+          }
+        });
+        final client = WsClient(
+          'http://127.0.0.1:${server.port}',
+          token: 'SECRET_NEVER_LOG',
+        );
+        final closed = Completer<void>();
+        client.onConnectionChanged = (connected) {
+          if (!connected && !closed.isCompleted) closed.complete();
+        };
+        addTearDown(() async {
+          client.close();
+          await server.close(force: true);
+        });
+        await client.connect();
+        final socket = await socketReady.future;
+        unawaited(socket.close(1001, 'SECRET_NEVER_LOG'));
+        await closed.future.timeout(const Duration(seconds: 2));
+        final requestClient = HttpClient();
+        try {
+          final response = await (await requestClient.getUrl(
+            Uri.parse('http://127.0.0.1:${server.port}/health'),
+          )).close();
+          expect(await utf8.decoder.bind(response).join(), 'healthy');
+        } finally {
+          requestClient.close(force: true);
+        }
+        final closeEvent = events().singleWhere(
+          (event) => event['event'] == 'ws.remote_closed',
+        );
+        expect(closeEvent['close_code'], 1001);
+        expect(lines.join(), isNot(contains('SECRET_NEVER_LOG')));
+      }, _RealHttpOverrides());
+    },
+  );
+
+  test(
+    'failed HTTP reads log status without response or authentication content',
+    () async {
+      await HttpOverrides.runWithHttpOverrides(() async {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        server.listen((request) async {
+          if (request.uri.path == '/') {
+            request.response.write(
+              'window.__HERMES_SESSION_TOKEN__="SECRET_NEVER_LOG";',
+            );
+          } else {
+            request.response.statusCode = 400;
+            request.response.write('{"detail":"SECRET_NEVER_LOG"}');
+          }
+          await request.response.close();
+        });
+        final client = DashboardClient(host: '127.0.0.1', port: server.port);
+        addTearDown(() async {
+          client.close();
+          await server.close(force: true);
+        });
+        await expectLater(
+          client.apiGet(
+            'profiles',
+            queryParameters: {'token': 'SECRET_NEVER_LOG'},
+          ),
+          throwsA(isA<DashboardHttpException>()),
+        );
+        final failure = events().singleWhere(
+          (event) => event['event'] == 'http.read_failed',
+        );
+        expect(failure['http_status'], 400);
+        expect(failure['stage'], 'response');
+        expect(failure['endpoint'], 'profiles');
+        expect(lines.join(), isNot(contains('SECRET_NEVER_LOG')));
+      }, _RealHttpOverrides());
+    },
+  );
+
+  test('release stack offsets survive without copying arbitrary trace text', () {
+    logConnectionDiagnostic(
+      'test.release',
+      error: StateError('SECRET_NEVER_LOG'),
+      stackTrace: StackTrace.fromString(
+        'isolate_dso_base: 0000007000000000\n'
+        '#00 abs 0000007000000123 virt 0000000000000123 _kDartIsolateSnapshotInstructions+0x123\n'
+        'SECRET_NEVER_LOG\n'
+        '#1 Injected (https://host/?ticket=SECRET_NEVER_LOG)',
+      ),
+    );
+    final event = events().single;
+    expect(event['stack_bases'], ['isolate_dso_base: 0000007000000000']);
+    expect(event['stack'], ['#00 abs 0000007000000123 virt 0000000000000123']);
+    expect(lines.join(), isNot(contains('SECRET_NEVER_LOG')));
+  });
+
+  test('logging failure cannot break recovery', () async {
+    debugPrint = (message, {wrapWidth}) =>
+        throw StateError('logging unavailable');
+    await controller.resumeConnection();
+    expect(controller.connectionStatus.liveAvailable('a'), isTrue);
+    debugPrint = previousPrint;
+  });
+}
+
+class _RealHttpOverrides extends HttpOverrides {}

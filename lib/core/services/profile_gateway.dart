@@ -19,6 +19,7 @@ import 'profiles_repository.dart';
 import 'ws_client.dart';
 import 'server_connection_status.dart';
 import 'workspace_connection_failure.dart';
+import 'connection_diagnostics.dart';
 
 typedef ScopedGet =
     Future<Map<String, dynamic>> Function(
@@ -172,7 +173,18 @@ class ProfileGateway {
   ) async {
     try {
       return await _rpcRequest(method, params);
-    } catch (failure) {
+    } catch (failure, stack) {
+      logConnectionDiagnostic(
+        'gateway.rpc_failed',
+        details: {
+          'connection': scope.connectionId,
+          'profile': scope.profileName,
+          'operation': method,
+          ...workspaceFailureDiagnostic(failure),
+        },
+        error: failure,
+        stackTrace: stack,
+      );
       if (isTemporaryWorkspaceFailure(failure)) {
         disconnect();
         _liveChanged(false);
@@ -204,12 +216,49 @@ class ProfileGateway {
   Future<Map<String, dynamic>> _get(
     String endpoint,
     Map<String, String> query,
-  ) => connectionStatus == null
-      ? _getRequest(endpoint, query)
-      : connectionStatus!.observeAccess(() => _getRequest(endpoint, query));
-  Future<ProfileDiscovery> discover() => connectionStatus == null
-      ? _discover()
-      : connectionStatus!.observeAccess(_discover);
+  ) async {
+    try {
+      return await (connectionStatus == null
+          ? _getRequest(endpoint, query)
+          : connectionStatus!.observeAccess(
+              () => _getRequest(endpoint, query),
+            ));
+    } catch (failure, stack) {
+      logConnectionDiagnostic(
+        'gateway.read_failed',
+        details: {
+          'connection': scope.connectionId,
+          'profile': scope.profileName,
+          'endpoint': connectionDiagnosticEndpoint(endpoint),
+          ...workspaceFailureDiagnostic(failure),
+        },
+        error: failure,
+        stackTrace: stack,
+      );
+      rethrow;
+    }
+  }
+
+  Future<ProfileDiscovery> discover() async {
+    try {
+      return await (connectionStatus == null
+          ? _discover()
+          : connectionStatus!.observeAccess(_discover));
+    } catch (failure, stack) {
+      logConnectionDiagnostic(
+        'gateway.discovery_failed',
+        details: {
+          'connection': scope.connectionId,
+          'profile': scope.profileName,
+          ...workspaceFailureDiagnostic(failure),
+        },
+        error: failure,
+        stackTrace: stack,
+      );
+      rethrow;
+    }
+  }
+
   StreamCallback? onEvent;
   ConnectionCallback? onConnectionChanged;
 
@@ -275,6 +324,13 @@ class ProfileGateway {
     Future<void>? connecting;
     late final ProfileGateway gateway;
     Future<void> open() async {
+      logConnectionDiagnostic(
+        'gateway.credentials_requested',
+        details: {
+          'connection': scope.connectionId,
+          'profile': scope.profileName,
+        },
+      );
       final credentials =
           await (gateway.connectionStatus?.observeAccess(
                 () => dashboard.gatewayCredentials().timeout(
@@ -285,11 +341,22 @@ class ProfileGateway {
                 const Duration(seconds: 20),
               ));
       if (closed) throw StateError('Gateway is closed');
+      logConnectionDiagnostic(
+        'gateway.credentials_ready',
+        details: {
+          'connection': scope.connectionId,
+          'profile': scope.profileName,
+        },
+      );
       final candidate = WsClient(
         connection.desktopGatewayUrl ?? dashboard.baseUrl,
         token: credentials.token,
         ticket: credentials.ticket,
         gatewayHeaders: connection.gatewayHeaders,
+        diagnosticContext: {
+          'connection': scope.connectionId,
+          'profile': scope.profileName,
+        },
       );
       openingSocket = candidate;
       candidate.onStreamEvent = (event) => gateway.onEvent?.call(event);
@@ -468,7 +535,17 @@ class ProfileGateway {
     try {
       await _connect();
       _liveChanged(true);
-    } catch (_) {
+    } catch (failure, stack) {
+      logConnectionDiagnostic(
+        'gateway.connect_failed',
+        details: {
+          'connection': scope.connectionId,
+          'profile': scope.profileName,
+          ...workspaceFailureDiagnostic(failure),
+        },
+        error: failure,
+        stackTrace: stack,
+      );
       _liveChanged(false);
       rethrow;
     }

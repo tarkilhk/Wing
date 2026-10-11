@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'connection_manager.dart';
+import 'connection_diagnostics.dart';
 import 'profile_connection_identity.dart';
 import 'profile_workspace_controller.dart';
 
@@ -180,9 +181,25 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     if (_closed) return;
     _retireSettledOwners();
     for (final owner in _controllers.values) {
-      if (owner.initialized ||
+      final eligible =
+          owner.initialized ||
           owner.recovering ||
-          owner.notificationChat != null) {
+          owner.notificationChat != null ||
+          // A failed startup can be classified as permanent. A mounted route
+          // still deserves a fresh attempt when the user returns to Wing.
+          !networkChanged && owner.hasMountedRoutes;
+      logConnectionDiagnostic(
+        'registry.recovery_trigger',
+        details: {
+          'connection': owner.connection.id,
+          'trigger': networkChanged ? 'network_changed' : 'foreground',
+          'initialized': owner.initialized,
+          'recovering': owner.recovering,
+          'mounted': owner.hasMountedRoutes,
+          'eligible': eligible,
+        },
+      );
+      if (eligible) {
         unawaited(owner.resumeConnection(networkChanged: networkChanged));
       }
     }

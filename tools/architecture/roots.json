@@ -8634,6 +8634,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/services/connection_diagnostics.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
       "path": "lib/core/services/connection_manager.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -10259,12 +10264,12 @@
       "provenance": "tracked"
     },
     {
-      "path": "test/bot_exchange_activity_test.dart",
+      "path": "test/bot_avatar_animation_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },
     {
-      "path": "test/bot_avatar_animation_test.dart",
+      "path": "test/bot_exchange_activity_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },
@@ -10515,6 +10520,11 @@
     },
     {
       "path": "test/connection_address_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/connection_diagnostics_test.dart",
       "area": "test",
       "provenance": "tracked"
     },

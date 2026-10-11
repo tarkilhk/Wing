@@ -16,6 +16,7 @@ import 'administration_repository.dart';
 import 'skill_reader_session.dart';
 import '../models/skill_reader.dart';
 import 'app_preferences.dart';
+import 'connection_diagnostics.dart';
 import 'profile_colors_session.dart';
 
 import 'package:flutter/foundation.dart';
@@ -1838,6 +1839,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<void> _initialize() async {
     connectionStatus.beginRecovery('initialization');
+    logConnectionDiagnostic(
+      'workspace.initialization_started',
+      details: {
+        'connection': connection.id,
+        'attempt': _initializationAttempt,
+        'generation': _generation,
+      },
+    );
     _initializationFailure = null;
     final generation = _generation;
     _initializationRetry?.cancel();
@@ -1859,9 +1868,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         preferredName: _discovery!.serverPreferred.name,
       );
       if (!await switchProfile(initial)) return;
-    } catch (e) {
+    } catch (e, stack) {
       if (_closed || generation != _generation) return;
-      _initializationFailed(e);
+      _initializationFailed(e, stack);
       _changed();
     }
   }
@@ -1879,6 +1888,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     // Admit the connection-owned restoration once before any awaited work.
     // A subsequent profile navigation cannot duplicate this initialization.
     _initialized = true;
+    logConnectionDiagnostic(
+      'workspace.initialized',
+      details: {
+        'connection': connection.id,
+        'profile': _current?.scope.profileName,
+        'attempt': _initializationAttempt,
+      },
+    );
     _initializationFailure = null;
     _profileSelectionRepairRequired = false;
     connectionStatus.endRecovery('initialization');
@@ -1897,12 +1914,23 @@ class ProfileWorkspaceController extends ChangeNotifier {
   static Duration _recoveryDelay(int attempt) =>
       Duration(seconds: 1 << attempt);
 
-  void _initializationFailed(Object failure) {
+  void _initializationFailed(Object failure, [StackTrace? stack]) {
     _initializationFailure = failure;
     if (failure is ProfileSelectionRepairRequired) {
       _profileSelectionRepairRequired = true;
     }
     _recoveringInitialization = isTemporaryWorkspaceFailure(failure);
+    logConnectionDiagnostic(
+      'workspace.initialization_failed',
+      details: {
+        'connection': connection.id,
+        'attempt': _initializationAttempt,
+        'generation': _generation,
+        ...workspaceFailureDiagnostic(failure),
+      },
+      error: failure,
+      stackTrace: stack,
+    );
     _error = _recoveringInitialization
         ? null
         : failure is ProfileSelectionRepairRequired
@@ -1912,6 +1940,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
         !_closed &&
         _notificationTarget == null &&
         _initializationAttempt < _maxRecoveryRetries) {
+      logConnectionDiagnostic(
+        'workspace.initialization_retry_scheduled',
+        details: {
+          'connection': connection.id,
+          'attempt': _initializationAttempt + 1,
+          'delay_ms': _recoveryDelay(_initializationAttempt).inMilliseconds,
+        },
+      );
       _initializationRetry?.cancel();
       _initializationRetry = Timer(
         _recoveryDelay(_initializationAttempt++),
@@ -1921,6 +1957,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
         },
       );
     } else {
+      logConnectionDiagnostic(
+        'workspace.initialization_stopped',
+        details: {
+          'connection': connection.id,
+          'attempt': _initializationAttempt,
+          'retryable': _recoveringInitialization,
+          'notification_opening': _notificationTarget != null,
+        },
+      );
       if (_notificationTarget != null ||
           failure is ProfileSelectionRepairRequired) {
         // Notification opening owns its outer retry burst; profile-selection
@@ -1949,6 +1994,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
   /// Foreground entry also recovers a workspace that never finished loading.
   Future<void> resumeConnection({bool networkChanged = false}) async {
     if (_closed) return;
+    logConnectionDiagnostic(
+      'workspace.resume',
+      details: {
+        'connection': connection.id,
+        'network_changed': networkChanged,
+        'initialized': _initialized,
+        'recovering': recovering,
+        'notification_opening': _notificationTarget != null,
+      },
+    );
     if (networkChanged) {
       // A socket associated with the previous mobile route can look connected
       // until its next timeout. Re-open it when Android reports a new route.
@@ -2085,12 +2140,23 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       _changed();
       return true;
-    } catch (e) {
+    } catch (e, stack) {
       if (!_closed && generation == _generation) {
+        logConnectionDiagnostic(
+          'workspace.profile_open_failed',
+          details: {
+            'connection': connection.id,
+            'profile': name,
+            'generation': generation,
+            ...workspaceFailureDiagnostic(e),
+          },
+          error: e,
+          stackTrace: stack,
+        );
         _pendingProfile = null;
         _initializationFailure = e;
         if (!_initialized) {
-          _initializationFailed(e);
+          _initializationFailed(e, stack);
         } else if (isTemporaryWorkspaceFailure(e)) {
           _scheduleReconnect(target);
           if (target != _current) {
@@ -7785,6 +7851,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
       return;
     }
     if (resource._reconnectAttempt >= _maxRecoveryRetries) {
+      logConnectionDiagnostic(
+        'workspace.recovery_exhausted',
+        details: {
+          'connection': connection.id,
+          'profile': resource.scope.profileName,
+          'attempts': resource._reconnectAttempt,
+        },
+      );
       // A restored transport is not proof the conversation was restored.
       resource._recovering = true;
       connectionStatus.failRecovery(
@@ -7797,6 +7871,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
     resource._recovering = true;
     connectionStatus.beginRecovery(resource.scope.profileName);
     final delay = _recoveryDelay(resource._reconnectAttempt);
+    logConnectionDiagnostic(
+      'workspace.recovery_scheduled',
+      details: {
+        'connection': connection.id,
+        'profile': resource.scope.profileName,
+        'attempt': resource._reconnectAttempt + 1,
+        'delay_ms': delay.inMilliseconds,
+      },
+    );
     // Further attempts are driven by app/screen focus or network changes.
     resource._reconnectAttempt++;
     resource._retry = Timer(delay, () {
@@ -7828,6 +7911,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (_closed) return;
     resource._reconnecting = true;
     resource._recovering = true;
+    logConnectionDiagnostic(
+      'workspace.recovery_started',
+      details: {
+        'connection': connection.id,
+        'profile': resource.scope.profileName,
+        'attempt': resource._reconnectAttempt,
+      },
+    );
     connectionStatus.beginRecovery(resource.scope.profileName);
     _changed();
     var retry = false;
@@ -7896,6 +7987,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       await _journal();
       await _refreshSessions(resource);
+      logConnectionDiagnostic(
+        'workspace.recovered',
+        details: {
+          'connection': connection.id,
+          'profile': resource.scope.profileName,
+          'attempt': resource._reconnectAttempt,
+        },
+      );
       resource._reconnectAttempt = 0;
       resource._reconnectError = null;
       resource._recovering = false;
@@ -7912,8 +8011,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
       // Notification reconciliation can scan every profile and continue while
       // sessions change. A restored chat socket must not stay orange during it.
       await _scheduleNotificationReconciliation(resource);
-    } catch (failure) {
+    } catch (failure, stack) {
       retry = isTemporaryWorkspaceFailure(failure);
+      logConnectionDiagnostic(
+        'workspace.recovery_failed',
+        details: {
+          'connection': connection.id,
+          'profile': resource.scope.profileName,
+          'attempt': resource._reconnectAttempt,
+          ...workspaceFailureDiagnostic(failure),
+        },
+        error: failure,
+        stackTrace: stack,
+      );
       if (retry &&
           !connectionStatus.liveAvailable(resource.scope.profileName)) {
         try {

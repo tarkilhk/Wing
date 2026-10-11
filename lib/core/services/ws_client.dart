@@ -10,6 +10,7 @@ import 'package:web_socket_channel/io.dart';
 import '../models/connection.dart';
 import '../models/gateway_sensitive_prompt.dart';
 import 'authenticated_web_socket.dart';
+import 'connection_diagnostics.dart';
 
 Object? _deepFreezeJson(Object? value) {
   if (value is Map) {
@@ -106,6 +107,7 @@ typedef ConnectionCallback = void Function(bool connected);
 /// WebSocket client for the Hermes JSON-RPC gateway.
 class WsClient {
   final String baseUrl;
+  final Map<String, Object?> _diagnosticContext;
   final String? _token;
   final String? _ticket;
   final Map<String, String> _gatewayHeaders;
@@ -131,16 +133,24 @@ class WsClient {
     String? token,
     String? ticket,
     Map<String, String> gatewayHeaders = const {},
+    Map<String, Object?> diagnosticContext = const {},
   }) {
     return WsClient._(
       baseUrl,
       token,
       ticket,
       validateGatewayHeaders(gatewayHeaders),
+      Map<String, Object?>.unmodifiable(diagnosticContext),
     );
   }
 
-  WsClient._(this.baseUrl, this._token, this._ticket, this._gatewayHeaders);
+  WsClient._(
+    this.baseUrl,
+    this._token,
+    this._ticket,
+    this._gatewayHeaders,
+    this._diagnosticContext,
+  );
 
   /// Connect to the WebSocket gateway.
   Future<void> connect() async {
@@ -149,6 +159,10 @@ class WsClient {
       throw StateError('A WebSocket connection is already in progress');
     }
     final generation = ++_connectionGeneration;
+    logConnectionDiagnostic(
+      'ws.connect_started',
+      details: {..._diagnosticContext, 'generation': generation},
+    );
     _gatewayReadyFrame = null;
     _gatewayReadyCanonical = null;
     _gatewayReadyFailure = null;
@@ -165,8 +179,28 @@ class WsClient {
     _channel = channel;
     channel.stream.listen(
       (message) => _handleMessage(message, generation),
-      onError: (_) => _handleClosedConnection(generation),
+      onError: (Object error, StackTrace stack) {
+        if (generation != _connectionGeneration) return;
+        logConnectionDiagnostic(
+          'ws.stream_failed',
+          details: {..._diagnosticContext, 'generation': generation},
+          error: error,
+          stackTrace: stack,
+        );
+        _handleClosedConnection(generation);
+      },
       onDone: () {
+        if (generation != _connectionGeneration) return;
+        logConnectionDiagnostic(
+          'ws.remote_closed',
+          details: {
+            ..._diagnosticContext,
+            'generation': generation,
+            'close_code': channel.closeCode,
+            'pending_requests': _pending.length,
+            'gateway_ready': _gatewayReadyFrame != null,
+          },
+        );
         _handleClosedConnection(generation);
       },
     );
@@ -191,12 +225,22 @@ class WsClient {
         }),
       );
       _connected = true;
+      logConnectionDiagnostic(
+        'ws.connected',
+        details: {..._diagnosticContext, 'generation': generation},
+      );
       try {
         onConnectionChanged?.call(true);
       } catch (_) {
         // Transport observers cannot turn a live socket into setup failure.
       }
-    } catch (_) {
+    } catch (error, stack) {
+      logConnectionDiagnostic(
+        'ws.connect_failed',
+        details: {..._diagnosticContext, 'generation': generation},
+        error: error,
+        stackTrace: stack,
+      );
       _handleClosedConnection(generation);
       try {
         await channel.sink.close();
@@ -365,6 +409,10 @@ class WsClient {
     final canonical = _canonicalJson(frame);
     final pinned = _gatewayReadyCanonical;
     if (pinned == null) {
+      logConnectionDiagnostic(
+        'ws.gateway_ready',
+        details: {..._diagnosticContext, 'generation': generation},
+      );
       _gatewayReadyCanonical = canonical;
       _gatewayReadyFrame = frame;
       final ready = _gatewayReadyCompleter;
@@ -373,6 +421,10 @@ class WsClient {
     }
     if (pinned == canonical) return;
 
+    logConnectionDiagnostic(
+      'ws.gateway_ready_drift',
+      details: {..._diagnosticContext, 'generation': generation},
+    );
     _gatewayReadyFailure = JsonRpcError(
       'gateway.ready',
       'Gateway ready frame changed on the active connection',
@@ -456,6 +508,16 @@ class WsClient {
     final id = _nextId++;
     final completer = Completer<Map<String, dynamic>>();
     final timer = Timer(timeout, () {
+      logConnectionDiagnostic(
+        'ws.rpc_timeout',
+        details: {
+          ..._diagnosticContext,
+          'generation': _connectionGeneration,
+          'rpc_method': method,
+          'request_id': id,
+          'timeout_ms': timeout.inMilliseconds,
+        },
+      );
       _pending.remove(id);
       if (!completer.isCompleted) {
         completer.completeError(
@@ -515,6 +577,14 @@ class WsClient {
     if (!_connected && _channel == null) return;
     final generation = _connectionGeneration;
     final channel = _channel;
+    logConnectionDiagnostic(
+      'ws.local_closed',
+      details: {
+        ..._diagnosticContext,
+        'generation': generation,
+        'pending_requests': _pending.length,
+      },
+    );
     _handleClosedConnection(generation);
     channel?.sink.close();
   }

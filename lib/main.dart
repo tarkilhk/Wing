@@ -1,3 +1,4 @@
+import 'core/services/connection_diagnostics.dart';
 import 'core/services/bots_connection_source.dart';
 import 'core/services/bots_session.dart';
 import 'core/models/profile_session_key.dart';
@@ -338,6 +339,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    logConnectionDiagnostic('app.lifecycle', details: {'state': state.name});
     if (state == AppLifecycleState.resumed) {
       // Admit recovery before alerts inspect failures retained during suspension.
       _profileControllers.resumeConnections();

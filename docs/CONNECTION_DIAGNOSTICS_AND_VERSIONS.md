@@ -4,7 +4,7 @@ Start with [Getting started](GETTING_STARTED.md) for your first connection and [
 
 ## Returning to Wing
 
-Wing attempts to restore the visible workspace connection when you return to the app or open a disconnected workspace. Temporary failures trigger automatic retries; **Retry connection** remains available if recovery fails. Recovery preserves drafts and does not automatically resubmit a message whose delivery is uncertain.
+Wing attempts to restore the visible workspace connection when you return to the app or open a disconnected workspace. Temporary failures trigger automatic retries; **Retry connection** remains available if recovery fails. Returning also retries a workspace that failed during its initial loading. Recovery preserves drafts and does not automatically resubmit a message whose delivery is uncertain.
 
 Changing a connection's address or credentials replaces its access configuration. Check that you are opening the intended saved instance before sending work.
 
