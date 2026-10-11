@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_repository.dart';
 import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/models/notification_focus.dart';
 import 'dart:async';
@@ -2533,8 +2534,27 @@ void main() {
               home: ProfileWorkspaceScreen(
                 controller: controller,
                 initialDestination: AppDestination.activity,
+                createBotsSession: () {
+                  final bots = BotsFixture();
+                  return BotsSession(
+                    (_) async => [
+                      BotsRepository(
+                        scope: controller.current!.scope,
+                        instance: 'Host',
+                        read: bots.read,
+                        savedHistory: bots.savedHistory,
+                        command: bots.command,
+                        ownership: bots.ownership,
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
+          );
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(
+            find.text('Review the Android gestures').first,
           );
           await tester.pumpAndSettle();
           await tester.tap(find.text('Review the Android gestures').first);

@@ -3,13 +3,29 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/bots.dart';
 import 'bots_repository.dart';
+import 'bot_group_read_state.dart';
 
 /// The stock gateway drives group discussion, including while Wing is away.
 /// This owner replays its log and retains one immutable idempotent send attempt.
 class BotGroupSession extends ChangeNotifier {
-  BotGroupSession(this.repository, this.group) {
+  BotGroupSession(this.repository, this.group, {required this.reads}) {
     repository.retain();
   }
+  final BotGroupReadState reads;
+  Future<void> acknowledgeVisibleMessages(int sequence) async {
+    if (_closed ||
+        !_visible ||
+        _capturing ||
+        !events.any((e) => e.isMessage && e.sequence == sequence)) {
+      return;
+    }
+    try {
+      await reads.acknowledge(group, sequence);
+    } catch (_) {
+      /* Keep unread until the device receipt can be saved. */
+    }
+  }
+
   final BotsRepository repository;
   final BotGroup group;
   final _events = <int, BotGroupEvent>{};

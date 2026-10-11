@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bot_group_read_state.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -895,7 +896,11 @@ void main() {
         'created_at': 1791756000.5,
         'payload': {'text': '**Evidence**'},
       });
-      final session = BotGroupSession(fixture.repository, group);
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        reads: BotGroupReadState(),
+      );
       addTearDown(session.dispose);
       final waiting = Completer<void>();
       final started = Completer<void>();
@@ -929,7 +934,11 @@ void main() {
     () async {
       final fixture = BotsFixture()..sendLost = true;
       final group = (await fixture.repository.groups()).first;
-      final session = BotGroupSession(fixture.repository, group);
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        reads: BotGroupReadState(),
+      );
       addTearDown(session.dispose);
       expect(await session.send('Hello @bot_atlas'), false);
       expect(await session.send('A different message'), false);

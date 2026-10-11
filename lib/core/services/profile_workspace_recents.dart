@@ -21,10 +21,7 @@ final class _WorkspaceRecentConversationSource
     final all = controller.recentChats();
     return RecentConversationCatalog(
       entries: [
-        for (final item in [
-          ...all.where((item) => item.activity != null),
-          ...all.where((item) => item.activity == null),
-        ])
+        for (final item in all)
           RecentConversationEntry(key: item.key, title: item.title),
       ],
       error: controller.recentsProfileErrors.isEmpty

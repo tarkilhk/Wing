@@ -1,8 +1,8 @@
 # Bots
 
-Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Filter bots by Working or Needs input; pinned entries lead the list. The floating + creates a bot or group for the selected tab. Lists refresh automatically while visible.
+Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Pinned entries lead the list. Names and message previews sit on the left, with saved artwork on the right. The floating + creates a bot or group for the selected tab. Lists refresh automatically while visible.
 
-Tap a bot's avatar to edit its appearance. Tap its name or message preview to open its continuing **Bot Chat**. Back returns to the same tab, search and filter. Bot Chats use the usual conversation screen, showing its saved avatar to the left of its display name when available.
+Tap a bot's avatar to edit its appearance. Tap its name or message preview to open its continuing **Bot Chat**. Back returns to the same tab and search. Bot Chats use the usual conversation screen, showing its saved avatar to the left of its display name when available.
 
 Explicitly selected classic shapes blink and move in the Bots roster and the
 open Bot Chat header, with stronger motion and dots while working. Pictures
@@ -22,8 +22,10 @@ Bot settings contains appearance, configuration editors, Duplicate bot and profi
 
 Creating a bot uses the instance's launch credentials and model defaults, as explained before creation. Duplication excludes channel bindings to avoid taking over messaging channels. Settings always apply to the chosen instance/profile, without switching the currently selected chat.
 
-Recents cards show each canonical bot chat's saved name and avatar before you
-open it. Appearance is prepared while the cards are still and shared with the
+Recents cards show each canonical bot chat's saved name on the left and avatar
+on the right before you open it. Group discussions appear in the same last-message
+order, with their room artwork or member avatars. Unread replies show a green
+New answer dot; reading the latest visible discussion messages clears that cue. Appearance is prepared while the cards are still and shared with the
 chat header; opening a card is not required to identify its bot.
 
 Appearance supports a display name, eight shapes, twelve profile hues, automatic color, image upload/removal and generation through that profile's configured image provider. PNG, JPEG and WebP uploads must fit the 2,000,000-byte avatar limit.

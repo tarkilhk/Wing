@@ -32,11 +32,34 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   bool _scrollScheduled = false;
   int _lastSequence = 0;
 
+  void _acknowledgeLatest() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_foreground ||
+          ModalRoute.of(context)?.isCurrent != true ||
+          _capturing ||
+          _inspectingHistory ||
+          !_following ||
+          !_scroll.hasClients ||
+          _scroll.position.extentAfter >= 80) {
+        return;
+      }
+      final sequence = _session.events
+          .where((e) => e.isMessage)
+          .lastOrNull
+          ?.sequence;
+      if (sequence != null) {
+        unawaited(_session.acknowledgeVisibleMessages(sequence));
+      }
+    });
+  }
+
   void _scrollChanged() {
     if (!_capturing && _scroll.hasClients) {
       final following = _scroll.position.extentAfter < 80;
       if (following != _following && mounted) {
         setState(() => _following = following);
+        if (following) _acknowledgeLatest();
       }
     }
   }
@@ -48,6 +71,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       _scrollScheduled = false;
       if (mounted && _following && !_capturing && _scroll.hasClients) {
         _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        _acknowledgeLatest();
       }
     });
   }
@@ -117,12 +141,14 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       _lastSequence = sequence;
       _followLatest();
     }
+    _acknowledgeLatest();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
     _session.setVisible(_foreground && !_capturing && !_inspectingHistory);
+    if (_foreground) _acknowledgeLatest();
   }
 
   @override

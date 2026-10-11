@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/bots.dart';
 import '../../models/profile_session_key.dart';
-import '../../services/bot_group_session.dart';
-import '../../widgets/bot_group_picture.dart';
+import '../../widgets/bot_group_identity.dart';
 import '../../services/bot_profile_edit_session.dart';
 import '../../services/bot_screen_session.dart';
 import '../../services/bots_session.dart';
@@ -18,18 +17,12 @@ import 'bot_settings_screen.dart';
 import 'bots_create_screen.dart';
 
 /// Presentation choices live with the workspace route, so Back from a bot chat
-/// returns to the same tab, search and filter without giving them I/O authority.
+/// returns to the same tab and search without giving them I/O authority.
 @immutable
 class BotsViewState {
-  const BotsViewState({
-    this.tab = 0,
-    this.query = '',
-    this.filter,
-    this.showHidden = false,
-  });
+  const BotsViewState({this.tab = 0, this.query = '', this.showHidden = false});
   final int tab;
   final String query;
-  final BotPresence? filter;
   final bool showHidden;
 }
 
@@ -61,18 +54,11 @@ class _BotsContentState extends State<BotsContent> {
     super.dispose();
   }
 
-  void _change({
-    int? tab,
-    String? query,
-    BotPresence? filter,
-    bool clearFilter = false,
-    bool? hidden,
-  }) {
+  void _change({int? tab, String? query, bool? hidden}) {
     widget.onViewChanged(
       BotsViewState(
         tab: tab ?? view.tab,
         query: query ?? view.query,
-        filter: clearFilter ? null : filter ?? view.filter,
         showHidden: hidden ?? view.showHidden,
       ),
     );
@@ -219,12 +205,7 @@ class _BotsContentState extends State<BotsContent> {
   }
 
   Future<void> _openGroup(BotGroup group) => _push(
-    BotGroupScreen(
-      createSession: () => BotGroupSession(
-        widget.session.repository(group.scope.connectionIdentity),
-        group,
-      ),
-    ),
+    BotGroupScreen(createSession: () => widget.session.groupSession(group)),
   );
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -237,7 +218,6 @@ class _BotsContentState extends State<BotsContent> {
               .where(
                 (bot) =>
                     (view.showHidden || !bot.hidden) &&
-                    (view.filter == null || bot.presence == view.filter) &&
                     '${bot.title} ${bot.profile.name} ${bot.instance} ${bot.profile.description ?? ''}'
                         .toLowerCase()
                         .contains(query),
@@ -327,31 +307,6 @@ class _BotsContentState extends State<BotsContent> {
                                 ),
                         ),
                       ),
-                      if (view.tab == 0)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              for (final (label, filter)
-                                  in <(String, BotPresence?)>[
-                                    ('All', null),
-                                    ('Working', BotPresence.working),
-                                    ('Needs input', BotPresence.needsInput),
-                                  ])
-                                ChoiceChip(
-                                  showCheckmark: false,
-                                  label: Text(label),
-                                  selected: view.filter == filter,
-                                  onSelected: (_) => _change(
-                                    filter: filter,
-                                    clearFilter: filter == null,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
                       for (final error in state.errors)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
@@ -363,8 +318,8 @@ class _BotsContentState extends State<BotsContent> {
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 40),
                           child: Text(
-                            query.isNotEmpty || view.filter != null
-                                ? 'No matches. Try another search or filter.'
+                            query.isNotEmpty
+                                ? 'No matches. Try another search.'
                                 : view.tab == 0
                                 ? 'Your saved profiles appear here as bots.'
                                 : 'No groups yet. Create a group to bring bots into one discussion.',
@@ -407,165 +362,291 @@ class _BotsContentState extends State<BotsContent> {
       );
     },
   );
-  Widget _roster(BuildContext context, List<Widget> rows) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: WingTokens.of(context).raised,
-      borderRadius: WingRadius.card,
-      border: Border.all(color: WingTokens.of(context).border),
-    ),
-    child: Column(
+  Widget _roster(BuildContext context, List<Widget> rows) =>
+      Column(children: rows);
+  Widget status(String label) {
+    final t = WingTokens.of(context);
+    final active = label == 'Running' || label == 'Needs input';
+    final c = label == 'Needs input'
+        ? t.warning
+        : label == 'Running'
+        ? t.running
+        : t.muted;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        for (var i = 0; i < rows.length; i++) ...[
-          if (i > 0) const Divider(height: 1),
-          rows[i],
+        if (active) ...[
+          Icon(
+            label == 'Running' ? Icons.autorenew : Icons.chat_bubble_outline,
+            size: 14,
+            color: c,
+          ),
+          const SizedBox(width: 6),
         ],
+        Flexible(
+          child: Text(label, style: TextStyle(fontSize: 12, color: c)),
+        ),
       ],
-    ),
-  );
-  Widget _botRow(BuildContext context, BotRecord bot, bool busy) {
-    final label = switch (bot.presence) {
-      BotPresence.working => 'Working',
-      BotPresence.needsInput => 'Needs input',
-      BotPresence.idle => 'Ready',
-      BotPresence.unknown => 'Status unavailable',
-    };
-    return _row(
-      context,
-      key: 'bot-${bot.id}',
-      title: bot.title,
-      pinned: bot.pinned,
-      leading: IconButton(
-        key: ValueKey('bot-avatar-${bot.id}'),
-        tooltip: 'Edit name & appearance for ${bot.title}',
-        onPressed: busy ? null : () => _editAppearance(bot),
-        style: IconButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          fixedSize: const Size(48, 48),
-          padding: const EdgeInsets.all(4),
-        ),
-        icon: LiveBotAvatar(
-          bot: bot,
-          name: bot.profile.name,
-          mood: bot.presence == BotPresence.working
-              ? BotAvatarMood.work
-              : BotAvatarMood.idle,
-        ),
-      ),
-      subtitle: '${bot.instance} · $label',
-      preview: bot.preview.isEmpty ? 'Start a conversation' : bot.preview,
-      onOpen: busy ? null : () => _open(bot),
-      menu: (anchor) => _botMenu(anchor, bot),
-      busy: busy,
     );
   }
 
-  Widget _groupRow(BuildContext context, BotGroup group, bool busy) => _row(
-    context,
-    key: 'group-${group.key}',
-    title: group.name,
-    pinned: group.pinned,
-    leading: BotGroupPicture(
-      name: group.name,
-      color: group.iconColor,
-      image: group.picture,
-    ),
-    subtitle:
-        '${group.instance} · ${group.members.length} bots${group.working ? ' · Working' : ''}',
-    preview: group.preview.isEmpty
-        ? group.members.map((m) => m.name).join(', ')
-        : group.preview,
-    onOpen: busy ? null : () => _openGroup(group),
-    menu: (anchor) => _groupMenu(anchor, group),
-    busy: busy,
-  );
-  Widget _row(
-    BuildContext context, {
-    required String key,
-    required String title,
-    bool pinned = false,
-    required Widget leading,
-    required String subtitle,
-    required String preview,
-    required VoidCallback? onOpen,
-    required Future<void> Function(BuildContext) menu,
-    required bool busy,
+  Widget card({
+    required String identity,
+    required Widget main,
+    required Widget footer,
   }) {
-    final large = MediaQuery.textScalerOf(context).scale(16) >= 24;
-    return Row(
-      key: ValueKey(key),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: InkWell(
-            borderRadius: WingRadius.card,
-            onTap: onOpen,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 14, 0, 14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  leading,
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+    final t = WingTokens.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        key: ValueKey(identity),
+        color: t.raised,
+        shape: RoundedRectangleBorder(
+          borderRadius: WingRadius.card,
+          side: BorderSide(color: t.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            main,
+            Container(
+              decoration: BoxDecoration(
+                color: Color.alphaBlend(
+                  t.muted.withValues(alpha: .04),
+                  t.raised,
+                ),
+                border: Border(top: BorderSide(color: t.border)),
+              ),
+              child: footer,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _botRow(BuildContext context, BotRecord bot, bool busy) {
+    final t = WingTokens.of(context);
+    final key = GlobalKey();
+    final label = bot.presence == BotPresence.working
+        ? 'Running'
+        : bot.presence == BotPresence.needsInput
+        ? 'Needs input'
+        : bot.presence == BotPresence.unknown
+        ? 'Unknown'
+        : 'Ready';
+    return card(
+      identity: 'bot-${bot.id}',
+      main: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: busy ? null : () => _open(bot),
+                onLongPress: busy
+                    ? null
+                    : () => _botMenu(key.currentContext!, bot),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                title,
-                                maxLines: large ? 3 : 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleSmall
-                                    ?.copyWith(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
+                        Text(
+                          bot.title,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            height: 1.25,
+                          ),
+                        ),
+                        if (bot.pinned)
+                          Tooltip(
+                            message: 'Pinned',
+                            child: Icon(
+                              Icons.push_pin_outlined,
+                              size: 13,
+                              color: t.muted,
                             ),
-                            if (pinned)
-                              const Tooltip(
-                                message: 'Pinned',
-                                child: Icon(Icons.push_pin, size: 14),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          subtitle,
-                          maxLines: large ? 3 : 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          preview.replaceAll(RegExp(r'\s+'), ' '),
-                          maxLines: large ? 2 : 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                        ),
+                          ),
                       ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Text(
+                      bot.preview.isEmpty
+                          ? 'Start a conversation'
+                          : bot.preview,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.45,
+                        color: t.muted,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 56,
+              height: 56,
+              child: IconButton(
+                tooltip: 'Edit name & appearance for ${bot.title}',
+                padding: const EdgeInsets.all(4),
+                onPressed: busy ? null : () => _editAppearance(bot),
+                icon: LiveBotAvatar(
+                  bot: bot,
+                  name: bot.profile.name,
+                  size: 48,
+                  mood: bot.presence == BotPresence.working
+                      ? BotAvatarMood.work
+                      : bot.presence == BotPresence.needsInput
+                      ? BotAvatarMood.think
+                      : BotAvatarMood.idle,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      footer: Padding(
+        padding: const EdgeInsets.only(left: 16),
+        child: Row(
+          children: [
+            Expanded(child: status(label)),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.textScalerOf(context).scale(16) >= 24
+                    ? 100
+                    : 110,
+              ),
+              child: Text(
+                bot.instance,
+                style: TextStyle(fontSize: 11, color: t.muted),
+              ),
+            ),
+            IconButton(
+              key: key,
+              tooltip: 'Actions for ${bot.title}',
+              onPressed: busy ? null : () => _botMenu(key.currentContext!, bot),
+              icon: const Icon(Icons.more_horiz),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _groupRow(BuildContext context, BotGroup group, bool busy) {
+    final t = WingTokens.of(context);
+    final key = GlobalKey();
+    return card(
+      identity: 'group-${group.key}',
+      main: InkWell(
+        onTap: busy ? null : () => _openGroup(group),
+        onLongPress: busy ? null : () => _groupMenu(key.currentContext!, group),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          group.name,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            height: 1.25,
+                          ),
+                        ),
+                        if (group.pinned)
+                          Tooltip(
+                            message: 'Pinned',
+                            child: Icon(
+                              Icons.push_pin_outlined,
+                              size: 13,
+                              color: t.muted,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Bot group · ${group.members.length}',
+                      style: TextStyle(fontSize: 11, color: t.muted),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      group.preview,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.45,
+                        color: t.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              BotGroupIdentity(
+                group: group,
+                bots: widget.session.state.bots,
+                size: 48,
+              ),
+            ],
           ),
         ),
-        Builder(
-          builder: (anchor) => IconButton(
-            tooltip: 'Actions for $title',
-            onPressed: busy ? null : () => menu(anchor),
-            icon: const Icon(Icons.more_horiz),
-          ),
+      ),
+      footer: Padding(
+        padding: const EdgeInsets.only(left: 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: status(
+                group.blocked
+                    ? 'Needs input'
+                    : group.working
+                    ? 'Running'
+                    : 'Ready',
+              ),
+            ),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.textScalerOf(context).scale(16) >= 24
+                    ? 100
+                    : 110,
+              ),
+              child: Text(
+                group.instance,
+                style: TextStyle(fontSize: 11, color: t.muted),
+              ),
+            ),
+            IconButton(
+              key: key,
+              tooltip: 'Actions for ${group.name}',
+              onPressed: busy
+                  ? null
+                  : () => _groupMenu(key.currentContext!, group),
+              icon: const Icon(Icons.more_horiz),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

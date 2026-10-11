@@ -1,3 +1,6 @@
+import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/services/bots_repository.dart';
+import 'support/bots_fixture.dart';
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:wing/core/services/shared_draft_session.dart';
@@ -135,6 +138,21 @@ void main() {
             home ??
             ProfileWorkspaceScreen(
               controller: controller,
+              createBotsSession: () {
+                final bots = BotsFixture();
+                return BotsSession(
+                  (_) async => [
+                    BotsRepository(
+                      scope: controller.current!.scope,
+                      instance: 'Host',
+                      read: bots.read,
+                      savedHistory: bots.savedHistory,
+                      command: bots.command,
+                      ownership: bots.ownership,
+                    ),
+                  ],
+                );
+              },
               onConnections: () {},
             ),
       ),
@@ -196,7 +214,8 @@ void main() {
         });
         await show(tester);
         await navigate(tester, AppDestination.activity);
-        await tester.tap(find.widgetWithText(FilterChip, 'Needs input'));
+        expect(find.byType(FilterChip), findsNothing);
+        await tester.ensureVisible(find.text('Recent conversation'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Recent conversation'));
         await tester.pumpAndSettle();
@@ -211,14 +230,7 @@ void main() {
         }
         await tester.pumpAndSettle();
         expect(find.byType(WorkspaceActivityContent), findsOneWidget);
-        expect(
-          tester
-              .widget<FilterChip>(
-                find.widgetWithText(FilterChip, 'Needs input'),
-              )
-              .selected,
-          isTrue,
-        );
+        expect(find.byType(FilterChip), findsNothing);
       },
     );
   }
@@ -238,15 +250,14 @@ void main() {
         await show(tester, scale: scale, brightness: brightness);
         await navigate(tester, AppDestination.activity);
         expect(find.text('Recents'), findsOneWidget);
-        expect(find.widgetWithText(FilterChip, 'All'), findsOneWidget);
-        expect(find.widgetWithText(FilterChip, 'Running'), findsOneWidget);
-        expect(find.widgetWithText(FilterChip, 'Needs input'), findsOneWidget);
+        expect(find.byType(FilterChip), findsNothing);
+        await tester.scrollUntilVisible(
+          find.text('Choose deployment region'),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text('Choose deployment region'), findsOneWidget);
         await snapshot(tester, 'recents-${brightness.name}-$scale');
-        await tester.tap(find.widgetWithText(FilterChip, 'Running'));
-        await tester.pumpAndSettle();
-        expect(find.text('No running sessions'), findsOneWidget);
-        await snapshot(tester, 'recents-empty-${brightness.name}-$scale');
-        await tester.tap(find.widgetWithText(FilterChip, 'All'));
         final pending = Completer<void>();
         fixture.pageDelays[('personal', 0)] = pending;
         final refresh = controller.refreshRecents();
@@ -627,13 +638,14 @@ void main() {
     ];
     await show(tester);
     await navigate(tester, AppDestination.activity);
-    await tester.tap(
-      find.byKey(
-        ValueKey(
-          'activity-${personal.key.workspace.profileName}-${personal.key.sessionId}',
-        ),
+    final recent = find.byKey(
+      ValueKey(
+        'activity-${personal.key.workspace.profileName}-${personal.key.sessionId}',
       ),
     );
+    await tester.ensureVisible(recent);
+    await tester.pumpAndSettle();
+    await tester.tap(recent);
     await tester.pumpAndSettle();
     expect(controller.current!.scope, personal.key.workspace);
     expect(controller.current!.chat, same(personal));

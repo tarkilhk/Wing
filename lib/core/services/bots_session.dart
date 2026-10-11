@@ -10,6 +10,8 @@ import '../models/profile_session_key.dart';
 import 'bots_repository.dart';
 import 'bots_preferences.dart';
 import 'bot_screen_session.dart';
+import 'bot_group_read_state.dart';
+import 'bot_group_session.dart';
 
 typedef BotsSources =
     Future<List<BotsRepository>> Function(bool Function() canUse);
@@ -21,6 +23,12 @@ class BotsSession extends ChangeNotifier {
     this._sources, {
     Future<BotsPreferences> Function()? loadPreferences,
   }) : _loadPreferences = loadPreferences ?? BotsPreferences.load;
+  final groupReads = BotGroupReadState();
+  BotGroupSession groupSession(BotGroup group) => BotGroupSession(
+    repository(group.scope.connectionIdentity),
+    group,
+    reads: groupReads,
+  );
   final BotsSources _sources;
   final Future<BotsPreferences> Function() _loadPreferences;
   BotsPreferences? _preferences;
@@ -359,6 +367,7 @@ class BotsSession extends ChangeNotifier {
     final errors = <String>[];
     bool current() => !_closed && generation == _readGeneration;
     try {
+      await groupReads.load();
       if (_preferences == null) {
         final preferences = await _loadPreferences();
         if (!current()) return;
@@ -649,6 +658,7 @@ class BotsSession extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    groupReads.dispose();
     _invalidateAppearances();
     _appearanceCache.clear();
     _appearanceKeys.clear();

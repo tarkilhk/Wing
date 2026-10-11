@@ -602,26 +602,45 @@ class BotsRepository {
       });
       for (final row in _rows(result['rooms'])) {
         final base = _group(row);
-        // Read the tail, not a synthetic message from a member's private chat.
         var preview = '';
-        var working = false;
+        var working = false, blocked = false;
+        BotGroupEvent? message, answer;
         try {
           final state = await _read('default', 'groups.state', {
             'room_id': base.id,
           });
           final room = _map(state['room']);
-          final seq = room['latest_seq'];
-          final page = await groupLog(
-            base,
-            since: seq is int ? (seq - 50).clamp(0, seq) : 0,
-          );
-          preview =
-              page.events.where((e) => e.isMessage).lastOrNull?.text ?? '';
-          working =
-              state['driver_status'] is Map &&
-              state['driver_status']['working'] == true;
+          if (room['room_id'] != base.id) {
+            throw const FormatException('Wrong group state owner');
+          }
+          final status = _map(state['driver_status']);
+          working = status['working'] == true;
+          blocked =
+              status['blocked'] == true ||
+              _rows(status['pending_actions']).isNotEmpty;
+          final latest = room['latest_seq'];
+          if (latest is! int || latest < 0) {
+            throw const FormatException('Invalid latest sequence');
+          }
+          // Scan backwards until both latest message and latest bot reply are
+          // known. Non-message work events never establish recency or unread.
+          var end = latest;
+          while (end > 0 && (message == null || answer == null)) {
+            final start = (end - 100).clamp(0, end);
+            final page = await groupLog(base, since: start);
+            for (final event
+                in page.events
+                    .where((e) => e.sequence <= end && e.isMessage)
+                    .toList()
+                    .reversed) {
+              message ??= event;
+              if (event.kind == 'message.member') answer ??= event;
+            }
+            end = start;
+          }
+          preview = message?.text ?? '';
         } catch (_) {
-          /* A room remains reachable if its preview is unavailable. */
+          // Identity stays usable; absent message evidence grants no freshness.
         }
         groups.add(
           BotGroup(
@@ -632,6 +651,10 @@ class BotsRepository {
             members: base.members,
             preview: preview,
             working: working,
+            blocked: blocked,
+            lastMessageAt: message?.timestamp,
+            lastMessageSequence: message?.sequence ?? 0,
+            lastAnswerSequence: answer?.sequence ?? 0,
           ),
         );
       }

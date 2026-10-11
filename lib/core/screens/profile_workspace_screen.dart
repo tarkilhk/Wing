@@ -1,3 +1,4 @@
+import 'bots/bot_group_screen.dart';
 import '../models/recent_conversation.dart';
 import '../models/bots.dart';
 import 'bots/bot_screen_view.dart';
@@ -405,7 +406,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       controller.canAddAttachment(chat) && !_launchingCamera;
   late AppDestination _destination;
   AppDestination? _chatOrigin;
-  WorkspaceActivityFilter _recentFilter = WorkspaceActivityFilter.all;
   bool _routeIsCurrent = true;
   bool _appIsActive = true;
   RecentConversationSession? _recentVisit, _pendingRecentVisit;
@@ -2946,14 +2946,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   widget.configurationActions!(context, () {
                     if (mounted) setState(() => _settingsRevision++);
                   }),
-                if (_destination == AppDestination.activity)
-                  IconButton(
-                    tooltip: 'Refresh recents',
-                    icon: const Icon(Icons.refresh),
-                    onPressed: controller.switching || controller.recentsLoading
-                        ? null
-                        : () => _run(controller.refreshRecents),
-                  ),
               ],
             ),
       body: Column(
@@ -2963,8 +2955,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               _destination != AppDestination.settings &&
               _destination != AppDestination.administration)
             const LinearProgressIndicator(),
-          if (_destination == AppDestination.activity ||
-              _destination == AppDestination.health ||
+          if (_destination == AppDestination.health ||
               _destination == AppDestination.analytics)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -3034,8 +3025,16 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               AppDestination.activity => WorkspaceActivityContent(
                 controller: controller,
                 bots: _bots,
-                filter: _recentFilter,
-                onFilterChanged: (filter) => _recentFilter = filter,
+                visible: _appIsActive && _routeIsCurrent,
+                onOpenGroup: (group) async {
+                  await Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => BotGroupScreen(
+                        createSession: () => _bots.groupSession(group),
+                      ),
+                    ),
+                  );
+                },
                 onOpen: (item, displayed) => unawaited(
                   _run(() => _openRecentConversation(item, displayed)),
                 ),

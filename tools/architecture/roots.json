@@ -8627,6 +8627,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/services/bot_group_read_state.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/bot_group_session.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -9197,6 +9202,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/services/workspace_recents_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/workspace_snapshot_store.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -9333,6 +9343,11 @@
     },
     {
       "path": "lib/core/widgets/bot_display_viewport.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/bot_group_identity.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
     },
@@ -9668,6 +9683,11 @@
     },
     {
       "path": "lib/core/widgets/recent_conversations/recent_conversation_switcher.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/recent_identity_card.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
     },
@@ -10423,6 +10443,11 @@
     },
     {
       "path": "test/bot_group_history_view_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_group_recents_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },

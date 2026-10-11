@@ -305,6 +305,8 @@ class ProfileRecentChat {
   final String? source;
   final double lastActive;
   final ProfileLiveActivity? activity;
+  final bool unread;
+  final BrowserProject? project;
 
   const ProfileRecentChat({
     required this.key,
@@ -312,6 +314,8 @@ class ProfileRecentChat {
     required this.source,
     required this.lastActive,
     this.activity,
+    this.unread = false,
+    this.project,
   });
 
   ProfileLiveActivityState? get state => activity?.state;
@@ -922,6 +926,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   List<ProfileRecentChat> _savedRecents = const [];
   final _recentSessionRows = <ProfileSessionKey, Map<String, dynamic>>{};
+  final _recentMessageTimes = <ProfileSessionKey, double>{};
   bool _recentsLoading = false;
   Future<void>? _recentsRefresh;
   bool get recentsLoading => _recentsLoading;
@@ -983,9 +988,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         key: key,
         title: live.title,
         source: live.source,
-        lastActive: previous != null && previous.lastActive > live.lastActive
-            ? previous.lastActive
-            : live.lastActive,
+        lastActive: previous?.lastActive ?? _recentMessageTimes[key] ?? 0,
         activity: live,
       );
     }
@@ -1001,8 +1004,28 @@ class ProfileWorkspaceController extends ChangeNotifier {
           source: item.source,
           lastActive: item.lastActive,
           activity: item.activity,
+          unread: _recentSessionRows.containsKey(item.key)
+              ? (_recentSessionRows[item.key]?['unread'] == true)
+              : _resources[item.key.workspace]?._sessions.any(
+                      (row) =>
+                          row['id'] == item.key.sessionId &&
+                          row['unread'] == true,
+                    ) ==
+                    true,
+          project: _recentProject(item.key),
         ),
     ]..sort((a, b) => b.lastActive.compareTo(a.lastActive));
+  }
+
+  BrowserProject? _recentProject(ProfileSessionKey key) {
+    final resource = _resources[key.workspace];
+    final projectId =
+        resource?._chats[key.sessionId]?._projectId ??
+        resource?._projectMembership?[key.sessionId];
+    final row = resource?._projects
+        .where((p) => p['id'] == projectId)
+        .firstOrNull;
+    return row == null ? null : BrowserProject.fromWire(row);
   }
 
   RecentConversationSession recentConversationSession({
@@ -1059,6 +1082,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
           final checkedSessions = <String>{};
           String? profileError;
           try {
+            try {
+              final projects = await browserProjects(
+                profile.name,
+                sessionLimit: ProfileGateway.projectSessionScanLimit,
+                canRead: () => !_closed && generation == _recentsGeneration,
+              );
+              if (!_closed && generation == _recentsGeneration) {
+                resource._projects = _readonlyWorkspaceRows(projects);
+              }
+            } catch (_) {
+              // Project context is optional; keep independently readable chats.
+            }
             int? offset = 0;
             while (offset != null) {
               final page = await resource.gateway.sessions(
@@ -1111,6 +1146,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                     row['id'] as String,
                   );
                   _recentSessionRows[key] = row;
+                  _recentMessageTimes[key] = time;
                   final title = row['title'] as String?;
                   items[key] = ProfileRecentChat(
                     key: key,
@@ -1149,6 +1185,25 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _recentsAvailableProfiles = 0;
     } finally {
       await liveRefresh;
+      if (!_closed && generation == _recentsGeneration) {
+        for (final live in liveActivity) {
+          final key = ProfileSessionKey(live.workspace, live.sessionId);
+          if (!SessionVisibility.chats.includes(live.source) ||
+              _recentMessageTimes.containsKey(key)) {
+            continue;
+          }
+          try {
+            final page = await _resource(
+              live.workspace.profileName,
+            ).gateway.history(live.sessionId, limit: 1);
+            if (_closed || generation != _recentsGeneration) return;
+            final time = _latestMessageTime(page.rows);
+            if (time != null) _recentMessageTimes[key] = time;
+          } catch (_) {
+            /* Unknown message age stays unknown, never a runtime age. */
+          }
+        }
+      }
       if (!_closed && generation == _recentsGeneration) {
         _recentsLoaded = true;
         _recentsLoading = false;
@@ -4170,6 +4225,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
         };
       }
       if (_closed && !delete) return;
+      if (delete) {
+        _recentSessionRows.remove(key);
+        _recentMessageTimes.remove(key);
+      } else if (_recentSessionRows[key] case final row?) {
+        _recentSessionRows[key] = {...row, ...updated};
+      }
       _invalidateSessionLoad(resource);
       if (delete || changes.containsKey('archived')) {
         _invalidateProjectMembership(resource);

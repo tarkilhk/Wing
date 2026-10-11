@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bot_group_read_state.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
@@ -99,7 +100,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: BotGroupScreen(
-          createSession: () => BotGroupSession(fixture.repository, group),
+          createSession: () => BotGroupSession(
+            fixture.repository,
+            group,
+            reads: BotGroupReadState(),
+          ),
         ),
       ),
     );
@@ -162,8 +167,11 @@ void main() {
               home: RepaintBoundary(
                 key: frame,
                 child: BotGroupScreen(
-                  createSession: () =>
-                      session = BotGroupSession(fixture.repository, group),
+                  createSession: () => session = BotGroupSession(
+                    fixture.repository,
+                    group,
+                    reads: BotGroupReadState(),
+                  ),
                 ),
               ),
             ),

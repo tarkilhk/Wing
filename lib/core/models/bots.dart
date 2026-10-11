@@ -131,6 +131,10 @@ class BotGroup {
     required Iterable<BotGroupMember> members,
     this.preview = '',
     this.working = false,
+    this.blocked = false,
+    this.lastMessageAt,
+    this.lastMessageSequence = 0,
+    this.lastAnswerSequence = 0,
     this.pinned = false,
     this.iconColor,
     Uint8List? picture,
@@ -139,7 +143,9 @@ class BotGroup {
   final WorkspaceScope scope;
   final String instance, id, name, preview;
   final List<BotGroupMember> members;
-  final bool working;
+  final bool working, blocked;
+  final DateTime? lastMessageAt;
+  final int lastMessageSequence, lastAnswerSequence;
   final bool pinned;
   final Uint8List? picture;
   final ProfileColorChoice? iconColor;
@@ -152,6 +158,10 @@ class BotGroup {
     members: members,
     preview: preview,
     working: working,
+    blocked: blocked,
+    lastMessageAt: lastMessageAt,
+    lastMessageSequence: lastMessageSequence,
+    lastAnswerSequence: lastAnswerSequence,
     pinned: value,
     picture: picture,
     iconColor: iconColor,
@@ -165,6 +175,10 @@ class BotGroup {
         members: members,
         preview: preview,
         working: working,
+        blocked: blocked,
+        lastMessageAt: lastMessageAt,
+        lastMessageSequence: lastMessageSequence,
+        lastAnswerSequence: lastAnswerSequence,
         pinned: pinned,
         picture: picture,
         iconColor: color,

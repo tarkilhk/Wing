@@ -1365,9 +1365,7 @@ void main() {
       );
     }
   }
-  testWidgets('search filters and hidden bots never write profiles', (
-    tester,
-  ) async {
+  testWidgets('search and hidden bots never write profiles', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final fixture = BotsFixture();
     var rosterReads = 0;
@@ -1401,10 +1399,9 @@ void main() {
     expect(find.text('Forge'), findsNothing);
     await tester.tap(find.byTooltip('Clear search'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Working'));
-    await tester.pumpAndSettle();
+    expect(find.byType(ChoiceChip), findsNothing);
     expect(find.text('Forge'), findsOneWidget);
-    expect(find.text('Mira'), findsNothing);
+    expect(find.text('Mira'), findsOneWidget);
     final beforeMenu = rosterReads;
     await tester.tap(find.byTooltip('Roster options'));
     await tester.pumpAndSettle();
@@ -1414,7 +1411,6 @@ void main() {
     expect(view.showHidden, true);
     expect(rosterReads, beforeMenu);
     expect(find.text('Forge'), findsOneWidget);
-    expect(view.filter, BotPresence.working);
     await tester.fling(find.byType(ListView).first, const Offset(0, 300), 1000);
     await tester.pumpAndSettle();
     expect(rosterReads, beforeMenu);

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bot_group_read_state.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -112,7 +113,11 @@ void main() {
                 child: RepaintBoundary(key: frame, child: child!),
               ),
               home: BotGroupScreen(
-                createSession: () => BotGroupSession(fixture.repository, group),
+                createSession: () => BotGroupSession(
+                  fixture.repository,
+                  group,
+                  reads: BotGroupReadState(),
+                ),
               ),
             ),
           );

@@ -4,6 +4,8 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Match Bots and Recents with the approved compact card family: prominent Bots names, right-hand artwork, freshness-ordered Recents without message previews or filters, and group discussions with persistent unread cues.
+
 ### Bots and discussions
 
 - Redesign group creation with picked bots above search, optional names,

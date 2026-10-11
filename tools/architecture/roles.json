@@ -1081,6 +1081,11 @@
       "feature": "bots",
       "library": "lib/core/services/bot_group_history_session.dart"
     },
+    "lib/core/services/bot_group_read_state.dart": {
+      "role": "data",
+      "feature": "bots",
+      "library": "lib/core/services/bot_group_read_state.dart"
+    },
     "lib/core/services/bot_group_session.dart": {
       "role": "application",
       "feature": "bots",
@@ -1646,6 +1651,11 @@
       "feature": "app-shell",
       "library": "lib/core/services/workspace_entry_session.dart"
     },
+    "lib/core/services/workspace_recents_session.dart": {
+      "role": "application",
+      "feature": "app-shell",
+      "library": "lib/core/services/workspace_recents_session.dart"
+    },
     "lib/core/services/workspace_snapshot_store.dart": {
       "role": "data",
       "feature": "conversation",
@@ -1785,6 +1795,11 @@
       "role": "view",
       "feature": "bots",
       "library": "lib/core/widgets/bot_display_viewport.dart"
+    },
+    "lib/core/widgets/bot_group_identity.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/widgets/bot_group_identity.dart"
     },
     "lib/core/widgets/bot_group_picture.dart": {
       "role": "view",
@@ -2120,6 +2135,11 @@
       "role": "view",
       "feature": "conversation",
       "library": "lib/core/widgets/recent_conversations/recent_conversation_switcher.dart"
+    },
+    "lib/core/widgets/recent_identity_card.dart": {
+      "role": "view",
+      "feature": "app-shell",
+      "library": "lib/core/widgets/recent_identity_card.dart"
     },
     "lib/core/widgets/resource_filename.dart": {
       "role": "view",

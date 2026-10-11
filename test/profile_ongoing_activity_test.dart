@@ -77,6 +77,8 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: WorkspaceActivityContent(
+            visible: false,
+            onOpenGroup: (_) async {},
             bots: bots,
             controller: controller,
             onOpen: (_, displayed) {},
@@ -124,6 +126,8 @@ void main() {
                   ProfileChatIndicator(chat: chat),
                   Expanded(
                     child: WorkspaceActivityContent(
+                      visible: false,
+                      onOpenGroup: (_) async {},
                       bots: bots,
                       controller: controller,
                       onOpen: (_, displayed) {},
@@ -145,7 +149,8 @@ void main() {
       });
       await tester.pump();
       expect(find.text('Delegated research'), findsOneWidget);
-      expect(find.text('Last 24 hours'), findsOneWidget);
+      expect(find.text('Last 24 hours'), findsNothing);
+      expect(find.text('Read'), findsOneWidget);
       expect(find.text('Ongoing'), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(chat.runtime.execution, ChatExecution.completed);

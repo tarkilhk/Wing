@@ -31,7 +31,7 @@ While Hermes is working, the composer can **Steer**, **Queue** or **Stop**. The 
 Open a chat from **Recents** to switch between that visit's conversations with a
 two-finger horizontal swipe. Pinch inward to open the card stack; its icon-only
 controls also support keyboard and accessibility navigation. Android Back
-returns from the stack to the conversation, then to the retained Recents filter.
+returns from the stack to the conversation, then to Recents.
 When you return to
 a conversation already loaded in this workspace, its retained messages appear
 while Wing refreshes from Hermes. The thin bar at the top stays visible during

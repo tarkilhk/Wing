@@ -2,6 +2,7 @@ import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'dart:async';
 import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,15 +11,37 @@ import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/models/session_visibility.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_gateway.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_browser_fixture.dart';
 import 'support/bots_fixture.dart';
 
 class _RecentsFixture extends ProfileBrowserFixture {
+  bool unread = false;
+  @override
+  ProfileGateway gateway(WorkspaceScope scope) {
+    final delegate = super.gateway(scope);
+    return ProfileGateway(
+      scope: scope,
+      discover: delegate.discover,
+      get: delegate.read,
+      rpc: delegate.call,
+      ownedPatch: (path, body, canDispatch, onDispatched) async {
+        if (!canDispatch()) throw StateError('Read superseded');
+        expect(path, 'sessions/shared-id');
+        expect(body['profile'], scope.profileName);
+        expect(body['unread'], false);
+        onDispatched();
+        unread = false;
+        return {'ok': true};
+      },
+    );
+  }
+
   @override
   List<Map<String, dynamic>> historyRows(String profile, String id) => [
-    if (id != 'empty')
+    if (id != 'empty' && id != 'active-empty')
       {
         'id': 1,
         'role': 'assistant',
@@ -58,6 +81,7 @@ class _RecentsFixture extends ProfileBrowserFixture {
       'profile': profile,
       'last_active': now - 600,
       'archived': profile == 'work',
+      'unread': unread,
     },
     {
       'id': 'old',
@@ -99,6 +123,67 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  test(
+    'runtime heartbeats do not outrank newer messages or invent an age',
+    () async {
+      fixture.hiddenSessions['personal'] = [
+        {
+          'id': 'active-empty',
+          'title': 'Empty active chat',
+          'profile': 'personal',
+        },
+      ];
+      fixture.liveSessions['personal'] = [
+        {
+          'id': 'busy-runtime',
+          'session_key': 'recent-100',
+          'status': 'working',
+          'last_active': fixture.now + 1000,
+        },
+        {
+          'id': 'empty-runtime',
+          'session_key': 'active-empty',
+          'status': 'working',
+          'last_active': fixture.now + 2000,
+        },
+      ];
+      await controller.refreshRecents();
+      final chats = controller.recentChats();
+      expect(chats.first.key.sessionId, 'recent-0');
+      expect(chats.first.state, isNull);
+      final busy = chats.singleWhere(
+        (c) =>
+            c.key.workspace.profileName == 'personal' &&
+            c.key.sessionId == 'recent-100',
+      );
+      expect(busy.activity, isNotNull);
+      expect(busy.lastActive, fixture.now - 6000);
+      final empty = chats.singleWhere((c) => c.key.sessionId == 'active-empty');
+      expect(empty.lastActive, 0);
+      expect(chats.last.key, empty.key);
+    },
+  );
+
+  test(
+    'confirmed reading clears unread without advancing message freshness',
+    () async {
+      fixture.unread = true;
+      await controller.refreshRecents();
+      final before = controller.recentChats().singleWhere(
+        (c) =>
+            c.key.workspace.profileName == 'personal' &&
+            c.key.sessionId == 'shared-id',
+      );
+      expect(before.unread, isTrue);
+      await controller.openSession(before.key);
+      final after = controller.recentChats().singleWhere(
+        (c) => c.key == before.key,
+      );
+      expect(after.unread, isFalse);
+      expect(after.lastActive, before.lastActive);
+    },
+  );
 
   test('group workers stay out of saved, opened and active Recents', () async {
     await controller.setSessionVisibility(SessionVisibility.all);

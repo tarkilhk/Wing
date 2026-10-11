@@ -81,6 +81,7 @@ class _ActivityHost {
                   'profile': 'main',
                   'last_active':
                       DateTime.now().millisecondsSinceEpoch / 1000 - 7200,
+                  'unread': true,
                 },
               {'id': 'running', 'title': 'Running job', 'profile': 'main'},
               {'id': 'needs-input', 'title': 'Question', 'profile': 'main'},
@@ -94,21 +95,26 @@ class _ActivityHost {
         : {
             'session_id': path.split('/')[1],
             'messages': <Map<String, dynamic>>[
-              if (includeHistory && path == 'sessions/recent/messages')
+              if (includeHistory)
                 {
                   'id': 1,
                   'role': 'assistant',
                   'content': 'Guide ready',
                   'timestamp':
-                      DateTime.now().millisecondsSinceEpoch / 1000 - 7200,
+                      DateTime.now().millisecondsSinceEpoch / 1000 -
+                      (path == 'sessions/needs-input/messages'
+                          ? 360
+                          : path == 'sessions/running/messages'
+                          ? 600
+                          : path == 'sessions/side-work/messages'
+                          ? 1200
+                          : 7200),
                 },
             ],
             'pagination': {
               'offset': 0,
               'limit': int.parse(query['limit'] ?? '50'),
-              'returned': includeHistory && path == 'sessions/recent/messages'
-                  ? 1
-                  : 0,
+              'returned': includeHistory ? 1 : 0,
               'order': 'latest',
             },
           },
@@ -117,7 +123,19 @@ class _ActivityHost {
         if (failed.contains(scope.profileName)) throw StateError('offline');
         return {'sessions': live[scope.profileName] ?? []};
       }
-      if (method == 'projects.tree') return {'projects': []};
+      if (method == 'projects.tree') {
+        return {
+          'projects': [
+            {
+              'id': 'sync',
+              'label': 'Sync',
+              'icon': 'repo',
+              'color': '#A78BFA',
+              'sessionIds': ['needs-input'],
+            },
+          ],
+        };
+      }
       return {};
     },
   );
@@ -138,15 +156,14 @@ void main() {
   });
   late _ActivityHost host;
   late ProfileWorkspaceController controller;
-  late AppPreferences appPreferences;
+  late AppPreferences preferences;
   late BotsSession bots;
-
+  late BotsFixture fixture;
   setUp(() async {
-    bots = BotsSession((_) async => []);
     SharedPreferences.setMockInitialValues({});
-    host = _ActivityHost();
-    final preferences = await SharedPreferences.getInstance();
-    appPreferences = AppPreferences(preferences);
+    host = _ActivityHost()..includeHistory = true;
+    final saved = await SharedPreferences.getInstance();
+    preferences = AppPreferences(saved);
     controller = ProfileWorkspaceController(
       access: ConnectionAccess(
         connection: SavedConnection(
@@ -159,8 +176,8 @@ void main() {
         dashboardOAuth: null,
       ),
       connectionIdentity: 'activity-filter-test',
-      preferences: preferences,
-      appPreferences: appPreferences,
+      preferences: saved,
+      appPreferences: preferences,
       gatewayFactory: host.gateway,
     );
     await controller.initialize();
@@ -169,83 +186,71 @@ void main() {
         'id': 'runtime-running',
         'session_key': 'running',
         'status': 'working',
-        'last_active': 2,
+        'last_active': DateTime.now().millisecondsSinceEpoch / 1000,
       },
       {
         'id': 'runtime-input',
         'session_key': 'needs-input',
         'status': 'waiting',
         'last_active': 1,
-        'side_tasks_running': 0,
       },
       {
         'id': 'runtime-side',
         'session_key': 'side-work',
         'status': 'idle',
-        'last_active': 3,
+        'last_active': 2,
         'side_tasks_running': 2,
-      },
-      {
-        'id': 'runtime-idle-old',
-        'session_key': 'idle-old',
-        'status': 'idle',
-        'last_active': 4,
       },
     ];
     await controller.refreshRecents();
+    fixture = BotsFixture();
+    fixture.profiles.first['name'] = 'main';
+    fixture.profiles.first['ui_meta']['hermes-bots']['title'] = 'Scout';
+    fixture.profiles.first['canonical_session'] = {
+      'id': 'running',
+      'resolved_id': 'running',
+      'preview': 'Body text must stay out of Recents',
+    };
+    fixture.events.add({
+      'room_id': 'room-1',
+      'seq': 1,
+      'kind': 'message.member',
+      'created_at': DateTime.now().millisecondsSinceEpoch / 1000 - 720,
+      'actor': {'kind': 'member', 'id': 'atlas', 'display_name': 'Scout'},
+      'payload': {'text': 'Room message must stay out of Recents'},
+    });
+    bots = BotsSession(
+      (_) async => [
+        BotsRepository(
+          scope: controller.current!.scope,
+          instance: 'Host',
+          read: fixture.read,
+          savedHistory: fixture.savedHistory,
+          command: fixture.command,
+          ownership: fixture.ownership,
+        ),
+      ],
+    );
+    await bots.refresh();
   });
-
   tearDown(() {
     bots.dispose();
     controller.dispose();
-    appPreferences.dispose();
+    preferences.dispose();
   });
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
-      testWidgets('work and history at $scale in ${brightness.name}', (
+      testWidgets('approved identity cards in ${brightness.name} at $scale', (
         tester,
       ) async {
-        host.includeHistory = true;
-        final now = DateTime.now().millisecondsSinceEpoch / 1000;
-        for (final (index, row) in host.live['main']!.indexed) {
-          row['last_active'] = now - (index + 1) * 180;
-        }
-        await controller.refreshRecents();
-        expect(controller.recentChats(), hasLength(4));
-        final fixture = BotsFixture();
-        fixture.profiles
-          ..clear()
-          ..add(
-            BotsFixture.profile('main', 'Pace')
-              ..['canonical_session'] = {
-                'id': 'running',
-                'resolved_id': 'recent',
-                'preview': '',
-              },
-          );
-        final botReads = <String>[];
-        fixture.readHook = (_, method, _) async {
-          botReads.add(method);
-          return null;
-        };
-        bots.dispose();
-        bots = BotsSession(
-          (_) async => [
-            BotsRepository(
-              scope: controller.current!.scope,
-              instance: 'Host',
-              read: fixture.read,
-              savedHistory: fixture.savedHistory,
-              command: fixture.command,
-              ownership: fixture.ownership,
-            ),
-          ],
-        );
         tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final frame = GlobalKey();
+        ProfileRecentChat? opened;
+        List<ProfileRecentChat>? displayed;
+        String? openedRoom;
         await tester.pumpWidget(
           MaterialApp(
             debugShowCheckedModeBanner: false,
@@ -259,29 +264,66 @@ void main() {
             home: Scaffold(
               appBar: AppBar(title: const Text('Recents')),
               body: WorkspaceActivityContent(
-                bots: bots,
                 controller: controller,
-                onOpen: (_, displayed) {},
+                bots: bots,
+                visible: false,
+                onOpen: (item, rows) {
+                  opened = item;
+                  displayed = rows;
+                },
+                onOpenGroup: (group) async {
+                  openedRoom = group.id;
+                },
               ),
             ),
           ),
         );
         await tester.pumpAndSettle();
-        final ongoing = find.byKey(const ValueKey('recents-ongoing'));
+        expect(find.byType(FilterChip), findsNothing);
+        expect(find.text('Ongoing'), findsNothing);
+        expect(find.text('Last 24 hours'), findsNothing);
+        expect(find.textContaining('Body text'), findsNothing);
+        expect(find.textContaining('Room message'), findsNothing);
+        expect(find.text('New answer'), findsWidgets);
+        expect(find.text('Sync'), findsOneWidget);
+        expect(find.byIcon(Icons.account_tree_outlined), findsOneWidget);
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pumpAndSettle();
+        final botRow = find.byKey(const ValueKey('activity-main-running'));
+        for (
+          var wait = 0;
+          wait < 20 &&
+              find
+                  .descendant(of: botRow, matching: find.byType(BotAvatar))
+                  .evaluate()
+                  .isEmpty;
+          wait++
+        ) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        final avatar = find.descendant(
+          of: botRow,
+          matching: find.byType(BotAvatar),
+        );
+        expect(tester.getSize(avatar), const Size(32, 32));
+        final botName = find.descendant(
+          of: botRow,
+          matching: find.text('Scout'),
+        );
+        expect(botName, findsOneWidget);
         expect(
-          find.descendant(of: ongoing, matching: find.text('Deploy checks')),
-          findsOneWidget,
+          tester.getRect(botName).right,
+          lessThan(tester.getRect(avatar).left),
         );
         expect(
-          find.descendant(
-            of: ongoing,
-            matching: find.text('Draft the setup guide'),
-          ),
+          find.descendant(of: botRow, matching: find.text('M')),
           findsNothing,
         );
-        expect(tester.takeException(), isNull);
-        Future<void> capture(String suffix) async {
-          if (!_capture) return;
+        expect(
+          find.descendant(of: botRow, matching: find.text('Running job')),
+          findsNothing,
+        );
+        if (_capture) {
           final boundary =
               frame.currentContext!.findRenderObject()!
                   as RenderRepaintBoundary;
@@ -291,179 +333,62 @@ void main() {
               format: ui.ImageByteFormat.png,
             );
             final file = File(
-              'build/recents-review/${brightness.name}-$scale-$suffix.png',
+              'build/recents-review/${brightness.name}-$scale-approved.png',
             );
             await file.parent.create(recursive: true);
             await file.writeAsBytes(bytes!.buffer.asUint8List());
             image.dispose();
           });
         }
-
-        final botIcon = find.descendant(
-          of: find.byKey(const ValueKey('activity-main-running')),
-          matching: find.byType(BotAvatar),
+        final room = find.byKey(
+          const ValueKey('recent-group-activity-filter-test/room-1'),
         );
-        expect(botIcon, findsOneWidget);
-        final savedBot = tester.widget<BotAvatar>(botIcon);
-        expect(savedBot.name, 'Pace');
-        expect(savedBot.shape, 'squircle');
-        expect(savedBot.color, '#65c7bc');
-        expect(tester.getSize(botIcon), const Size(40, 40));
-        final botRow = find.byKey(const ValueKey('activity-main-running'));
-        expect(
-          tester.getCenter(botIcon).dy,
-          closeTo(tester.getCenter(botRow).dy, 0.01),
+        await tester.ensureVisible(room);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(of: room, matching: find.text('Research team')),
         );
-        final botProfile = find.descendant(
-          of: botRow,
-          matching: find.text('main'),
-        );
-        expect(
-          tester.getTopLeft(botProfile).dx,
-          tester.getTopLeft(find.text('Running job')).dx,
-        );
-        expect(
-          find.descendant(of: botRow, matching: find.text('M')),
-          findsNothing,
-        );
-        expect(
-          tester.getRect(botIcon).right,
-          lessThan(tester.getRect(find.text('Running job')).left),
-        );
-        expect(
-          find.descendant(
-            of: find.byKey(const ValueKey('activity-main-needs-input')),
-            matching: find.byType(BotAvatar),
-          ),
-          findsNothing,
-        );
-        expect(botReads, ['profiles.list']);
-        expect(fixture.commands, isEmpty);
-        await capture('top');
-        await tester.scrollUntilVisible(
-          find.text('Draft the setup guide'),
-          200,
-        );
-        expect(find.text('Draft the setup guide'), findsOneWidget);
-        expect(find.text('Last 24 hours'), findsOneWidget);
-        expect(find.text('Recent'), findsNothing);
+        await tester.pumpAndSettle();
+        expect(openedRoom, 'room-1');
+        await tester.ensureVisible(botRow);
+        await tester.pumpAndSettle();
+        await tester.tap(botName);
+        await tester.pumpAndSettle();
+        expect(opened?.key.sessionId, 'running');
+        expect(displayed!.map((row) => row.key.sessionId), [
+          'needs-input',
+          'running',
+          'side-work',
+          'recent',
+        ]);
+        expect(() => displayed!.clear(), throwsUnsupportedError);
         expect(tester.takeException(), isNull);
-        expect(
-          find.descendant(
-            of: find.byKey(const ValueKey('activity-main-recent')),
-            matching: find.byType(BotAvatar),
-          ),
-          findsOneWidget,
-        );
-        final historyRow = find.byKey(const ValueKey('activity-main-recent'));
-        final historyAvatar = find.descendant(
-          of: historyRow,
-          matching: find.byType(BotAvatar),
-        );
-        expect(tester.getSize(historyAvatar), const Size(40, 40));
-        expect(
-          tester.getCenter(historyAvatar).dy,
-          closeTo(tester.getCenter(historyRow).dy, 0.01),
-        );
-        expect(
-          tester
-              .getTopLeft(
-                find.descendant(of: historyRow, matching: find.text('main')),
-              )
-              .dx,
-          tester.getTopLeft(find.text('Draft the setup guide')).dx,
-        );
-        expect(
-          find.descendant(of: historyRow, matching: find.text('M')),
-          findsNothing,
-        );
-        expect(botReads, ['profiles.list']);
-        await tester.ensureVisible(historyRow);
-        await tester.pumpAndSettle();
-        await capture('history');
-        final metadata = fixture.profiles.first['ui_meta']['hermes-bots'];
-        metadata['shape'] = 'triangle';
-        await controller.refreshRecents();
-        await tester.pumpAndSettle();
-        final refreshedIcon = find.descendant(
-          of: find.byKey(const ValueKey('activity-main-recent')),
-          matching: find.byType(BotAvatar),
-        );
-        expect(tester.widget<BotAvatar>(refreshedIcon).shape, 'triangle');
-        expect(botReads, ['profiles.list', 'profiles.list']);
-        expect(fixture.commands, isEmpty);
+        await tester.pumpWidget(const SizedBox());
       });
     }
   }
-
-  testWidgets('filters activity, opens an owner item, and fits large text', (
+  testWidgets('retains partial status failures with usable chats', (
     tester,
   ) async {
-    ProfileRecentChat? opened;
-    List<ProfileRecentChat>? displayedAtOpen;
-    await tester.pumpWidget(
-      MediaQuery(
-        data: const MediaQueryData(textScaler: TextScaler.linear(2)),
-        child: MaterialApp(
-          home: SizedBox(
-            width: 320,
-            child: Scaffold(
-              body: WorkspaceActivityContent(
-                bots: bots,
-                controller: controller,
-                onOpen: (item, displayed) {
-                  opened = item;
-                  displayedAtOpen = displayed;
-                },
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-    expect(find.text('Running job'), findsOneWidget);
-    expect(find.text('Question'), findsOneWidget);
-    expect(find.text('Deploy checks'), findsOneWidget);
-    expect(find.textContaining('2 background tasks running'), findsOneWidget);
-    expect(find.text('Idle old server'), findsNothing);
-
-    await tester.tap(find.widgetWithText(FilterChip, 'Needs input'));
-    await tester.pump();
-    expect(find.text('Running job'), findsNothing);
-    expect(find.text('Question'), findsOneWidget);
-    await tester.tap(find.text('Question'));
-    expect(opened?.key.sessionId, 'needs-input');
-    expect(displayedAtOpen!.map((chat) => chat.key.sessionId), ['needs-input']);
-    expect(() => displayedAtOpen!.clear(), throwsUnsupportedError);
-
-    await tester.tap(find.widgetWithText(FilterChip, 'Running'));
-    await tester.pump();
-    expect(find.text('Running job'), findsOneWidget);
-    expect(find.text('Question'), findsNothing);
-    expect(find.text('Deploy checks'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilterChip, 'All'));
-    await tester.pump();
-    expect(find.text('Question'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('retains activity-unavailable error', (tester) async {
     host.failed.add('main');
     await controller.refreshRecents();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: WorkspaceActivityContent(
-            bots: bots,
             controller: controller,
-            onOpen: (_, displayed) {},
+            bots: bots,
+            visible: false,
+            onOpen: (_, _) {},
+            onOpenGroup: (_) async {},
           ),
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('Live status could not be loaded.'), findsOneWidget);
     expect(find.text('No recent chats'), findsNothing);
+    expect(find.text('Draft the setup guide'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
   });
 }
