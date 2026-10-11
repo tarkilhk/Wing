@@ -69,46 +69,47 @@ class BotGroupPicture extends StatelessWidget {
       );
     }
     final members = avatars.take(6).toList();
-    final columns = members.length > 4 ? 3 : math.min(members.length, 2);
+    final columns = members.length == 4 ? 2 : math.min(members.length, 3);
     final rows = (members.length / columns).ceil();
+    const horizontalStep = .76;
+    const verticalStep = .86;
     return LayoutBuilder(
       builder: (_, constraints) {
-        final cell = math.min(
-          constraints.maxWidth / columns,
-          constraints.maxHeight / rows,
-        );
-        final avatarSize = cell * .84;
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (var row = 0; row < rows; row++)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (final bot in members.skip(row * columns).take(columns))
-                    SizedBox.square(
-                      dimension: cell,
-                      child: Center(
-                        child: bot == null
-                            ? Icon(
-                                Icons.smart_toy_outlined,
-                                size: avatarSize,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              )
-                            : BotAvatar(
-                                name: bot.title,
-                                shape: bot.shape,
-                                color: bot.color,
-                                image: bot.avatar,
-                                size: avatarSize,
-                              ),
-                      ),
+        final avatarSize =
+            .9 *
+            math.min(
+              constraints.maxWidth / (1 + (columns - 1) * horizontalStep),
+              constraints.maxHeight / (1 + (rows - 1) * verticalStep),
+            );
+        final height = avatarSize * (1 + (rows - 1) * verticalStep);
+        return Stack(
+          children: members.indexed.map((entry) {
+            final (index, bot) = entry;
+            final row = index ~/ columns;
+            final rowCount = math.min(columns, members.length - row * columns);
+            final width = avatarSize * (1 + (rowCount - 1) * horizontalStep);
+            return Positioned(
+              left:
+                  (constraints.maxWidth - width) / 2 +
+                  (index % columns) * avatarSize * horizontalStep,
+              top:
+                  (constraints.maxHeight - height) / 2 +
+                  row * avatarSize * verticalStep,
+              child: bot == null
+                  ? Icon(
+                      Icons.smart_toy_outlined,
+                      size: avatarSize,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    )
+                  : BotAvatar(
+                      name: bot.title,
+                      shape: bot.shape,
+                      color: bot.color,
+                      image: bot.avatar,
+                      size: avatarSize,
                     ),
-                ],
-              ),
-          ],
+            );
+          }).toList(),
         );
       },
     );

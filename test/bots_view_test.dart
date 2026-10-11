@@ -225,7 +225,12 @@ void main() {
               );
               expect(avatars, findsNWidgets(count));
               final bounds = tester.getRect(icon);
-              for (final avatar in avatars.evaluate()) {
+              final faces = avatars.evaluate().toList();
+              final first = tester.getRect(find.byWidget(faces[0].widget));
+              final second = tester.getRect(find.byWidget(faces[1].widget));
+              expect(first.overlaps(second), true);
+              expect(second.left, greaterThan(first.left));
+              for (final avatar in faces) {
                 final rect = tester.getRect(find.byWidget(avatar.widget));
                 expect(bounds.contains(rect.topLeft), true);
                 expect(bounds.contains(rect.bottomRight), true);

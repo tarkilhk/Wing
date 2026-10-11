@@ -56,7 +56,7 @@ add; removing a picked bot returns it to the list. Leave the
 name blank to use the selected bots' names, or enter a name of up to 64 characters.
 Choose a Hermes instance when several are ready.
 
-The default room icon groups the selected bots’ avatars inside a square frame
+The default room icon overlaps the selected bots’ avatars inside a square frame
 with a random color from Hermes/Wing’s usual palette. The frame color stays fixed
 while you edit and is saved on Hermes. Renaming the room keeps its member avatars.
 
@@ -95,8 +95,11 @@ approval needs. Hermes currently exposes group activity rather than individual
 bots typing, so Wing displays “Bots are working…”.
 
 Internal group workers stay out of the default Chats list and chat notifications,
-so they do not produce `Group: <UUID>` alerts. Read replies and answer approvals
-in the discussion. Wing does not currently send a separate group notification.
+so they do not produce `Group: <UUID>` alerts, including after opening a worker
+from an earlier notification. Replies to bot-to-bot messages in Bot Chat are also
+silent; replies to your own messages still notify you. Read group replies and
+answer approvals in the discussion. Wing does not currently send a separate
+group notification.
 On Android 12 and later, the group transcript supports system scroll capture;
 the composer and keyboard are outside the capture area, and capture restores
 your reading position.
