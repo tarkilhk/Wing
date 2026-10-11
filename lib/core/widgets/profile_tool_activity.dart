@@ -133,8 +133,8 @@ class ProfileToolActivitySection extends StatelessWidget {
           ? Text(metadata)
           : Tooltip(
               message:
-                  'Approximate reply time: final reply timestamp minus the '
-                  'triggering message timestamp, both from Hermes',
+                  'Approximate reply time: final reply timestamp minus your '
+                  'sent message timestamp, both from Hermes',
               child: Text(
                 metadata,
                 semanticsLabel:

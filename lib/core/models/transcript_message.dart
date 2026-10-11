@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'bot_exchange.dart';
 
 import 'answer_versions.dart';
 import 'gateway_activity.dart';
@@ -15,7 +14,6 @@ enum TranscriptMessageKind {
   system,
   tool,
   dialogue,
-  botMessage,
 }
 
 /// Passive reading facts. This projection cannot hydrate or execute a runtime,
@@ -33,8 +31,6 @@ final class TranscriptMessage {
     this.noticeMonospace = false,
     this.systemMultiline = false,
     this.timestamp,
-    this.sender,
-    this.senderHandle,
     this.tool,
     Iterable<UserMessageAttachment> attachments = const [],
   }) : attachments = List.unmodifiable([
@@ -57,8 +53,6 @@ final class TranscriptMessage {
   final bool noticeMonospace;
   final bool systemMultiline;
   final DateTime? timestamp;
-  final String? sender;
-  final String? senderHandle;
   final TranscriptToolResult? tool;
   final List<UserMessageAttachment> attachments;
 
@@ -73,32 +67,18 @@ final class TranscriptMessage {
         id: id,
       );
     }
-    final delivery = transcriptUserDelivery(row);
-    if (delivery?.kind == 'agent_message') {
-      return TranscriptMessage._(
-        kind: TranscriptMessageKind.botMessage,
-        role: role,
-        id: id,
-        text: delivery!.detail,
-        copyText: delivery.detail,
-        sender: delivery.sender,
-        senderHandle: delivery.senderHandle,
-        timestamp: _timestamp(row['timestamp']),
-      );
-    }
     final notice = transcriptNoticeText(row);
     if (notice != null) {
+      final delivery = transcriptUserDelivery(row);
       return TranscriptMessage._(
         kind: TranscriptMessageKind.notice,
         role: role,
         id: id,
         text: notice,
         noticeResult: transcriptNoticeResult(row),
-        noticeDisclosure:
-            row['display_kind'] == 'process_complete' ||
-                delivery?.kind == 'process_notification'
+        noticeDisclosure: row['display_kind'] == 'process_complete'
             ? 'Output'
-            : 'View result',
+            : delivery?.disclosure ?? 'View result',
         noticePlainText:
             delivery != null || row['display_kind'] == 'process_complete',
         noticeMonospace:
@@ -193,7 +173,6 @@ final class TranscriptToolResult {
     this.summary,
     this.durationSeconds,
     this.labels = const [],
-    this.exchangeReceipts = const [],
   });
 
   final Object? id;
@@ -206,12 +185,8 @@ final class TranscriptToolResult {
   final String? summary;
   final double? durationSeconds;
   final List<ToolCallLabel> labels;
-  final List<BotExchangeReceipt> exchangeReceipts;
 
-  factory TranscriptToolResult.fromRow(
-    Map<String, dynamic> row, {
-    List<BotExchangeReceipt> exchangeReceipts = const [],
-  }) {
+  factory TranscriptToolResult.fromRow(Map<String, dynamic> row) {
     final id = row['id'];
     return TranscriptToolResult._(
       id: id is int || id is String ? id : null,
@@ -233,7 +208,6 @@ final class TranscriptToolResult {
           ? (row['duration_s'] as num).toDouble()
           : null,
       labels: ToolCallLabel.parse(row['labels']),
-      exchangeReceipts: List.unmodifiable(exchangeReceipts),
     );
   }
 }

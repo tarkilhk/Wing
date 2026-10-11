@@ -38,7 +38,6 @@ class ProfileToolCall extends StatelessWidget {
 
   static const _icons = <String, IconData>{
     'memory': Icons.psychology_outlined,
-    'message_agent': Icons.forum_outlined,
     'terminal': Icons.terminal_rounded,
     'execute_code': Icons.code_rounded,
     'browser_exec': Icons.code_rounded,
@@ -164,11 +163,6 @@ class ProfileToolCall extends StatelessWidget {
                   _RawToolValue(label: 'Inputs', value: args),
                 if (call.result case final result?)
                   _RawToolValue(label: 'Output', value: result),
-                for (final receipt in call.exchangeReceipts)
-                  _RawToolValue(
-                    label: 'Delivery notification',
-                    value: receipt.raw,
-                  ),
               ],
             ),
           ],
@@ -189,14 +183,8 @@ class _RawToolValue extends StatelessWidget {
       label: label,
       text: value,
       format: ToolDetailFormat.source,
-      copyable:
-          label == 'Inputs' ||
-          label == 'Output' ||
-          label == 'Delivery notification',
+      copyable: label == 'Inputs' || label == 'Output',
     ),
-    viewable:
-        label == 'Inputs' ||
-        label == 'Output' ||
-        label == 'Delivery notification',
+    viewable: label == 'Inputs' || label == 'Output',
   );
 }

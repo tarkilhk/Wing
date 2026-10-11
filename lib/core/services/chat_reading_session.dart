@@ -197,9 +197,7 @@ final class _ReadingRow {
     : id = row['id'],
       match = ChatReadingMatch(
         text: _searchText(row),
-        role: transcriptUserDelivery(row)?.kind == 'agent_message'
-            ? transcriptUserDelivery(row)!.sender!
-            : transcriptNoticeKind(row) != null
+        role: transcriptNoticeKind(row) != null
             ? 'system'
             : row['role']?.toString() ?? 'message',
         canSelect: row['id'] is int,

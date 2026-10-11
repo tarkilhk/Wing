@@ -55,13 +55,11 @@ final class ToolDetailBlock {
     this.exactCopyText,
     this.showEmpty = false,
     this.language,
-    this.timestamp,
   });
 
   final String label;
   final String text;
   final String? language;
-  final DateTime? timestamp;
   final ToolDetailFormat format;
   final bool markdown;
   final Uri? link;
@@ -201,49 +199,11 @@ final class ToolActivityDetails {
         _toolCall(p);
       case 'clarify':
         _clarify(p);
-      case 'message_agent':
-        _messageAgent(p);
       default:
         _unknownTool(p);
     }
     p.finish();
     return ToolActivityDetails._(p);
-  }
-}
-
-void _messageAgent(_ToolProjection p) {
-  final target = _text(p.data['to']) ?? _text(p.args['target']);
-  p.intent = target == null ? 'Message another agent' : 'To $target';
-  p.addRequest('Message', p.args['message'], markdown: true, copyable: true);
-  if (p.data['status'] == 'queued') {
-    p.status = 'Queued';
-    final at = p.data['queued_at'];
-    final timestamp = at is num && at.isFinite && at > 0 && at <= 8640000000000
-        ? DateTime.fromMillisecondsSinceEpoch((at * 1000).round())
-        : null;
-    p.response.add(
-      ToolDetailBlock(
-        label: 'Queued',
-        text:
-            'Queued${target == null ? '' : ' for $target'}.\n\nHanded to a background delivery process. '
-            '${p.data['reply_delivery'] == 'notification'
-                ? 'The delivery outcome will arrive separately.'
-                : p.data['reply_delivery'] == 'poll'
-                ? 'This session cannot receive completion notifications. Hermes must retrieve the outcome using its process handle.'
-                : 'Delivery has not been confirmed.'}',
-        copyable: true,
-        exactCopyText: _text(p.data['detail']),
-        timestamp: timestamp,
-      ),
-    );
-  } else {
-    // A refused send or synchronous receipt has its actual supplied result.
-    p.addResponse(
-      'Result',
-      p.data['reply'] ?? p.data['detail'],
-      markdown: true,
-      copyable: true,
-    );
   }
 }
 

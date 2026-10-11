@@ -6,13 +6,11 @@ import 'anchored_expansion_tile.dart';
 import 'package:flutter/services.dart';
 
 import '../models/chat_output.dart';
-import '../models/bots.dart';
 import '../models/transcript_message.dart';
 import 'markdown_message_content.dart';
 import 'profile_tool_activity.dart';
 import 'profile_review_notice_card.dart';
 import 'user_message_attachment.dart';
-import 'bot_avatar.dart';
 
 /// User attachments and explicit assistant deliverables render inline;
 /// server paths are resolved only by the owning chat's loader.
@@ -20,7 +18,6 @@ class ProfileMessage extends StatelessWidget {
   final TranscriptMessage message;
   final bool streaming;
   final bool showCopyHeader;
-  final BotRecord? senderAppearance;
 
   /// Passive snapshots render resource labels without acquiring image bytes.
   final bool loadImages;
@@ -41,7 +38,6 @@ class ProfileMessage extends StatelessWidget {
     required this.message,
     this.streaming = false,
     this.showCopyHeader = true,
-    this.senderAppearance,
     this.loadImages = true,
     this.attachmentImagesAvailable = true,
     this.onOpenRemoteFile,
@@ -186,121 +182,6 @@ class ProfileMessage extends StatelessWidget {
     );
   }
 
-  Widget _botBubble(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final appearance = senderAppearance;
-    final name = appearance?.title ?? message.sender!;
-    final bubbleColor = colors.surfaceContainerHigh;
-    final date = _timestamp(context, color: colors.onSurfaceVariant);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: WingSpacing.md),
-      child: LayoutBuilder(
-        builder: (context, bounds) {
-          final enlarged = MediaQuery.textScalerOf(context).scale(12) > 18;
-          final inset = enlarged ? 12.0 : bounds.maxWidth * .12;
-          return Padding(
-            padding: EdgeInsets.only(right: inset),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Semantics(
-                    label: '$name avatar',
-                    image: true,
-                    child: appearance == null
-                        ? SizedBox.square(
-                            dimension: 28,
-                            child: Icon(
-                              Icons.smart_toy_outlined,
-                              size: 24,
-                              color: colors.onSurfaceVariant,
-                            ),
-                          )
-                        : BotAvatar(
-                            name: name,
-                            shape: appearance.shape,
-                            color: appearance.color,
-                            image: appearance.avatar,
-                            size: 28,
-                          ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: ClipRRect(
-                    key: ValueKey(('bot-message-bubble', message.id)),
-                    borderRadius: WingRadius.card,
-                    child: ColoredBox(
-                      color: bubbleColor,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    name,
-                                    style: theme.textTheme.labelLarge?.copyWith(
-                                      color: colors.onSurface,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                copyAction(context, message),
-                              ],
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
-                            child: MarkdownMessageContent(
-                              data: message.text,
-                              loadImages: loadImages,
-                              loadImage: loadAttachmentImage,
-                              onOpenRemoteFile: onOpenRemoteFile,
-                              onDownloadRemoteFile: onDownloadRemoteFile,
-                            ),
-                          ),
-                          if (date != null)
-                            ColoredBox(
-                              color: Color.lerp(
-                                colors.surface,
-                                bubbleColor,
-                                .5,
-                              )!,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                ),
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    minHeight: 32,
-                                  ),
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: date.widget,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   Widget _footer(
     BuildContext context,
     ({Widget widget, double width})? timestamp,
@@ -397,9 +278,6 @@ class ProfileMessage extends StatelessWidget {
     }
     final theme = Theme.of(context);
     final role = message.role;
-    if (message.kind == TranscriptMessageKind.botMessage) {
-      return _botBubble(context);
-    }
     final notice = message.text;
     if (message.kind == TranscriptMessageKind.notice) {
       final result = message.noticeResult;

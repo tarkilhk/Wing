@@ -13,7 +13,7 @@ import 'package:wing/core/widgets/profile_tool_activity.dart';
 const _capture = bool.fromEnvironment('STUDIO_REVIEW');
 const _frame = ValueKey('reply-duration-frame');
 const _explanation =
-    'Approximate reply time: final reply timestamp minus the triggering message '
+    'Approximate reply time: final reply timestamp minus your sent message '
     'timestamp, both from Hermes';
 
 Map<String, dynamic> _row(int id, String role, double? timestamp) => {
@@ -31,27 +31,6 @@ TranscriptTimeline _timeline(List<Map<String, dynamic>> rows, {int? live}) =>
     );
 
 void main() {
-  test(
-    'bot delivery starts its own reply interval after an older human turn',
-    () {
-      final timeline = _timeline([
-        _row(1, 'user', 1000),
-        _row(2, 'assistant', 1010),
-        {
-          ..._row(3, 'user', 103680),
-          'content': 'Message from 🤖 Pace (@pace): Please create the issue.',
-        },
-        _row(4, 'assistant', 103690),
-        _row(5, 'tool', 103700),
-        _row(6, 'assistant', 103777),
-      ]);
-      expect(
-        timeline.sections.lastWhere((s) => s.isActivity).replyDuration,
-        const Duration(seconds: 97),
-      );
-    },
-  );
-
   setUpAll(() async {
     if (!_capture) return;
     for (final entry in {
@@ -67,41 +46,6 @@ void main() {
           .load();
     }
   });
-
-  test(
-    'each bot delivery resets time and a missing stamp never borrows a prompt',
-    () {
-      for (final stamp in [2000.0, null]) {
-        final timeline = _timeline([
-          _row(1, 'user', 1000),
-          _row(2, 'assistant', 1010),
-          {
-            ..._row(3, 'user', stamp),
-            'content': 'Message from 🤖 Pace (@pace): First request',
-          },
-          _row(4, 'tool', 2010),
-          _row(5, 'assistant', 2020),
-          {
-            ..._row(6, 'user', 3000),
-            'content': 'Message from 🤖 Default (@hermes): Second request',
-          },
-          _row(7, 'tool', 3010),
-          _row(8, 'assistant', 3030),
-        ]);
-        expect(
-          timeline.sections
-              .where((s) => s.isActivity)
-              .map((s) => s.replyDuration),
-          [
-            stamp == null ? null : const Duration(seconds: 20),
-            const Duration(seconds: 30),
-          ],
-        );
-        expect(timeline.entries[4].branchAnswer, isFalse);
-        expect(timeline.entries[7].branchAnswer, isFalse);
-      }
-    },
-  );
 
   test('each final reply uses its own original sent message', () {
     final timeline = _timeline([

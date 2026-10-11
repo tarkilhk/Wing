@@ -101,72 +101,6 @@ class _NoticeHistory extends ProfileHistoryFixture {
 }
 
 void main() {
-  test('bot delivery projects sender, authored Markdown and timestamp', () {
-    final row = {
-      'id': 42,
-      'role': 'user',
-      'content':
-          'Message from 🤖 Pace (@pace): **Please** create the issue.\n\n- HTTPS\n- Backups',
-      'timestamp': 1791680800.125,
-    };
-    final message = TranscriptMessage.fromRow(row);
-    expect(message.kind, TranscriptMessageKind.botMessage);
-    expect(message.sender, 'Pace');
-    expect(message.senderHandle, 'pace');
-    expect(
-      message.copyText,
-      '**Please** create the issue.\n\n- HTTPS\n- Backups',
-    );
-    expect(message.timestamp!.millisecondsSinceEpoch, 1791680800125);
-    expect(message.noticeResult, isNull);
-    expect(isHumanAnswerPrompt(row), isFalse);
-  });
-
-  test('delivery runner receipts describe completion and preserve failures', () {
-    for (final exit in [0, 1]) {
-      final envelope =
-          '[IMPORTANT: Background process proc_example completed normally (exit code $exit).\n'
-          'Command: /usr/bin/python3 /home/user/hermes/tools/bot_mode_dm.py --run-delivery query-file /tmp/dm.txt\n'
-          'Output:\n${exit == 0 ? 'Response delivered' : 'Delivery failed: connection refused'}]';
-      for (final typed in [false, true]) {
-        final row = {
-          'id': 1,
-          'role': 'user',
-          'content': envelope,
-          if (typed) 'display_kind': 'process_complete',
-          if (typed) 'display_metadata': {'display_text': 'Process completed'},
-        };
-        final message = TranscriptMessage.fromRow(row);
-        expect(
-          message.text,
-          exit == 0
-              ? 'Bot delivery process finished'
-              : 'Bot delivery process failed',
-        );
-        expect(
-          message.noticeResult,
-          contains(exit == 0 ? 'Response delivered' : 'connection refused'),
-        );
-        expect(message.noticeResult, contains('Command: /usr/bin/python3'));
-      }
-    }
-    final ordinary = _processEnvelope.replaceFirst(
-      'Output:\n',
-      'Output:\nbot_mode_dm.py --run-delivery\n',
-    );
-    expect(
-      TranscriptMessage.fromRow({'role': 'user', 'content': ordinary}).text,
-      startsWith('Background process proc_'),
-    );
-    final echo = _processEnvelope.replaceFirst(
-      'env -u ANTHROPIC_API_KEY claude --print',
-      'echo bot_mode_dm.py --run-delivery',
-    );
-    expect(
-      TranscriptMessage.fromRow({'role': 'user', 'content': echo}).text,
-      startsWith('Background process proc_'),
-    );
-  });
   test('process heartbeats are hidden without changing stored history', () {
     for (final fields in <Map<String, dynamic>>[
       {'content': _processHeartbeat},
@@ -482,7 +416,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       for (var refresh = 0; refresh < 2; refresh++) {
-        await tester.settleMarkdown();
         expect(find.text(_envelope), findsNothing);
         expect(find.text('Private hidden instructions'), findsNothing);
         expect(find.text('3 background agents finished'), findsOneWidget);
@@ -491,16 +424,8 @@ void main() {
         expect(find.byKey(const ValueKey('edit-message-5')), findsNothing);
         expect(find.byKey(const ValueKey('edit-message-6')), findsNothing);
         expect(find.byKey(const ValueKey('answer-actions-7')), findsNothing);
-        expect(find.text('Private agent reply'), findsOneWidget);
-        expect(find.text('Replied to Hermes'), findsNothing);
-        expect(find.text('Private agent instructions'), findsOneWidget);
-        expect(find.text('Hermes'), findsWidgets);
-        expect(
-          find.byKey(
-            const ValueKey<(String, Object?)>(('bot-message-bubble', 6)),
-          ),
-          findsOneWidget,
-        );
+        expect(find.text('Private agent reply'), findsNothing);
+        expect(find.text('Replied to Hermes'), findsOneWidget);
         expect(find.text(_processEnvelope), findsNothing);
         expect(find.text(_agentEnvelope), findsNothing);
         expect(find.text(_skillEnvelope), findsNothing);
@@ -578,7 +503,11 @@ void main() {
   });
 
   for (final width in [360.0, 900.0]) {
-    for (final envelope in [_processEnvelope, _agentEnvelope]) {
+    for (final envelope in [
+      _processEnvelope,
+      _agentEnvelope,
+      "[Message from agent 'legacy'] Delivered text",
+    ]) {
       testWidgets('delivery at $width: ${envelope.substring(0, 30)}', (
         tester,
       ) async {
@@ -595,20 +524,13 @@ void main() {
           ),
         );
         expect(find.text(envelope), findsNothing);
+        expect(find.text(delivery.headline), findsOneWidget);
+        expect(find.text(delivery.detail), findsNothing);
+        expect(find.byTooltip('Copy message'), findsNothing);
         expect(isHumanAnswerPrompt(row), isFalse);
-        if (delivery.kind == 'agent_message') {
-          expect(find.text(delivery.sender!), findsOneWidget);
-          await tester.settleMarkdown();
-          expect(find.text(delivery.detail), findsOneWidget);
-          expect(find.byTooltip('Copy message'), findsOneWidget);
-        } else {
-          expect(find.text(delivery.headline), findsOneWidget);
-          expect(find.text(delivery.detail), findsNothing);
-          expect(find.byTooltip('Copy message'), findsNothing);
-          await tester.tap(find.text('Output'));
-          await tester.pumpAndSettle();
-          expect(find.text(delivery.detail), findsOneWidget);
-        }
+        await tester.tap(find.text(delivery.disclosure));
+        await tester.pumpAndSettle();
+        expect(find.text(delivery.detail), findsOneWidget);
         expect(find.text(envelope), findsNothing);
         expect(tester.takeException(), isNull);
       });
@@ -660,6 +582,7 @@ void main() {
     for (final text in [
       'Message from Turquoise: ready',
       'Message from 🤖 Dev: line one\nline two',
+      "[Message from agent 'legacy'] ping",
     ]) {
       expect(
         transcriptNoticeKind({'role': 'user', 'content': text}),
@@ -698,7 +621,7 @@ void main() {
     );
   });
 
-  test('bot replies stay dialogue with human replay boundaries intact', () {
+  test('agent reply classification stops at the next human or assistant', () {
     final messages = <Map<String, dynamic>>[
       {'role': 'user', 'content': _agentEnvelope},
       {'role': 'system', 'content': 'status'},
@@ -707,17 +630,9 @@ void main() {
       {'role': 'user', 'content': 'Human prompt'},
       {'role': 'assistant', 'content': 'Human answer'},
     ];
-    final timeline = TranscriptTimeline.project(
-      messages,
-      presentationId: (row) => row,
-    );
-    expect(timeline.entries[0].message.kind, TranscriptMessageKind.botMessage);
-    for (final index in [2, 3, 5]) {
-      expect(
-        timeline.entries[index].message.kind,
-        TranscriptMessageKind.dialogue,
-      );
-    }
+    expect(interAgentReplySender(messages, 2), 'Hermes');
+    expect(interAgentReplySender(messages, 3), isNull);
+    expect(interAgentReplySender(messages, 5), isNull);
     // Untyped deliveries retain their durable ordinal for existing history APIs.
     expect(AnswerTarget.at(messages, 5)!.userOrdinal, 1);
   });
@@ -777,7 +692,7 @@ void main() {
     );
     await tester.pump();
     expect(find.text('1 matching message'), findsOneWidget);
-    expect(find.text('Hermes'), findsOneWidget);
+    expect(find.text('system'), findsOneWidget);
     await tester.enterText(
       find.byType(TextField),
       'Action needed: check failed',

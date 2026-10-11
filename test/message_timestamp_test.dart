@@ -8,9 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_message.dart';
-import 'package:wing/core/widgets/bot_avatar.dart';
-import 'package:wing/core/models/bots.dart';
-import 'package:wing/core/models/hermes_profile.dart';
 
 import 'helpers/pump_markdown_widget.dart';
 
@@ -48,11 +45,8 @@ void main() {
     VoidCallback? onEdit,
     bool showRestoreAction = false,
     VoidCallback? onRestore,
-    BotRecord? senderAppearance,
-    double width = 320,
-    double height = 640,
   }) async {
-    await tester.binding.setSurfaceSize(Size(width, height));
+    await tester.binding.setSurfaceSize(const Size(320, 640));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpMarkdownWidget(
       RepaintBoundary(
@@ -76,7 +70,6 @@ void main() {
                     child: Padding(
                       padding: EdgeInsets.fromLTRB(16, 16, 4, 16),
                       child: ProfileMessage(
-                        senderAppearance: senderAppearance,
                         showEditAction: showEditAction,
                         onEdit: onEdit,
                         showRestoreAction: showRestoreAction,
@@ -99,90 +92,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-  }
-
-  for (final brightness in Brightness.values) {
-    for (final scale in [1.0, 2.0]) {
-      for (final long in [false, true]) {
-        testWidgets('incoming bot bubble ${brightness.name} $scale long=$long', (
-          tester,
-        ) async {
-          const body =
-              '**Issue created**\n\n'
-              'Deploy self-hosted Health Hub MCP for Android Health Connect ingestion.\n\n'
-              '- Persistent storage and HTTPS\n'
-              '- Backups and integration checks\n\n'
-              '[View issue #620](https://gitea.hollinger.asia/Tarkil-Org/homelab-infra/issues/620)';
-          final text = long ? body : '**Done.** Issue #620 is open.';
-          final bot = BotRecord(
-            scope: WorkspaceScope(
-              connectionId: 'host',
-              connectionIdentity: 'host-1',
-              profileName: 'default',
-            ),
-            instance: 'Claw',
-            profile: const HermesProfile(name: 'default'),
-            title: 'Default',
-            shape: 'squircle',
-            color: '#8b5cf6',
-            pinned: false,
-            hidden: false,
-            hasAvatar: false,
-            revision: 1,
-            metadata: const {},
-          );
-          await pump(
-            tester,
-            role: 'user',
-            timestamp: _date.millisecondsSinceEpoch / 1000,
-            brightness: brightness,
-            scale: scale,
-            width: scale == 1 ? 390 : 320,
-            content: 'Message from 🤖 Default (@hermes): $text',
-            senderAppearance: bot,
-            showEditAction: true,
-            showRestoreAction: true,
-          );
-          expect(find.text('Default'), findsOneWidget);
-          expect(find.text('Show message'), findsNothing);
-          expect(find.byTooltip('Copy message'), findsOneWidget);
-          expect(find.byTooltip('Edit message'), findsNothing);
-          expect(find.byTooltip('Restore checkpoint'), findsNothing);
-          expect(
-            tester.widget<BotAvatar>(find.byType(BotAvatar)).color,
-            '#8b5cf6',
-          );
-          final bubble = tester.getRect(
-            find.byKey(
-              const ValueKey<(String, Object?)>(('bot-message-bubble', 4)),
-            ),
-          );
-          final avatar = tester.getRect(find.byType(BotAvatar));
-          expect(avatar.left, closeTo(16, .01));
-          expect(bubble.left, closeTo(avatar.right + 8, .01));
-          final date = tester.getRect(find.text('15 Sep, 14:07'));
-          expect(bubble.contains(date.topLeft), isTrue);
-          expect(bubble.contains(date.bottomRight), isTrue);
-          if (_capture) {
-            final boundary = tester.renderObject<RenderRepaintBoundary>(
-              find.byKey(_messageFrame),
-            );
-            await tester.runAsync(() async {
-              final image = await boundary.toImage();
-              final bytes = await image.toByteData(
-                format: ui.ImageByteFormat.png,
-              );
-              final directory = Directory('build/design-previews/bot-messages')
-                ..createSync(recursive: true);
-              await File(
-                '${directory.path}/${brightness.name}-$scale-${long ? 'long' : 'short'}.png',
-              ).writeAsBytes(bytes!.buffer.asUint8List());
-              image.dispose();
-            });
-          }
-        });
-      }
-    }
   }
 
   for (final brightness in Brightness.values) {
@@ -404,35 +313,6 @@ void main() {
       }
     }
   }
-
-  testWidgets('incoming bot Copy keeps the exact authored Markdown', (
-    tester,
-  ) async {
-    String? copied;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.setData') {
-          copied = (call.arguments as Map)['text'] as String;
-        }
-        return null;
-      },
-    );
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        null,
-      ),
-    );
-    await pump(
-      tester,
-      role: 'user',
-      content: 'Message from 🤖 Pace (@pace): **Ready**\n\n- One\n- Two',
-    );
-    await tester.tap(find.byTooltip('Copy message'));
-    await tester.pumpAndSettle();
-    expect(copied, '**Ready**\n\n- One\n- Two');
-  });
 
   testWidgets(
     'full local date is accessible, long press reveals it, copy stays text only',
