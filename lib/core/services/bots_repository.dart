@@ -6,6 +6,8 @@ import '../models/hermes_profile.dart';
 import '../models/profile_session_key.dart';
 import 'administration_repository.dart';
 import 'attachment_image_preflight.dart';
+import 'bot_display_client.dart';
+import '../models/bot_display.dart';
 
 typedef BotsRead =
     Future<Map<String, dynamic>> Function(
@@ -34,6 +36,7 @@ class BotsRepository {
     required this._command,
     required this._ownership,
     this.server,
+    this.displayConnect,
     void Function()? retain,
     void Function()? release,
   }) : _retain = retain ?? _noop,
@@ -50,6 +53,7 @@ class BotsRepository {
     ),
     instance: server.connectionLabel,
     server: server,
+    displayConnect: server.displayConnect,
     retain: server.retain,
     release: server.release,
     read: (profile, method, params) async {
@@ -97,6 +101,7 @@ class BotsRepository {
   final WorkspaceScope scope;
   final String instance;
   final AdministrationRepository? server;
+  final Future<BotDisplayClient> Function(String ticket)? displayConnect;
   final BotsRead _read;
   final BotsCommand _command;
   final BotsOwnership _ownership;
@@ -770,17 +775,62 @@ class BotsRepository {
     );
   }
 
-  Future<BotScreenFrame> screen(BotRecord bot) async {
+  Future<BotDisplayStatus> displayStatus(BotRecord bot) async {
     _owns(bot);
-    final result = await _read(bot.profile.name, 'display.thumbnail', {});
-    return BotScreenFrame(
-      image:
-          result['suppressed'] == 'human_has_control' ||
-              result['data_url'] == null
-          ? null
-          : _image(result['data_url']),
-      suppressed: result['suppressed'] == 'human_has_control',
+    return BotDisplayStatus.parse(
+      await _read(bot.profile.name, 'display.status', {}),
     );
+  }
+
+  Future<({String ticket, String viewer, BotDisplayStatus status})>
+  observeDisplay(BotRecord bot, String? viewer) async {
+    _owns(bot);
+    final value = await _read(bot.profile.name, 'display.observe', {
+      'viewer_id': ?viewer,
+    });
+    if (value['ticket'] is! String ||
+        (value['ticket'] as String).isEmpty ||
+        value['viewer_id'] is! String ||
+        (value['viewer_id'] as String).isEmpty ||
+        value['path'] != '/api/display/ws') {
+      throw const FormatException('Invalid screen observation');
+    }
+    return (
+      ticket: value['ticket'] as String,
+      viewer: value['viewer_id'] as String,
+      status: BotDisplayStatus.parse(value),
+    );
+  }
+
+  Future<BotDisplayClient> connectDisplay(String ticket) {
+    final connect = displayConnect;
+    if (connect == null) throw StateError('Screen transport unavailable');
+    return connect(ticket);
+  }
+
+  Future<BotDisplayLease> displayControl(
+    BotRecord bot,
+    String? viewer, {
+    required bool acquire,
+    required bool force,
+    required bool Function() canDispatch,
+    required void Function() onDispatched,
+  }) async {
+    _owns(bot);
+    if (acquire && (viewer == null || force)) {
+      throw ArgumentError('Invalid takeover');
+    }
+    final result = await _command(
+      bot.profile.name,
+      acquire ? 'display.lease.acquire' : 'display.lease.release',
+      {
+        if (!force && viewer != null) 'viewer_id': viewer,
+        if (force) 'force': true,
+      },
+      canDispatch,
+      onDispatched,
+    );
+    return BotDisplayLease.parse(result['lease']);
   }
 
   Future<void> screenPower(

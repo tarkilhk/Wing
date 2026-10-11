@@ -3,6 +3,7 @@ import 'models_dev_pricing.dart';
 import 'skill_reader_session.dart';
 import '../models/skill_reader.dart';
 import 'connection_access.dart';
+import 'bot_display_client.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -95,6 +96,7 @@ class AdministrationRepository {
   final AdministrationMutation ownedMutation;
   final ProfileGateway Function(String name) gateway;
   final ProviderConsoleCommand? providerCommand;
+  final Future<BotDisplayClient> Function(String ticket)? displayConnect;
   final void Function() _close;
   int _leases = 0;
   bool _closing = false;
@@ -110,6 +112,7 @@ class AdministrationRepository {
     required this.ownedMutation,
     required this.gateway,
     this.providerCommand,
+    this.displayConnect,
     void Function()? close,
   }) : // The named dependency is an injectable public seam.
        // ignore: prefer_initializing_formals
@@ -146,6 +149,11 @@ class AdministrationRepository {
       connectionIdentity: identity,
       connectionLabel: connection.label,
       providerCommand: console.run,
+      displayConnect: (ticket) => BotDisplayClient.connect(
+        connection.desktopGatewayUrl ?? dashboard.baseUrl,
+        ticket,
+        connection.gatewayHeaders,
+      ),
       ownedMutation:
           (method, endpoint, query, body, canDispatch, onDispatched) async {
             var dispatchAllowed = true;

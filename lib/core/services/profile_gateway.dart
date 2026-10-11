@@ -1324,6 +1324,8 @@ class ProfileGateway {
       'image.generate',
       'display.start',
       'display.stop',
+      'display.lease.acquire',
+      'display.lease.release',
     };
     if (!allowed.contains(method)) throw ArgumentError('Unknown bot command');
     await connect();

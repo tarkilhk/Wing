@@ -2,7 +2,7 @@
 
 Wing keeps the controls you need close to the chats they support.
 
-- **Bots** lists profiles across saved instances. Tap a name or message preview to open its continuing Bot Chat, or its avatar to edit appearance. The row menu offers screen preview, pin, hide and Bot settings. Bot settings opens the captured profile's existing editors. Hosted Discussion groups use 2–6 bots from one ready instance. [Bots guide](BOTS.md).
+- **Bots** lists profiles across saved instances. Tap a name or message preview to open its continuing Bot Chat, or its avatar to edit appearance. The row menu offers live screen viewing and takeover, pin, hide and Bot settings. Bot settings opens the captured profile's existing editors. Hosted Discussion groups use 2–6 bots from one ready instance. [Bots guide](BOTS.md).
 - **Hermes administration** opens on the selected profile. Manage models and reasoning, agent identity, skills, provider access, MCP connectors and scheduled tasks. Hermes runs scheduled tasks even when Wing is closed.
 - **Hermes health** shows server diagnostics and profile checks for model access, tools, connectors and scheduled tasks. A check tells you what it observed; it does not send a model prompt or run a scheduled job.
 - **Hermes analytics** shows activity, token usage and model breakdowns over 1, 7, 30, 90 or 365 days. OpenAI Codex subscriptions show an API-equivalent estimate using the same models.dev rates as the model picker; other providers retain Hermes's estimate. Unknown amounts remain unavailable.

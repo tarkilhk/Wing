@@ -19,6 +19,7 @@ import 'package:wing/core/screens/bots/bot_profile_editor.dart';
 import 'package:wing/core/screens/bots/bot_settings_screen.dart';
 import 'package:wing/core/screens/bots/bots_create_screen.dart';
 import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/services/bot_screen_window.dart';
 import 'package:wing/core/services/bot_profile_edit_session.dart';
 import 'package:wing/core/theme/profile_colors.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -107,6 +108,8 @@ Future<void> _capture(
 void main() {
   if (_export) _ReviewBinding();
   setUpAll(() async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(BotScreenWindow.channel, (_) async => null);
     if (!_export) return;
     for (final entry in {
       'Roboto': 'build/studio-roboto.ttf',
@@ -760,18 +763,23 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(find.widgetWithText(Tab, 'Bots'));
           await tester.pumpAndSettle();
-          fixture.readHook = (_, method, _) async =>
-              method == 'display.thumbnail'
-              ? {'data_url': null, 'suppressed': 'human_has_control'}
+          fixture.readHook = (_, method, _) async => method == 'display.status'
+              ? {
+                  'supported': true,
+                  'installed': true,
+                  'running': false,
+                  'lease': {
+                    'holder': 'human',
+                    'viewer_hash': 'abcd1234abcd',
+                    'epoch': 1,
+                  },
+                }
               : null;
           await tester.tap(find.byTooltip('Actions for Atlas revised'));
           await tester.pumpAndSettle();
           await tester.tap(find.byKey(const ValueKey('bot-menu-screen')));
           await tester.pumpAndSettle();
-          expect(
-            find.textContaining('Preview is paused for privacy'),
-            findsOneWidget,
-          );
+          expect(find.byTooltip('Human has control'), findsOneWidget);
           await _capture(
             tester,
             frame,

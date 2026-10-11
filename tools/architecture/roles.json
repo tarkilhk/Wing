@@ -56,6 +56,11 @@
       "feature": "versions-updates",
       "library": "lib/core/models/backend_update.dart"
     },
+    "lib/core/models/bot_display.dart": {
+      "role": "domain",
+      "feature": "bots",
+      "library": "lib/core/models/bot_display.dart"
+    },
     "lib/core/models/bot_exchange.dart": {
       "role": "domain",
       "feature": "conversation",
@@ -1066,6 +1071,11 @@
       "feature": "bots",
       "library": "lib/core/services/bot_avatar_io.dart"
     },
+    "lib/core/services/bot_display_client.dart": {
+      "role": "data",
+      "feature": "bots",
+      "library": "lib/core/services/bot_display_client.dart"
+    },
     "lib/core/services/bot_group_session.dart": {
       "role": "application",
       "feature": "bots",
@@ -1080,6 +1090,11 @@
       "role": "application",
       "feature": "bots",
       "library": "lib/core/services/bot_screen_session.dart"
+    },
+    "lib/core/services/bot_screen_window.dart": {
+      "role": "data",
+      "feature": "bots",
+      "library": "lib/core/services/bot_screen_window.dart"
     },
     "lib/core/services/bots_connection_source.dart": {
       "role": "composition",
@@ -1765,6 +1780,16 @@
       "role": "view",
       "feature": "bots",
       "library": "lib/core/widgets/bot_avatar.dart"
+    },
+    "lib/core/widgets/bot_display_surface.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/widgets/bot_display_surface.dart"
+    },
+    "lib/core/widgets/bot_display_viewport.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/widgets/bot_display_viewport.dart"
     },
     "lib/core/widgets/chat_find_sheet.dart": {
       "role": "view",
