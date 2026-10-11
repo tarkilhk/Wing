@@ -168,7 +168,12 @@ class BotsFixture {
         'has_more': false,
         'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
       },
-      'display.thumbnail' => {'data_url': null},
+      'display.status' => {
+        'supported': true,
+        'installed': true,
+        'running': false,
+        'lease': {'holder': 'agent', 'viewer_hash': null, 'epoch': 0},
+      },
       _ => throw StateError('Unexpected read $method'),
     };
   }

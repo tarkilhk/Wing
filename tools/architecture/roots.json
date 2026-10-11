@@ -6225,6 +6225,34 @@
       "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml: Python unittest discovery",
       "status": "supported",
       "selector": "unittest"
+    },
+    {
+      "id": "device-or-live-test-integration_test/bot_screen_live_test.dart",
+      "kind": "device-or-live-test",
+      "path": "integration_test/bot_screen_live_test.dart",
+      "purpose": "Approved live screen acceptance on an owned emulator, with private runtime login and own-lease cleanup",
+      "source": "internal/docs/TESTING.md; integration_test/bot_screen_live_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "opt-in-qa-cli-scripts/test_live_bot_screen.py",
+      "kind": "opt-in-qa-cli",
+      "path": "scripts/test_live_bot_screen.py",
+      "purpose": "Approved live screen acceptance on an owned emulator, with private runtime login and own-lease cleanup",
+      "source": "internal/docs/TESTING.md; scripts/test_live_bot_screen.py",
+      "status": "supported"
+    },
+    {
+      "id": "channel-bot-screen",
+      "kind": "platform-channel",
+      "path": "android/app/src/main/kotlin/com/tarkilhk/wing/BotScreenChannel.kt",
+      "purpose": "Route-owned native immersive bars, restored on exit and engine detachment",
+      "source": "lib/core/services/bot_screen_window.dart; android/app/src/main/kotlin/com/tarkilhk/wing/MainActivity.kt",
+      "status": "supported",
+      "selector": [
+        "setImmersive"
+      ]
     }
   ],
   "files": [
@@ -6387,6 +6415,11 @@
       "path": "android/app/src/main/kotlin/com/tarkilhk/wing/BackgroundMonitoringService.kt",
       "area": "android",
       "provenance": "tracked"
+    },
+    {
+      "path": "android/app/src/main/kotlin/com/tarkilhk/wing/BotScreenChannel.kt",
+      "area": "android",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "android/app/src/main/kotlin/com/tarkilhk/wing/BoundedIntakeQueue.kt",
@@ -7014,6 +7047,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "integration_test/bot_screen_live_test.dart",
+      "area": "integration_test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "integration_test/bots_native_test.dart",
       "area": "integration_test",
       "provenance": "intentional-untracked"
@@ -7532,6 +7570,11 @@
       "path": "lib/core/models/backend_update.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/models/bot_display.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/models/bot_exchange.dart",
@@ -8534,6 +8577,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/services/bot_display_client.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/bot_group_session.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -8545,6 +8593,11 @@
     },
     {
       "path": "lib/core/services/bot_screen_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bot_screen_window.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
     },
@@ -9224,6 +9277,16 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/widgets/bot_display_surface.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/bot_display_viewport.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/chat_find_sheet.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -9779,6 +9842,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "scripts/test_live_bot_screen.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "scripts/test_native_bots.py",
       "area": "scripts",
       "provenance": "intentional-untracked"
@@ -10269,7 +10337,27 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "test/bot_display_client_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_display_viewport_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/bot_exchange_activity_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_screen_session_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_screen_view_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },
@@ -12155,6 +12243,11 @@
     },
     {
       "path": "test/support/administration_operation_fixture.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/support/bot_display_fixture.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },

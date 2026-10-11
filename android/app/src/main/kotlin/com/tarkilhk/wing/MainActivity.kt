@@ -49,6 +49,7 @@ class MainActivity : FlutterActivity() {
     private var mediaPreviewChannel: MediaPreviewChannel? = null
     private var voiceChannel: VoiceChannel? = null
     private var imageClipboardChannel: ImageClipboardChannel? = null
+    private var botScreenChannel: BotScreenChannel? = null
     @Volatile private var shareAuthority = Any()
     @Volatile private var shareAuthorityActive = true
     private var initialShareIntent: Intent? = null
@@ -76,6 +77,8 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         engineAttached = true
+        botScreenChannel?.close()
+        botScreenChannel = BotScreenChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         shareAuthority = Any()
         shareAuthorityActive = true
         MonitoringRuntime.attach(this, flutterEngine)
@@ -270,6 +273,8 @@ class MainActivity : FlutterActivity() {
         // Clean up at engine detachment, before a replacement host installs its
         // handlers. The old host's later onDestroy must not clear those handlers.
         engineAttached = false
+        botScreenChannel?.close()
+        botScreenChannel = null
         shareAuthorityActive = false
         providerWork.cancel(shareAuthority)
         activityResumed = false
@@ -309,6 +314,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        botScreenChannel?.apply()
         if (!engineAttached) return
         activityResumed = true
         if (!getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked) {
@@ -329,6 +335,11 @@ class MainActivity : FlutterActivity() {
         activityResumed = false
         if (engineAttached) MonitoringRuntime.activityVisible = false
         super.onPause()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) botScreenChannel?.apply()
     }
 
     override fun onStop() {

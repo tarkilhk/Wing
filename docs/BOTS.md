@@ -36,11 +36,42 @@ Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes r
 
 An unconfirmed send stays available for review/retry. Interrupted tasks ask for explicit confirmation before retrying. Approvals apply to the request shown in that discussion.
 
-## Screen preview and limits
+## Bot screen
 
-View screen periodically refreshes the selected profile's screen while visible. Start/stop controls target that profile. When a human controls the screen, Hermes suppresses preview frames and Wing clears the previous image.
+Choose **View screen** from a bot’s row menu to watch its live desktop. The bot
+needs a supported Linux host with the Hermes Bot Screen components installed.
+Start/stop controls target the selected bot; stopping is unavailable while a
+human holds control.
 
-Screen preview is read-only; it has no keyboard or pointer control. Wing does not currently configure RoomLink peer groups, desktop Direct conversations, pet avatars or automatic screen opening. Hosted groups use bots from one instance, although the bot roster and ordinary settings work across saved instances.
+Use the control icon in the floating bar to take control. If another device has
+control, Wing asks before replacing it. Trackpad mode lets you move one finger
+to position the pointer, tap to click, and hold then move to drag. Pinch to zoom;
+move two fingers together to scroll. The controls tray also provides mouse
+buttons, zoom buttons and Fit screen. Direct touch taps the target itself;
+Move view pans without sending desktop input.
+
+Turn the phone sideways to enter full screen automatically. Returning upright
+restores the normal viewer; the fullscreen icon works in either orientation.
+Exit fullscreen keeps your control. Use the bar's handle to dock it at the top
+or bottom when it covers something you need.
+
+Open the phone keyboard from the bar to type. The desktop keeps its magnification
+and brings the last clicked point into the uncovered area; use Move view if the
+caret has moved elsewhere. Text is cleared locally after sending. Extra controls
+include Enter, Tab, Escape, Backspace, arrows and Ctrl/Alt/Shift. Selected modifiers
+apply to each key and are released remotely after that key. Back closes the
+keyboard first, then the controls tray or fullscreen, before leaving the viewer.
+
+Hand control back when finished, then tell the bot to continue. Closing the
+screen hands back this phone’s control. If that cannot be confirmed, Wing keeps
+the screen open for recovery. Backgrounding or losing the connection leaves
+control held until you explicitly hand it back. If the controller belongs to
+another connection or device, force hand-back asks for confirmation.
+
+Wing does not currently configure RoomLink peer groups, desktop Direct
+conversations, pet avatars or automatic screen opening. Hosted groups use bots
+from one instance, although the bot roster and ordinary settings work across
+saved instances.
 
 See [Administration](ADMINISTRATION.md) for profile configuration and [Chats](CHATS.md) for conversation actions.
 

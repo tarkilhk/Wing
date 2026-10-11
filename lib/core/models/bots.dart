@@ -229,14 +229,6 @@ class BotInstance {
   final String identity, label;
 }
 
-@immutable
-class BotScreenFrame {
-  BotScreenFrame({Uint8List? image, required this.suppressed})
-    : image = image?.asUnmodifiableView();
-  final Uint8List? image;
-  final bool suppressed;
-}
-
 class BotMetadataConflict implements Exception {
   const BotMetadataConflict();
   @override
