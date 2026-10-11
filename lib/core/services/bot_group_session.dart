@@ -3,19 +3,73 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/bots.dart';
 import 'bots_repository.dart';
+import '../models/composer_reference.dart';
 
 /// The stock gateway drives group discussion, including while Wing is away.
 /// This owner replays its log and retains one immutable idempotent send attempt.
 class BotGroupSession extends ChangeNotifier {
-  BotGroupSession(this.repository, this.group) {
+  BotGroupSession(
+    this.repository,
+    this.group, {
+    required Iterable<BotRecord> appearances,
+  }) {
     repository.retain();
+    for (final member in group.members) {
+      final matches = appearances.where(
+        (bot) =>
+            bot.scope.connectionId == group.scope.connectionId &&
+            bot.scope.connectionIdentity == group.scope.connectionIdentity &&
+            bot.profile.name == member.profile,
+      );
+      if (matches.length == 1) _appearances[member.id] = matches.single;
+    }
   }
   final BotsRepository repository;
   final BotGroup group;
+  final _appearances = <String, BotRecord>{};
+  List<ComposerReference> _references = const [];
+  List<ComposerReference> get composerReferences => _references;
+
+  MentionCompletion completeMentions(MentionQuery query) => MentionCompletion(
+    query: query,
+    items: [
+      for (final member in group.members)
+        if (member.handle.contains(query.term.toLowerCase()) ||
+            member.name.toLowerCase().contains(query.term.toLowerCase()))
+          MentionCandidate(
+            label: member.name,
+            detail: '@${member.handle}',
+            appearance: _appearances[member.id],
+            reference: ComposerReference(
+              kind: ComposerReferenceKind.agent,
+              token: '@${member.handle}',
+              target: member.id,
+            ),
+          ),
+      if ('everyone'.contains(query.term.toLowerCase()))
+        const MentionCandidate(
+          label: 'Everyone',
+          detail: 'All room members',
+          isCollective: true,
+          reference: ComposerReference(
+            kind: ComposerReferenceKind.agent,
+            token: '@everyone',
+            target: 'everyone',
+          ),
+        ),
+    ],
+  );
+
+  void editMentions(String text, {ComposerReference? selected}) {
+    _references = retainComposerReferences(text, [..._references, ?selected]);
+  }
+
   final _events = <int, BotGroupEvent>{};
-  Map<String, BotRecord> _appearances = const {};
-  BotRecord? appearance(String profile) => _appearances[profile];
-  bool _appearanceStarted = false;
+  BotRecord? appearance(String profile) {
+    final matches = group.members.where((member) => member.profile == profile);
+    return matches.length == 1 ? _appearances[matches.single.id] : null;
+  }
+
   BotGroupRuntime? _runtime;
   BotGroupRuntime? get runtime => _runtime;
   bool _acting = false;
@@ -42,39 +96,11 @@ class BotGroupSession extends ChangeNotifier {
     _visible = visible;
     _poll?.cancel();
     if (visible) {
-      if (!_appearanceStarted) {
-        _appearanceStarted = true;
-        unawaited(_loadAppearance());
-      }
       unawaited(refresh());
       _poll = Timer.periodic(
         const Duration(seconds: 3),
         (_) => unawaited(refresh()),
       );
-    }
-  }
-
-  Future<void> _loadAppearance() async {
-    try {
-      final roster = await repository.bots();
-      if (_closed) return;
-      for (final bot in roster.where(
-        (bot) =>
-            group.members.any((member) => member.profile == bot.profile.name),
-      )) {
-        final saved = await repository.enrich(
-          bot,
-          presence: BotPresence.unknown,
-        );
-        if (_closed) return;
-        _appearances = Map.unmodifiable({
-          ..._appearances,
-          bot.profile.name: saved,
-        });
-        notifyListeners();
-      }
-    } catch (_) {
-      // The room's delivered name/identity remains usable without appearance.
     }
   }
 
@@ -119,27 +145,50 @@ class BotGroupSession extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    final isNew = _pending == null;
     final attempt = _pending ?? (const Uuid().v4(), text.trim());
     _pending = attempt;
     _sending = true;
     _actionError = null;
     repository.retain();
     notifyListeners();
+    var dispatched = false;
     try {
+      if (isNew && _references.isNotEmpty) {
+        final members = await repository.groupMembers(group);
+        if (_closed) return false;
+        for (final ref in retainComposerReferences(text, _references)) {
+          if (!(ref.target == 'everyone' && ref.token == '@everyone') &&
+              !members.any(
+                (member) =>
+                    member.id == ref.target && '@${member.handle}' == ref.token,
+              )) {
+            _pending = null;
+            _actionError =
+                'A mentioned member is unavailable. Correct the mention before sending.';
+            return false;
+          }
+        }
+      }
       await repository.sendGroup(
         group,
         attempt.$1,
         attempt.$2,
         () => !_closed,
-        () {},
+        () {
+          dispatched = true;
+        },
       );
       _pending = null;
+      _references = const [];
       if (!_closed) unawaited(refresh());
       return !_closed;
     } catch (_) {
       if (!_closed) {
-        _actionError =
-            'Message not confirmed. Retry sends the same message once.';
+        if (!dispatched) _pending = null;
+        _actionError = dispatched
+            ? 'Message not confirmed. Retry sends the same message once.'
+            : 'The message could not be sent. Your text is kept. Retry.';
       }
       return false;
     } finally {

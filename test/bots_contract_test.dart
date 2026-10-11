@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:wing/core/models/composer_reference.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
@@ -62,15 +63,22 @@ void main() {
       final root = canonical('atlas'), tip = canonical('atlas', suffix: 'tip');
       final a = owner.appearancesForConversations([root], canRead: () => true);
       final b = owner.botForConversation(tip);
+      final c = owner.appearancesForProfiles([
+        root.workspace,
+      ], canRead: () => true);
       await started.future;
       roster.complete(null);
       await Future<void>.delayed(Duration.zero);
       expect(rosters, 1);
       expect(assets, 1);
       asset.complete({'found': true, 'data': _avatarPng});
-      final results = await Future.wait<Object?>([a, b]);
+      final results = await Future.wait<Object?>([a, b, c]);
       final map = results[0] as Map<ProfileSessionKey, BotRecord>;
       expect(map[root], same(results[1]));
+      expect(
+        (results[2] as Map<WorkspaceScope, BotRecord>)[root.workspace],
+        same(map[root]),
+      );
       expect(map[root]!.avatar, base64Decode(_avatarPng));
       expect(owner.cachedAppearance(tip), same(map[root]));
       final changes = notifications;
@@ -79,6 +87,47 @@ void main() {
       expect(assets, 1);
       expect(notifications, changes);
       expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test(
+    'profile appearance never borrows a same-named bot from another connection',
+    () async {
+      final fixture = BotsFixture();
+      var reads = 0;
+      fixture.readHook = (_, _, _) async {
+        reads++;
+        return null;
+      };
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      final wrongSavedId = WorkspaceScope(
+        connectionId: 'another-saved-connection',
+        connectionIdentity: 'instance-1',
+        profileName: 'atlas',
+      );
+      final wrongInstance = WorkspaceScope(
+        connectionId: 'host',
+        connectionIdentity: 'another-instance',
+        profileName: 'atlas',
+      );
+      expect(
+        await owner.appearancesForProfiles([
+          wrongSavedId,
+          wrongInstance,
+        ], canRead: () => true),
+        isEmpty,
+      );
+      expect(reads, 0);
+      final scope = canonical('atlas').workspace;
+      final result = await owner.appearancesForProfiles([
+        scope,
+        wrongSavedId,
+        wrongInstance,
+      ], canRead: () => true);
+      expect(result.keys, [scope]);
+      expect(result[scope]!.title, 'Atlas');
+      expect(reads, 1);
     },
   );
 
@@ -878,6 +927,94 @@ void main() {
     },
   );
   test(
+    'room references borrow saved avatars without reads or changing frozen addressing',
+    () async {
+      final fixture = BotsFixture();
+      fixture.profiles.first['has_avatar'] = true;
+      final metadata = fixture.profiles.first['ui_meta']['hermes-bots'];
+      metadata['title'] = 'Renamed Atlas';
+      metadata['shape'] = 'hexagon';
+      metadata['color'] = '#8b5cf6';
+      var reads = 0;
+      fixture.readHook = (profile, method, params) async {
+        reads++;
+        if (method == 'profiles.get_asset') {
+          expect(profile, 'atlas');
+          return {'found': true, 'data': 'data:image/png;base64,$_avatarPng'};
+        }
+        return null;
+      };
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      await owner.refresh();
+      final session = owner.openGroup(owner.state.groups.single);
+      addTearDown(session.dispose);
+      final before = reads;
+      for (final text in ['@', '@bot_atlas', '@Atlas']) {
+        final choice = session
+            .completeMentions(MentionQuery.at(text, text.length)!)
+            .items
+            .first;
+        expect(choice.label, 'Atlas');
+        expect(choice.reference.token, '@bot_atlas');
+        expect(choice.reference.target, 'atlas');
+        expect(choice.appearance!.title, 'Renamed Atlas');
+        expect(choice.appearance!.shape, 'hexagon');
+        expect(choice.appearance!.color, '#8b5cf6');
+        expect(choice.appearance!.avatar, base64Decode(_avatarPng));
+        expect(choice.isCollective, isFalse);
+      }
+      final everyone = session
+          .completeMentions(MentionQuery.at('@everyone', 9)!)
+          .items
+          .single;
+      expect(everyone.isCollective, isTrue);
+      expect(everyone.appearance, isNull);
+      expect(reads, before);
+    },
+  );
+  test(
+    'room avatar admission rejects foreign and ambiguous profile observations',
+    () async {
+      final fixture = BotsFixture();
+      final group = (await fixture.repository.groups()).single;
+      final roster = await fixture.repository.bots();
+      final bot = roster.first;
+      final foreign = BotRecord(
+        scope: WorkspaceScope(
+          connectionId: 'other-host',
+          connectionIdentity: 'other-instance',
+          profileName: bot.profile.name,
+        ),
+        instance: 'Other server',
+        profile: bot.profile,
+        title: bot.title,
+        shape: bot.shape,
+        color: bot.color,
+        pinned: bot.pinned,
+        hidden: bot.hidden,
+        hasAvatar: bot.hasAvatar,
+        revision: bot.revision,
+        metadata: bot.metadata,
+      );
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: [foreign, roster[1], roster[1]],
+      );
+      addTearDown(session.dispose);
+      final choices = session.completeMentions(MentionQuery.at('@', 1)!).items;
+      expect(choices.take(2).every((c) => c.appearance == null), isTrue);
+      expect(choices.map((c) => c.reference.token), [
+        '@bot_atlas',
+        '@bot_mira',
+        '@everyone',
+      ]);
+      session.editMentions('@everyone', selected: choices.last.reference);
+      expect(await session.send('@everyone'), isTrue);
+    },
+  );
+  test(
     'group capture retires held reads and resumes the exact log cursor',
     () async {
       final fixture = BotsFixture();
@@ -895,7 +1032,11 @@ void main() {
         'created_at': 1791756000.5,
         'payload': {'text': '**Evidence**'},
       });
-      final session = BotGroupSession(fixture.repository, group);
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: const [],
+      );
       addTearDown(session.dispose);
       final waiting = Completer<void>();
       final started = Completer<void>();
@@ -929,7 +1070,11 @@ void main() {
     () async {
       final fixture = BotsFixture()..sendLost = true;
       final group = (await fixture.repository.groups()).first;
-      final session = BotGroupSession(fixture.repository, group);
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: const [],
+      );
       addTearDown(session.dispose);
       expect(await session.send('Hello @bot_atlas'), false);
       expect(await session.send('A different message'), false);
@@ -946,6 +1091,60 @@ void main() {
       expect(fixture.events.length, 1);
     },
   );
+  test(
+    'group picker uses frozen members; removed identity pauses before stock send',
+    () async {
+      final fixture = BotsFixture();
+      final group = (await fixture.repository.groups()).first;
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: const [],
+      );
+      addTearDown(session.dispose);
+      final choices = session.completeMentions(MentionQuery.at('@', 1)!).items;
+      expect(choices.map((c) => c.reference.token), [
+        '@bot_atlas',
+        '@bot_mira',
+        '@everyone',
+      ]);
+      final ref = choices.first.reference;
+      session.editMentions('Hello ${ref.token}', selected: ref);
+      (fixture.room['members'] as List).removeAt(0);
+      expect(await session.send('Hello ${ref.token}'), isFalse);
+      expect(session.error, contains('Correct the mention'));
+      expect(fixture.commands.where((c) => c.$2 == 'groups.send'), isEmpty);
+      final everyone = choices.last.reference;
+      session.editMentions('Hello @everyone', selected: everyone);
+      expect(await session.send('Hello @everyone'), isTrue);
+      expect(
+        fixture.commands
+            .lastWhere((c) => c.$2 == 'groups.send')
+            .$3['payload']['text'],
+        'Hello @everyone',
+      );
+    },
+  );
+  test('a member id named everyone is still a selected identity', () async {
+    final fixture = BotsFixture();
+    (fixture.room['members'] as List).first['member_id'] = 'everyone';
+    final group = (await fixture.repository.groups()).first;
+    final session = BotGroupSession(
+      fixture.repository,
+      group,
+      appearances: const [],
+    );
+    addTearDown(session.dispose);
+    final ref = session
+        .completeMentions(MentionQuery.at('@bot_atlas', 10)!)
+        .items
+        .single
+        .reference;
+    session.editMentions('Hello @bot_atlas', selected: ref);
+    (fixture.room['members'] as List).removeAt(0);
+    expect(await session.send('Hello @bot_atlas'), isFalse);
+    expect(fixture.commands.where((c) => c.$2 == 'groups.send'), isEmpty);
+  });
   test(
     'route retirement revokes dispatch after asynchronous connection preparation',
     () async {

@@ -96,10 +96,15 @@ void main() {
       'created_at': 1791756000.0,
     });
     final group = (await fixture.repository.groups()).first;
+    final appearances = await fixture.repository.bots();
     await tester.pumpWidget(
       MaterialApp(
         home: BotGroupScreen(
-          createSession: () => BotGroupSession(fixture.repository, group),
+          createSession: () => BotGroupSession(
+            fixture.repository,
+            group,
+            appearances: appearances,
+          ),
         ),
       ),
     );
@@ -142,6 +147,7 @@ void main() {
           final group = (await fixture.repository.groups()).first.withIcon(
             picture: File('assets/icon/icon.png').readAsBytesSync(),
           );
+          final appearances = await fixture.repository.bots();
           final frame = GlobalKey();
           final keyboard = ValueNotifier<bool>(false);
           addTearDown(keyboard.dispose);
@@ -162,8 +168,11 @@ void main() {
               home: RepaintBoundary(
                 key: frame,
                 child: BotGroupScreen(
-                  createSession: () =>
-                      session = BotGroupSession(fixture.repository, group),
+                  createSession: () => session = BotGroupSession(
+                    fixture.repository,
+                    group,
+                    appearances: appearances,
+                  ),
                 ),
               ),
             ),

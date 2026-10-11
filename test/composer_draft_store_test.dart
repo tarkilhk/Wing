@@ -163,7 +163,7 @@ void main() {
 
     expect(await store.read(profileName: 'work', sessionId: 'chat'), isNull);
     expect(
-      preferences.getKeys().where((key) => key.startsWith('composer_work_v2.')),
+      preferences.getKeys().where((key) => key.startsWith('composer_work_v3.')),
       isEmpty,
     );
   });

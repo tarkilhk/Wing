@@ -44,7 +44,7 @@ class _RecordingPreferences extends InMemorySharedPreferencesStore {
 
 String _key(String connection, String profile, String session) {
   String component(String value) => base64Url.encode(utf8.encode(value));
-  return 'composer_work_v2.${component(connection)}.'
+  return 'composer_work_v3.${component(connection)}.'
       '${component(profile)}.${component(session)}';
 }
 

@@ -918,6 +918,18 @@ class BotsRepository {
     );
   }
 
+  Future<List<BotGroupMember>> groupMembers(BotGroup group) async {
+    _ownsGroup(group);
+    final result = await _read('default', 'groups.state', {
+      'room_id': group.id,
+    });
+    final current = _group(_map(result['room']));
+    if (current.id != group.id) {
+      throw const FormatException('Wrong group member owner');
+    }
+    return current.members;
+  }
+
   Future<void> resolveGroup(
     BotGroup group,
     BotGroupAction action,

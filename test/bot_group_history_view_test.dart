@@ -100,6 +100,7 @@ void main() {
             },
           ];
           final group = (await fixture.repository.groups()).single;
+          final appearances = await fixture.repository.bots();
           final frame = GlobalKey();
           await tester.pumpWidget(
             MaterialApp(
@@ -112,7 +113,11 @@ void main() {
                 child: RepaintBoundary(key: frame, child: child!),
               ),
               home: BotGroupScreen(
-                createSession: () => BotGroupSession(fixture.repository, group),
+                createSession: () => BotGroupSession(
+                  fixture.repository,
+                  group,
+                  appearances: appearances,
+                ),
               ),
             ),
           );

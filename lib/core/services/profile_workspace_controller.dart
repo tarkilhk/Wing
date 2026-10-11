@@ -1,3 +1,7 @@
+import '../models/server_reference.dart';
+import '../models/composer_reference.dart';
+import 'composer_reference_repository.dart';
+import 'composer_reference_preparation.dart';
 import '../models/recent_conversation.dart';
 import 'recent_conversation_session.dart';
 import 'bots_session.dart';
@@ -71,6 +75,7 @@ import 'android_share_intent_service.dart';
 import '../models/notification_focus.dart';
 import '../models/notification_input.dart';
 
+part 'profile_workspace_references.dart';
 part 'profile_workspace_notifications.dart';
 part 'profile_workspace_recents.dart';
 part 'profile_workspace_deleted_drafts.dart';
@@ -84,6 +89,8 @@ class ProfileChat {
   ProfileSessionKey _key;
   String _title;
   String _source;
+  String? _cwd;
+  String? _terminalBackend;
   String? _parentSessionId;
   double _lastActive = DateTime.now().millisecondsSinceEpoch / 1000;
   String? _projectId;
@@ -4708,13 +4715,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return chat.composer.applyVoiceDraft(capture, text);
   }
 
-  Future<void> updateDraft(ProfileChat chat, String text) {
+  Future<void> updateDraft(
+    ProfileChat chat,
+    String text, {
+    ComposerReference? reference,
+  }) {
     _commandOwner(chat);
     final replacement = chat._replacementCompletion;
     if (replacement != null) {
-      return replacement.future.then((_) => updateDraft(chat, text));
+      return replacement.future.then(
+        (_) => updateDraft(chat, text, reference: reference),
+      );
     }
-    return chat.composer.editText(text);
+    return chat.composer.editText(text, reference: reference);
   }
 
   Future<void> stageSharedDraft(
@@ -5162,6 +5175,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
           'The gateway did not return a saved prompt address for regeneration',
         );
       }
+      _commandOwner(chat);
+      final wireText = await _prepareReferences(
+        chat,
+        answerMessageDisplayText(prompt),
+        selected: _savedReferences(prompt),
+      );
       await _journal();
       _commandOwner(chat);
       chat.reading.stageRegeneration(history, history.indexOf(prompt));
@@ -5171,7 +5190,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       submitted = true;
       await resource.gateway.call('prompt.submit', {
         'session_id': chat.runtime.runtimeId,
-        'text': answerMessageDisplayText(prompt),
+        'text': wireText,
         'truncate_before_row_id': rowId,
         'confirm_truncate': true,
         'confirm_empty_truncate': true,
@@ -5186,7 +5205,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat._runtime.rejectRegeneration(
           runtimeChange,
           dispatched: submitted,
-          error: e is JsonRpcError && e.code == 4018
+          error: e is FormatException && !submitted
+              ? e.message.toString()
+              : e is JsonRpcError && e.code == 4018
               ? 'Hermes could not match this saved prompt. The conversation is unchanged. Send a new message to continue.'
               : 'Hermes did not accept the regeneration. The conversation is unchanged.',
         );
@@ -5308,6 +5329,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (rowId is! int || rowId <= 0) {
         throw StateError('The gateway did not return a saved message address');
       }
+      _commandOwner(chat);
+      final wireText = await _prepareReferences(
+        chat,
+        text,
+        selected: _savedReferences(selected),
+      );
+      requireOwner();
       await _journal();
       _commandOwner(chat);
       chat.reading.stageSavedPromptEdit(history, targetIndex, text);
@@ -5317,7 +5345,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       submitted = true;
       final params = <String, dynamic>{
         'session_id': runtimeId,
-        'text': text,
+        'text': wireText,
         'truncate_before_row_id': rowId,
         'confirm_truncate': true,
         'confirm_empty_truncate': true,
@@ -5370,7 +5398,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat._runtime.rejectSavedPromptEdit(
           runtimeChange,
           dispatched: submitted,
-          error: queueRestored
+          error: e is FormatException && !submitted && queueRestored
+              ? e.message.toString()
+              : queueRestored
               ? restore
                     ? 'Hermes did not accept the restore. The conversation is unchanged.'
                     : 'Hermes did not accept the edited message.'
@@ -5760,6 +5790,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
     await commandCatalog(chat);
     requireCaptured();
   }
+
+  Future<MentionCompletion> completeMention(
+    ProfileChat chat,
+    MentionQuery query, {
+    required BotsSession bots,
+    required bool Function() canRead,
+    String? directory,
+  }) => _completeMention(
+    chat,
+    query,
+    bots: bots,
+    canRead: canRead,
+    directory: directory,
+  );
 
   Future<SlashCompletion> completeCommand(ProfileChat chat, String text) async {
     final resource = _owned(chat);
@@ -6225,9 +6269,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }) async {
     chat._replaceableUnsubmittedRuntime = false;
     _commandOwner(chat);
+    final runtime = chat.runtime.runtimeId;
+    final wireText = await _prepareReferences(
+      chat,
+      prompt,
+      selected: chat.composer.observation.references,
+    );
+    _commandOwner(chat);
+    if (chat.runtime.runtimeId != runtime) {
+      throw StateError('The conversation changed before sending.');
+    }
     final result = await resource.gateway.call(method, {
-      'session_id': chat.runtime.runtimeId,
-      'text': prompt,
+      'session_id': runtime,
+      'text': wireText,
     });
     final rawTaskId = result['task_id'];
     if (rawTaskId is! String || rawTaskId.trim().isEmpty) {
@@ -6279,7 +6333,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final taskId = rawTaskId is String && rawTaskId.trim().isNotEmpty
         ? rawTaskId.trim()
         : null;
-    final question = data['question']?.toString().trim() ?? '';
+    final questionWire = data['question']?.toString().trim() ?? '';
+    final question =
+        PreparedComposerMessage.parse(questionWire)?.message ?? questionWire;
     final index = taskId == null
         ? -1
         : chat._sideQuestionDeliveries.indexWhere(
@@ -6424,10 +6480,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
           : null;
       final text = expanded ?? draftText;
       final displayText = display ?? (text == draftText ? null : draftText);
-      final promptText = [
+      final authoredPrompt = [
         refs.join('\n'),
         text,
       ].where((v) => v.isNotEmpty).join('\n\n');
+      final promptText = await _prepareReferences(
+        chat,
+        authoredPrompt,
+        selected: ticket.references,
+      );
       await chat.composer.prepareDispatch(ticket);
       if (commandPrompt != null && !commandPrompt.current) {
         throw StateError('The command continuation has changed.');
@@ -6515,9 +6576,17 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<bool> _steerRuntime(ProfileChat chat, String text) async {
     final runtime = chat.runtime.runtimeId;
+    final prepared = await _prepareReferences(
+      chat,
+      text,
+      selected: chat.composer.observation.references,
+    );
+    if (chat.runtime.runtimeId != runtime) {
+      throw StateError('The conversation changed before steering.');
+    }
     final result = await _commandOwner(
       chat,
-    ).gateway.call('session.steer', {'session_id': runtime, 'text': text});
+    ).gateway.call('session.steer', {'session_id': runtime, 'text': prepared});
     if (chat.runtime.runtimeId != runtime) {
       throw StateError(
         'Chat reconnected while steering. Check its history before trying again.',
@@ -6611,9 +6680,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     await chat.composer.beginEdit(prompt);
   }
 
-  void updateQueuedPromptEdit(ProfileChat chat, String text) {
+  void updateQueuedPromptEdit(
+    ProfileChat chat,
+    String text, {
+    ComposerReference? reference,
+  }) {
     _commandOwner(chat);
-    chat.composer.editQueuedText(text);
+    chat.composer.editQueuedText(text, reference: reference);
   }
 
   Future<void> cancelQueuedPromptEdit(ProfileChat chat) async {
@@ -7010,6 +7083,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           _hydrateTitle(chat, event.data['title']);
         }
       case 'session.info':
+        _observeReferenceWorkspace(chat, event.data);
         _hydrateIntelligence(chat, {'info': event.data});
         if (event.data.containsKey('side_tasks')) {
           _hydrateSideTasks(chat, event.data['side_tasks']);
@@ -8091,6 +8165,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   void _hydrate(ProfileChat chat, Map<String, dynamic> result) {
+    _observeReferenceWorkspace(
+      chat,
+      result['info'] as Map? ?? const {},
+      replace: true,
+    );
     final source = (result['info'] as Map?)?['source'];
     if (source is String && source.isNotEmpty) chat._source = source;
     final runtime = result['session_id'] as String;
