@@ -443,7 +443,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         widget.currentActivity.isNotEmpty || widget.activityTabs.isNotEmpty;
     Widget currentActivity() => ProfileActivitySection(
       label: widget.liveToolCount > 0
-          ? 'Using ${widget.liveToolCount} ${widget.liveToolCount == 1 ? 'tool' : 'tools'}'
+          ? 'Activity · ${widget.liveToolCount} ${widget.liveToolCount == 1 ? 'tool' : 'tools'}'
           : 'Activity',
       key: ValueKey(('activity', chat.key)),
       detailsBuilder: (_) => ProfileActivityTabs(
@@ -941,17 +941,15 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (chat.reading.historyLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+        child: Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              semanticsLabel: 'Loading history',
             ),
-            SizedBox(width: 10),
-            Text('Loading history…'),
-          ],
+          ),
         ),
       );
     }

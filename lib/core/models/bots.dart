@@ -46,6 +46,13 @@ class BotRecord {
   final int revision;
   // Opaque, recursively frozen stock metadata. Only the repository merges it.
   final Map<String, Object?> metadata;
+
+  /// Only an explicit stock choice admits procedural motion. The displayed
+  /// shape can be a client default, so it is not sufficient by itself.
+  bool get hasExplicitClassicShape =>
+      metadata['imageKind'] == 'shape' &&
+      metadata['shape'] == shape &&
+      botShapes.contains(shape);
   final ProfileSessionKey? chat;
   final ProfileSessionKey? resolvedChat;
   bool describesConversation(ProfileSessionKey key) =>

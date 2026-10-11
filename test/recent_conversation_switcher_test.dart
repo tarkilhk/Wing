@@ -1094,7 +1094,7 @@ void main() {
     for (final brightness in Brightness.values) {
       for (final scale in [1.0, 2.0]) {
         testWidgets(
-          'opening cover separates title and status in ${brightness.name} at $scale',
+          'opening cover uses progress without a repeated caption in ${brightness.name} at $scale',
           (tester) async {
             final frame = GlobalKey();
             await mount(
@@ -1109,11 +1109,14 @@ void main() {
             final selection = switcher.currentState!.selectAdjacent(1);
             await _finishFrames(tester);
             final title = tester.getRect(find.text(source.entries[1].title));
-            final status = tester.getRect(find.text('Opening conversation…'));
+            expect(find.text('Opening conversation…'), findsNothing);
+            expect(find.byType(LinearProgressIndicator), findsOneWidget);
+            expect(
+              find.bySemanticsLabel('Opening conversation'),
+              findsOneWidget,
+            );
             expect(title.top, lessThan(48));
-            expect(title.bottom, lessThan(status.top));
             expect(title.left, greaterThanOrEqualTo(16));
-            expect(status.center.dy, closeTo(400, 1));
             expect(
               find.text(source.entries[1].key.workspace.profileName),
               findsNothing,

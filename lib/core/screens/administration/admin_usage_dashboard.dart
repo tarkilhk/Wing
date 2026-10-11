@@ -100,8 +100,6 @@ class _UsageDashboardState extends State<UsageDashboard> {
         const SizedBox(height: 12),
         if (data == null) ...[
           const LinearProgressIndicator(semanticsLabel: 'Loading usage'),
-          const SizedBox(height: 20),
-          const Text('Loading usage…'),
         ] else ...[
           if (data.modelsError != null || data.dailyError != null)
             AdminNotice.error(
@@ -235,10 +233,10 @@ class _UsageDashboardState extends State<UsageDashboard> {
         const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerRight,
-          child: TextButton.icon(
+          child: IconButton(
+            tooltip: 'Refresh usage',
             onPressed: loading ? null : _session.refresh,
             icon: const Icon(Icons.refresh, size: 18),
-            label: Text(loading ? 'Refreshing…' : 'Refresh'),
           ),
         ),
       ],

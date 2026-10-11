@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/attachment_draft.dart';
+import 'package:wing/core/widgets/composer_attachment_tile.dart';
 import 'package:wing/core/services/android_share_intent_service.dart';
 import 'package:wing/core/services/attachment_draft_service.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -43,6 +44,8 @@ class _Credentials implements CredentialStore {
 
 class _CameraAttachments extends AttachmentDraftService {
   bool fail = false;
+  int prepared = 0;
+  Completer<void>? delay;
 
   @override
   Future<AttachmentDraft> prepareImage({
@@ -51,10 +54,11 @@ class _CameraAttachments extends AttachmentDraftService {
     required Iterable<AttachmentDraft> existingDrafts,
     void Function(AttachmentImageJob)? onImageJob,
   }) async {
+    await delay?.future;
     if (fail) throw const AttachmentDraftException('Photo could not be saved.');
     return AttachmentDraft(
-      id: 'captured-photo',
-      cachedPath: '/cache/captured-photo.jpg',
+      id: 'captured-photo-${++prepared}',
+      cachedPath: '/cache/captured-photo-$prepared.jpg',
       name: displayName,
       byteLength: 1,
       mediaType: 'image/jpeg',
@@ -84,6 +88,8 @@ ProfileWorkspaceController _controller(
   AppPreferences appPreferences, {
   Set<String> missingSessions = const {},
   AttachmentDraftService? attachments,
+  Future<void> Function()? beforeSessionRead,
+  void Function(String)? onRpc,
 }) {
   final controller = ProfileWorkspaceController(
     access: ConnectionAccess(connection: connection, dashboardOAuth: null),
@@ -98,13 +104,30 @@ ProfileWorkspaceController _controller(
         currentName: 'default',
         activeName: 'default',
       ),
-      get: (_, query) async => {
-        'sessions': <Map<String, dynamic>>[],
-        'offset': int.parse(query['offset']!),
-        'limit': int.parse(query['limit']!),
-        'total': 0,
+      get: (path, query) async {
+        if (path == 'logs') return {'file': 'gui', 'lines': <String>[]};
+        if (path.endsWith('/messages')) {
+          return {
+            'session_id': Uri.decodeComponent(path.split('/')[1]),
+            'messages': <Map<String, dynamic>>[],
+            'pagination': {
+              'offset': 0,
+              'limit': 50,
+              'returned': 0,
+              'order': 'latest',
+            },
+          };
+        }
+        await beforeSessionRead?.call();
+        return {
+          'sessions': <Map<String, dynamic>>[],
+          'offset': int.parse(query['offset']!),
+          'limit': int.parse(query['limit']!),
+          'total': 0,
+        };
       },
       rpc: (method, params) async {
+        onRpc?.call(method);
         if (method == 'session.resume' &&
             missingSessions.contains(params['session_id'])) {
           throw JsonRpcError('session.resume', 'session not found', code: 4007);
@@ -457,6 +480,7 @@ void main() {
 
   for (final outcome in [
     'saved',
+    'cancelled',
     'preparation failed',
     'acknowledgement failed',
   ]) {
@@ -466,7 +490,11 @@ void main() {
       final appPreferences = fixture.appPreferences;
       await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
       final connection = manager.getConnections().single;
+      final expectedText = outcome == 'saved'
+          ? 'Existing draft updated'
+          : 'Existing draft';
       final attachments = _CameraAttachments()
+        ..delay = outcome == 'cancelled' ? null : Completer<void>()
         ..fail = outcome == 'preparation failed';
       final controller = _controller(
         connection,
@@ -501,14 +529,14 @@ void main() {
           .setMockMethodCallHandler(channel, (call) async {
             if (call.method == 'capturePhoto') {
               expect((call.arguments as Map)['target'], chat.key.toJson());
-              shares.pendingShare.value = payload;
+              if (outcome != 'cancelled') shares.pendingShare.value = payload;
             }
             if (call.method == 'acknowledgeShare') {
               acknowledgements++;
               expect((call.arguments as Map)['id'], payload.id);
               final saved = drafts.summaries(profileName: 'default').single;
               expect(saved.sessionId, chat.key.sessionId);
-              expect(saved.text, 'Existing draft');
+              expect(saved.text, expectedText);
               expect(saved.attachmentCount, 1);
               if (outcome == 'acknowledgement failed') {
                 throw PlatformException(code: 'ack-failed');
@@ -525,26 +553,72 @@ void main() {
         controller: controller,
       );
       await tester.pumpAndSettle();
+      final originalScreen = tester.state(find.byType(ProfileWorkspaceScreen));
+      final composerFinder = find.byKey(const Key('profile-message-composer'));
+      final composer = tester.widget<TextField>(composerFinder);
+      composer.controller!.selection = const TextSelection.collapsed(offset: 4);
       await tester.tap(find.byTooltip('Attach file'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Camera'));
+      if (outcome != 'cancelled') {
+        for (var attempt = 0; attempt < 100; attempt++) {
+          await tester.pump(const Duration(milliseconds: 10));
+          if (chat.composer.observation.preparing) break;
+        }
+        expect(chat.composer.observation.preparing, isTrue);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.byType(ComposerPendingAttachmentTile), findsOneWidget);
+        expect(find.byTooltip('Adding photo…'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('composer-image-thumbnail')),
+          findsNothing,
+        );
+        expect(
+          tester.state(find.byType(ProfileWorkspaceScreen)),
+          same(originalScreen),
+        );
+        expect(
+          tester.widget<TextField>(composerFinder).controller,
+          same(composer.controller),
+        );
+        expect(tester.widget<TextField>(composerFinder).enabled, isTrue);
+        if (outcome == 'saved') {
+          await tester.enterText(composerFinder, expectedText);
+          await tester.pump();
+          composer.controller!.selection = const TextSelection.collapsed(
+            offset: 4,
+          );
+        }
+        attachments.delay!.complete();
+      }
       await tester.pumpAndSettle();
+      expect(find.byType(ComposerPendingAttachmentTile), findsNothing);
 
       expect(find.text('Add shared content'), findsNothing);
       expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
-      expect(controller.current!.chat, same(chat));
-      expect(chat.composer.observation.text, 'Existing draft');
-      expect(chat.reading.messages, isEmpty);
-      expect(acknowledgements, attachments.fail ? 0 : 1);
       expect(
-        chat.composer.observation.attachments,
-        hasLength(attachments.fail ? 0 : 1),
+        tester.state(find.byType(ProfileWorkspaceScreen)),
+        same(originalScreen),
       );
+      expect(controller.current!.chat, same(chat));
+      expect(
+        tester.widget<TextField>(composerFinder).controller,
+        same(composer.controller),
+      );
+      expect(
+        composer.controller!.selection,
+        const TextSelection.collapsed(offset: 4),
+      );
+      expect(chat.composer.observation.text, expectedText);
+      expect(chat.reading.messages, isEmpty);
+      final added = !attachments.fail && outcome != 'cancelled';
+      expect(acknowledgements, added ? 1 : 0);
+      expect(chat.composer.observation.attachments, hasLength(added ? 1 : 0));
       expect(
         shares.pendingShare.value,
-        outcome == 'saved' ? isNull : same(payload),
+        outcome == 'saved' || outcome == 'cancelled' ? isNull : same(payload),
       );
-      if (!attachments.fail) {
+      if (added) {
         expect(
           find.byKey(const ValueKey('composer-image-thumbnail')),
           findsOneWidget,
@@ -559,8 +633,144 @@ void main() {
           findsOneWidget,
         );
       }
+      if (outcome == 'saved') {
+        final second = AndroidSharePayload(
+          id: 'second-photo',
+          files: payload.files,
+          target: payload.target,
+        );
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              if (call.method == 'capturePhoto') {
+                shares.pendingShare.value = second;
+              }
+              if (call.method == 'acknowledgeShare') {
+                acknowledgements++;
+                final saved = drafts.summaries(profileName: 'default').single;
+                expect(saved.text, expectedText);
+                expect(saved.attachmentCount, 2);
+              }
+              return null;
+            });
+        await tester.tap(find.byTooltip('Attach file'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Camera'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.state(find.byType(ProfileWorkspaceScreen)),
+          same(originalScreen),
+        );
+        expect(chat.composer.observation.attachments.map((file) => file.id), [
+          'captured-photo-1',
+          'captured-photo-2',
+        ]);
+        expect(acknowledgements, 2);
+        expect(shares.pendingShare.value, isNull);
+      }
     });
   }
+
+  testWidgets('camera intake retains the screen during resume recovery', (
+    tester,
+  ) async {
+    final fixture = await _homeFixture();
+    final manager = fixture.manager;
+    final appPreferences = fixture.appPreferences;
+    await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
+    final connection = manager.getConnections().single;
+    final listRelease = Completer<void>();
+    final imageRelease = Completer<void>();
+    addTearDown(() {
+      if (!listRelease.isCompleted) listRelease.complete();
+      if (!imageRelease.isCompleted) imageRelease.complete();
+    });
+    var capturing = false;
+    var recovering = false;
+    final methods = <String>[];
+    final attachments = _CameraAttachments()..delay = imageRelease;
+    final controller = _controller(
+      connection,
+      manager.prefs,
+      appPreferences,
+      attachments: attachments,
+      beforeSessionRead: () async {
+        if (capturing && !recovering) await listRelease.future;
+      },
+      onRpc: methods.add,
+    );
+    await controller.initialize();
+    final chat = await controller.createChat(canDispatch: () => true);
+    await controller.updateDraft(chat, 'Keep my draft');
+    await manager.prefs.setString('last_connection_id', connection.id);
+    final errors = <String>{};
+    var lostSelection = false;
+    controller.addListener(() {
+      if (controller.error case final error?) errors.add(error);
+      if (capturing && !identical(controller.current?.chat, chat)) {
+        lostSelection = true;
+      }
+    });
+    final shares = AndroidShareIntentService();
+    addTearDown(shares.dispose);
+    final payload = AndroidSharePayload(
+      id: 'photo-during-recovery',
+      files: const [
+        AndroidSharedFile(
+          path: '/intake/camera.jpg',
+          name: 'Camera photo.jpg',
+          mediaType: 'image/jpeg',
+          byteLength: 1,
+        ),
+      ],
+      target: chat.key.toJson(),
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'capturePhoto') {
+            capturing = true;
+            shares.pendingShare.value = payload;
+          }
+          return null;
+        });
+    await _pumpHome(
+      tester,
+      manager,
+      shares,
+      appPreferences: appPreferences,
+      controller: controller,
+    );
+    await tester.pumpAndSettle();
+    final originalScreen = tester.state(find.byType(ProfileWorkspaceScreen));
+    methods.clear();
+    await tester.tap(find.byTooltip('Attach file'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Camera'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    recovering = true;
+    await controller.resumeConnection();
+    listRelease.complete();
+    await tester.pump();
+    imageRelease.complete();
+    await tester.pumpAndSettle();
+
+    expect(errors, isEmpty);
+    expect(controller.error, isNull);
+    expect(lostSelection, isFalse);
+    expect(
+      tester.state(find.byType(ProfileWorkspaceScreen)),
+      same(originalScreen),
+    );
+    expect(methods.where((method) => method == 'session.resume'), hasLength(1));
+    expect(methods.where((method) => method == 'prompt.submit'), isEmpty);
+    expect(chat.composer.observation.text, 'Keep my draft');
+    expect(chat.composer.observation.attachments, hasLength(1));
+    expect(shares.pendingShare.value, isNull);
+    expect(
+      find.text('Chats changed while loading. Refresh to reload.'),
+      findsNothing,
+    );
+  });
 
   testWidgets('cold camera recovery keeps the saved text in its new draft', (
     tester,

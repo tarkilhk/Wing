@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
@@ -30,6 +31,7 @@ void main() {
     final changes = ChangeNotifier();
     addTearDown(changes.dispose);
     var attempts = 0;
+    final gate = Completer<void>();
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -47,7 +49,10 @@ void main() {
                 pending: () => true,
                 submit: () async {
                   attempts++;
-                  if (attempts == 1) throw StateError('offline');
+                  if (attempts == 1) {
+                    await gate.future;
+                    throw StateError('offline');
+                  }
                 },
               ),
             ),
@@ -59,6 +64,10 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Allow once'));
+    await tester.pump();
+    expect(find.text('Sending…'), findsOneWidget);
+    expect(find.text('Sending decision…'), findsNothing);
+    gate.complete();
     await tester.pumpAndSettle();
     expect(find.text('Review command'), findsOneWidget);
     expect(

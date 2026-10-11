@@ -8,6 +8,7 @@ import '../models/hermes_profile.dart';
 import '../models/profile_session_key.dart';
 import 'bots_repository.dart';
 import 'bots_preferences.dart';
+import 'bot_screen_session.dart';
 
 typedef BotsSources =
     Future<List<BotsRepository>> Function(bool Function() canUse);
@@ -164,6 +165,37 @@ class BotsSession extends ChangeNotifier {
         .firstOrNull;
     if (repository == null) throw StateError('Instance is unavailable');
     return repository;
+  }
+
+  /// Screen identity is the profile, independent of its canonical conversation.
+  /// Resolve actual roster metadata from the captured instance; opening a screen
+  /// never creates a canonical chat or selects a different workspace.
+  Future<BotScreenSession?> openScreen(
+    WorkspaceScope scope, {
+    required bool Function() canUse,
+  }) async {
+    bool current() => !_closed && canUse();
+    if (!current()) return null;
+    final sources = await _sources(current);
+    if (!current()) return null;
+    final source = sources
+        .where(
+          (source) =>
+              source.scope.connectionId == scope.connectionId &&
+              source.scope.connectionIdentity == scope.connectionIdentity,
+        )
+        .firstOrNull;
+    if (source == null) throw StateError('Screen instance is unavailable');
+    source.retain();
+    try {
+      final roster = await source.bots();
+      if (!current()) return null;
+      final bot = roster.where((bot) => bot.scope == scope).firstOrNull;
+      if (bot == null) throw StateError('Screen profile is unavailable');
+      return BotScreenSession(source, bot);
+    } finally {
+      source.release();
+    }
   }
 
   void setVisible(bool visible) {

@@ -41,6 +41,7 @@ class CommandHost extends Host {
   bool reportYolo = true;
   String warning = '';
   String? yoloSetResult;
+  Future<Map<String, dynamic>> Function(String profile)? readCatalog;
   final List<String> sideQuestionTaskIds = ['side-task-1'];
   final List<String> backgroundTaskIds = ['background-task-1'];
   FutureOr<Map<String, dynamic>> Function(Map<String, dynamic>)?
@@ -114,7 +115,10 @@ class CommandHost extends Host {
           final error = sensitiveResponseError;
           if (error != null) throw error;
         }
-        if (method == 'commands.catalog') return catalog(scope.profileName);
+        if (method == 'commands.catalog') {
+          return await readCatalog?.call(scope.profileName) ??
+              catalog(scope.profileName);
+        }
         if (method == 'skills.reload') {
           return await respond?.call(method, params) ??
               {
@@ -239,6 +243,14 @@ void main() {
       }
       await loader.load();
     }
+    final mono = Platform.environment['CAPTURE_SKILL_COMPOSER_MONO_FONT'];
+    if (mono != null) {
+      final loader = FontLoader('monospace');
+      loader.addFont(
+        File(mono).readAsBytes().then((b) => b.buffer.asByteData()),
+      );
+      await loader.load();
+    }
   });
   setUp(() async {
     controllerDisposed = false;
@@ -274,6 +286,88 @@ void main() {
     if (!controllerDisposed) controller.dispose();
     appPreferences.dispose();
   });
+
+  for (final retained in [false, true]) {
+    testWidgets(
+      'opening a ${retained ? 'retained' : 'cold'} saved slash draft loads commands after connection',
+      (tester) async {
+        const skill = '/mattpocock-skills:writing-for-agents';
+        host.running = false;
+        host.extraSkillNames.add(skill);
+        final profile = retained ? 'a' : 'b';
+        if (retained) await controller.updateDraft(chat, skill);
+        await draftStore.write(
+          profileName: profile,
+          sessionId: 'same',
+          text: skill,
+          attachments: const [],
+          submissionUncertain: false,
+          queuedPrompts: const [],
+          queuePaused: false,
+        );
+        final connection = Completer<void>();
+        if (retained) {
+          host.resumeDelay = connection;
+          host.runtimeForResume[profile] = '$profile-resumed-runtime';
+        } else {
+          host.connectDelay = connection;
+        }
+        host.readCatalog = (profile) async {
+          if (retained) await connection.future;
+          if (!connection.isCompleted) {
+            throw JsonRpcError(
+              'commands.catalog',
+              'Connection unavailable',
+              reason: 'connection_closed',
+            );
+          }
+          return host.catalog(profile);
+        };
+        final opening = controller.openBrowserSession(
+          ProfileSessionKey(controller.browserResource(profile).scope, 'same'),
+          isCurrentRequest: () => true,
+        );
+        await tester.pumpWidget(
+          MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        );
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(controller.notificationChat!.runtime.opening, isTrue);
+        expect(
+          host.commandCalls.where(
+            (c) => c.$1 == 'commands.catalog' && c.$2['profile'] == profile,
+          ),
+          isEmpty,
+        );
+        connection.complete();
+        var opened = false;
+        unawaited(opening.then((_) => opened = true));
+        for (var i = 0; i < 100 && !opened; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(opened, isTrue);
+        await opening;
+        await tester.pumpAndSettle();
+        expect(find.text('Could not load commands.'), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(SlashCommandSuggestions),
+            matching: find.text(skill),
+          ),
+          findsOneWidget,
+        );
+        expect(controller.current!.chat!.composer.observation.text, skill);
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'skills.reload'),
+          isEmpty,
+        );
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'prompt.submit'),
+          isEmpty,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 
   test(
     'skill refresh reloads Hermes before replacing the cached catalog',
@@ -1437,13 +1531,90 @@ void main() {
     },
   );
 
+  test('plugin skill names share completion and reference boundaries', () {
+    const name = '/mattpocock-skills:writing-for-agents';
+    host.extraSkillNames.add(name);
+    final catalog = SlashCatalog.fromJson(host.catalog('a'));
+    expect(catalog.commands.singleWhere((c) => c.text == name).isSkill, isTrue);
+    for (final text in ['$name ', 'Use ($name).', '😀 Use $name, please']) {
+      final reference = catalog.skillReferences(text).single;
+      expect(reference.text, name);
+      expect(text.substring(reference.start, reference.end), name);
+    }
+    for (final query in [
+      '/mattpocock-skills:',
+      name,
+      'Use /mattpocock-skills:writing-',
+    ]) {
+      final completion = SlashCompletion.fromCatalog(query, catalog);
+      expect(completion.items.single.text, name);
+      expect(
+        completion
+            .select(completion.items.single, text: query, cursor: query.length)!
+            .text,
+        '${query.startsWith('Use ') ? 'Use ' : ''}$name ',
+      );
+    }
+    expect(SlashCompletion.queryToken('$name review'), '$name review');
+    expect(SlashCompletion.usesCatalog('$name review'), isFalse);
+    final invocation = SlashInvocation.parse('$name review')!;
+    expect(invocation.name, name.substring(1));
+    expect(invocation.argument, 'review');
+    for (final text in [
+      'Use $name-extra',
+      'Use $name/path',
+      'Use $name\\path',
+      'Use /mattpocock-skills:missing',
+      'Use ./mattpocock-skills:writing-for-agents',
+      'https://example.com/mattpocock-skills:writing-for-agents',
+    ]) {
+      expect(catalog.skillReferences(text), isEmpty, reason: text);
+    }
+    expect(
+      SlashSkillReference.inText('Use $name', ['/mattpocock-skills']),
+      isEmpty,
+    );
+    expect(SlashInvocation.parse('/a-skill: review')!.name, 'a-skill');
+    expect(SlashInvocation.parse('/a-skill: review')!.argument, 'review');
+  });
+
+  for (final original in [
+    '/mattpocock-skills:writing-for-agents review',
+    'Use /mattpocock-skills:writing-for-agents, please',
+  ]) {
+    test(
+      'plugin skill dispatch retains qualified identity: $original',
+      () async {
+        host.extraSkillNames.add('/mattpocock-skills:writing-for-agents');
+        host.respond = (_, params) async => {
+          'type': 'skill',
+          'message': 'Expanded ${params['name']}',
+        };
+        chat.composer.editText(original);
+        await controller.send(chat);
+        expect(
+          host.commandCalls
+              .singleWhere((c) => c.$1 == 'command.dispatch')
+              .$2['name'],
+          'mattpocock-skills:writing-for-agents',
+        );
+        expect(
+          host.commandCalls
+              .singleWhere((c) => c.$1 == 'prompt.submit')
+              .$2['text'],
+          'Expanded mattpocock-skills:writing-for-agents',
+        );
+        expect(chat.reading.messages.single['display_content'], original);
+      },
+    );
+  }
+
   test('punctuation delimits skill names like whitespace', () {
     const separators = [
       ',',
       '.',
       '!',
       '?',
-      ':',
       ';',
       '(',
       ')',
@@ -1722,6 +1893,101 @@ void main() {
     },
   );
 
+  testWidgets('native command emphasis keeps arguments plain and IME native', (
+    tester,
+  ) async {
+    final input = SkillComposerController(text: '/reload-mcp now use /a-skill');
+    addTearDown(input.dispose);
+    input.observeCommands(const [
+      SlashCommand('/reload-mcp', 'Reload MCP servers', 'Tools & Skills'),
+      SlashCommand('/a-skill', '', 'Skills'),
+    ]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: TextField(controller: input)),
+      ),
+    );
+    final context = tester.element(find.byType(EditableText));
+    List<TextSpan> spans() => input
+        .buildTextSpan(context: context, withComposing: true)
+        .children!
+        .whereType<TextSpan>()
+        .toList();
+    final command = spans().singleWhere((s) => s.text == '/reload-mcp');
+    expect(command.style!.fontFamily, 'monospace');
+    expect(command.style!.fontWeight, FontWeight.w400);
+    expect(command.style!.color, Theme.of(context).colorScheme.primary);
+    final skill = spans().singleWhere((s) => s.text == '/a-skill');
+    expect(skill.style!.fontWeight, FontWeight.w700);
+    expect(skill.style!.fontFamily, isNull);
+    expect(
+      spans().singleWhere((s) => s.text == ' now use ').style!.color,
+      isNull,
+    );
+    input.value = input.value.copyWith(
+      selection: const TextSelection.collapsed(offset: 11),
+      composing: const TextRange(start: 8, end: 11),
+    );
+    expect(
+      spans()
+          .where((s) => s.style!.decoration == TextDecoration.underline)
+          .map((s) => s.text)
+          .join(),
+      'mcp',
+    );
+    expect(
+      input.buildTextSpan(context: context, withComposing: false).toPlainText(),
+      input.text,
+    );
+    expect(input.selection, const TextSelection.collapsed(offset: 11));
+    for (final literal in [
+      'Use /reload-mcp now',
+      '/reload-mc now',
+      '/reload-mcp/path',
+      'https://example.com/reload-mcp',
+    ]) {
+      input.text = literal;
+      expect(spans().where((s) => s.style!.fontFamily == 'monospace'), isEmpty);
+    }
+    input.text = '  /reload-mcp now';
+    expect(
+      spans().singleWhere((s) => s.text == '/reload-mcp').style!.fontFamily,
+      'monospace',
+    );
+    input.setScope('another profile');
+    expect(spans().where((s) => s.style!.color != null), isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('plugin skill emphasis covers the full qualified name', (
+    tester,
+  ) async {
+    const name = '/mattpocock-skills:writing-for-agents';
+    final input = SkillComposerController(text: '$name ');
+    addTearDown(input.dispose);
+    input.observeCommands(const [SlashCommand(name, '', 'Skills')]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: TextField(controller: input)),
+      ),
+    );
+    final context = tester.element(find.byType(EditableText));
+    final span = input.buildTextSpan(context: context, withComposing: true);
+    expect(span.toPlainText(), '$name ');
+    expect(
+      span.children!
+          .whereType<TextSpan>()
+          .where((s) => s.style?.fontWeight == FontWeight.w700)
+          .map((s) => s.text),
+      [name],
+    );
+    expect(
+      span.children!.whereType<TextSpan>().first.style!.color,
+      Theme.of(context).colorScheme.primary,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'skill emphasis preserves plain text, editing and IME decoration',
     (tester) async {
@@ -1790,6 +2056,135 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('command and skill distinction ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final captureKey = GlobalKey();
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: captureKey,
+            child: MaterialApp(
+              theme: wingTheme(brightness),
+              debugShowCheckedModeBanner: false,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  viewInsets: EdgeInsets.only(bottom: scale == 1 ? 280 : 0),
+                ),
+                child: child!,
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          ),
+        );
+        Future<void> capture(String state) async {
+          if (!Platform.environment.containsKey('CAPTURE_SKILL_COMPOSER')) {
+            return;
+          }
+          await tester.runAsync(() async {
+            final render =
+                captureKey.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary;
+            final image = await render.toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final file = File(
+              'build/skill-composer/${brightness.name}-$scale-distinction-$state.png',
+            );
+            await file.parent.create(recursive: true);
+            await file.writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+
+        final composer = find.byKey(const Key('profile-message-composer'));
+        await tester.enterText(composer, '/');
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pumpAndSettle();
+        final skillRow = find.ancestor(
+          of: find.text('/a-skill'),
+          matching: find.byType(ListTile),
+        );
+        final commandRow = find.ancestor(
+          of: find.text('/model'),
+          matching: find.byType(ListTile),
+        );
+        expect(
+          find.descendant(
+            of: skillRow,
+            matching: find.text('Skill · Profile a skill'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: commandRow,
+            matching: find.text('Command · Choose model'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byTooltip('Inspect /a-skill').hitTestable(),
+          findsOneWidget,
+        );
+        expect(find.byTooltip('Inspect /model'), findsNothing);
+        await tester.ensureVisible(find.text('/model'));
+        await tester.pumpAndSettle();
+        expect(find.text('/model').hitTestable(), findsOneWidget);
+        await capture('picker');
+        await tester.tap(find.text('/model'));
+        await tester.pumpAndSettle();
+        final input = tester.widget<TextField>(composer).controller!;
+        expect(input.text, '/model ');
+        await tester.enterText(composer, '/model use /a-skill');
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pumpAndSettle();
+        final span = input.buildTextSpan(
+          context: tester.element(composer),
+          withComposing: true,
+        );
+        expect(span.toPlainText(), '/model use /a-skill');
+        expect(
+          span.children!
+              .whereType<TextSpan>()
+              .singleWhere((s) => s.text == '/model')
+              .style!
+              .fontFamily,
+          'monospace',
+        );
+        expect(
+          span.children!
+              .whereType<TextSpan>()
+              .singleWhere((s) => s.text == '/a-skill')
+              .style!
+              .fontWeight,
+          FontWeight.w700,
+        );
+        expect(
+          tester
+              .widget<EditableText>(
+                find.descendant(
+                  of: composer,
+                  matching: find.byType(EditableText),
+                ),
+              )
+              .focusNode
+              .hasFocus,
+          isTrue,
+        );
+        expect(
+          host.commandCalls.where((c) => c.$1 == 'prompt.submit'),
+          isEmpty,
+        );
+        expect(tester.takeException(), isNull);
+        await capture('composer');
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+
       testWidgets('manual skill refresh ${brightness.name} $scale', (
         tester,
       ) async {
@@ -1920,109 +2315,122 @@ void main() {
         await tester.pumpWidget(const SizedBox.shrink());
       });
 
-      testWidgets('mobile inline skill composer ${brightness.name} $scale', (
-        tester,
-      ) async {
-        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
-        final captureKey = GlobalKey();
-        await tester.pumpWidget(
-          RepaintBoundary(
-            key: captureKey,
-            child: MaterialApp(
-              theme: wingTheme(brightness),
-              debugShowCheckedModeBanner: false,
-              builder: (context, child) => MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(textScaler: TextScaler.linear(scale)),
-                child: child!,
+      for (final skillName in [
+        '/a-skill',
+        '/mattpocock-skills:writing-for-agents',
+      ]) {
+        testWidgets(
+          'mobile inline skill composer $skillName ${brightness.name} $scale',
+          (tester) async {
+            tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            final query = skillName == '/a-skill'
+                ? 'Please use /a-'
+                : 'Please use /mattpocock-skills:writing-';
+            if (skillName != '/a-skill') host.extraSkillNames.add(skillName);
+            final captureKey = GlobalKey();
+            await tester.pumpWidget(
+              RepaintBoundary(
+                key: captureKey,
+                child: MaterialApp(
+                  theme: wingTheme(brightness),
+                  debugShowCheckedModeBanner: false,
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(textScaler: TextScaler.linear(scale)),
+                    child: child!,
+                  ),
+                  home: ProfileWorkspaceScreen(controller: controller),
+                ),
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
-            ),
-          ),
-        );
-        final composer = find.byKey(const Key('profile-message-composer'));
-        await tester.enterText(composer, 'Please use /a-');
-        await tester.pump(const Duration(milliseconds: 200));
-        await tester.pumpAndSettle();
-        expect(find.text('/a-skill'), findsOneWidget);
-        Future<void> capture(String state) async {
-          if (!Platform.environment.containsKey('CAPTURE_SKILL_COMPOSER')) {
-            return;
-          }
-          await tester.runAsync(() async {
-            final render =
-                captureKey.currentContext!.findRenderObject()!
-                    as RenderRepaintBoundary;
-            final image = await render.toImage();
-            final bytes = await image.toByteData(
-              format: ui.ImageByteFormat.png,
             );
-            final file = File(
-              'build/skill-composer/${brightness.name}-$scale-$state.png',
-            );
-            await file.parent.create(recursive: true);
-            await file.writeAsBytes(bytes!.buffer.asUint8List());
-            image.dispose();
-          });
-        }
+            final composer = find.byKey(const Key('profile-message-composer'));
+            await tester.enterText(composer, query);
+            await tester.pump(const Duration(milliseconds: 200));
+            await tester.pumpAndSettle();
+            expect(find.text(skillName), findsOneWidget);
+            Future<void> capture(String state) async {
+              if (!Platform.environment.containsKey('CAPTURE_SKILL_COMPOSER')) {
+                return;
+              }
+              await tester.runAsync(() async {
+                final render =
+                    captureKey.currentContext!.findRenderObject()!
+                        as RenderRepaintBoundary;
+                final image = await render.toImage();
+                final bytes = await image.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final file = File(
+                  'build/skill-composer/${brightness.name}-$scale-${skillName.contains(':') ? 'plugin-' : ''}$state.png',
+                );
+                await file.parent.create(recursive: true);
+                await file.writeAsBytes(bytes!.buffer.asUint8List());
+                image.dispose();
+              });
+            }
 
-        await capture('picker');
-        final inspect = find.byTooltip('Inspect /a-skill');
-        expect(tester.getSize(inspect), const Size(48, 48));
-        await tester.tap(inspect);
-        await tester.pumpAndSettle();
-        expect(find.byType(SkillDocumentViewer), findsOneWidget);
-        expect(
-          tester
-              .widget<SkillDocumentViewer>(find.byType(SkillDocumentViewer))
-              .document
-              .rawContent,
-          contains('Inspect the original sources.'),
+            await capture('picker');
+            final inspect = find.byTooltip('Inspect $skillName');
+            expect(tester.getSize(inspect), const Size(48, 48));
+            await tester.tap(inspect);
+            await tester.pumpAndSettle();
+            expect(find.byType(SkillDocumentViewer), findsOneWidget);
+            expect(
+              tester
+                  .widget<SkillDocumentViewer>(find.byType(SkillDocumentViewer))
+                  .document
+                  .rawContent,
+              contains('Inspect the original sources.'),
+            );
+            expect(host.skillReads.single, {
+              'profile': 'a',
+              'name': skillName.substring(1),
+            });
+            expect(chat.composer.observation.text, query);
+            expect(
+              host.commandCalls.where((c) => c.$1 == 'prompt.submit'),
+              isEmpty,
+            );
+            await tester.pageBack();
+            await tester.pumpAndSettle();
+            expect(tester.widget<TextField>(composer).controller!.text, query);
+            expect(inspect.hitTestable(), findsOneWidget);
+            await tester.tap(find.text(skillName));
+            await tester.pumpAndSettle();
+            final input = tester.widget<TextField>(composer).controller!;
+            expect(input.text, 'Please use $skillName ');
+            expect(
+              find.byType(SlashCommandSuggestions).hitTestable(),
+              findsNothing,
+            );
+            final editable = tester.widget<EditableText>(
+              find.descendant(
+                of: composer,
+                matching: find.byType(EditableText),
+              ),
+            );
+            final span = input.buildTextSpan(
+              context: tester.element(composer),
+              style: editable.style,
+              withComposing: true,
+            );
+            expect(
+              span.children!
+                  .whereType<TextSpan>()
+                  .singleWhere((s) => s.text == skillName)
+                  .style!
+                  .fontWeight,
+              FontWeight.w700,
+            );
+            expect(tester.takeException(), isNull);
+            await capture('selected');
+            await tester.pumpWidget(const SizedBox.shrink());
+          },
         );
-        expect(host.skillReads.single, {'profile': 'a', 'name': 'a-skill'});
-        expect(chat.composer.observation.text, 'Please use /a-');
-        expect(
-          host.commandCalls.where((c) => c.$1 == 'prompt.submit'),
-          isEmpty,
-        );
-        await tester.pageBack();
-        await tester.pumpAndSettle();
-        expect(
-          tester.widget<TextField>(composer).controller!.text,
-          'Please use /a-',
-        );
-        expect(inspect.hitTestable(), findsOneWidget);
-        await tester.tap(find.text('/a-skill'));
-        await tester.pumpAndSettle();
-        final input = tester.widget<TextField>(composer).controller!;
-        expect(input.text, 'Please use /a-skill ');
-        expect(
-          find.byType(SlashCommandSuggestions).hitTestable(),
-          findsNothing,
-        );
-        final editable = tester.widget<EditableText>(
-          find.descendant(of: composer, matching: find.byType(EditableText)),
-        );
-        final span = input.buildTextSpan(
-          context: tester.element(composer),
-          style: editable.style,
-          withComposing: true,
-        );
-        expect(
-          span.children!
-              .whereType<TextSpan>()
-              .singleWhere((s) => s.text == '/a-skill')
-              .style!
-              .fontWeight,
-          FontWeight.w700,
-        );
-        expect(tester.takeException(), isNull);
-        await capture('selected');
-        await tester.pumpWidget(const SizedBox.shrink());
-      });
+      }
     }
   }
 

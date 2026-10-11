@@ -113,6 +113,12 @@ void main() {
           expect(tester.takeException(), isNull);
           expect(find.byType(LinearProgressIndicator), findsNothing);
           if (scenario == 'loading') {
+            expect(find.text('Reading resources…'), findsNothing);
+            expect(find.text('Reading machine details…'), findsNothing);
+            expect(
+              find.bySemanticsLabel('Reading host resources'),
+              findsOneWidget,
+            );
             expect(find.byType(CircularProgressIndicator), findsOneWidget);
             expect(
               tester

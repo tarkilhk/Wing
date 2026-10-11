@@ -2,11 +2,15 @@
 
 ## Add something to a chat
 
-In the composer, choose **Camera**, **Photos** or **Files**. You can also share text, a link, an image or a file from another Android app into Wing. Incoming shares open a review so you can choose the connection, profile and chat. Nothing is sent until you tap **Send** in the chat.
+In the composer, choose **Camera**, **Photos** or **Files**. These actions are available whether you opened the chat from the chat list, a notification or a health alert. You can also share text, a link, an image or a file from another Android app into Wing. Incoming shares open a review so you can choose the connection, profile and chat. Nothing is sent until you tap **Send** in the chat.
+
+With **Camera**, confirm the picture to add it to your current draft while keeping the chat open. You can take another picture to add it alongside the first. Cancelling the camera leaves the draft unchanged.
 
 With **Photos** or **Files**, select several items in the picker and confirm to add them together. Tap an image thumbnail in the draft to open a full-screen preview; pinch to zoom, then go back to continue composing. The × removes that attachment.
 
-Sent images show up to five previews in a compact two-column grid. An unpaired image fills the last row. With more than five images, the fifth preview shows **+N** for the remaining images. Tap any preview to open the full-resolution viewer; swipe left or right, or use the arrow icons, to browse every image. A scrollable thumbnail strip at the bottom lets you jump directly to any image and highlights the current one. Images have no number labels; the counter shows your position. Pinch to zoom; dragging while zoomed pans the current image. Unavailable previews retry when you return to Wing or the connection recovers, and the retry icon remains available.
+After confirming a camera photo or picker selection, a pending tile appears in the attachment strip while Wing prepares and saves the files locally. It shows **Adding** and a count for multiple items, then fades into the thumbnail. You can keep typing during photo preparation. If preparation fails, Wing shows an error and keeps your existing draft. Upload starts only when you send.
+
+Sent images show up to five previews in a compact two-column grid. An unpaired image fills the last row. With more than five images, the fifth preview shows **+N** for the remaining images. Tap any preview to open the full-resolution viewer; swipe left or right, or use the arrow icons, to browse every image. Images follow your swipe as neighboring cards, gently receding and settling into place while the controls stay steady. A scrollable thumbnail strip at the bottom lets you jump directly to any image and highlights the current one. Nearby selections slide; distant jumps briefly fade and settle without scrolling through every image. Images have no number labels; the counter shows your position. Pinch to zoom; dragging while zoomed pans the current image. Unavailable previews retry when you return to Wing or the connection recovers, and the retry icon remains available.
 
 A draft can hold up to **40 attachments** and **128 MiB** in total. Generic files are limited to **16 MiB each**. Wing shows an error if a selection is too large and keeps your existing draft; your Hermes server or provider may have a smaller limit.
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -99,6 +100,7 @@ void main() {
   testWidgets('keeps recent matches first after loading older messages', (
     tester,
   ) async {
+    final older = Completer<ProfileHistoryPage>();
     await tester.pumpWidget(
       MaterialApp(
         home: _findSheet(
@@ -117,14 +119,7 @@ void main() {
                     'content': 'recent newest needle',
                   },
                 ])
-              : page([
-                  {'id': 1, 'role': 'assistant', 'content': 'oldest needle'},
-                  {
-                    'id': 500,
-                    'role': 'assistant',
-                    'content': 'older newest needle',
-                  },
-                ], offset: offset),
+              : older.future,
         ),
       ),
     );
@@ -141,6 +136,24 @@ void main() {
     );
 
     await tester.tap(find.text('Search older messages'));
+    await tester.pump();
+    expect(find.text('Searching older messages…'), findsNothing);
+    expect(find.text('Search older messages'), findsOneWidget);
+    expect(find.bySemanticsLabel('Searching messages'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(
+            find.widgetWithText(TextButton, 'Search older messages'),
+          )
+          .onPressed,
+      isNull,
+    );
+    older.complete(
+      page([
+        {'id': 1, 'role': 'assistant', 'content': 'oldest needle'},
+        {'id': 500, 'role': 'assistant', 'content': 'older newest needle'},
+      ], offset: 500),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1));
 

@@ -397,7 +397,9 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(chat.reading.historyLoading, isTrue);
     await tester.pump();
     expect(find.byType(PlayfulPortrait), findsNothing);
-    expect(find.text('Loading history…'), findsOneWidget);
+    expect(find.text('Loading history…'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.bySemanticsLabel('Loading history'), findsOneWidget);
 
     gate.complete();
     await loading;
@@ -707,9 +709,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     );
     await show(tester);
     await tester.tap(
-      find.textContaining(
-        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-      ),
+      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
     );
     await tester.pumpAndSettle();
     await Scrollable.ensureVisible(
@@ -802,11 +802,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             for (
               var attempt = 0;
               find
-                      .textContaining(
-                        RegExp(
-                          r'^(Activity|Used \d+ tools?|Using \d+ tools?)$',
-                        ),
-                      )
+                      .textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$'))
                       .evaluate()
                       .isEmpty &&
                   attempt < 50;
@@ -818,17 +814,13 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             }
             await Scrollable.ensureVisible(
               tester.element(
-                find.textContaining(
-                  RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-                ),
+                find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
               ),
               alignment: 0.1,
             );
             await tester.pumpAndSettle();
             await tester.tap(
-              find.textContaining(
-                RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-              ),
+              find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
             );
             await tester.pumpAndSettle();
             final agents = find.byKey(
@@ -935,7 +927,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           await show(tester, brightness: brightness, scale: scale);
           await tester.settleMarkdown();
           final activity = find.textContaining(
-            RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+            RegExp(r'^Activity(?: · \d+ tools?)?$'),
           );
           final before = tester.getBottomLeft(activity).dy;
           final scroll = tester.widget<ListView>(list).controller!;
@@ -991,9 +983,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await show(tester);
     await toggleInPlace(
       tester,
-      find.textContaining(
-        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-      ),
+      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
     );
     final header = find.text('Scrollable output');
     await tester.ensureVisible(header);
@@ -1041,7 +1031,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     );
     await show(tester);
     final activity = find.textContaining(
-      RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
+      RegExp(r'^Activity(?: · \d+ tools?)?$'),
     );
     await toggleInPlace(tester, activity);
     final header = find.text('Long output');
@@ -1090,9 +1080,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       await show(tester);
       await toggleInPlace(
         tester,
-        find.textContaining(
-          RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-        ),
+        find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
       );
       final tool = find.text('Delegated tasks');
       await tester.ensureVisible(tool);
@@ -1166,14 +1154,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     chat.reading.installSnapshot(snapshot);
     await show(tester);
     expect(find.text('· 1m 24s'), findsOneWidget);
-    expect(find.text('Used 1 tool'), findsOneWidget);
-    tester.binding.handleAppLifecycleStateChanged(
-      AppLifecycleState.paused,
-    );
+    expect(find.text('Activity · 1 tool'), findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump(const Duration(minutes: 10));
-    tester.binding.handleAppLifecycleStateChanged(
-      AppLifecycleState.resumed,
-    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(find.text('· 1m 24s'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -1212,20 +1196,16 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     );
     await show(tester);
     expect(
-      find.textContaining(
-        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-      ),
+      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
       findsOneWidget,
     );
-    expect(find.text('Used 3 tools'), findsOneWidget);
+    expect(find.text('Activity · 3 tools'), findsOneWidget);
     expect(find.text('Read file'), findsNothing);
     expect(find.text('Tool 1'), findsNothing);
     expect(find.text('Message 5'), findsOneWidget);
 
     await tester.tap(
-      find.textContaining(
-        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-      ),
+      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
     );
     await tester.pumpAndSettle();
     expect(find.text('Read file'), findsOneWidget);
@@ -1256,9 +1236,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       findsNothing,
     );
     await tester.tap(
-      find.textContaining(
-        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-      ),
+      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
     );
     await tester.pumpAndSettle();
     expect(
@@ -1270,9 +1248,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(find.text('Message 5'), findsOneWidget);
 
     await tester.tap(
-      find.textContaining(
-        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-      ),
+      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
     );
     await tester.pumpAndSettle();
     expect(
@@ -1285,9 +1261,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     chat.reading.recordScrollOffset(0);
     await show(tester);
     expect(
-      find.textContaining(
-        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-      ),
+      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
       findsOneWidget,
     );
     expect(find.text('Read file'), findsNothing);
@@ -1313,13 +1287,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     );
     await show(tester);
     expect(
-      find.textContaining(
-        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-      ),
+      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
       findsNWidgets(2),
     );
-    expect(find.text('Used 30 tools'), findsOneWidget);
-    expect(find.text('Used 1 tool'), findsOneWidget);
+    expect(find.text('Activity · 30 tools'), findsOneWidget);
+    expect(find.text('Activity · 1 tool'), findsOneWidget);
     expect(find.text('Tool result'), findsNothing);
     expect(find.text('Message 60').hitTestable(), findsOneWidget);
     expect(find.text('Message 62').hitTestable(), findsOneWidget);
@@ -1342,9 +1314,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await show(tester);
 
     expect(
-      find.textContaining(
-        RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'),
-      ),
+      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
       findsOneWidget,
     );
     expect(find.text('Unsaved tool output'), findsNothing);

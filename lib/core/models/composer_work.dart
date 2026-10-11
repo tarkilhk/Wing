@@ -94,6 +94,18 @@ final class ComposerRuntimeObservation {
   final bool historyAvailable;
 }
 
+/// One locally prepared batch; progress is indeterminate until it is saved.
+final class ComposerAttachmentPreparation {
+  const ComposerAttachmentPreparation({
+    required this.imageCount,
+    required this.fileCount,
+  });
+
+  final int imageCount;
+  final int fileCount;
+  int get count => imageCount + fileCount;
+}
+
 final class ComposerObservation {
   ComposerObservation({
     required this.revision,
@@ -108,6 +120,7 @@ final class ComposerObservation {
     required this.saving,
     required this.draining,
     required this.preparing,
+    required this.attachmentPreparation,
     required this.sending,
     required this.steering,
     required this.restored,
@@ -128,6 +141,7 @@ final class ComposerObservation {
   final bool saving;
   final bool draining;
   final bool preparing;
+  final ComposerAttachmentPreparation? attachmentPreparation;
   final bool sending;
   final bool steering;
   final bool restored;

@@ -311,9 +311,7 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
               ? WingTokens.dark()
               : WingTokens.light());
       final tools = _probe?.tools ?? const <ConnectorTool>[];
-      final status = _testing
-          ? 'Testing connection…'
-          : _testFailure != null
+      final status = _testFailure != null
           ? 'Connection failed'
           : _probe != null
           ? 'Connected'
@@ -339,7 +337,10 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
                       const SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          semanticsLabel: 'Testing connection',
+                        ),
                       )
                     else
                       Icon(
@@ -351,8 +352,10 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
                         size: 20,
                         color: color,
                       ),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(status)),
+                    if (!_testing) ...[
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(status)),
+                    ],
                   ],
                 ),
               ),

@@ -20,6 +20,7 @@ import 'administration_repository.dart';
 import 'skill_reader_session.dart';
 import '../models/skill_reader.dart';
 import 'app_preferences.dart';
+import 'connection_diagnostics.dart';
 import 'profile_colors_session.dart';
 
 import 'package:flutter/foundation.dart';
@@ -469,6 +470,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   final Future<void> Function(ProfileInputNotification)? onNotificationInputs;
   final Future<void> Function(ProfileSessionKey, String)? onNotificationRead;
   final NotificationFocus? Function(ProfileSessionKey)? notificationResultFor;
+  final List<NotificationInput> Function(ProfileSessionKey)?
+  _notificationInputsFor;
   final _notificationReplayCursors = <String, int>{};
   final Map<WorkspaceScope, ProfileWorkspaceData> _resources = {};
   final Map<ProfileSessionKey, ProfileChat> _recoveredDraftTargets = {};
@@ -761,7 +764,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     this.onNotificationInputs,
     this.onNotificationRead,
     this.notificationResultFor,
-  }) : _gatewayConnection = ProfileGatewayConnection(access),
+    List<NotificationInput> Function(ProfileSessionKey)? notificationInputsFor,
+    // Keep the injected journal reader private behind the workspace boundary.
+    // ignore: prefer_initializing_formals
+  }) : _notificationInputsFor = notificationInputsFor,
+       _gatewayConnection = ProfileGatewayConnection(access),
        _runtimeFactory = runtimeFactory ?? _createRuntime,
        attachments = attachmentService ?? AttachmentDraftService() {
     _factory = gatewayFactory ?? _gatewayConnection.create;
@@ -1477,6 +1484,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   /// Establish the destination synchronously, before any network operation.
   Future<void> openNotification(
     ProfileSessionKey key, {
+    String? title,
     bool Function()? isCurrent,
   }) {
     if (!owns(key)) throw ArgumentError('Wrong connection settings or host');
@@ -1485,6 +1493,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _notificationIsCurrent = isCurrent;
     _notificationAttempts = 0;
     final resource = _resource(key.workspace.profileName);
+    // A chat destination supersedes older profile-list publication immediately.
+    // Its connection and history load are owned by this opening, not the browser.
+    ++_generation;
+    _cancelOlderLoads();
+    if (_current != null) _invalidateSessionLoad(_current!);
+    if (_current != resource) _invalidateSessionLoad(resource);
+    _pendingProfile = null;
     final row = resource._sessions
         .where((r) => r['id'] == key.sessionId)
         .firstOrNull;
@@ -1493,9 +1508,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
       () => _createChatRecord(
         key: key,
         runtimeId: key.sessionId,
-        title: row?['title'] as String? ?? 'Chat',
+        title: title ?? row?['title'] as String? ?? 'Chat',
       ).._runtime.installOfflineReading(),
     );
+    if (title != null) chat._title = title;
     chat._runtime.beginOpening();
     connectionStatus.beginRecovery('notification');
     _changed();
@@ -1572,6 +1588,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         throw _initializationFailure ?? TimeoutException('Connecting');
       }
       chat._runtime.recovered();
+      _resource(key.workspace.profileName)._offlineSnapshot = false;
       final row = _resource(
         key.workspace.profileName,
       ).sessions.where((row) => row['id'] == key.sessionId).firstOrNull;
@@ -1640,6 +1657,22 @@ class ProfileWorkspaceController extends ChangeNotifier {
   ProfileChat? browserChat(ProfileSessionKey key) {
     if (!owns(key)) throw ArgumentError('Wrong connection settings or host');
     return _resources[key.workspace]?._chats[key.sessionId];
+  }
+
+  /// Canonical browsing uses a connected reader, never an unopened chat socket.
+  Future<ProfileCanonicalBotChat?> browserCanonicalBotChat(
+    String name, {
+    required bool Function() canRead,
+  }) async {
+    if (_closed || !canRead()) throw StateError('Browser is closed');
+    final reader = _factory(browserResource(name).scope);
+    try {
+      await reader.connect();
+      if (_closed || !canRead()) throw StateError('Browser is closed');
+      return await reader.canonicalBotChat();
+    } finally {
+      reader.close();
+    }
   }
 
   /// Project browsing uses short-lived readers, never the conversation socket.
@@ -1829,6 +1862,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<void> _initialize() async {
     connectionStatus.beginRecovery('initialization');
+    logConnectionDiagnostic(
+      'workspace.initialization_started',
+      details: {
+        'connection': connection.id,
+        'attempt': _initializationAttempt,
+        'generation': _generation,
+      },
+    );
     _initializationFailure = null;
     final generation = _generation;
     _initializationRetry?.cancel();
@@ -1850,9 +1891,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         preferredName: _discovery!.serverPreferred.name,
       );
       if (!await switchProfile(initial)) return;
-    } catch (e) {
+    } catch (e, stack) {
       if (_closed || generation != _generation) return;
-      _initializationFailed(e);
+      _initializationFailed(e, stack);
       _changed();
     }
   }
@@ -1870,6 +1911,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     // Admit the connection-owned restoration once before any awaited work.
     // A subsequent profile navigation cannot duplicate this initialization.
     _initialized = true;
+    logConnectionDiagnostic(
+      'workspace.initialized',
+      details: {
+        'connection': connection.id,
+        'profile': _current?.scope.profileName,
+        'attempt': _initializationAttempt,
+      },
+    );
     _initializationFailure = null;
     _profileSelectionRepairRequired = false;
     connectionStatus.endRecovery('initialization');
@@ -1888,12 +1937,23 @@ class ProfileWorkspaceController extends ChangeNotifier {
   static Duration _recoveryDelay(int attempt) =>
       Duration(seconds: 1 << attempt);
 
-  void _initializationFailed(Object failure) {
+  void _initializationFailed(Object failure, [StackTrace? stack]) {
     _initializationFailure = failure;
     if (failure is ProfileSelectionRepairRequired) {
       _profileSelectionRepairRequired = true;
     }
     _recoveringInitialization = isTemporaryWorkspaceFailure(failure);
+    logConnectionDiagnostic(
+      'workspace.initialization_failed',
+      details: {
+        'connection': connection.id,
+        'attempt': _initializationAttempt,
+        'generation': _generation,
+        ...workspaceFailureDiagnostic(failure),
+      },
+      error: failure,
+      stackTrace: stack,
+    );
     _error = _recoveringInitialization
         ? null
         : failure is ProfileSelectionRepairRequired
@@ -1903,6 +1963,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
         !_closed &&
         _notificationTarget == null &&
         _initializationAttempt < _maxRecoveryRetries) {
+      logConnectionDiagnostic(
+        'workspace.initialization_retry_scheduled',
+        details: {
+          'connection': connection.id,
+          'attempt': _initializationAttempt + 1,
+          'delay_ms': _recoveryDelay(_initializationAttempt).inMilliseconds,
+        },
+      );
       _initializationRetry?.cancel();
       _initializationRetry = Timer(
         _recoveryDelay(_initializationAttempt++),
@@ -1912,6 +1980,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
         },
       );
     } else {
+      logConnectionDiagnostic(
+        'workspace.initialization_stopped',
+        details: {
+          'connection': connection.id,
+          'attempt': _initializationAttempt,
+          'retryable': _recoveringInitialization,
+          'notification_opening': _notificationTarget != null,
+        },
+      );
       if (_notificationTarget != null ||
           failure is ProfileSelectionRepairRequired) {
         // Notification opening owns its outer retry burst; profile-selection
@@ -1940,6 +2017,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
   /// Foreground entry also recovers a workspace that never finished loading.
   Future<void> resumeConnection({bool networkChanged = false}) async {
     if (_closed) return;
+    logConnectionDiagnostic(
+      'workspace.resume',
+      details: {
+        'connection': connection.id,
+        'network_changed': networkChanged,
+        'initialized': _initialized,
+        'recovering': recovering,
+        'notification_opening': _notificationTarget != null,
+      },
+    );
     if (networkChanged) {
       // A socket associated with the previous mobile route can look connected
       // until its next timeout. Re-open it when Android reports a new route.
@@ -2076,12 +2163,23 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       _changed();
       return true;
-    } catch (e) {
+    } catch (e, stack) {
       if (!_closed && generation == _generation) {
+        logConnectionDiagnostic(
+          'workspace.profile_open_failed',
+          details: {
+            'connection': connection.id,
+            'profile': name,
+            'generation': generation,
+            ...workspaceFailureDiagnostic(e),
+          },
+          error: e,
+          stackTrace: stack,
+        );
         _pendingProfile = null;
         _initializationFailure = e;
         if (!_initialized) {
-          _initializationFailed(e);
+          _initializationFailed(e, stack);
         } else if (isTemporaryWorkspaceFailure(e)) {
           _scheduleReconnect(target);
           if (target != _current) {
@@ -3364,17 +3462,62 @@ class ProfileWorkspaceController extends ChangeNotifier {
   /// mutable workspace owner. Recovery policy stays with the connection owner.
   Future<void> openBrowserSession(
     ProfileSessionKey key, {
+    String? title,
     required bool Function() isCurrentRequest,
   }) async {
     if (_closed || !isCurrentRequest()) return;
     if (!owns(key)) throw ArgumentError('Wrong connection settings or host');
-    if (_resources[key.workspace]?.offlineSnapshot == true || recovering) {
-      // Publishing the destination replaces and disposes the browser. Its
-      // request authority admits this handoff; the controller's generation
-      // owns recovery until Back or a newer destination cancels it.
-      await openNotification(key);
-    } else {
-      await openSession(key, isCurrentRequest: isCurrentRequest);
+    // Publish every explicit destination before I/O, including during profile
+    // refresh. Browser disposal transfers authority to the opening generation;
+    // Back or a newer destination can still cancel its connection/history reads.
+    await openNotification(key, title: title);
+  }
+
+  /// A saved chat needs a validated profile and transport, not a list/tree.
+  /// Keep the existing browser snapshot while the exact destination is opened.
+  Future<bool> _selectChatProfile(
+    WorkspaceScope scope,
+    bool Function()? isCurrentRequest,
+  ) async {
+    final generation = ++_generation;
+    final resource = _resource(scope.profileName);
+    _cancelOlderLoads();
+    if (_current != null) _invalidateSessionLoad(_current!);
+    if (_current != resource) _invalidateSessionLoad(resource);
+    _pendingProfile = null;
+    bool valid() =>
+        !_closed &&
+        generation == _generation &&
+        (isCurrentRequest?.call() ?? true);
+    try {
+      final profiles = await resource.gateway.discover();
+      if (!valid()) return false;
+      if (profiles.named(scope.profileName) == null) {
+        throw StateError('Profile ${scope.profileName} is no longer available');
+      }
+      await resource.gateway.connect();
+      if (!valid()) return false;
+      _adoptDiscovery(profiles);
+      _current = resource;
+      _error = null;
+      _failedSwitchProfile = null;
+      _failedSwitchError = null;
+      appPreferences.admitProfileSelection(
+        connectionIdentity,
+        scope.profileName,
+      );
+      unawaited(appPreferences.settleProfileSelection(connectionIdentity));
+      return true;
+    } catch (failure) {
+      if (!valid()) return false;
+      _initializationFailure = failure;
+      _error = failure is StateError
+          ? failure.message.toString()
+          : workspaceFailureMessage(failure);
+      _failedSwitchProfile = scope.profileName;
+      _failedSwitchError = _error;
+      _changed();
+      return false;
     }
   }
 
@@ -3389,6 +3532,29 @@ class ProfileWorkspaceController extends ChangeNotifier {
     propagateHistoryFailure: propagateHistoryFailure,
     isCurrentRequest: isCurrentRequest,
   );
+
+  /// Camera intake borrows a mounted draft without navigation or server reads.
+  /// An absent destination still uses the exact saved-chat recovery workflow.
+  Future<({ProfileChat chat, bool retainWorkspace})?> prepareSharedDraftTarget(
+    ProfileSessionKey key,
+  ) async {
+    if (!owns(key)) throw ArgumentError('Wrong connection settings or host');
+    if (_closed) return null;
+    final retained = _resources[key.workspace]?._chats[key.sessionId];
+    final replacement = retained?._replacementCompletion;
+    if (replacement != null) await replacement.future;
+    if (_closed) return null;
+    final chat = _recoveredDraftTarget(key) ?? retained;
+    if (chat != null &&
+        !switching &&
+        hasMountedRoutes &&
+        identical(current?.chat, chat)) {
+      _commandOwner(chat);
+      return (chat: chat, retainWorkspace: true);
+    }
+    final opened = await openSession(key, recoverExpiredDraft: true);
+    return opened == null ? null : (chat: opened, retainWorkspace: false);
+  }
 
   Future<ProfileChat?> _openSession(
     ProfileSessionKey key, {
@@ -3452,7 +3618,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     // A newer selection must supersede an unfinished switch even when the
     // user chooses a chat in the profile that is still on screen.
     if ((_current?.scope != key.workspace || switching) &&
-        !await switchProfile(key.workspace.profileName)) {
+        !await _selectChatProfile(key.workspace, isCurrentRequest)) {
       return null;
     }
     if (isCurrentRequest?.call() == false) return null;
@@ -3616,6 +3782,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
       unawaited(_loadChatProject(resource, chat));
       await refreshHistory(chat, propagateFailure: propagateHistoryFailure);
       chat._runtime.recovered();
+      if (!_closed &&
+          _current?.chat == chat &&
+          navigation == _navigationGeneration &&
+          isCurrentRequest?.call() != false &&
+          !chat.reading.historyLoading &&
+          chat.reading.historyError == null) {
+        // Direct Bot/Activity opens can select a restored profile without a
+        // browser refresh. Resume and fresh history restore its send authority.
+        resource._offlineSnapshot = false;
+      }
       if (!chat.runtime.blocksTurnAdmission &&
           chat.reading.historyError == null) {
         chat.reading.updateStreaming('');
@@ -7785,6 +7961,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
       return;
     }
     if (resource._reconnectAttempt >= _maxRecoveryRetries) {
+      logConnectionDiagnostic(
+        'workspace.recovery_exhausted',
+        details: {
+          'connection': connection.id,
+          'profile': resource.scope.profileName,
+          'attempts': resource._reconnectAttempt,
+        },
+      );
       // A restored transport is not proof the conversation was restored.
       resource._recovering = true;
       connectionStatus.failRecovery(
@@ -7797,6 +7981,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
     resource._recovering = true;
     connectionStatus.beginRecovery(resource.scope.profileName);
     final delay = _recoveryDelay(resource._reconnectAttempt);
+    logConnectionDiagnostic(
+      'workspace.recovery_scheduled',
+      details: {
+        'connection': connection.id,
+        'profile': resource.scope.profileName,
+        'attempt': resource._reconnectAttempt + 1,
+        'delay_ms': delay.inMilliseconds,
+      },
+    );
     // Further attempts are driven by app/screen focus or network changes.
     resource._reconnectAttempt++;
     resource._retry = Timer(delay, () {
@@ -7828,6 +8021,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (_closed) return;
     resource._reconnecting = true;
     resource._recovering = true;
+    logConnectionDiagnostic(
+      'workspace.recovery_started',
+      details: {
+        'connection': connection.id,
+        'profile': resource.scope.profileName,
+        'attempt': resource._reconnectAttempt,
+      },
+    );
     connectionStatus.beginRecovery(resource.scope.profileName);
     _changed();
     var retry = false;
@@ -7896,6 +8097,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       await _journal();
       await _refreshSessions(resource);
+      logConnectionDiagnostic(
+        'workspace.recovered',
+        details: {
+          'connection': connection.id,
+          'profile': resource.scope.profileName,
+          'attempt': resource._reconnectAttempt,
+        },
+      );
       resource._reconnectAttempt = 0;
       resource._reconnectError = null;
       resource._recovering = false;
@@ -7912,8 +8121,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
       // Notification reconciliation can scan every profile and continue while
       // sessions change. A restored chat socket must not stay orange during it.
       await _scheduleNotificationReconciliation(resource);
-    } catch (failure) {
+    } catch (failure, stack) {
       retry = isTemporaryWorkspaceFailure(failure);
+      logConnectionDiagnostic(
+        'workspace.recovery_failed',
+        details: {
+          'connection': connection.id,
+          'profile': resource.scope.profileName,
+          'attempt': resource._reconnectAttempt,
+          ...workspaceFailureDiagnostic(failure),
+        },
+        error: failure,
+        stackTrace: stack,
+      );
       if (retry &&
           !connectionStatus.liveAvailable(resource.scope.profileName)) {
         try {
@@ -7992,6 +8212,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final usage = (result['info'] as Map?)?['usage'];
     if (usage is Map) _updateContext(chat, usage);
     chat._notificationInputsQuiet = true;
+    if (result['open_requests'] is List &&
+        _notificationInputsFor?.call(chat.key).isNotEmpty == true) {
+      _publishNotificationInputs(chat, alert: false, confirmedSnapshot: true);
+    }
     _hydrateIntelligence(chat, result);
     chat._fastMode = null;
     unawaited(_observeModelControls(chat));

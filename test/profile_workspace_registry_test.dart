@@ -51,6 +51,53 @@ void main() {
   });
 
   test(
+    'foreground retries a mounted workspace whose startup stopped',
+    () async {
+      final connection = identityTestConnection();
+      final owner = await registry.forConnection(connection);
+      final host = hosts[owner.connectionIdentity]!;
+      owner.setRouteMounted(Object(), true);
+      host.discoveryFailure = const DashboardHttpException(400, 'profiles');
+      await owner.initialize();
+      expect(owner.initialized, isFalse);
+      expect(owner.recovering, isFalse);
+      expect(owner.error, contains('Couldn’t open this workspace'));
+      host.discoveryFailure = null;
+
+      registry.resumeConnections();
+      for (var attempt = 0; attempt < 20 && !owner.initialized; attempt++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(
+        owner.initialized,
+        isTrue,
+        reason: 'Foreground entry must retry the mounted failed startup',
+      );
+    },
+  );
+
+  for (final trigger in ['network', 'unmounted foreground']) {
+    test('$trigger does not retry a permanently failed startup', () async {
+      final connection = identityTestConnection();
+      final owner = await registry.forConnection(connection);
+      final host = hosts[owner.connectionIdentity]!;
+      if (trigger == 'network') owner.setRouteMounted(Object(), true);
+      host.discoveryFailure = const DashboardHttpException(401, 'profiles');
+      await owner.initialize();
+      host.discoveryFailure = null;
+      if (trigger == 'network') {
+        registry.recoverConnections();
+      } else {
+        registry.resumeConnections();
+      }
+      await Future<void>.delayed(Duration.zero);
+      expect(owner.initialized, isFalse);
+      expect(host.connectCalls, 0);
+    });
+  }
+
+  test(
     'connection edit soak closes settled obsolete sockets and reconnects live owners only',
     () async {
       final base = identityTestConnection();

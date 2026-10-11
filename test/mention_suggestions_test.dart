@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/composer_reference.dart';
+import 'package:wing/core/models/slash_command.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/mention_suggestions.dart';
 import 'package:wing/core/widgets/slash_command_suggestions.dart';
@@ -36,6 +37,72 @@ const _folder = MentionCandidate(
 );
 
 void main() {
+  testWidgets('references retain emphasis beside native commands and skills', (
+    tester,
+  ) async {
+    const file = ComposerReference(
+      kind: ComposerReferenceKind.file,
+      token: '@file:"/work/design note.md"',
+      target: '/work/design note.md',
+    );
+    final input = SkillComposerController(
+      text: '/bg use /plugin:skill with ${file.token} and @hermes',
+    );
+    addTearDown(input.dispose);
+    input.setScope('first-chat');
+    input.observeCommands(const [
+      SlashCommand('/bg', 'Background task', 'Session'),
+      SlashCommand('/plugin:skill', '', 'Skills'),
+    ]);
+    input.observeReferences([file, _agent.reference]);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.light),
+        home: Scaffold(body: TextField(controller: input)),
+      ),
+    );
+    final context = tester.element(find.byType(EditableText));
+    List<TextSpan> spans() => input
+        .buildTextSpan(context: context, withComposing: true)
+        .children!
+        .whereType<TextSpan>()
+        .toList();
+    final native = spans().singleWhere((span) => span.text == '/bg');
+    expect(native.style!.fontFamily, 'monospace');
+    expect(native.style!.fontWeight, FontWeight.w400);
+    for (final token in ['/plugin:skill', file.token, '@hermes']) {
+      final span = spans().singleWhere((span) => span.text == token);
+      expect(span.style!.fontWeight, FontWeight.w700);
+      expect(span.style!.fontFamily, isNull);
+      expect(span.style!.color, Theme.of(context).colorScheme.primary);
+    }
+    final start = input.text.indexOf('design');
+    final selection = TextSelection.collapsed(offset: start + 6);
+    input.value = input.value.copyWith(
+      selection: selection,
+      composing: TextRange(start: start, end: start + 6),
+    );
+    final composing = spans()
+        .where((span) => span.style!.decoration == TextDecoration.underline)
+        .toList();
+    expect(composing.map((span) => span.text).join(), 'design');
+    expect(
+      composing.every((span) => span.style!.fontWeight == FontWeight.w700),
+      isTrue,
+    );
+    expect(
+      input.buildTextSpan(context: context, withComposing: true).toPlainText(),
+      input.text,
+    );
+    expect(input.selection, selection);
+    input.setScope('next-chat');
+    expect(spans().any((span) => span.text == '@hermes'), isFalse);
+    expect(
+      spans().any((span) => span.style!.fontFamily == 'monospace'),
+      isFalse,
+    );
+  });
+
   setUpAll(() async {
     final fonts = Platform.environment['CAPTURE_REFERENCE_FONTS'];
     if (fonts == null) return;

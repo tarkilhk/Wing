@@ -18,6 +18,12 @@ void main() {
     );
 
     await tester.pumpWidget(const MaterialApp(home: InstalledAppVersionCard()));
+    expect(find.text('Loading version information…'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp('Loading version information')),
+      findsOneWidget,
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Wing'), findsOneWidget);

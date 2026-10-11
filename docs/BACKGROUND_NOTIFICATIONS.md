@@ -20,6 +20,8 @@ Alerts show their chat and connection/profile. Reply previews omit reasoning, co
 
 Unanswered requests take priority over unread results. When several requests are pending, they are shown in order. Dismissing a notification does not answer or deny the request.
 
+When Wing confirms that a question or approval was answered, it clears that request's alert. This also applies to answers sent from desktop. After restarting Wing, connect to the original server so it can check restored alerts. A failed connection leaves them visible until the check succeeds. An unread reply can remain after its question clears.
+
 ## Answer approvals and open chats
 
 Approval actions require unlocking the phone. Depending on the request, an alert offers Once, Session, Always or Deny. Session applies to matching commands for that session. Permanent approval opens a confirmation in Wing. Long or incomplete commands, or hidden previews, require review in the app.

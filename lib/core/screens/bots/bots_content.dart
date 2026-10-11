@@ -442,11 +442,12 @@ class _BotsContentState extends State<BotsContent> {
           fixedSize: const Size(48, 48),
           padding: const EdgeInsets.all(4),
         ),
-        icon: BotAvatar(
+        icon: LiveBotAvatar(
+          bot: bot,
           name: bot.profile.name,
-          shape: bot.shape,
-          color: bot.color,
-          image: bot.avatar,
+          mood: bot.presence == BotPresence.working
+              ? BotAvatarMood.work
+              : BotAvatarMood.idle,
         ),
       ),
       subtitle: '${bot.instance} · $label',

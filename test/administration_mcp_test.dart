@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:wing/core/services/profile_connectors_session.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -74,6 +75,42 @@ Future<void> testConnection(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'connector probe uses accessible progress without repeated text',
+    (tester) async {
+      final fixture = fixtureWith({'ok': true, 'tools': []});
+      addTearDown(fixture.server.close);
+      final get = fixture.override!;
+      final gate = Completer<Map<String, dynamic>>();
+      fixture.override = (method, path, query, body) =>
+          method == 'POST' ? gate.future : get(method, path, query, body);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdminConnectorDetail(
+            createRoute: () {
+              final parent = ProfileConnectorsSession(
+                fixture.server.profile('personal'),
+              );
+              addTearDown(parent.dispose);
+              return parent.openDetail('aspire', signInOnOpen: false);
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Test connection'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Test'));
+      await tester.pump();
+      expect(find.text('Testing connection…'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.bySemanticsLabel('Testing connection'), findsOneWidget);
+      gate.complete({'ok': true, 'tools': []});
+      await tester.pumpAndSettle();
+      expect(find.text('Connected'), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'MCP sign-in starts a profile-scoped loopback flow with paste-back',
     (tester) async {

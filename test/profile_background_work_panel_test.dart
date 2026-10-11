@@ -331,20 +331,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('chat actions opens background work for the current chat', (
+  testWidgets('Activity Work opens background work without any tools', (
     tester,
   ) async {
+    await supervision.refreshWork();
     await tester.pumpWidget(
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byTooltip('Chat actions'));
+    await tester.tap(find.text('Activity'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Chat actions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Background work').last);
+    expect(
+      find.byKey(const ValueKey(('activity-tab', 'work'))),
+      findsOneWidget,
+    );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Background work'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Background work'));
+    await tester.pumpAndSettle();
     expect(find.text('Check the release queue'), findsOneWidget);
     expect(find.text('Report deployment health'), findsOneWidget);
     expect(find.text('dart run worker.dart'), findsWidgets);

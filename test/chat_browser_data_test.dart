@@ -11,12 +11,18 @@ import 'package:wing/core/models/session_visibility.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'support/profile_paging_fixture.dart';
 
 class ReaderFixture extends ProfilePagingFixture {
   final opened = <int>{}, closed = <int>{};
+  final ready = <int>{};
+  final prematureCanonicalReads = <String>[];
+  final connectionDelays = <String, Completer<void>>{};
+  Completer<void>? connectionEntered;
+  bool requireReadySocket = false;
   final owners = <int, String>{};
   bool failNextPage = false;
   bool failNextTree = false;
@@ -42,7 +48,13 @@ class ReaderFixture extends ProfilePagingFixture {
       discover: base.discover,
       connect: () async {
         opened.add(id);
+        final delay = connectionDelays[scope.profileName];
+        if (delay != null) {
+          connectionEntered?.complete();
+          await delay.future;
+        }
         await base.connect();
+        ready.add(id);
       },
       close: () {
         closed.add(id);
@@ -68,6 +80,16 @@ class ReaderFixture extends ProfilePagingFixture {
         return base.read(path, query);
       },
       rpc: (method, params) async {
+        if (requireReadySocket &&
+            method == 'session.list' &&
+            (!ready.contains(id) || closed.contains(id))) {
+          prematureCanonicalReads.add(scope.profileName);
+          throw JsonRpcError(
+            method,
+            'Connection unavailable',
+            reason: 'connection_closed',
+          );
+        }
         if (failNextTree && method == 'projects.tree') {
           failNextTree = false;
           throw TimeoutException('Temporary tree timeout');
@@ -115,6 +137,75 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+  test(
+    'retired canonical read closes its reader without sending an RPC',
+    () async {
+      final live = {...fixture.opened};
+      final gate = Completer<void>();
+      fixture.connectionDelays['work'] = gate;
+      fixture.connectionEntered = Completer<void>();
+      var active = true;
+      final pending = controller.browserCanonicalBotChat(
+        'work',
+        canRead: () => active,
+      );
+      final checked = expectLater(pending, throwsStateError);
+      await fixture.connectionEntered!.future;
+      active = false;
+      gate.complete();
+      await checked;
+      expect(
+        fixture.calls.where(
+          (call) => call.$1 == 'work' && call.$2 == 'session.list',
+        ),
+        isEmpty,
+      );
+      expect(fixture.closed.intersection(live), isEmpty);
+      expect(fixture.opened.difference(live), fixture.closed);
+    },
+  );
+  test(
+    'canonical browsing opens and retires readers without losing live chats',
+    () async {
+      fixture.requireReadySocket = true;
+      final live = {...fixture.opened};
+      for (final profile in ['personal', 'work']) {
+        fixture.hiddenSessions[profile] = [
+          {
+            'id': 'bot-chat',
+            'title': 'Bot Chat',
+            'profile': profile,
+            'hidden': 1,
+            'last_active': fixture.now,
+          },
+        ];
+      }
+      await data.chooseVisibility(SessionVisibility.all);
+      expect(
+        fixture.prematureCanonicalReads,
+        isEmpty,
+        reason: 'Browsing must not fail an unopened conversation socket',
+      );
+      expect(
+        data.state.profiles.values.every((profile) => profile.complete),
+        isTrue,
+      );
+      expect(
+        data.state.profiles.values.every((profile) => profile.error == null),
+        isTrue,
+      );
+      expect(
+        data.entries
+            .where((entry) => entry.isBotChat)
+            .map((entry) => entry.profile)
+            .toSet(),
+        {'personal', 'work'},
+      );
+      expect(fixture.closed.intersection(live), isEmpty);
+      expect(fixture.opened.difference(live), fixture.closed);
+      expect(controller.current!.reconnectScheduled, isFalse);
+    },
+  );
   test(
     'hidden Bot Chats obey visibility before and after opening and re-entry',
     () async {
@@ -196,7 +287,8 @@ void main() {
         ),
         request: (_, _, _, _) async => throw StateError('RPC only'),
         settingsWrite: (_, _, _, _) async => throw StateError('Read only'),
-        ownedMutation: (_, _, _, _, _, _) async => throw StateError('Read only'),
+        ownedMutation: (_, _, _, _, _, _) async =>
+            throw StateError('Read only'),
       );
       controller.healthSession(repository: server);
       data.dispose();
@@ -213,7 +305,10 @@ void main() {
       await data.chooseVisibility(SessionVisibility.all);
       final key = ProfileSessionKey(controller.current!.scope, 'bot-chat');
       expect(data.botAppearance(key)!.shape, 'circle');
-      expect(fixture.calls.where((call) => call.$2 == 'profiles.list'), hasLength(1));
+      expect(
+        fixture.calls.where((call) => call.$2 == 'profiles.list'),
+        hasLength(1),
+      );
       data.dispose();
       expect(controller.administration(), same(server));
       final roster = await server.gateway('default').call('profiles.list');

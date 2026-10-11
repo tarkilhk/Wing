@@ -1,7 +1,7 @@
 # Goals and background work
 
-Open **Goal** or **Background work** from a chat's menu. The conversation's
-Activity **Work** tab also shows known goals, recurring work, and processes.
+Open **Activity** in the conversation, then **Work**, to inspect known goals,
+recurring work and processes. Expand Goal or Background work for their details.
 Hermes runs this work on the server; it does not depend on a phone scheduler.
 
 ## Goals and criteria

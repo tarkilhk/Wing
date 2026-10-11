@@ -19,8 +19,11 @@ import 'package:wing/core/screens/bots/bot_profile_editor.dart';
 import 'package:wing/core/screens/bots/bot_settings_screen.dart';
 import 'package:wing/core/screens/bots/bots_create_screen.dart';
 import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/services/bot_profile_edit_session.dart';
+import 'package:wing/core/theme/profile_colors.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/bots_fixture.dart';
+import 'support/composer_fixture.dart' show emitChatEvent;
 import 'support/administration_fixture.dart';
 import 'support/profile_browser_fixture.dart';
 import 'helpers/pump_markdown_widget.dart';
@@ -75,9 +78,18 @@ class _ReviewBinding extends AutomatedTestWidgetsFlutterBinding {
   bool get disableShadows => false;
 }
 
-Future<void> _capture(WidgetTester tester, GlobalKey frame, String name) async {
+Future<void> _capture(
+  WidgetTester tester,
+  GlobalKey frame,
+  String name, {
+  bool motion = false,
+}) async {
   if (!_export) return;
-  await tester.pumpAndSettle();
+  if (motion) {
+    await tester.pump(const Duration(milliseconds: 100));
+  } else {
+    await tester.pumpAndSettle();
+  }
   await tester.runAsync(() async {
     final boundary =
         frame.currentContext!.findRenderObject()! as RenderRepaintBoundary;
@@ -108,6 +120,91 @@ void main() {
           .load();
     }
   });
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'color taps repaint the saved shape preview before autosave in ${brightness.name}',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = BotsFixture();
+        final meta = fixture.profiles.first['ui_meta']['hermes-bots'];
+        meta['shape'] = 'cloud';
+        meta['imageKind'] = 'shape';
+        const png =
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=';
+        final bot = (await fixture.repository.bots()).first.withAvatar(
+          base64Decode(png),
+        );
+        final frame = GlobalKey();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            home: RepaintBoundary(
+              key: frame,
+              child: BotProfileEditor(
+                createSession: () =>
+                    BotProfileEditSession(fixture.repository, bot),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final preview = find.byWidgetPredicate(
+          (widget) => widget is BotAvatar && widget.size == 88,
+        );
+        Future<void> expectPreviewColor(Color expected) async {
+          final rect = tester.getRect(preview);
+          final sample = Offset(rect.center.dx, rect.top + rect.height * .65);
+          final rendered = await tester.runAsync(() async {
+            final boundary =
+                frame.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary;
+            final image = await boundary.toImage();
+            final rgba = await image.toByteData(
+              format: ui.ImageByteFormat.rawRgba,
+            );
+            final offset =
+                (sample.dy.floor() * image.width + sample.dx.floor()) * 4;
+            final color = Color.fromARGB(
+              rgba!.getUint8(offset + 3),
+              rgba.getUint8(offset),
+              rgba.getUint8(offset + 1),
+              rgba.getUint8(offset + 2),
+            );
+            image.dispose();
+            return color;
+          });
+          expect(rendered!.toARGB32(), expected.toARGB32());
+          expect(tester.widget<BotAvatar>(preview).image, isNull);
+        }
+
+        for (final index in [0, 8, 7]) {
+          await tester.tap(find.byTooltip('Color ${index + 1}'));
+          await tester.pump();
+          expect(
+            fixture.commands,
+            isEmpty,
+            reason: 'Preview precedes autosave',
+          );
+          await expectPreviewColor(desktopProfileSwatches[index]);
+        }
+        await tester.tap(find.byTooltip('Match profile color'));
+        await tester.pump();
+        await expectPreviewColor(BotAvatar.resolveColor('', bot.profile.name));
+        await tester.pump(const Duration(milliseconds: 450));
+        await tester.pumpAndSettle();
+        await expectPreviewColor(BotAvatar.resolveColor('', bot.profile.name));
+        expect(
+          fixture.commands.single.$3['ui_meta']['hermes-bots']['color'],
+          '',
+        );
+        await _capture(tester, frame, 'editor-live-color-${brightness.name}');
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
   testWidgets(
     'settings reopens acknowledged avatar after save, removal and shape selection',
     (tester) async {
@@ -200,6 +297,132 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets(
+    'canonical header borrows only its own live activity for motion',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      final browser = _BotConversationBrowser();
+      final controller = ProfileWorkspaceController(
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Home server',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
+        ),
+        connectionIdentity: 'instance-1',
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: browser.gateway,
+      );
+      await controller.initialize();
+      final scope = controller.current!.scope;
+      await controller.openSession(ProfileSessionKey(scope, 'canonical-root'));
+      final bots = BotsFixture();
+      bots.profiles
+        ..clear()
+        ..add(BotsFixture.profile(scope.profileName, 'Atlas'));
+      bots.profiles.single['canonical_session'] = {
+        'id': 'canonical-root',
+        'resolved_id': 'canonical-tip',
+      };
+      bots.profiles.single['ui_meta']['hermes-bots']['imageKind'] = 'shape';
+      var reads = 0;
+      bots.readHook = (_, _, _) async {
+        reads++;
+        return null;
+      };
+      final frame = GlobalKey();
+      var brightness = Brightness.dark;
+      var scale = 1.0;
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      Widget host() => MaterialApp(
+        theme: wingTheme(brightness),
+        debugShowCheckedModeBanner: false,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
+        home: RepaintBoundary(
+          key: frame,
+          child: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () =>
+                BotsSession((_) async => [bots.repository]),
+          ),
+        ),
+      );
+      await tester.pumpWidget(host());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.settleMarkdown();
+      final face = find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byType(LiveBotAvatar),
+      );
+      expect(face, findsOneWidget);
+      BotAvatarMood mood() => tester.widget<LiveBotAvatar>(face).mood;
+      expect(mood(), BotAvatarMood.idle);
+      final chat = controller.current!.chat!;
+      emitChatEvent(controller, chat, 'message.start');
+      await tester.pump();
+      expect(mood(), BotAvatarMood.work);
+      emitChatEvent(controller, chat, 'reasoning.delta', {
+        'text': 'Considering the plan.',
+      });
+      await tester.pump();
+      expect(mood(), BotAvatarMood.think);
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.settleMarkdown();
+      await _capture(tester, frame, 'animated-canonical-header', motion: true);
+      for (final theme in Brightness.values) {
+        for (final textScale in [1.0, 2.0]) {
+          brightness = theme;
+          scale = textScale;
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          await tester.pumpWidget(host());
+          await tester.pump(const Duration(milliseconds: 450));
+          await tester.settleMarkdown();
+          expect(tester.getSize(face), const Size(32, 32));
+          await _capture(
+            tester,
+            frame,
+            'animated-canonical-header-${theme.name}-$scale',
+            motion: true,
+          );
+          expect(tester.takeException(), isNull);
+        }
+      }
+      emitChatEvent(controller, chat, 'message.complete', {
+        'text': 'The plan is ready.',
+      });
+      await tester.pump();
+      expect(mood(), BotAvatarMood.idle);
+      final before = reads;
+      await tester.pump(const Duration(seconds: 1));
+      expect(reads, before);
+      expect(bots.commands, isEmpty);
+      expect(tester.getSize(face), const Size(32, 32));
+      await controller.openSession(ProfileSessionKey(scope, 'ordinary'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.byType(LiveBotAvatar), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+      appPreferences.dispose();
+    },
+  );
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(

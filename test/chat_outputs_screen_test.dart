@@ -99,6 +99,63 @@ Finder _viewerAction(String label) => find.byWidgetPredicate(
 );
 
 void main() {
+  testWidgets(
+    'older outputs keep their action label while progress is visible',
+    (tester) async {
+      final older = Completer<ProfileHistoryPage>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChatOutputsScreen(
+            chatTitle: 'This chat',
+            createSession: () => ChatOutputsSession(
+              loadHistory: (offset) async => offset == 0
+                  ? ProfileHistoryPage(
+                      'chat',
+                      [
+                        {
+                          'id': 501,
+                          'role': 'assistant',
+                          'content': 'Saved /srv/current/report.pdf',
+                        },
+                        for (var id = 502; id <= 1000; id++)
+                          {
+                            'id': id,
+                            'role': 'assistant',
+                            'content': 'Message $id',
+                          },
+                      ],
+                      0,
+                      500,
+                    )
+                  : older.future,
+              download: (_) async => throw StateError('Unexpected download'),
+              readText: (_) async => throw StateError('Unexpected preview'),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Load older outputs'));
+      await tester.pump();
+      expect(find.text('Loading older outputs…'), findsNothing);
+      expect(find.text('Load older outputs'), findsOneWidget);
+      expect(find.bySemanticsLabel('Loading outputs'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextButton>(
+              find.widgetWithText(TextButton, 'Load older outputs'),
+            )
+            .onPressed,
+        isNull,
+      );
+      older.complete(
+        ProfileHistoryPage('chat', const [], 500, 500, isComplete: true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
   const capture = bool.fromEnvironment('CAPTURE_RESOURCE_VIEWERS');
   setUpAll(() async {
     if (!capture) return;

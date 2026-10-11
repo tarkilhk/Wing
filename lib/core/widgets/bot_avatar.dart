@@ -1,8 +1,242 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import '../theme/profile_colors.dart';
 import '../models/bots.dart';
+
+enum BotAvatarMood { idle, work, think }
+
+/// Live surfaces borrow saved appearance; they never infer a choice from pixels.
+class LiveBotAvatar extends StatelessWidget {
+  const LiveBotAvatar({
+    super.key,
+    required this.bot,
+    required this.name,
+    required this.mood,
+    this.size = 40,
+  });
+  final BotRecord bot;
+  final String name;
+  final BotAvatarMood mood;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => bot.hasExplicitClassicShape
+      ? _AnimatedFace(
+          key: ValueKey(bot.scope),
+          shape: bot.shape,
+          color: BotAvatar.resolveColor(bot.color, name),
+          mood: mood,
+          size: size,
+          phase:
+              bot.id.codeUnits.fold(0, (int h, c) => (h * 31 + c) & 1023) /
+              1024 *
+              3.2,
+        )
+      : BotAvatar(
+          name: name,
+          shape: bot.shape,
+          color: bot.color,
+          image: bot.avatar,
+          size: size,
+        );
+}
+
+/// Owns only paint time. Scroll, route, ticker and app visibility all retire it.
+class _AnimatedFace extends StatefulWidget {
+  const _AnimatedFace({
+    super.key,
+    required this.shape,
+    required this.color,
+    required this.mood,
+    required this.size,
+    required this.phase,
+  });
+  final String shape;
+  final Color color;
+  final BotAvatarMood mood;
+  final double size, phase;
+  @override
+  State<_AnimatedFace> createState() => _AnimatedFaceState();
+}
+
+class _AnimatedFaceState extends State<_AnimatedFace>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  late final Ticker _ticker = createTicker(_tick);
+  final _pose = ValueNotifier<_FacePose>(const _FacePose());
+  ScrollPosition? _scroll;
+  Duration _lastPaint = Duration.zero;
+  double _time = 0, _transitionStart = -1;
+  _FacePose _from = const _FacePose();
+  bool _visibilityQueued = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Register dependencies even when animation is currently parked.
+    TickerMode.valuesOf(context);
+    MediaQuery.disableAnimationsOf(context);
+    ModalRoute.isCurrentOf(context);
+    final scroll = Scrollable.maybeOf(context)?.position;
+    if (!identical(scroll, _scroll)) {
+      _scroll?.removeListener(_queueVisibility);
+      _scroll = scroll;
+      _scroll?.addListener(_queueVisibility);
+    }
+    _queueVisibility();
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedFace oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mood != widget.mood) {
+      _from = _pose.value;
+      _transitionStart = _time;
+    }
+    _queueVisibility();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) => _syncVisibility();
+
+  void _queueVisibility() {
+    if (_visibilityQueued) return;
+    _visibilityQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _visibilityQueued = false;
+      if (mounted) _syncVisibility();
+    });
+  }
+
+  bool get _canAnimate {
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if ((lifecycle != null && lifecycle != AppLifecycleState.resumed) ||
+        !TickerMode.valuesOf(context).enabled ||
+        MediaQuery.disableAnimationsOf(context) ||
+        ModalRoute.isCurrentOf(context) == false) {
+      return false;
+    }
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return false;
+    var visible = Offset.zero & MediaQuery.sizeOf(context);
+    final viewport = Scrollable.maybeOf(context)?.context.findRenderObject();
+    if (viewport is RenderBox && viewport.hasSize) {
+      visible = visible.intersect(
+        viewport.localToGlobal(Offset.zero) & viewport.size,
+      );
+    }
+    return visible.overlaps(box.localToGlobal(Offset.zero) & box.size);
+  }
+
+  void _syncVisibility() {
+    if (_canAnimate) {
+      if (!_ticker.isActive) {
+        _lastPaint = Duration.zero;
+        _ticker.start();
+      }
+    } else {
+      _ticker.stop();
+      _pose.value = const _FacePose();
+      _transitionStart = -1;
+    }
+  }
+
+  void _tick(Duration elapsed) {
+    if (elapsed - _lastPaint < const Duration(microseconds: 66667)) return;
+    _time += (elapsed - _lastPaint).inMicroseconds / 1000000;
+    _lastPaint = elapsed;
+    final target = _FacePose.at(widget.mood, _time + widget.phase);
+    final blend = ((_time - _transitionStart) / .4).clamp(0.0, 1.0);
+    _pose.value = _transitionStart < 0
+        ? target
+        : _FacePose.blend(_from, target, 1 - (1 - blend) * (1 - blend));
+  }
+
+  @override
+  void dispose() {
+    _scroll?.removeListener(_queueVisibility);
+    WidgetsBinding.instance.removeObserver(this);
+    _ticker.dispose();
+    _pose.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: SizedBox.square(
+      dimension: widget.size,
+      child: CustomPaint(
+        painter: _FacePainter(widget.shape, widget.color, motion: _pose),
+      ),
+    ),
+  );
+}
+
+/// Native adaptation of Hermes' MIT-licensed face timing. See NOTICE.md.
+class _FacePose {
+  const _FacePose({
+    this.turn = 0,
+    this.tilt = 0,
+    this.roll = 0,
+    this.gazeX = 0,
+    this.gazeY = 0,
+    this.blink = false,
+    this.dots = const [0, 0, 0],
+  });
+  final double turn, tilt, roll, gazeX, gazeY;
+  final bool blink;
+  final List<double> dots;
+
+  factory _FacePose.at(BotAvatarMood mood, double t) {
+    if (mood == BotAvatarMood.idle) {
+      return _FacePose(
+        turn: math.sin(t * .5) * 1.5,
+        tilt: math.sin(t * .27),
+        roll: math.sin(t * .85) * 1.2,
+        blink: t % 3.2 > 3.02,
+      );
+    }
+    final thinking = mood == BotAvatarMood.think;
+    return _FacePose(
+      turn: thinking
+          ? -18 + math.sin(t * .55) * 14
+          : -11 + math.sin(t * .48) * 8,
+      tilt: thinking
+          ? math.sin(t * .48) * 12 + math.sin(t * 1.35) * 3
+          : math.sin(t * .42) * 8 + math.sin(t * 1.1) * 1.6,
+      roll: math.sin(t * (thinking ? .95 : .75)) * (thinking ? 10 : 4.2),
+      gazeX: math.sin(t * (thinking ? .7 : .55)) * 3.6,
+      gazeY: thinking
+          ? -2.2 + math.sin(t * .4) * 2.2
+          : -1.6 + math.sin(t * .38) * 2,
+      blink: t % 1.45 > 1.26,
+      dots: [
+        for (var i = 0; i < 3; i++)
+          .2 + .8 * math.max(0, math.sin(t * (thinking ? 2.4 : 2.6) - i * .7)),
+      ],
+    );
+  }
+
+  factory _FacePose.blend(_FacePose a, _FacePose b, double p) {
+    double mix(double x, double y) => x + (y - x) * p;
+    return _FacePose(
+      turn: mix(a.turn, b.turn),
+      tilt: mix(a.tilt, b.tilt),
+      roll: mix(a.roll, b.roll),
+      gazeX: mix(a.gazeX, b.gazeX),
+      gazeY: mix(a.gazeY, b.gazeY),
+      blink: b.blink,
+      dots: [for (var i = 0; i < 3; i++) mix(a.dots[i], b.dots[i])],
+    );
+  }
+}
 
 /// Desktop's friendly shape faces, rendered natively with Studio sizing.
 class BotAvatar extends StatelessWidget {
@@ -62,13 +296,23 @@ class BotAvatar extends StatelessWidget {
 }
 
 class _FacePainter extends CustomPainter {
-  const _FacePainter(this.shape, this.color);
+  _FacePainter(this.shape, this.color, {this.motion}) : super(repaint: motion);
   final String shape;
   final Color color;
+  final ValueNotifier<_FacePose>? motion;
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
-    canvas.scale(size.width / 40, size.height / 40);
+    canvas.scale(size.width / 40, size.height / (motion == null ? 40 : 44));
+    final pose = motion?.value ?? const _FacePose();
+    canvas.save();
+    canvas.translate(20, 20);
+    canvas.rotate((pose.roll + pose.tilt) * math.pi / 180);
+    canvas.scale(
+      math.cos(pose.turn * math.pi / 180),
+      math.cos(pose.tilt * math.pi / 180),
+    );
+    canvas.translate(-20, -20);
     final paint = Paint()..color = color;
     final path = Path();
     switch (shape) {
@@ -147,24 +391,50 @@ class _FacePainter extends CustomPainter {
           : const Color(0xfff4f5ed);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        const Rect.fromLTWH(12, 16, 4, 7),
+        Rect.fromLTWH(
+          12 + pose.gazeX,
+          (shape == 'cloud' && motion != null ? 22 : 19.5) +
+              pose.gazeY -
+              (pose.blink ? .5 : 3.5),
+          4,
+          pose.blink ? 1 : 7,
+        ),
         const Radius.circular(2),
       ),
       eyes,
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        const Rect.fromLTWH(24, 16, 4, 7),
+        Rect.fromLTWH(
+          24 + pose.gazeX,
+          (shape == 'cloud' && motion != null ? 22 : 19.5) +
+              pose.gazeY -
+              (pose.blink ? .5 : 3.5),
+          4,
+          pose.blink ? 1 : 7,
+        ),
         const Radius.circular(2),
       ),
       eyes,
     );
     canvas.restore();
+    for (var i = 0; i < 3; i++) {
+      if (pose.dots[i] > 0) {
+        canvas.drawCircle(
+          Offset(16.4 + i * 3.6, 41.2),
+          1.15,
+          Paint()..color = color.withValues(alpha: pose.dots[i]),
+        );
+      }
+    }
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(_FacePainter oldDelegate) =>
-      oldDelegate.shape != shape || oldDelegate.color != color;
+      oldDelegate.shape != shape ||
+      oldDelegate.color != color ||
+      oldDelegate.motion != motion;
 }
 
 /// The shared title for live and passive canonical bot conversations.
@@ -173,22 +443,33 @@ class BotConversationTitle extends StatelessWidget {
     super.key,
     required this.title,
     required this.bot,
+    required this.mood,
   });
   final String title;
   final BotRecord? bot;
+
+  /// Null selects the stable passive rendition used for Recents capture.
+  final BotAvatarMood? mood;
   @override
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
       if (bot case final appearance?) ...[
         ExcludeSemantics(
-          child: BotAvatar(
-            name: appearance.title,
-            shape: appearance.shape,
-            color: appearance.color,
-            image: appearance.avatar,
-            size: 32,
-          ),
+          child: mood == null
+              ? BotAvatar(
+                  name: appearance.title,
+                  shape: appearance.shape,
+                  color: appearance.color,
+                  image: appearance.avatar,
+                  size: 32,
+                )
+              : LiveBotAvatar(
+                  bot: appearance,
+                  name: appearance.title,
+                  mood: mood!,
+                  size: 32,
+                ),
         ),
         const SizedBox(width: 8),
       ],

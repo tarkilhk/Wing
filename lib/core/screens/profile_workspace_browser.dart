@@ -869,24 +869,9 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
       liveRegion: true,
       label: label,
       child: ExcludeSemantics(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            LinearProgressIndicator(
-              minHeight: 2,
-              value: reducedMotion ? 1 : null,
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: WingTokens.of(context).muted,
-                ),
-              ),
-            ),
-          ],
+        child: LinearProgressIndicator(
+          minHeight: 2,
+          value: reducedMotion ? 1 : null,
         ),
       ),
     );

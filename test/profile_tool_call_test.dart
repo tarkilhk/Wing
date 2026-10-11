@@ -284,7 +284,7 @@ void main() {
       expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
       expect(find.byIcon(Icons.share_outlined), findsOneWidget);
       await tester.tap(find.byTooltip(previewLabel));
-      await tester.pumpAndSettle();
+      await settleImages(tester);
       if (image) {
         expect(opened, isNull);
         final viewer = tester.widget<ChatImagePreview>(

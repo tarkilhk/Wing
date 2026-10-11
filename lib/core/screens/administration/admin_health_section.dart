@@ -32,9 +32,7 @@ class AdminHealthSectionHeading extends StatelessWidget {
             if (!sameDay) MaterialLocalizations.of(context).formatShortDate(at),
             TimeOfDay.fromDateTime(at).format(context),
           ].join(', ');
-    final label = checking
-        ? 'Checking…'
-        : at == null && !attempted
+    final label = at == null && !attempted
         ? 'Not checked'
         : incomplete
         ? 'Check incomplete${time == null ? '' : ' · $time'}'
@@ -48,7 +46,8 @@ class AdminHealthSectionHeading extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: Theme.of(context).textTheme.titleMedium),
-                Text(label, style: Theme.of(context).textTheme.bodySmall),
+                if (!checking)
+                  Text(label, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),

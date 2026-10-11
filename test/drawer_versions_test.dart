@@ -125,7 +125,7 @@ void main() {
       expect(find.byType(VersionsUpdatesScreen), findsOneWidget);
       expect(find.text('Versions & updates'), findsOneWidget);
       expect(find.text('Version 1.0.1'), findsNothing);
-      expect(find.text('Check for updates'), findsOneWidget);
+      expect(find.byTooltip('Check for updates'), findsOneWidget);
       expect(find.text('View release'), findsNothing);
       expect(find.text('Releases'), findsNothing);
       expect(find.text('Home server'), findsOneWidget);

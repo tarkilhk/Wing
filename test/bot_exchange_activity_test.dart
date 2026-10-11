@@ -523,9 +523,9 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.ensureVisible(find.textContaining('Used 4 tools'));
+        await tester.ensureVisible(find.textContaining('Activity · 4 tools'));
         await tester.pumpAndSettle();
-        await tester.tap(find.textContaining('Used 4 tools'));
+        await tester.tap(find.textContaining('Activity · 4 tools'));
         await tester.pumpAndSettle();
         await tester.ensureVisible(find.text('Message agent'));
         await tester.tap(find.text('Message agent'));

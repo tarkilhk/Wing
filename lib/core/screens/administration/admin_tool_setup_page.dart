@@ -265,7 +265,12 @@ class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (state.busy) const LinearProgressIndicator(),
+              if (state.busy)
+                LinearProgressIndicator(
+                  semanticsLabel: state.saving
+                      ? 'Saving model'
+                      : 'Loading models',
+                ),
               if (state.error case final error?)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -318,7 +323,7 @@ class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
                       onPressed: state.canSaveModel
                           ? () => _session.saveModel(_editor)
                           : null,
-                      child: Text(state.saving ? 'Saving…' : 'Use model'),
+                      child: const Text('Use model'),
                     ),
                   ),
                 ),

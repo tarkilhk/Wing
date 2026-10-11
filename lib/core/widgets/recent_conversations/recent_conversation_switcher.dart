@@ -1036,17 +1036,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
         Positioned.fill(
           child: Opacity(
             opacity: 1 - excerptOpacity,
-            child: Stack(
-              children: [
-                Positioned.fill(child: _placeholder(index)),
-                Center(
-                  child: Text(
-                    'Opening conversation…',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              ],
-            ),
+            child: _placeholder(index),
           ),
         ),
       ],
@@ -1211,13 +1201,14 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                             animation: _motion,
                             builder: (context, _) => _cards(),
                           ),
-                          if (_selecting && !_motion.animating)
+                          if (_selecting)
                             Positioned(
                               top: MediaQuery.paddingOf(context).top,
                               left: 0,
                               right: 0,
                               child: const LinearProgressIndicator(
                                 minHeight: 2,
+                                semanticsLabel: 'Opening conversation',
                               ),
                             ),
                           if (_stack)
@@ -1340,8 +1331,6 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                                         ).textTheme.bodySmall,
                                       ),
                                     ),
-                                  if (_selecting)
-                                    const LinearProgressIndicator(),
                                   if (MediaQuery.accessibleNavigationOf(
                                     context,
                                   ))

@@ -1,3 +1,4 @@
+import 'connection_diagnostics.dart';
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
@@ -1233,33 +1234,64 @@ class DashboardClient {
     Map<String, String>? queryParameters,
     bool retried = false,
   }) async {
-    final headers = await _authHeaders().timeout(readTimeout);
-    _requireCurrentAccess();
-    final uri = Uri.parse(
-      '$_baseUrl/api/$endpoint',
-    ).replace(queryParameters: queryParameters);
-    final res = await _reads.request('GET', uri, headers: headers);
-    if (res.statusCode == 401 && !retried) {
-      _resetAuth(headers);
-      return apiGet(endpoint, queryParameters: queryParameters, retried: true);
-    }
-    if (res.statusCode != 200) {
-      if (res.statusCode == 404 &&
-          RegExp(r'^sessions/[^/?#]+$').hasMatch(endpoint)) {
-        try {
-          final error = jsonDecode(res.body);
-          if (error is Map &&
-              error.length == 1 &&
-              error['detail'] == 'Session not found') {
-            throw DashboardSessionNotFound(endpoint);
-          }
-        } on FormatException {
-          // An invalid response never establishes session absence.
-        }
+    var stage = 'authentication';
+    try {
+      final headers = await _authHeaders().timeout(readTimeout);
+      _requireCurrentAccess();
+      final uri = Uri.parse(
+        '$_baseUrl/api/$endpoint',
+      ).replace(queryParameters: queryParameters);
+      stage = 'request';
+      final res = await _reads.request('GET', uri, headers: headers);
+      stage = 'response';
+      if (res.statusCode == 401 && !retried) {
+        logConnectionDiagnostic(
+          'http.auth_retry',
+          details: {
+            'endpoint': connectionDiagnosticEndpoint(endpoint),
+            'http_status': 401,
+          },
+        );
+        _resetAuth(headers);
+        return apiGet(
+          endpoint,
+          queryParameters: queryParameters,
+          retried: true,
+        );
       }
-      throw DashboardHttpException(res.statusCode, endpoint);
+      if (res.statusCode != 200) {
+        if (res.statusCode == 404 &&
+            RegExp(r'^sessions/[^/?#]+$').hasMatch(endpoint)) {
+          try {
+            final error = jsonDecode(res.body);
+            if (error is Map &&
+                error.length == 1 &&
+                error['detail'] == 'Session not found') {
+              throw DashboardSessionNotFound(endpoint);
+            }
+          } on FormatException {
+            // An invalid response never establishes session absence.
+          }
+        }
+        throw DashboardHttpException(res.statusCode, endpoint);
+      }
+      stage = 'decode';
+      return _decodeMapResponse(res);
+    } catch (failure, stack) {
+      logConnectionDiagnostic(
+        'http.read_failed',
+        details: {
+          'endpoint': connectionDiagnosticEndpoint(endpoint),
+          'auth_retry': retried,
+          'stage': stage,
+          if (failure is DashboardHttpException)
+            'http_status': failure.statusCode,
+        },
+        error: failure,
+        stackTrace: stack,
+      );
+      rethrow;
     }
-    return _decodeMapResponse(res);
   }
 
   Future<http.Response> apiGetBytes(

@@ -36,6 +36,27 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _captureAttachments = bool.fromEnvironment('CAPTURE_ATTACHMENTS');
 const _attachmentFrame = ValueKey('attachment-review-frame');
 
+class _AttachmentTestBinding extends AutomatedTestWidgetsFlutterBinding {
+  Future<void>? imageDecodeDelay;
+  int delayedDecodeCount = 0;
+
+  @override
+  Future<ui.Codec> instantiateImageCodecWithSize(
+    ui.ImmutableBuffer buffer, {
+    ui.TargetImageSizeCallback? getTargetSize,
+  }) async {
+    final delay = imageDecodeDelay;
+    if (delay != null) {
+      delayedDecodeCount++;
+      await delay;
+    }
+    return super.instantiateImageCodecWithSize(
+      buffer,
+      getTargetSize: getTargetSize,
+    );
+  }
+}
+
 Future<void> _waitForAttachmentImages(WidgetTester tester) async {
   final context = tester.element(find.byKey(_attachmentFrame));
   var loaded = false;
@@ -487,6 +508,7 @@ class Host {
 }
 
 void main() {
+  final binding = _AttachmentTestBinding();
   setUpAll(() async {
     if (!_captureAttachments) return;
     for (final entry in {
@@ -1424,6 +1446,56 @@ void main() {
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     },
   );
+
+  test(
+    'mounted camera intake keeps the draft without a session resume',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      controller.setRouteMounted(Object(), true);
+      final start = host.calls.length;
+
+      final destination = await controller.prepareSharedDraftTarget(chat.key);
+
+      expect(destination?.chat, same(chat));
+      expect(destination?.retainWorkspace, isTrue);
+      expect(host.calls.skip(start), isEmpty);
+    },
+  );
+
+  test('mounted camera intake joins background draft replacement', () async {
+    final chat = await controller.createChat(canDispatch: () => true);
+    final capturedKey = chat.key;
+    await controller.updateDraft(chat, 'camera draft');
+    controller.setRouteMounted(Object(), true);
+    host
+      ..expireUnsubmittedResume = true
+      ..replacementCreateStarted = Completer<void>()
+      ..replacementCreateDelay = Completer<void>();
+    final reconnecting = controller.reconnect(capturedKey.workspace);
+    await host.replacementCreateStarted!.future;
+    final destination = controller.prepareSharedDraftTarget(capturedKey);
+
+    host.replacementCreateDelay!.complete();
+    await reconnecting;
+
+    final prepared = await destination;
+    expect(prepared?.chat, same(chat));
+    expect(prepared?.retainWorkspace, isTrue);
+    expect(chat.key.sessionId, 'replacement');
+    expect(chat.composer.observation.text, 'camera draft');
+    expect(
+      host.calls.where((call) => call.$2 == 'session.resume'),
+      hasLength(1),
+    );
+    expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+    final later = await controller.prepareSharedDraftTarget(capturedKey);
+    expect(later?.chat, same(chat));
+    expect(later?.retainWorkspace, isTrue);
+    expect(
+      host.calls.where((call) => call.$2 == 'session.resume'),
+      hasLength(1),
+    );
+  });
 
   test(
     'explicit recovery waits for an in-flight replacement of its captured key',
@@ -2432,6 +2504,14 @@ void main() {
         expect(saved!.attachments, hasLength(2));
         if (photos) {
           await _captureAttachmentFrame(tester, 'composer-$reviewName');
+          final decodedBeforePreview = binding.delayedDecodeCount;
+          // Hold the native decoder on the real clock, as on a busy CI host.
+          await tester.runAsync(() async {
+            binding.imageDecodeDelay = Future<void>.delayed(
+              const Duration(milliseconds: 500),
+            );
+          });
+          addTearDown(() => binding.imageDecodeDelay = null);
           await tester.tap(find.byTooltip('Preview item-1.png'));
           for (var attempt = 0; attempt < 200; attempt++) {
             await tester.runAsync(
@@ -2440,7 +2520,10 @@ void main() {
             await tester.pump();
             if (find.byType(ChatImagePreview).evaluate().isNotEmpty) break;
           }
-          await tester.pumpAndSettle();
+          // Native decoding needs real event-loop time before the loading
+          // spinner can stop scheduling frames.
+          await _waitForAttachmentImages(tester);
+          expect(binding.delayedDecodeCount, greaterThan(decodedBeforePreview));
           expect(find.byType(ChatImagePreview), findsOneWidget);
           final preview = tester.widget<ChatImagePreview>(
             find.byType(ChatImagePreview),
@@ -2453,8 +2536,6 @@ void main() {
             configuration.width,
           );
           await _captureAttachmentFrame(tester, 'preview-$reviewName');
-          // A mounted preview can still have no decoded image or hit-test area.
-          await _waitForAttachmentImages(tester);
           final viewer = find.byType(InteractiveViewer);
           final viewerSize = tester.getSize(viewer);
           expect(viewerSize.width, greaterThan(80));

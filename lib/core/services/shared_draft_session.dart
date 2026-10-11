@@ -40,6 +40,7 @@ class SharedDraftOffer {
   SharedDraftReviewState? _lastReview;
   String _destination = SharedDraftSession._newChat;
   bool _working = false, _recoveryApplied = false, _staged = false;
+  bool _retainWorkspace = false;
 }
 
 class SharedDraftNavigation {
@@ -219,15 +220,12 @@ class SharedDraftSession extends ChangeNotifier {
           if (controller.owns(key) &&
               controller.discovery?.named(key.workspace.profileName) != null) {
             verified = key;
-            await controller.navigateProfile(key.workspace.profileName);
+            final destination = await controller.prepareSharedDraftTarget(key);
             _requireEntry(offer);
-            final opened = await controller.openSession(
-              key,
-              recoverExpiredDraft: true,
-            );
-            _requireEntry(offer);
+            final opened = destination?.chat;
             if (opened != null && identical(controller.current?.chat, opened)) {
               offer._initial = opened;
+              offer._retainWorkspace = destination!.retainWorkspace;
             }
           }
         } catch (error) {
@@ -612,7 +610,8 @@ class SharedDraftSession extends ChangeNotifier {
   }
 
   SharedDraftNavigation? navigation(SharedDraftOffer offer) =>
-      _canNavigate(offer)
+      _canNavigate(offer) &&
+          !(offer._retainWorkspace && offer._controller!.hasMountedRoutes)
       ? SharedDraftNavigation._(offer._entry!, offer._payload.target != null)
       : null;
   void finish(SharedDraftOffer offer) {

@@ -5,12 +5,12 @@ import 'package:flutter/material.dart';
 import '../models/slash_command.dart';
 import '../models/composer_reference.dart';
 
-/// Skill emphasis is a text projection: selection, copy and IME stay native.
+/// Slash emphasis is a text projection: selection, copy and IME stay native.
 class SkillComposerController extends TextEditingController {
   SkillComposerController({super.text});
   SkillComposerController.fromValue(super.value) : super.fromValue();
 
-  final _skills = <String>{};
+  final _commands = <String, SlashCommand>{};
   Object? _scope;
   List<ComposerReference> _references = const [];
 
@@ -21,14 +21,18 @@ class SkillComposerController extends TextEditingController {
   void setScope(Object? scope) {
     if (_scope == scope) return;
     _scope = scope;
-    _skills.clear();
+    _commands.clear();
     _references = const [];
   }
 
   void observeCommands(Iterable<SlashCommand> commands) {
-    final previous = _skills.length;
-    _skills.addAll(commands.where((c) => c.isSkill).map((c) => c.text));
-    if (_skills.length != previous) notifyListeners();
+    var changed = false;
+    for (final command in commands.where((c) => c.category.isNotEmpty)) {
+      final previous = _commands[command.text];
+      _commands[command.text] = command;
+      changed |= previous == null || previous.isSkill != command.isSkill;
+    }
+    if (changed) notifyListeners();
   }
 
   @override
@@ -37,12 +41,17 @@ class SkillComposerController extends TextEditingController {
     TextStyle? style,
     required bool withComposing,
   }) {
-    final skills = SlashSkillReference.inText(text, _skills).toList();
-    final references = composerReferenceSpans(text, selected: _references);
-    final ranges = [
-      for (final skill in skills) (skill.start, skill.end),
-      for (final reference in references) (reference.start, reference.end),
-    ];
+    final invocation = SlashInvocation.parse(text);
+    final slashReferences = SlashSkillReference.inText(text, _commands.keys)
+        .where(
+          (reference) =>
+              _commands[reference.text]!.isSkill ||
+              (invocation != null &&
+                  reference.text == '/${invocation.name}' &&
+                  text.substring(0, reference.start).trim().isEmpty),
+        )
+        .toList();
+    final mentions = composerReferenceSpans(text, selected: _references);
     final composing =
         withComposing &&
             value.isComposingRangeValid &&
@@ -52,36 +61,53 @@ class SkillComposerController extends TextEditingController {
     final boundaries = <int>{
       0,
       text.length,
-      for (final range in ranges) ...[range.$1, range.$2],
+      for (final reference in slashReferences) ...[
+        reference.start,
+        reference.end,
+      ],
+      for (final reference in mentions) ...[reference.start, reference.end],
       if (composing.isValid) ...[composing.start, composing.end],
     }.toList()..sort();
+    TextSpan segment(int start, int end) {
+      final emphasized = slashReferences.where(
+        (reference) => reference.start <= start && reference.end >= end,
+      );
+      final command = emphasized.isEmpty
+          ? null
+          : _commands[emphasized.first.text];
+      final mention = mentions.any(
+        (reference) => reference.start <= start && reference.end >= end,
+      );
+      final native = command != null && !command.isSkill;
+      final mono = WingTokens.of(context).typography.mono;
+      return TextSpan(
+        text: text.substring(start, end),
+        style: TextStyle(
+          color: command == null && !mention
+              ? null
+              : Theme.of(context).colorScheme.primary,
+          fontWeight: command == null && !mention
+              ? null
+              : mention || command?.isSkill == true
+              ? FontWeight.w700
+              : FontWeight.w400,
+          fontFamily: native ? mono.fontFamily : null,
+          fontFamilyFallback: native ? mono.fontFamilyFallback : null,
+          decoration:
+              composing.isValid &&
+                  composing.start <= start &&
+                  composing.end >= end
+              ? TextDecoration.underline
+              : null,
+        ),
+      );
+    }
+
     return TextSpan(
       style: style,
       children: [
         for (var i = 0; i < boundaries.length - 1; i++)
-          TextSpan(
-            text: text.substring(boundaries[i], boundaries[i + 1]),
-            style: TextStyle(
-              color:
-                  ranges.any(
-                    (s) => s.$1 <= boundaries[i] && s.$2 >= boundaries[i + 1],
-                  )
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
-              fontWeight:
-                  ranges.any(
-                    (s) => s.$1 <= boundaries[i] && s.$2 >= boundaries[i + 1],
-                  )
-                  ? FontWeight.w700
-                  : null,
-              decoration:
-                  composing.isValid &&
-                      composing.start <= boundaries[i] &&
-                      composing.end >= boundaries[i + 1]
-                  ? TextDecoration.underline
-                  : null,
-            ),
-          ),
+          segment(boundaries[i], boundaries[i + 1]),
       ],
     );
   }
@@ -141,9 +167,7 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
     final end = value.selection.isValid
         ? value.selection.extentOffset
         : value.text.length;
-    final query =
-        (value.selection.isValid && !value.selection.isCollapsed) ||
-            MentionQuery.at(value.text, end) != null
+    final query = value.selection.isValid && !value.selection.isCollapsed
         ? ''
         : value.text.substring(0, end);
     if (query == _query) return;
@@ -346,7 +370,12 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
                           dense: true,
                           title: Text(item.text),
                           subtitle: Text(
-                            item.description,
+                            '${item.isSkill
+                                ? 'Skill'
+                                : item.category.isNotEmpty
+                                ? 'Command'
+                                : 'Argument'}'
+                            '${item.description.isEmpty ? '' : ' · ${item.description}'}',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -372,12 +401,7 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
                                           size: 20,
                                         ),
                                 )
-                              : item.category.isEmpty
-                              ? null
-                              : Text(
-                                  item.category,
-                                  style: Theme.of(context).textTheme.labelSmall,
-                                ),
+                              : null,
                           onTap: () => _select(completion, item),
                         ),
                   ],

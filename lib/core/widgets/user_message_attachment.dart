@@ -470,29 +470,40 @@ class _UserMessageImageGallery extends StatefulWidget {
       _UserMessageImageGalleryState();
 }
 
-class _UserMessageImageGalleryState extends State<_UserMessageImageGallery> {
+class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
+    with SingleTickerProviderStateMixin {
   static const _thumbnailExtent = 76.0;
   final _thumbnails = ScrollController();
   final _providers = <String, Future<ImageProvider>>{};
+  final _navigationByPage = <int, bool>{};
   int _providerCapacity = 12;
   late int _index = widget.initialIndex;
-  late Future<ImageProvider> _image;
+  late final _pages = PageController(initialPage: widget.initialIndex);
+  bool _navigationEnabled = true;
+  late final AnimationController _jumpFade;
 
   @override
   void initState() {
     super.initState();
+    _jumpFade = AnimationController(
+      vsync: this,
+      duration: WingMotion.standard,
+      value: 1,
+    );
     for (final entry in widget.previewProviders.entries) {
       _providers[entry.key] = Future.value(entry.value);
     }
     if (widget.initialProvider case final provider?) {
       _providers[widget.images[_index].target] = Future.value(provider);
     }
-    _image = _provider(_index);
     _revealSelectedThumbnail();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prepareNeighbors());
   }
 
   @override
   void dispose() {
+    _jumpFade.dispose();
+    _pages.dispose();
     _thumbnails.dispose();
     super.dispose();
   }
@@ -516,26 +527,79 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery> {
   }
 
   void _select(int index) {
-    if (index == _index) return;
-    setState(() {
-      _index = index;
-      _image = _provider(index);
-    });
-    _revealSelectedThumbnail();
+    if (!_pages.hasClients || _pages.page == index.toDouble()) return;
+    // Distant thumbnail jumps skip intervening originals rather than fetching
+    // every image crossed by a long animated scroll.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _jumpFade.value = 1;
+      _pages.jumpToPage(index);
+    } else if ((index - _index).abs() > 1) {
+      _pages.jumpToPage(index);
+      _jumpFade.forward(from: 0);
+    } else {
+      _pages.animateToPage(
+        index,
+        duration: WingMotion.standard,
+        curve: WingMotion.curve,
+      );
+    }
   }
 
-  void _retry() => setState(() {
-    _providers.remove(widget.images[_index].target);
-    _image = _provider(_index);
+  void _pageChanged(int index) {
+    setState(() {
+      _index = index;
+      _navigationEnabled = _navigationByPage[index] ?? true;
+    });
+    _revealSelectedThumbnail(animate: true);
+    _prepareNeighbors();
+  }
+
+  void _prepareNeighbors() {
+    if (!mounted) return;
+    for (final index in [_index - 1, _index + 1]) {
+      if (index < 0 || index >= widget.images.length) continue;
+      _provider(index).then((provider) {
+        if (!mounted || (index - _index).abs() > 1) return;
+        // Preparing only the immediate originals makes the incoming card
+        // visible throughout the swipe without eagerly decoding an album.
+        precacheImage(provider, context, onError: (_, _) {});
+      }, onError: (Object _, StackTrace _) {});
+    }
+  }
+
+  void _setNavigationEnabled(int index, bool enabled) {
+    _navigationByPage[index] = enabled;
+    if (index != _index || enabled == _navigationEnabled) return;
+    if (!enabled && _pages.hasClients) {
+      // A second finger or a zoom cancels paging already in progress.
+      _pages.jumpToPage(_index);
+    }
+    setState(() => _navigationEnabled = enabled);
+  }
+
+  void _retry(int index) => setState(() {
+    _providers.remove(widget.images[index].target);
   });
 
-  void _revealSelectedThumbnail() {
+  void _revealSelectedThumbnail({bool animate = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_thumbnails.hasClients) return;
       final position = _thumbnails.position;
       final offset =
           (_index + .5) * _thumbnailExtent - 4 - position.viewportDimension / 2;
-      _thumbnails.jumpTo(offset.clamp(0.0, position.maxScrollExtent));
+      final target = offset.clamp(0.0, position.maxScrollExtent);
+      // Animate the local reveal, but skip a distant stretch of originals.
+      final nearby =
+          (target - position.pixels).abs() <= position.viewportDimension;
+      if (animate && nearby && !MediaQuery.disableAnimationsOf(context)) {
+        _thumbnails.animateTo(
+          target,
+          duration: WingMotion.standard,
+          curve: WingMotion.curve,
+        );
+      } else {
+        _thumbnails.jumpTo(target);
+      }
     });
   }
 
@@ -550,47 +614,57 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery> {
         label: attachment.name,
         child: Tooltip(
           message: attachment.name,
-          child: Material(
-            color: index == _index
-                ? colors.primary
-                : colors.surfaceContainerHigh,
-            borderRadius: WingRadius.card,
-            child: InkWell(
-              key: ValueKey('image-thumbnail-$index'),
+          child: AnimatedScale(
+            scale: index == _index ? 1 : .94,
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : WingMotion.fast,
+            curve: WingMotion.curve,
+            child: Material(
+              color: index == _index
+                  ? colors.primary
+                  : colors.surfaceContainerHigh,
+              animationDuration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : WingMotion.fast,
               borderRadius: WingRadius.card,
-              onTap: () => _select(index),
-              child: Padding(
-                padding: const EdgeInsets.all(3),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: ExcludeSemantics(
-                    child: FutureBuilder<ImageProvider>(
-                      future: _provider(index),
-                      builder: (context, snapshot) {
-                        final provider =
-                            snapshot.connectionState == ConnectionState.done
-                            ? snapshot.data
-                            : null;
-                        if (provider != null) {
-                          return Image(
-                            image: ResizeImage(
-                              provider,
-                              width: 144,
-                              height: 144,
-                              policy: ResizeImagePolicy.fit,
-                            ),
-                            fit: BoxFit.cover,
-                            alignment: Alignment.topCenter,
-                            errorBuilder: (_, _, _) =>
-                                const Icon(Icons.broken_image_outlined),
+              child: InkWell(
+                key: ValueKey('image-thumbnail-$index'),
+                borderRadius: WingRadius.card,
+                onTap: () => _select(index),
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: ExcludeSemantics(
+                      child: FutureBuilder<ImageProvider>(
+                        future: _provider(index),
+                        builder: (context, snapshot) {
+                          final provider =
+                              snapshot.connectionState == ConnectionState.done
+                              ? snapshot.data
+                              : null;
+                          if (provider != null) {
+                            return Image(
+                              image: ResizeImage(
+                                provider,
+                                width: 144,
+                                height: 144,
+                                policy: ResizeImagePolicy.fit,
+                              ),
+                              fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
+                              errorBuilder: (_, _, _) =>
+                                  const Icon(Icons.broken_image_outlined),
+                            );
+                          }
+                          return Icon(
+                            snapshot.hasError
+                                ? Icons.broken_image_outlined
+                                : Icons.image_outlined,
                           );
-                        }
-                        return Icon(
-                          snapshot.hasError
-                              ? Icons.broken_image_outlined
-                              : Icons.image_outlined,
-                        );
-                      },
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -659,54 +733,118 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery> {
     ),
   );
 
+  Widget _page(int index) => FutureBuilder<ImageProvider>(
+    future: _provider(index),
+    builder: (context, snapshot) {
+      final attachment = widget.images[index];
+      final provider = snapshot.connectionState == ConnectionState.done
+          ? snapshot.data
+          : null;
+      if (provider != null) {
+        return ChatImageViewport(
+          key: ValueKey(attachment.target),
+          title: attachment.name,
+          imageDecoration: BoxDecoration(
+            borderRadius: WingRadius.card,
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(
+                  context,
+                ).colorScheme.shadow.withValues(alpha: .18),
+                offset: const Offset(0, 6),
+                blurRadius: 18,
+              ),
+            ],
+          ),
+          bytes: provider is MemoryImage ? provider.bytes : null,
+          uri: provider is NetworkImage ? Uri.parse(provider.url) : null,
+          onNavigationEnabled: (enabled) =>
+              _setNavigationEnabled(index, enabled),
+        );
+      }
+      return Center(
+        child:
+            snapshot.connectionState == ConnectionState.done &&
+                snapshot.hasError
+            ? IconButton(
+                tooltip: 'Retry image preview',
+                style: IconButton.styleFrom(
+                  minimumSize: const Size.square(48),
+                  visualDensity: VisualDensity.standard,
+                ),
+                onPressed: () => _retry(index),
+                icon: const Icon(Icons.refresh),
+              )
+            : const CircularProgressIndicator(),
+      );
+    },
+  );
+
+  Widget _cardPage(int index) => LayoutBuilder(
+    builder: (context, constraints) => AnimatedBuilder(
+      animation: _pages,
+      child: _page(index),
+      builder: (context, child) {
+        final page = _pages.hasClients && _pages.position.hasContentDimensions
+            ? _pages.page ?? _index.toDouble()
+            : _index.toDouble();
+        final distance = (index - page).clamp(-1.0, 1.0);
+        final travel = distance.abs();
+        if (MediaQuery.disableAnimationsOf(context)) return child!;
+        // Compress the travel between fitted originals, so portrait images
+        // exchange as neighboring cards rather than crossing a wide blank gap.
+        final direction = Directionality.of(context) == TextDirection.rtl
+            ? -1.0
+            : 1.0;
+        final inset =
+            -distance * direction * (1 - travel) * constraints.maxWidth * .5;
+        return Transform.translate(
+          offset: Offset(inset, travel * 8),
+          child: Transform.scale(
+            key: ValueKey('gallery-card-motion-$index'),
+            scale: 1 - travel * .12,
+            child: Opacity(opacity: 1 - travel * .12, child: child),
+          ),
+        );
+      },
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final visibleCapacity =
         (MediaQuery.sizeOf(context).width / _thumbnailExtent).ceil() + 4;
     _providerCapacity = visibleCapacity < 12 ? 12 : visibleCapacity;
-    return FutureBuilder<ImageProvider>(
-      future: _image,
-      builder: (context, snapshot) {
-        final attachment = widget.images[_index];
-        final provider = snapshot.connectionState == ConnectionState.done
-            ? snapshot.data
-            : null;
-        if (provider != null) {
-          return ChatImagePreview(
-            key: ValueKey(attachment.target),
-            title: attachment.name,
-            bytes: provider is MemoryImage ? provider.bytes : null,
-            uri: provider is NetworkImage ? Uri.parse(provider.url) : null,
-            navigation: _navigation(),
-            onPreviousImage: _index > 0 ? () => _select(_index - 1) : null,
-            onNextImage: _index + 1 < widget.images.length
-                ? () => _select(_index + 1)
-                : null,
-          );
-        }
-        return Scaffold(
-          appBar: ResourceViewerAppBar(
-            context: context,
-            title: attachment.name,
+    return Scaffold(
+      appBar: ResourceViewerAppBar(
+        context: context,
+        title: widget.images[_index].name,
+      ),
+      bottomNavigationBar: _navigation(),
+      body: Padding(
+        padding: const EdgeInsets.all(4),
+        child: FadeTransition(
+          opacity: _jumpFade.drive(CurveTween(curve: WingMotion.curve)),
+          child: ScaleTransition(
+            scale: _jumpFade.drive(
+              Tween(
+                begin: .97,
+                end: 1.0,
+              ).chain(CurveTween(curve: WingMotion.curve)),
+            ),
+            child: PageView.builder(
+              key: const ValueKey('user-image-gallery-pages'),
+              controller: _pages,
+              physics: _navigationEnabled
+                  ? null
+                  : const NeverScrollableScrollPhysics(),
+              onPageChanged: _pageChanged,
+              itemCount: widget.images.length,
+              itemBuilder: (_, index) => _cardPage(index),
+            ),
           ),
-          bottomNavigationBar: _navigation(),
-          body: Center(
-            child:
-                snapshot.connectionState == ConnectionState.done &&
-                    snapshot.hasError
-                ? IconButton(
-                    tooltip: 'Retry image preview',
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size.square(48),
-                      visualDensity: VisualDensity.standard,
-                    ),
-                    onPressed: _retry,
-                    icon: const Icon(Icons.refresh),
-                  )
-                : const CircularProgressIndicator(),
-          ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

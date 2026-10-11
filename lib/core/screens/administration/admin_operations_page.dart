@@ -127,16 +127,15 @@ class _AdminActionPageState extends State<AdminActionPage> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (loading) const LinearProgressIndicator(),
+          if (loading)
+            const LinearProgressIndicator(semanticsLabel: 'Checking operation'),
           if (error != null) AdminNotice.error(error),
           if (observation.classification ==
               AdministrationOperationOutcome.failed)
             const StudioError('Failed')
-          else if (!hasSummary)
+          else if (!hasSummary && !(checkedAt == null && loading))
             Text(
-              checkedAt == null && loading
-                  ? 'Checking operation…'
-                  : observation.auditSummaryUnavailable
+              observation.auditSummaryUnavailable
                   ? 'Audit summary unavailable'
                   : observation.outcome,
             ),

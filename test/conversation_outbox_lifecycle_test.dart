@@ -8,10 +8,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/attachment_draft.dart';
 import 'package:wing/core/models/queued_prompt_draft.dart';
+import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/attachment_draft_service.dart';
 import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/workspace_snapshot_store.dart';
 
 import 'profile_workspace_controller_test.dart' show Host;
 import 'support/composer_fixture.dart' show readComposerFixture;
@@ -111,6 +113,98 @@ Future<void> _until(bool Function() complete) async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final (restoredQueue, historyFails) in [
+    (false, false),
+    (true, false),
+    (false, true),
+  ]) {
+    test(
+      historyFails
+          ? 'cached Bot Chat with failed history keeps Send local'
+          : restoredQueue
+          ? 'opening a cached Bot Chat submits its known waiting outbox'
+          : 'first Send after opening a cached Bot Chat reaches Hermes',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        addTearDown(appPreferences.dispose);
+        await WorkspaceSnapshotStore(preferences, 'outbox-test').write({
+          'selected': 'a',
+          'profiles': [
+            {
+              'name': 'b',
+              'sessions': [
+                {'id': 'same', 'title': 'Cached Bot Chat', 'profile': 'b'},
+              ],
+              'chats': [
+                {
+                  'id': 'same',
+                  'title': 'Cached Bot Chat',
+                  'messages': [
+                    {'id': 1, 'role': 'assistant', 'content': 'Earlier reply'},
+                  ],
+                  'history_session': 'same',
+                },
+              ],
+            },
+          ],
+        });
+        final host = Host()..running = false;
+        final controller = _controller(
+          preferences,
+          host,
+          appPreferences: appPreferences,
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        if (restoredQueue) {
+          await ComposerDraftStore(
+            preferences,
+            connectionIdentity: 'outbox-test',
+          ).write(
+            profileName: 'b',
+            sessionId: 'same',
+            text: 'Separate draft',
+            attachments: const [],
+            queuedPrompts: [QueuedPromptDraft(text: 'First message')],
+          );
+        }
+        if (historyFails) host.failures.add('b');
+        final scope = controller.browserResource('b').scope;
+        // Bots and Activity open a chat directly, without loading its profile's
+        // browser or borrowing the notification entry's recovery transition.
+        final chat = (await controller.openSession(
+          ProfileSessionKey(scope, 'same'),
+        ))!;
+        expect(controller.connectionStatus.description, 'Connected');
+        expect(chat.runtime.offline, isFalse);
+        expect(chat.reading.historyError, historyFails ? isNotNull : isNull);
+        if (!restoredQueue) {
+          expect(chat.runtime.blocksTurnAdmission, isFalse);
+          await controller.updateDraft(chat, 'First message');
+          await controller.send(chat);
+        }
+        if (historyFails) {
+          expect(_submitted(host), isEmpty);
+          expect(chat.composer.observation.queue.single.text, 'First message');
+          return;
+        }
+        expect(_submitted(host), ['First message']);
+        expect(chat.composer.observation.queue, isEmpty);
+        expect(
+          chat.composer.observation.text,
+          restoredQueue ? 'Separate draft' : '',
+        );
+        final methods = host.calls.map((call) => call.$2).toList();
+        expect(
+          methods.indexOf('session.resume'),
+          lessThan(methods.indexOf('prompt.submit')),
+        );
+      },
+    );
+  }
 
   test('offline Send survives restart and reconnect drains FIFO', () async {
     SharedPreferences.setMockInitialValues({});

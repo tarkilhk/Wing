@@ -4,6 +4,14 @@ Open **Bots** from Wing's side menu to browse profiles from your saved Hermes in
 
 Tap a bot's avatar to edit its appearance. Tap its name or message preview to open its continuing **Bot Chat**. Back returns to the same tab, search and filter. Bot Chats use the usual conversation screen, showing its saved avatar to the left of its display name when available.
 
+Explicitly selected classic shapes blink and move in the Bots roster and the
+open Bot Chat header, with stronger motion and dots while working. Pictures
+and avatars without an explicit saved shape choice stay still. Select a shape
+in the appearance editor—even the currently displayed shape—to save that
+choice in Hermes and enable its animation. Motion respects reduced motion and
+pauses when hidden or backgrounded. Recents previews and message avatars stay
+static.
+
 Bot Chats stay hidden from the default Chats list. Enable **Show automated chats** in Chats to reveal them, or open them directly through Bots. Displayed Bot Chats show a small version of the bot's avatar before their name. Other conversations retain their saved titles.
 
 ## Profile options

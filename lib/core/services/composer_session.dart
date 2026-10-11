@@ -72,6 +72,8 @@ class ComposerSession {
       _preparing = 0,
       _preparationGeneration = 0;
   String? _error;
+  ComposerAttachmentPreparation? _attachmentPreparation;
+  int _preparationBaseCount = 0;
   Future<void>? _writes;
   final _files = <AttachmentDraft>[];
   final _queue = <_QueueEntry>[];
@@ -105,7 +107,12 @@ class ComposerSession {
     text: _text,
     references: _editing == null ? _references : _editReferences,
     submissionUncertain: _uncertain,
-    attachments: _files.map(_file),
+    // Persistence holds tentative files; publish their thumbnails only on success.
+    attachments:
+        (_attachmentPreparation == null
+                ? _files
+                : _files.take(_preparationBaseCount))
+            .map(_file),
     queue: _queue.map(_item),
     editing: _editing?.id,
     editText: _editText,
@@ -113,6 +120,7 @@ class ComposerSession {
     saving: _saving,
     draining: _draining,
     preparing: _preparing != 0,
+    attachmentPreparation: _attachmentPreparation,
     sending: _submissions.isNotEmpty,
     steering: _steering,
     restored: _restored,
@@ -743,6 +751,11 @@ class ComposerSession {
       _jobs.add(job);
     }
 
+    _attachmentPreparation = const ComposerAttachmentPreparation(
+      imageCount: 1,
+      fileCount: 0,
+    );
+    _preparationBaseCount = _files.length;
     _preparing++;
     _changed();
     AttachmentDraft? value;
@@ -773,6 +786,7 @@ class ComposerSession {
     } finally {
       _jobs.removeAll(jobs);
       if (generation == _preparationGeneration) _preparationGeneration++;
+      _attachmentPreparation = null;
       _preparing--;
       _changed();
     }
@@ -911,6 +925,14 @@ class ComposerSession {
       _jobs.add(job);
     }
 
+    final imageCount = selected.where((file) => file.isImage).length;
+    _attachmentPreparation = selected.isEmpty
+        ? null
+        : ComposerAttachmentPreparation(
+            imageCount: imageCount,
+            fileCount: selected.length - imageCount,
+          );
+    _preparationBaseCount = _files.length;
     _preparing++;
     _changed(ComposerChange.status);
     try {
@@ -939,7 +961,7 @@ class ComposerSession {
           !_same(_files, files) ||
           (requireUnchangedDraft &&
               (_draining ||
-                  revision != _revision ||
+                  (incoming.isNotEmpty && revision != _revision) ||
                   paused != _paused ||
                   uncertain != _uncertain ||
                   !_same(_queue, queue)))) {
@@ -982,6 +1004,7 @@ class ComposerSession {
     } finally {
       _jobs.removeAll(jobs);
       if (generation == _preparationGeneration) _preparationGeneration++;
+      _attachmentPreparation = null;
       _preparing--;
       _changed();
     }

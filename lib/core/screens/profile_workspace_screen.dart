@@ -1,6 +1,7 @@
 import '../models/composer_reference.dart';
 import '../models/recent_conversation.dart';
 import '../models/bots.dart';
+import 'bots/bot_screen_view.dart';
 import '../services/recent_conversation_session.dart';
 import '../widgets/chat_notice_activity_scope.dart';
 import '../widgets/recent_conversations/recent_conversation_switcher.dart';
@@ -770,19 +771,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
-  Widget _conversationHeading(
-    ProfileChat chat,
-    BotRecord? bot,
-    VoidCallback? moveToProject,
-  ) => Tooltip(
-    message: 'Move to project',
-    child: InkWell(
-      borderRadius: WingRadius.card,
-      onTap: moveToProject,
-      child: BotConversationTitle(title: chat.title, bot: bot),
-    ),
-  );
-
   void _syncComposer(ProfileChat? chat) {
     if (_composerKey != chat?.key ||
         _composer.text != (chat?.composer.observation.displayedText ?? '')) {
@@ -934,10 +922,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             tooltip: 'Open navigation menu',
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
-          title: _conversationHeading(
-            chat,
-            bot,
-            canMoveProject ? openProjectPicker : null,
+          title: BotConversationTitle(
+            title: chat.title,
+            bot: bot,
+            mood:
+                chat.runtime.recovery == ChatRecovery.ready &&
+                    chat.runtime.liveSessionConfirmed &&
+                    !chat.runtime.needsInput &&
+                    (chat.runtime.executionActive || chat.runtime.compacting)
+                ? chat.runtime.mainActivity == ChatMainActivity.thinking
+                      ? BotAvatarMood.think
+                      : BotAvatarMood.work
+                : BotAvatarMood.idle,
           ),
           contextHeight: stackChatScope ? 96 : 48,
           contextRow: LayoutBuilder(
@@ -1049,54 +1045,25 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   unawaited(_openFind(chat));
                 } else if (action == 'outputs') {
                   unawaited(_run(() => _openOutputs(chat)));
-                } else if (action == 'subagents') {
-                  unawaited(
-                    _openWorkDetails(
-                      ProfileSubagentPanel(
-                        session: _supervisionFor(chat),
-                        initiallyExpanded: true,
-                      ),
-                    ),
-                  );
-                } else if (action == 'goal') {
-                  unawaited(
-                    _openWorkDetails(
-                      ProfileGoalPanel(
-                        session: _supervisionFor(chat),
-                        initiallyExpanded: true,
-                      ),
-                    ),
-                  );
-                } else if (action == 'background') {
-                  unawaited(
-                    _openWorkDetails(
-                      ProfileBackgroundWorkPanel(
-                        session: _supervisionFor(chat),
-                        initiallyExpanded: true,
-                      ),
-                    ),
-                  );
+                } else if (action == 'screen') {
+                  unawaited(_run(() => _openScreen(chat)));
                 } else if (action == 'parent') {
                   unawaited(_run(() => controller.openParentChat(chat)));
                 }
               },
               itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'screen',
+                  child: Text('View screen'),
+                ),
+                const PopupMenuItem(value: 'outputs', child: Text('Outputs')),
+                const PopupMenuItem(value: 'find', child: Text('Find in chat')),
                 if (parentSessionId != null)
                   const PopupMenuItem(
                     value: 'parent',
                     child: Text('Parent chat'),
                   ),
-                const PopupMenuItem(value: 'outputs', child: Text('Outputs')),
-                const PopupMenuItem(
-                  value: 'subagents',
-                  child: Text('Subagents'),
-                ),
-                const PopupMenuItem(value: 'goal', child: Text('Goal')),
-                const PopupMenuItem(
-                  value: 'background',
-                  child: Text('Background work'),
-                ),
-                const PopupMenuItem(value: 'find', child: Text('Find in chat')),
+                const PopupMenuDivider(),
                 const PopupMenuItem(
                   value: 'refresh',
                   child: Text('Refresh workspace'),
@@ -1145,17 +1112,24 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     return _withRecentSwitcher(chat, conversation);
   }
 
-  Future<void> _openWorkDetails(Widget panel) => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (_) => SafeArea(
-      child: FractionallySizedBox(
-        heightFactor: 0.75,
-        child: ListView(children: [panel]),
+  Future<void> _openScreen(ProfileChat chat) async {
+    bool current() =>
+        mounted &&
+        !controller.switching &&
+        identical(controller.current?.chat, chat) &&
+        _destination == AppDestination.chats;
+    final session = await _bots.openScreen(chat.key.workspace, canUse: current);
+    if (session == null) return;
+    if (!mounted || !current()) {
+      session.dispose();
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => BotScreenView(createSession: () => session),
       ),
-    ),
-  );
+    );
+  }
 
   Future<void> _openFind(ProfileChat chat) async {
     await showChatFindSheet(
@@ -1947,6 +1921,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     builder: (context, _) {
       _syncComposer(chat);
       final referenceEdit = chat.composer.observation.editing;
+      final composerObservation = chat.composer.observation;
+      final composerAttachments =
+          composerObservation.editingEntry?.attachments ??
+          composerObservation.attachments;
+      final attachmentPreparation = composerObservation.attachmentPreparation;
       return ConstrainedBox(
         constraints: BoxConstraints(maxHeight: constraints.maxHeight),
         child: Column(
@@ -1955,7 +1934,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             Flexible(
               child: Stack(
                 children: [
-                  if (!chat.runtime.commandRunning &&
+                  if (!chat.runtime.opening &&
+                      !chat.runtime.offline &&
+                      !chat.runtime.reconnecting &&
+                      !chat.runtime.commandRunning &&
                       chat.composer.observation.editingEntry == null)
                     SingleChildScrollView(
                       child: SlashCommandSuggestions(
@@ -2123,105 +2105,94 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                           ),
                                         ],
                                       ),
-                                    if ((chat
-                                                .composer
-                                                .observation
-                                                .editingEntry
-                                                ?.attachments ??
-                                            chat
-                                                .composer
-                                                .observation
-                                                .attachments)
-                                        .isNotEmpty)
-                                      Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: SingleChildScrollView(
-                                          scrollDirection: Axis.horizontal,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 8,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              for (final file
-                                                  in chat
-                                                          .composer
-                                                          .observation
-                                                          .editingEntry
-                                                          ?.attachments ??
-                                                      chat
-                                                          .composer
-                                                          .observation
-                                                          .attachments)
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 4,
-                                                      ),
-                                                  child: ComposerAttachmentTile(
-                                                    name: file.name,
-                                                    kind: file.kind,
-                                                    error: file.error,
-                                                    previewImage: file.isImage
-                                                        ? AttachmentPreviewImage(
-                                                            chat.composer
-                                                                .preview(
-                                                                  file.id,
-                                                                ),
-                                                          )
-                                                        : null,
-                                                    onPreview: file.isImage
-                                                        ? () => _run(() async {
-                                                            final bytes =
-                                                                await chat
-                                                                    .composer
-                                                                    .preview(
-                                                                      file.id,
-                                                                    )
-                                                                    .readBytes();
-                                                            if (!context
-                                                                    .mounted ||
-                                                                (controller.notificationChat ??
-                                                                        controller
-                                                                            .current
-                                                                            ?.chat) !=
-                                                                    chat) {
-                                                              return;
-                                                            }
-                                                            await Navigator.of(
-                                                              context,
-                                                            ).push<void>(
-                                                              MaterialPageRoute(
-                                                                builder: (_) =>
-                                                                    ChatImagePreview(
-                                                                      bytes:
-                                                                          bytes,
-                                                                      title: file
-                                                                          .name,
-                                                                    ),
-                                                              ),
-                                                            );
-                                                          })
-                                                        : null,
-                                                    onRemove:
-                                                        !controller
-                                                            .canRemoveAttachment(
-                                                              chat,
-                                                              file.id,
-                                                            )
-                                                        ? null
-                                                        : () => _run(
-                                                            () => controller
-                                                                .removeAttachment(
-                                                                  chat,
-                                                                  file.id,
+                                    if (composerAttachments.isNotEmpty ||
+                                        attachmentPreparation != null)
+                                      ComposerAttachmentStrip(
+                                        key: ValueKey((
+                                          'composer-attachments',
+                                          chat.key,
+                                        )),
+                                        preparing:
+                                            attachmentPreparation != null,
+                                        children: [
+                                          for (final (index, file)
+                                              in composerAttachments.indexed)
+                                            ComposerAttachmentSlot(
+                                              key: ValueKey((
+                                                'composer-attachment-slot',
+                                                index,
+                                              )),
+                                              child: ComposerAttachmentTile(
+                                                key: ValueKey(file.id),
+                                                name: file.name,
+                                                kind: file.kind,
+                                                error: file.error,
+                                                previewImage: file.isImage
+                                                    ? AttachmentPreviewImage(
+                                                        chat.composer.preview(
+                                                          file.id,
+                                                        ),
+                                                      )
+                                                    : null,
+                                                onPreview: file.isImage
+                                                    ? () => _run(() async {
+                                                        final bytes = await chat
+                                                            .composer
+                                                            .preview(file.id)
+                                                            .readBytes();
+                                                        if (!context.mounted ||
+                                                            (controller.notificationChat ??
+                                                                    controller
+                                                                        .current
+                                                                        ?.chat) !=
+                                                                chat) {
+                                                          return;
+                                                        }
+                                                        await Navigator.of(
+                                                          context,
+                                                        ).push<void>(
+                                                          MaterialPageRoute(
+                                                            builder: (_) =>
+                                                                ChatImagePreview(
+                                                                  bytes: bytes,
+                                                                  title:
+                                                                      file.name,
                                                                 ),
                                                           ),
-                                                  ),
+                                                        );
+                                                      })
+                                                    : null,
+                                                onRemove:
+                                                    !controller
+                                                        .canRemoveAttachment(
+                                                          chat,
+                                                          file.id,
+                                                        )
+                                                    ? null
+                                                    : () => _run(
+                                                        () => controller
+                                                            .removeAttachment(
+                                                              chat,
+                                                              file.id,
+                                                            ),
+                                                      ),
+                                              ),
+                                            ),
+                                          if (attachmentPreparation != null)
+                                            ComposerAttachmentSlot(
+                                              key: ValueKey((
+                                                'composer-attachment-slot',
+                                                composerAttachments.length,
+                                              )),
+                                              child: ComposerPendingAttachmentTile(
+                                                key: const ValueKey(
+                                                  'composer-pending-attachment',
                                                 ),
-                                            ],
-                                          ),
-                                        ),
+                                                preparation:
+                                                    attachmentPreparation,
+                                              ),
+                                            ),
+                                        ],
                                       ),
                                     _voiceActivity(),
                                     TextField(

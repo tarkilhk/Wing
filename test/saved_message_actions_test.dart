@@ -310,7 +310,7 @@ void main() {
             )
             .first;
         await tester.scrollUntilVisible(
-          find.text('Used 1 tool'),
+          find.text('Activity · 1 tool'),
           200,
           scrollable: scrollable,
         );

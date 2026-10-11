@@ -9,9 +9,29 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_browser.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/models/hermes_profile.dart';
 import 'support/profile_browser_fixture.dart';
 
 class _HomeFixture extends ProfileBrowserFixture {
+  final resumeDelays = <String, Completer<void>>{};
+
+  @override
+  ProfileGateway gateway(WorkspaceScope scope) {
+    final base = super.gateway(scope);
+    return ProfileGateway(
+      scope: scope,
+      discover: base.discover,
+      get: base.read,
+      rpc: (method, params) async {
+        if (method == 'session.resume') {
+          await resumeDelays[scope.profileName]?.future;
+        }
+        return base.call(method, params);
+      },
+    );
+  }
+
   @override
   List<Map<String, dynamic>> projects(String profile) => [];
 
@@ -32,7 +52,7 @@ class _HomeFixture extends ProfileBrowserFixture {
 
 void main() {
   testWidgets(
-    'a pending profile read does not lock chats after a Home toggle',
+    'a pending chat resume does not lock chats after a Home toggle',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final fixture = _HomeFixture();
@@ -76,13 +96,16 @@ void main() {
       );
       await tester.pumpAndSettle();
       final delayed = Completer<void>();
-      fixture.delays['work'] = delayed;
+      fixture.resumeDelays['work'] = delayed;
       addTearDown(() {
         if (!delayed.isCompleted) delayed.complete();
       });
       await tester.tap(find.text('work chat 0'));
       await tester.pump();
-      expect(controller.switching, isTrue);
+      expect(controller.notificationChat?.key.sessionId, 'work-0');
+      expect(controller.notificationChat?.runtime.opening, isTrue);
+      expect(delayed.isCompleted, isFalse);
+      expect(controller.switching, isFalse);
       final header = find.byKey(const ValueKey('chat-group-project/work/home'));
       await tester.tap(header);
       await tester.pump();

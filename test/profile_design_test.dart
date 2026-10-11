@@ -266,7 +266,7 @@ void main() {
 
   test(
     'timeline preserves hidden continuity, empty card boundaries and latest review',
-    () {
+    () async {
       final source = <Map<String, dynamic>>[
         {'id': 1, 'role': 'tool', 'content': 'First'},
         {
@@ -280,10 +280,13 @@ void main() {
         {'id': 5, 'role': 'tool', 'content': 'Third'},
         {'id': 6, 'role': 'system', 'content': 'review: Details'},
       ];
-      final tokens = List<Object>.generate(source.length, (_) => Object());
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.reading.installSavedHistory(source);
+      final rows = chat.reading.messages;
+      final tokens = List<Object>.generate(rows.length, (_) => Object());
       final timeline = TranscriptTimeline.project(
-        source,
-        presentationId: (row) => tokens[source.indexOf(row)],
+        rows,
+        presentationId: (row) => tokens[rows.indexOf(row)],
       );
       final section = timeline.sections.single;
       expect(
@@ -366,7 +369,12 @@ void main() {
       final live = find.byKey(ValueKey(('activity', chat.key)));
       expect(live, findsOneWidget);
       await tester.tap(
-        find.descendant(of: live, matching: find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$'))),
+        find.descendant(
+          of: live,
+          matching: find.textContaining(
+            RegExp(r'^Activity(?: · \d+ tools?)?$'),
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       expect(
@@ -449,17 +457,42 @@ void main() {
       });
 
       await show(tester);
-      expect(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')), findsNWidgets(2));
+      expect(
+        find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
+        findsNWidgets(2),
+      );
       expect(find.text('Running command'), findsNothing);
       expect(find.text('Current private reasoning'), findsNothing);
-      expect(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')), findsNWidgets(2));
+      expect(
+        find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
+        findsNWidgets(2),
+      );
       expect(find.text('Visible saved reply'), findsOneWidget);
       expect(
-        tester.getTopLeft(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')).first).dx,
-        closeTo(tester.getTopLeft(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')).last).dx, 0.1),
+        tester
+            .getTopLeft(
+              find
+                  .textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$'))
+                  .first,
+            )
+            .dx,
+        closeTo(
+          tester
+              .getTopLeft(
+                find
+                    .textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$'))
+                    .last,
+              )
+              .dx,
+          0.1,
+        ),
       );
 
-      await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')).first);
+      final currentHeader = find.descendant(
+        of: find.byKey(ValueKey(('activity', chat.key))),
+        matching: find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
+      );
+      await tester.tap(currentHeader);
       await tester.pumpAndSettle();
       expect(find.text('Running command'), findsOneWidget);
       expect(find.text('Reasoning'), findsOneWidget);
@@ -472,10 +505,15 @@ void main() {
       await tester.pump();
       expect(find.text('Running command'), findsOneWidget);
 
-      await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')).first);
+      // The floating Back to latest control can cover the middle of a long
+      // header in the test font. Tap the leading title outside that control.
+      await tester.tapAt(tester.getTopLeft(currentHeader) + const Offset(8, 8));
       await tester.pumpAndSettle();
       expect(find.text('Running command'), findsNothing);
-      expect(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')), findsNWidgets(2));
+      expect(
+        find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
+        findsNWidgets(2),
+      );
       expect(find.text('Visible saved reply'), findsOneWidget);
     },
   );
@@ -504,11 +542,16 @@ void main() {
         ],
       ]);
       await show(tester);
-      expect(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')), findsOneWidget);
+      expect(
+        find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
+        findsOneWidget,
+      );
       expect(find.text('Read'), findsNothing);
       expect(find.text('Private tool detail A'), findsNothing);
       expect(find.text('Here is the answer.'), findsOneWidget);
-      await tester.tap(find.textContaining(RegExp(r'^(Activity|Used \d+ tools?|Using \d+ tools?)$')));
+      await tester.tap(
+        find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Read'), findsOneWidget);
       expect(find.text('Private tool detail A'), findsNothing);

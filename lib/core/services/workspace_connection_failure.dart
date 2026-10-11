@@ -82,3 +82,21 @@ String conversationOpeningFailureMessage(Object error) {
   }
   return 'Couldn’t reopen this chat. Retry to continue.';
 }
+
+/// Structured failure metadata for internal diagnostics; server prose and RPC
+/// data can contain chat content or secrets and are deliberately excluded.
+Map<String, Object?> workspaceFailureDiagnostic(Object error) {
+  if (error is DashboardRequestNotSentException) {
+    return {'request_sent': false, ...workspaceFailureDiagnostic(error.cause)};
+  }
+  return {
+    'retryable': isTemporaryWorkspaceFailure(error),
+    if (error is DashboardHttpException) 'http_status': error.statusCode,
+    if (error is JsonRpcError) ...{
+      'rpc_method': error.method,
+      if (error.code != null) 'rpc_code': error.code,
+      if ({'connection_closed', 'request_timeout'}.contains(error.reason))
+        'rpc_reason': error.reason,
+    },
+  };
+}

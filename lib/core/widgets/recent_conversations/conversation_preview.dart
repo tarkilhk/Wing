@@ -69,6 +69,7 @@ class ConversationPreview extends StatelessWidget {
           title: BotConversationTitle(
             title: preview?.entry.title ?? card.entry.title,
             bot: card.bot,
+            mood: null,
           ),
           contextHeight: stackedScope ? 96 : 48,
           contextRow: stackedScope
