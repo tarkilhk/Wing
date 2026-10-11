@@ -529,8 +529,9 @@ class BotsRepository {
   /// The initial is rendered from its current name. Each room has its own CAS
   /// key so other rooms are not rewritten. A retry confirms an already saved
   /// icon without another upload. Nothing is persisted on the device.
-  Future<void> saveGroupIcon(
+  Future<int> saveGroupIcon(
     String roomId,
+    int expectedRevision,
     ProfileColorChoice color,
     Uint8List? picture,
     bool Function() canDispatch,
@@ -542,7 +543,7 @@ class BotsRepository {
       throw ArgumentError('Room picture exceeds the backend upload limit');
     }
     if (picture != null) inspectAttachmentImage(picture);
-    if (!canDispatch()) throw StateError('Room creation is no longer active');
+    if (!canDispatch()) throw StateError('Room save is no longer active');
     final key = '$_groupIconPrefix$roomId';
     final value = <String, Object>{
       'version': 1,
@@ -550,19 +551,21 @@ class BotsRepository {
       if (picture != null) 'data': base64Encode(picture),
     };
     final row = await _groupIconProfile();
-    if (!canDispatch()) throw StateError('Room creation is no longer active');
+    if (!canDispatch()) throw StateError('Room save is no longer active');
     if (row == null) throw StateError('Hermes default profile is unavailable');
     final meta = row['ui_meta'] == null
         ? <String, dynamic>{}
         : _map(row['ui_meta']);
-    if (meta[key] != null) {
-      if (_sameGroupIcon(meta[key], value)) return;
-      throw StateError('This room already has a different icon');
-    }
     final revisions = _map(row['ui_meta_revisions']);
     final revision = revisions[key] ?? 0;
     if (revision is! int || revision < 0) {
       throw const FormatException('Invalid room picture revision');
+    }
+    if (_sameGroupIcon(meta[key], value)) return revision;
+    if (revision != expectedRevision) {
+      throw const BotGroupEditConflict(
+        'Group picture changed on Hermes. Reopen Edit group to review it.',
+      );
     }
     final result = await _command(
       'default',
@@ -583,13 +586,14 @@ class BotsRepository {
         _map(applied['ui_meta_revisions'])[key] != revision + 1) {
       throw StateError('Room picture was not saved to Hermes');
     }
-    if (!canDispatch()) throw StateError('Room creation is no longer active');
+    if (!canDispatch()) throw StateError('Room save is no longer active');
     final saved = await _groupIconProfile();
     if (saved == null ||
         _map(saved['ui_meta_revisions'])[key] != revision + 1 ||
         !_sameGroupIcon(_map(saved['ui_meta'])[key], value)) {
       throw StateError('Room picture could not be confirmed on Hermes');
     }
+    return revision + 1;
   }
 
   Future<List<BotGroup>> groups() async {
@@ -668,14 +672,18 @@ class BotsRepository {
     if (groups.isEmpty) return const [];
     try {
       final row = await _groupIconProfile();
-      final meta = row?['ui_meta'] == null
+      if (row == null) return List.unmodifiable(groups);
+      final meta = row['ui_meta'] == null
           ? <String, dynamic>{}
-          : _map(row!['ui_meta']);
+          : _map(row['ui_meta']);
       return List.unmodifiable(
         groups.map((room) {
           try {
-            final value = meta['$_groupIconPrefix${room.id}'];
-            if (value == null) return room;
+            final key = '$_groupIconPrefix${room.id}';
+            final revision = _map(row['ui_meta_revisions'])[key] ?? 0;
+            if (revision is! int || revision < 0) return room;
+            final value = meta[key];
+            if (value == null) return room.withIcon(revision: revision);
             final picture = _map(value);
             final data = picture['data'];
             final slot = picture['color'];
@@ -689,6 +697,7 @@ class BotsRepository {
             return room.withIcon(
               picture: data == null ? null : _image(data),
               color: ProfileColorChoice.values[slot + 1],
+              revision: revision,
             );
           } catch (_) {
             // Invalid decoration cannot prevent access to the hosted room.
@@ -998,6 +1007,29 @@ class BotsRepository {
     }
   }
 
+  Future<void> checkGroupEdit(BotGroup group, String name) async {
+    _ownsGroup(group);
+    final result = await _read('default', 'groups.state', {
+      'room_id': group.id,
+    });
+    final current = _group(_map(result['room']));
+    if (current.id != group.id ||
+        (current.name != group.name && current.name != name) ||
+        current.members.length != group.members.length ||
+        current.members.any(
+          (m) => !group.members.any(
+            (old) =>
+                old.id == m.id &&
+                old.profile == m.profile &&
+                old.handle == m.handle,
+          ),
+        )) {
+      throw const BotGroupEditConflict(
+        'Group changed on Hermes. Refresh Bots and reopen Edit group.',
+      );
+    }
+  }
+
   Future<void> groupAction(
     BotGroup group,
     String action,
@@ -1010,7 +1042,7 @@ class BotsRepository {
     if (!{'rename', 'stop', 'disband'}.contains(action)) {
       throw ArgumentError('Unknown group action');
     }
-    await _command(
+    final result = await _command(
       'default',
       'groups.$action',
       {
@@ -1024,6 +1056,13 @@ class BotsRepository {
       canDispatch,
       onDispatched,
     );
+    if (action == 'rename' &&
+        (_map(result['room'])['room_id'] != group.id ||
+            _map(result['room'])['name'] != name)) {
+      throw StateError(
+        'Group rename could not be confirmed. Retry to confirm it.',
+      );
+    }
   }
 
   Future<BotDisplayStatus> displayStatus(BotRecord bot) async {

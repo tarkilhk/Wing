@@ -148,7 +148,7 @@ class _BotsContentState extends State<BotsContent> {
             Icons.push_pin_outlined,
             true,
           ),
-          ('rename', 'Rename group', Icons.edit_outlined, true),
+          ('edit', 'Edit group', Icons.edit_outlined, true),
           ('stop', 'Stop group work', Icons.stop_outlined, true),
           ('delete', 'Disband group', Icons.delete_outline, true),
         ], keyPrefix: 'group-menu');
@@ -157,20 +157,7 @@ class _BotsContentState extends State<BotsContent> {
       await _openGroup(group);
       return;
     }
-    if (action == 'rename') {
-      final name = await showDialog<String>(
-        context: context,
-        builder: (_) => _GroupNameDialog(name: group.name),
-      );
-      if (name != null && mounted) {
-        await widget.session.groupAction(
-          group,
-          'rename',
-          name: name,
-          canUse: _canUse,
-        );
-      }
-    }
+    if (action == 'edit') await _editGroup(group);
     if (action == 'stop') {
       await widget.session.groupAction(group, 'stop', canUse: _canUse);
     }
@@ -204,8 +191,35 @@ class _BotsContentState extends State<BotsContent> {
     }
   }
 
+  Future<BotGroup?> _editGroup(
+    BotGroup group, {
+    bool fromDiscussion = false,
+  }) async {
+    final page = BotsCreateScreen(
+      session: widget.session,
+      group: true,
+      editGroup: group,
+    );
+    if (fromDiscussion) {
+      final saved = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => page),
+      );
+      if (saved != true) return null;
+    } else {
+      await _push(page);
+    }
+    if (!mounted) return null;
+    return widget.session.state.groups
+        .where((room) => room.key == group.key)
+        .firstOrNull;
+  }
+
   Future<void> _openGroup(BotGroup group) => _push(
-    BotGroupScreen(createSession: () => widget.session.openGroup(group)),
+    BotGroupScreen(
+      createSession: () => widget.session.openGroup(group),
+      onEdit: (group) => _editGroup(group, fromDiscussion: true),
+    ),
   );
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -649,46 +663,4 @@ class _BotsContentState extends State<BotsContent> {
       ),
     );
   }
-}
-
-class _GroupNameDialog extends StatefulWidget {
-  const _GroupNameDialog({required this.name});
-  final String name;
-  @override
-  State<_GroupNameDialog> createState() => _GroupNameDialogState();
-}
-
-class _GroupNameDialogState extends State<_GroupNameDialog> {
-  late final _name = TextEditingController(text: widget.name);
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Rename group'),
-    content: TextField(
-      controller: _name,
-      autofocus: true,
-      decoration: const InputDecoration(labelText: 'Group name'),
-    ),
-    actions: [
-      IconButton(
-        tooltip: 'Cancel',
-        onPressed: () => Navigator.pop(context),
-        icon: const Icon(Icons.close),
-      ),
-      IconButton(
-        tooltip: 'Save group name',
-        onPressed: () {
-          if (_name.text.trim().isNotEmpty) {
-            Navigator.pop(context, _name.text.trim());
-          }
-        },
-        icon: const Icon(Icons.check),
-      ),
-    ],
-  );
 }

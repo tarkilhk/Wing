@@ -538,7 +538,8 @@ class BotsSession extends ChangeNotifier {
       return value;
     } catch (error) {
       if (!_closed) {
-        _operationError = error is BotMetadataConflict
+        _operationError =
+            error is BotMetadataConflict || error is BotGroupEditConflict
             ? error.toString()
             : dispatched
             ? 'The change could not be confirmed. Check the result before trying again.'
@@ -669,7 +670,61 @@ class BotsSession extends ChangeNotifier {
         final source = repository(identity);
         await source.createGroup(roomId, name, members, active, sent);
         if (!active()) return false;
-        await source.saveGroupIcon(roomId, iconColor, picture, active, sent);
+        await source.saveGroupIcon(roomId, 0, iconColor, picture, active, sent);
+        return true;
+      }, canUse: canUse) ==
+      true;
+  Future<bool> editGroup(
+    BotGroup group,
+    String name,
+    ProfileColorChoice color,
+    Uint8List? picture,
+    String renameEvent, {
+    required bool Function() canUse,
+  }) async =>
+      await _mutate((active, sent) async {
+        final revision = group.iconRevision;
+        if (revision == null) {
+          throw StateError(
+            'Group picture is unavailable. Refresh Bots and reopen Edit group.',
+          );
+        }
+        final source = repository(group.scope.connectionIdentity);
+        await source.checkGroupEdit(group, name);
+        if (!active()) return false;
+        final confirmedRevision = await source.saveGroupIcon(
+          group.id,
+          revision,
+          color,
+          picture,
+          active,
+          sent,
+        );
+        if (!active()) return false;
+        if (name != group.name) {
+          await source.groupAction(
+            group,
+            'rename',
+            renameEvent,
+            active,
+            sent,
+            name: name,
+          );
+        }
+        if (!active()) return false;
+        final identity = group.scope.connectionIdentity;
+        _groups[identity] = (_groups[identity] ?? const <BotGroup>[])
+            .map(
+              (room) => room.key == group.key
+                  ? room.withDetails(
+                      name: name,
+                      color: color,
+                      picture: picture,
+                      revision: confirmedRevision,
+                    )
+                  : room,
+            )
+            .toList();
         return true;
       }, canUse: canUse) ==
       true;

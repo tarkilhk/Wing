@@ -1086,10 +1086,10 @@
       "feature": "bots",
       "library": "lib/core/services/bot_display_client.dart"
     },
-    "lib/core/services/bot_group_create_session.dart": {
+    "lib/core/services/bot_group_draft_session.dart": {
       "role": "application",
       "feature": "bots",
-      "library": "lib/core/services/bot_group_create_session.dart"
+      "library": "lib/core/services/bot_group_draft_session.dart"
     },
     "lib/core/services/bot_group_history_session.dart": {
       "role": "application",

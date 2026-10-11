@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/profile_colors.dart';
 import 'package:wing/core/services/bot_avatar_io.dart';
-import 'package:wing/core/services/bot_group_create_session.dart';
+import 'package:wing/core/services/bot_group_draft_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'package:wing/core/services/bots_session.dart';
 
@@ -84,11 +84,264 @@ void main() {
     return (fixture, session);
   }
 
+  Future<(BotsFixture, BotsSession, _PictureBackend)> editingRoster() async {
+    final fixture = BotsFixture();
+    final backend = _PictureBackend(fixture);
+    backend.profile['ui_meta']['wing-group-icon:room-1'] = {
+      'version': 1,
+      'color': ProfileColorChoice.cyan.slot,
+      'data': base64Encode(_photo()),
+    };
+    backend.profile['ui_meta_revisions']['wing-group-icon:room-1'] = 3;
+    final session = BotsSession((_) async => [fixture.repository]);
+    addTearDown(session.dispose);
+    await session.refresh();
+    return (fixture, session, backend);
+  }
+
+  test(
+    'existing draft retains its saved details and fixed membership without writes',
+    () async {
+      final (fixture, session, _) = await editingRoster();
+      final group = session.state.groups.single;
+      final draft = BotGroupDraftSession(session, existing: group);
+      addTearDown(draft.dispose);
+      expect(draft.name, group.name);
+      expect(draft.picture, _photo());
+      expect(draft.iconColor, ProfileColorChoice.cyan);
+      expect(group.withPinned(true).iconRevision, 3);
+      expect(draft.canSave, false);
+      expect(await draft.save(canUse: () => true), false);
+      draft.select(draft.bots.first, true);
+      draft.chooseInstance('another-instance');
+      expect(draft.identity, group.scope.connectionIdentity);
+      expect(draft.memberCount, 2);
+      expect(draft.existing!.members, group.members);
+      expect(fixture.commands, isEmpty);
+      draft.setName('');
+      expect(draft.canSave, false);
+    },
+  );
+
+  test(
+    'existing room saves name, palette and picture removal to its exact backend identity',
+    () async {
+      final (fixture, session, backend) = await editingRoster();
+      final group = session.state.groups.single;
+      final draft = BotGroupDraftSession(session, existing: group);
+      addTearDown(draft.dispose);
+      draft.setName('Field team');
+      draft.chooseColor(ProfileColorChoice.rose);
+      draft.removePicture();
+      expect(await draft.save(canUse: () => true), true);
+      expect(fixture.commands.map((c) => c.$2), [
+        'profiles.configure',
+        'groups.rename',
+      ]);
+      final saved = session.state.groups.single;
+      expect(saved.id, group.id);
+      expect(saved.name, 'Field team');
+      expect(saved.iconColor, ProfileColorChoice.rose);
+      expect(saved.iconRevision, 4);
+      expect(saved.picture, isNull);
+      expect(saved.members.map((m) => m.id), group.members.map((m) => m.id));
+      expect(backend.profile['ui_meta']['wing-group-icon:room-1'], {
+        'version': 1,
+        'color': ProfileColorChoice.rose.slot,
+      });
+      expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);
+    },
+  );
+
+  test(
+    'existing room retries a lost icon acknowledgement without creating or uploading twice',
+    () async {
+      final (fixture, session, backend) = await editingRoster();
+      backend.loseConfirmation = true;
+      final draft = BotGroupDraftSession(
+        session,
+        existing: session.state.groups.single,
+      );
+      addTearDown(draft.dispose);
+      draft.setName('Evidence team');
+      draft.chooseColor(ProfileColorChoice.blue);
+      expect(await draft.save(canUse: () => true), false);
+      expect(draft.frozen, true);
+      draft.setName('Other name');
+      draft.chooseColor(ProfileColorChoice.red);
+      draft.removePicture();
+      expect(draft.name, 'Evidence team');
+      expect(draft.iconColor, ProfileColorChoice.blue);
+      expect(draft.picture, _photo());
+      expect(await draft.save(canUse: () => true), true);
+      expect(
+        fixture.commands.where((c) => c.$2 == 'profiles.configure'),
+        hasLength(1),
+      );
+      expect(fixture.commands.where((c) => c.$2 == 'groups.create'), isEmpty);
+      expect(fixture.room['name'], 'Evidence team');
+    },
+  );
+
+  test(
+    'existing room reuses the same rename event after a lost acknowledgement',
+    () async {
+      final (fixture, session, backend) = await editingRoster();
+      var lost = true;
+      fixture.commandHook = (profile, method, params) async {
+        if (method == 'groups.rename' && lost) {
+          lost = false;
+          fixture.room['name'] = params['name'];
+          throw StateError('Lost rename acknowledgement');
+        }
+        return backend.command(profile, method, params);
+      };
+      final draft = BotGroupDraftSession(
+        session,
+        existing: session.state.groups.single,
+      );
+      addTearDown(draft.dispose);
+      draft.setName('New room name');
+      expect(await draft.save(canUse: () => true), false);
+      expect(await draft.save(canUse: () => true), true);
+      final renames = fixture.commands
+          .where((c) => c.$2 == 'groups.rename')
+          .toList();
+      expect(renames, hasLength(2));
+      expect(renames[0].$3, renames[1].$3);
+      expect(renames[0].$3['room_id'], 'room-1');
+      expect(
+        fixture.commands.where((c) => c.$2 == 'profiles.configure'),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'stale room icon and name edits never overwrite a newer backend observation',
+    () async {
+      final (fixture, session, backend) = await editingRoster();
+      final draft = BotGroupDraftSession(
+        session,
+        existing: session.state.groups.single,
+      );
+      addTearDown(draft.dispose);
+      draft.setName('My room name');
+      draft.chooseColor(ProfileColorChoice.red);
+      backend.profile['ui_meta']['wing-group-icon:room-1']['color'] =
+          ProfileColorChoice.green.slot;
+      backend.profile['ui_meta_revisions']['wing-group-icon:room-1'] = 4;
+      expect(await draft.save(canUse: () => true), false);
+      expect(draft.error, contains('Reopen Edit group'));
+      expect(fixture.commands, isEmpty);
+      expect(fixture.room['name'], 'Research team');
+      expect(
+        backend.profile['ui_meta']['wing-group-icon:room-1']['color'],
+        ProfileColorChoice.green.slot,
+      );
+    },
+  );
+
+  test(
+    'a renamed or retired room is rejected before editing its icon',
+    () async {
+      final (fixture, session, _) = await editingRoster();
+      final draft = BotGroupDraftSession(
+        session,
+        existing: session.state.groups.single,
+      );
+      addTearDown(draft.dispose);
+      draft.setName('My room name');
+      fixture.room['name'] = 'Changed on another device';
+      expect(await draft.save(canUse: () => true), false);
+      expect(fixture.commands, isEmpty);
+      expect(draft.error, contains('Group changed'));
+    },
+  );
+
+  test(
+    'editing an undecorated stock room saves its chosen icon without recreating membership',
+    () async {
+      final (fixture, session) = await roster();
+      _PictureBackend(fixture);
+      await session.refresh();
+      final draft = BotGroupDraftSession(
+        session,
+        existing: session.state.groups.single,
+      );
+      addTearDown(draft.dispose);
+      draft.chooseColor(ProfileColorChoice.magenta);
+      expect(await draft.save(canUse: () => true), true);
+      expect(fixture.commands.map((c) => c.$2), ['profiles.configure']);
+      expect(session.state.groups.single.iconColor, ProfileColorChoice.magenta);
+    },
+  );
+
+  test(
+    'editing with unreadable icon metadata or a retired route cannot dispatch',
+    () async {
+      final (fixture, session) = await roster();
+      final draft = BotGroupDraftSession(
+        session,
+        existing: session.state.groups.single,
+      );
+      addTearDown(draft.dispose);
+      expect(draft.editable, false);
+      expect(draft.error, contains('Refresh Bots'));
+      draft.setName('Blocked');
+      expect(await draft.save(canUse: () => true), false);
+      expect(fixture.commands, isEmpty);
+      final (_, ready, _) = await editingRoster();
+      final admitted = BotGroupDraftSession(
+        ready,
+        existing: ready.state.groups.single,
+      );
+      addTearDown(admitted.dispose);
+      admitted.setName('Not dispatched');
+      expect(await admitted.save(canUse: () => false), false);
+      expect(admitted.frozen, false);
+    },
+  );
+
+  test(
+    'editing a live room preserves unread message provenance in its immediate observation',
+    () async {
+      final (fixture, session, _) = await editingRoster();
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'actor': {'kind': 'member', 'id': 'mira', 'profile': 'mira'},
+        'payload': {'text': 'The evidence is ready.'},
+        'created_at': 1791756000.0,
+      });
+      fixture.pending.add({'kind': 'retry', 'task_id': 'task-1'});
+      await session.refresh();
+      final before = session.state.groups.single;
+      expect(before.lastAnswerSequence, 1);
+      expect(before.lastMessageAt, isNotNull);
+      expect(before.blocked, true);
+      final draft = BotGroupDraftSession(session, existing: before);
+      addTearDown(draft.dispose);
+      draft.setName('Evidence review');
+      expect(await draft.save(canUse: () => true), true);
+      final after = session.state.groups.single;
+      expect(after.name, 'Evidence review');
+      expect(after.preview, before.preview);
+      expect(after.lastAnswerSequence, before.lastAnswerSequence);
+      expect(after.lastMessageSequence, before.lastMessageSequence);
+      expect(after.lastMessageAt, before.lastMessageAt);
+      expect(after.blocked, before.blocked);
+      expect(after.withPinned(true).lastAnswerSequence, 1);
+    },
+  );
+
   test('stock metadata adapter confirms its saved room picture', () async {
     final fixture = BotsFixture();
     _PictureBackend(fixture);
     await fixture.repository.saveGroupIcon(
       'room-1',
+      0,
       ProfileColorChoice.cyan,
       _photo(),
       () => true,
@@ -102,7 +355,7 @@ void main() {
     () async {
       final (fixture, session) = await roster();
       final backend = _PictureBackend(fixture);
-      final draft = BotGroupCreateSession(session, random: Random(14));
+      final draft = BotGroupDraftSession(session, random: Random(14));
       addTearDown(draft.dispose);
       final color = draft.iconColor;
       expect(color.slot, isNotNull);
@@ -111,7 +364,7 @@ void main() {
       }
       draft.setName('  Research team');
       expect(draft.iconColor, color);
-      expect(await draft.create(canUse: () => true), true);
+      expect(await draft.save(canUse: () => true), true);
       fixture.room['room_id'] = fixture.commands.first.$3['room_id'];
       fixture.room['name'] = 'Research team';
       final saved = (await fixture.repository.groups()).single;
@@ -138,7 +391,7 @@ void main() {
         }
         return result;
       };
-      final draft = BotGroupCreateSession(
+      final draft = BotGroupDraftSession(
         session,
         pictureIo: _Picker(() async => _photo()),
       );
@@ -147,7 +400,7 @@ void main() {
         draft.select(bot, true);
       }
       await draft.pickPicture(canUse: () => true);
-      expect(await draft.create(canUse: () => true), false);
+      expect(await draft.save(canUse: () => true), false);
       expect(draft.frozen, true);
       expect(draft.error, isNotNull);
       expect(draft.picture, isNotNull);
@@ -170,7 +423,7 @@ void main() {
       }
       final source = Uint8List.fromList(image.encodePng(photo));
       expect(source.length, greaterThan(BotsRepository.groupPictureMaxBytes));
-      final draft = BotGroupCreateSession(
+      final draft = BotGroupDraftSession(
         session,
         pictureIo: _Picker(() async => source),
       );
@@ -197,14 +450,14 @@ void main() {
       final session = BotsSession((_) async => [fixture.repository]);
       addTearDown(session.dispose);
       await session.refresh();
-      final draft = BotGroupCreateSession(session);
+      final draft = BotGroupDraftSession(session);
       addTearDown(draft.dispose);
-      expect(draft.canCreate, false);
+      expect(draft.canSave, false);
       draft.select(draft.bots[0], true);
-      expect(draft.canCreate, false);
+      expect(draft.canSave, false);
       draft.select(draft.bots[1], true);
       expect(draft.effectiveName, 'Atlas, Mira');
-      expect(draft.canCreate, true);
+      expect(draft.canSave, true);
       draft.search('@bot_mira');
       expect(draft.matches, isEmpty);
       draft.search('@bot_forge');
@@ -230,7 +483,7 @@ void main() {
     () async {
       final (fixture, session) = await roster();
       Uint8List? next = _photo();
-      final draft = BotGroupCreateSession(
+      final draft = BotGroupDraftSession(
         session,
         pictureIo: _Picker(() async => next),
       );
@@ -260,7 +513,7 @@ void main() {
       fixture.commandHook = (_, method, _) async => method == 'image.generate'
           ? {'success': true, 'image_data': base64Encode(_photo())}
           : null;
-      final draft = BotGroupCreateSession(session);
+      final draft = BotGroupDraftSession(session);
       addTearDown(draft.dispose);
       for (final bot in draft.bots.take(2)) {
         draft.select(bot, true);
@@ -282,7 +535,7 @@ void main() {
     'unconfirmed create freezes the draft and retries its original room',
     () async {
       final (fixture, session) = await roster();
-      final draft = BotGroupCreateSession(
+      final draft = BotGroupDraftSession(
         session,
         pictureIo: _Picker(() async => _photo()),
       );
@@ -296,7 +549,7 @@ void main() {
         if (method == 'groups.create') throw StateError('Lost confirmation');
         return null;
       };
-      expect(await draft.create(canUse: () => true), false);
+      expect(await draft.save(canUse: () => true), false);
       final first = fixture.commands.single.$3;
       expect(first['name'], 'Atlas, Mira');
       expect(first.keys, unorderedEquals(['room_id', 'name', 'members']));
@@ -315,7 +568,7 @@ void main() {
       final backend = _PictureBackend(fixture);
       await session.refresh();
       expect(session.state.groups.single.picture, isNull);
-      expect(await draft.create(canUse: () => true), true);
+      expect(await draft.save(canUse: () => true), true);
       expect(
         fixture.commands.where((cmd) => cmd.$2 == 'groups.create').last.$3,
         first,
@@ -331,7 +584,7 @@ void main() {
     () async {
       final (fixture, session) = await roster();
       final backend = _PictureBackend(fixture)..loseConfirmation = true;
-      final draft = BotGroupCreateSession(
+      final draft = BotGroupDraftSession(
         session,
         pictureIo: _Picker(() async => _photo()),
       );
@@ -340,13 +593,13 @@ void main() {
         draft.select(bot, true);
       }
       await draft.pickPicture(canUse: () => true);
-      expect(await draft.create(canUse: () => true), false);
+      expect(await draft.save(canUse: () => true), false);
       final first = fixture.commands.first.$3;
       fixture.room['room_id'] = first['room_id'];
       while (session.state.loading) {
         await Future<void>.delayed(Duration.zero);
       }
-      expect(await draft.create(canUse: () => true), true);
+      expect(await draft.save(canUse: () => true), true);
       expect(
         fixture.commands.where((cmd) => cmd.$2 == 'profiles.configure'),
         hasLength(1),
@@ -375,7 +628,7 @@ void main() {
         'version': 1,
         'data': base64Encode(_photo()),
       };
-      final draft = BotGroupCreateSession(
+      final draft = BotGroupDraftSession(
         session,
         pictureIo: _Picker(() async => _photo()),
       );
@@ -384,13 +637,13 @@ void main() {
         draft.select(bot, true);
       }
       await draft.pickPicture(canUse: () => true);
-      expect(await draft.create(canUse: () => true), false);
+      expect(await draft.save(canUse: () => true), false);
       expect(draft.frozen, true);
       while (session.state.loading) {
         await Future<void>.delayed(Duration.zero);
       }
       backend.reject = false;
-      expect(await draft.create(canUse: () => true), true);
+      expect(await draft.save(canUse: () => true), true);
       final write = fixture.commands.last.$3;
       expect(write['name'], 'default');
       expect((write['ui_meta'] as Map).keys, hasLength(1));
@@ -420,6 +673,7 @@ void main() {
           : null;
       final operation = fixture.repository.saveGroupIcon(
         'room-id',
+        0,
         ProfileColorChoice.cyan,
         _photo(),
         () => active,
@@ -438,7 +692,7 @@ void main() {
       final (_, session) = await roster();
       final held = Completer<Uint8List?>();
       var current = true;
-      final draft = BotGroupCreateSession(
+      final draft = BotGroupDraftSession(
         session,
         pictureIo: _Picker(() => held.future),
       );
@@ -448,7 +702,7 @@ void main() {
       }
       final operation = draft.pickPicture(canUse: () => current);
       expect(draft.pictureBusy, true);
-      expect(draft.canCreate, false);
+      expect(draft.canSave, false);
       current = false;
       held.complete(_photo());
       await operation;
@@ -477,7 +731,7 @@ void main() {
       addTearDown(session.dispose);
       await session.refresh();
       final held = Completer<Uint8List?>();
-      final draft = BotGroupCreateSession(
+      final draft = BotGroupDraftSession(
         session,
         pictureIo: _Picker(() => held.future),
       );
@@ -507,7 +761,7 @@ void main() {
         started.complete();
         return held.future;
       };
-      final draft = BotGroupCreateSession(session);
+      final draft = BotGroupDraftSession(session);
       for (final bot in draft.bots.take(2)) {
         draft.select(bot, true);
       }

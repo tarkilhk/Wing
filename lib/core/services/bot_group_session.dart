@@ -11,10 +11,10 @@ import '../models/composer_reference.dart';
 class BotGroupSession extends ChangeNotifier {
   BotGroupSession(
     this.repository,
-    this.group, {
+    BotGroup group, {
     required Iterable<BotRecord> appearances,
     required this.reads,
-  }) {
+  }) : _group = group {
     repository.retain();
     for (final member in group.members) {
       final matches = appearances.where(
@@ -42,7 +42,27 @@ class BotGroupSession extends ChangeNotifier {
   }
 
   final BotsRepository repository;
-  final BotGroup group;
+  BotGroup _group;
+  BotGroup get group => _group;
+  void updateDetails(BotGroup next) {
+    if (_closed ||
+        next.scope != group.scope ||
+        next.id != group.id ||
+        next.members.length != group.members.length ||
+        next.members.any(
+          (m) => !group.members.any(
+            (old) =>
+                old.id == m.id &&
+                old.profile == m.profile &&
+                old.handle == m.handle,
+          ),
+        )) {
+      return;
+    }
+    _group = next;
+    notifyListeners();
+  }
+
   final _appearances = <String, BotRecord>{};
   List<ComposerReference> _references = const [];
   List<ComposerReference> get composerReferences => _references;

@@ -8,6 +8,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/models/profile_colors.dart';
+import 'package:wing/core/services/attachment_image_worker.dart';
+import 'package:wing/core/screens/bots/bot_group_screen.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
@@ -19,7 +22,7 @@ import 'package:wing/core/screens/bots/bot_profile_editor.dart';
 import 'package:wing/core/screens/bots/bot_settings_screen.dart';
 import 'package:wing/core/screens/bots/bots_create_screen.dart';
 import 'package:wing/core/services/bots_session.dart';
-import 'package:wing/core/services/bot_group_create_session.dart';
+import 'package:wing/core/services/bot_group_draft_session.dart';
 import 'package:wing/core/services/bot_avatar_io.dart';
 import 'package:wing/core/widgets/bot_group_picture.dart';
 import 'package:wing/core/services/bot_screen_window.dart';
@@ -152,6 +155,285 @@ void main() {
           .load();
     }
   });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group editing saved details, palette and keyboard ${brightness.name} $scale',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          tester.view.physicalSize = scale == 1
+              ? const Size(390, 844)
+              : const Size(320, 640);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          final Map<String, dynamic> profile = jsonDecode(
+            jsonEncode(BotsFixture.profile('default', 'Hermes')),
+          );
+          final photo = encodeRoomThumbnail((
+            File('assets/icon/icon.png').readAsBytesSync(),
+            45000,
+          ));
+          profile['ui_meta']['wing-group-icon:room-1'] = {
+            'version': 1,
+            'color': ProfileColorChoice.cyan.slot,
+            'data': base64Encode(photo),
+          };
+          profile['ui_meta_revisions']['wing-group-icon:room-1'] = 3;
+          fixture.profiles.add(profile);
+          fixture.commandHook = (_, method, params) async {
+            if (method != 'profiles.configure') return null;
+            final meta = params['ui_meta'] as Map;
+            final revisions = <String, int>{};
+            (profile['ui_meta'] as Map).addAll(meta);
+            for (final key in meta.keys) {
+              revisions[key as String] = profile['ui_meta_revisions'][key] =
+                  (profile['ui_meta_revisions'][key] as int? ?? 0) + 1;
+            }
+            return {
+              'applied': {'ui_meta': true, 'ui_meta_revisions': revisions},
+            };
+          };
+          final session = BotsSession((_) async => [fixture.repository]);
+          addTearDown(session.dispose);
+          await session.refresh();
+          final group = session.state.groups.single;
+          final draft = BotGroupDraftSession(
+            session,
+            existing: group,
+            pictureIo: _RoomPicturePicker(),
+          );
+          final frame = GlobalKey();
+          var keyboard = false;
+          late StateSetter setMedia;
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => StatefulBuilder(
+                builder: (context, setState) {
+                  setMedia = setState;
+                  return MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      textScaler: TextScaler.linear(scale),
+                      viewInsets: EdgeInsets.only(bottom: keyboard ? 240 : 0),
+                    ),
+                    child: RepaintBoundary(key: frame, child: child),
+                  );
+                },
+              ),
+              home: Builder(
+                builder: (context) => Scaffold(
+                  body: TextButton(
+                    onPressed: () => Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => BotsCreateScreen(
+                          session: session,
+                          group: true,
+                          editGroup: group,
+                          createGroupDraft: () => draft,
+                        ),
+                      ),
+                    ),
+                    child: const Text('Open editor'),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.text('Open editor'));
+          await tester.pumpAndSettle();
+          final name = find.byKey(const ValueKey('group-name'));
+          final save = find.byKey(const ValueKey('group-save'));
+          expect(
+            tester.widget<TextField>(name).controller!.text,
+            'Research team',
+          );
+          expect(tester.widget<IconButton>(save).onPressed, isNull);
+          expect(find.text('Search bots'), findsNothing);
+          expect(
+            find.text('Members are fixed when the group is created.'),
+            findsOneWidget,
+          );
+          await tester.runAsync(
+            () => precacheImage(
+              MemoryImage(photo),
+              tester.element(find.byType(BotGroupPicture).first),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await _capture(
+            tester,
+            frame,
+            'group-editing-saved-${brightness.name}-$scale',
+          );
+          await _revealGroup(
+            tester,
+            find.byTooltip('Choose icon color'),
+            delta: -120,
+          );
+          await tester.tap(find.byTooltip('Choose icon color'));
+          await tester.pumpAndSettle();
+          await _capture(
+            tester,
+            frame,
+            'group-editing-palette-${brightness.name}-$scale',
+          );
+          await tester.tap(find.byKey(const ValueKey('group-color-rose')));
+          await tester.pumpAndSettle();
+          expect(draft.iconColor, ProfileColorChoice.rose);
+          await tester.tap(find.byTooltip('Remove room picture'));
+          await tester.pumpAndSettle();
+          expect(draft.picture, isNull);
+          await tester.runAsync(() async {
+            await tester.tap(find.byTooltip('Upload room picture'));
+            while (draft.pictureBusy) {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
+          });
+          await tester.pumpAndSettle();
+          expect(draft.picture, isNotNull);
+          await tester.tap(find.byTooltip('Remove room picture'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Generate room picture'));
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .widget<TextFormField>(find.byType(TextFormField))
+                .initialValue,
+            contains('Atlas, Mira'),
+          );
+          await tester.tap(find.byTooltip('Cancel'));
+          await tester.pumpAndSettle();
+          expect(fixture.commands, isEmpty);
+          await _revealGroup(tester, name, delta: -120);
+          await tester.enterText(
+            name,
+            scale == 1 ? 'Field team' : 'Research and evidence review team',
+          );
+          setMedia(() => keyboard = true);
+          await tester.pumpAndSettle();
+          expect(
+            tester.getRect(save).bottom,
+            lessThanOrEqualTo(tester.view.physicalSize.height - 240),
+          );
+          await _capture(
+            tester,
+            frame,
+            'group-editing-keyboard-${brightness.name}-$scale',
+          );
+          await tester.tap(save);
+          await tester.pumpAndSettle();
+          expect(find.text('Edit group'), findsNothing);
+          expect(session.state.groups.single.name, draft.name);
+          expect(
+            session.state.groups.single.iconColor,
+            ProfileColorChoice.rose,
+          );
+          expect(session.state.groups.single.picture, isNull);
+          expect(fixture.commands.map((c) => c.$2), [
+            'profiles.configure',
+            'groups.rename',
+          ]);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'group editing is reachable from roster and discussion and updates the open room',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final fixture = BotsFixture();
+      final Map<String, dynamic> profile = jsonDecode(
+        jsonEncode(BotsFixture.profile('default', 'Hermes')),
+      );
+      fixture.profiles.add(profile);
+      fixture.commandHook = (_, method, params) async {
+        if (method != 'profiles.configure') return null;
+        (profile['ui_meta'] as Map).addAll(params['ui_meta'] as Map);
+        final key = (params['ui_meta'] as Map).keys.single;
+        profile['ui_meta_revisions'][key] = 1;
+        return {
+          'applied': {
+            'ui_meta': true,
+            'ui_meta_revisions': {key: 1},
+          },
+        };
+      };
+      final session = BotsSession((_) async => [fixture.repository]);
+      addTearDown(session.dispose);
+      await session.refresh();
+      var state = const BotsViewState(tab: 1);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.light),
+          home: StatefulBuilder(
+            builder: (context, setState) => BotsContent(
+              session: session,
+              viewState: state,
+              onViewChanged: (next) => setState(() => state = next),
+              onOpenMenu: () {},
+              onOpenChat: (_) async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Actions for Research team'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit group'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('group-save')), findsOneWidget);
+      expect(fixture.commands, isEmpty);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Research team').first);
+      await tester.pumpAndSettle();
+      expect(find.byType(BotGroupScreen), findsOneWidget);
+      await tester.tap(find.byTooltip('Group options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit group'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('group-name')),
+        'Updated discussion',
+      );
+      await tester.pump();
+      expect(session.state.groups.single.iconRevision, 0);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('group-name')))
+            .enabled,
+        true,
+      );
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const ValueKey('group-save')))
+            .onPressed,
+        isNotNull,
+      );
+      expect(session.state.busy, false);
+      await tester.tap(find.byTooltip('Save changes'));
+      await tester.pumpAndSettle();
+      expect(session.state.errors, isEmpty);
+      expect(
+        fixture.room['name'],
+        'Updated discussion',
+        reason: fixture.commands.map((c) => c.$2).join(', '),
+      );
+      expect(find.byType(BotsCreateScreen), findsNothing);
+      expect(find.byType(BotGroupScreen), findsOneWidget);
+      expect(find.text('Updated discussion'), findsOneWidget);
+      expect(find.text('Research team'), findsNothing);
+      expect(fixture.commands.where((c) => c.$2 == 'groups.create'), isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('group creation layout ${brightness.name} $scale', (
@@ -326,7 +608,7 @@ void main() {
         final session = BotsSession((_) async => [fixture.repository]);
         addTearDown(session.dispose);
         await session.refresh();
-        final draft = BotGroupCreateSession(
+        final draft = BotGroupDraftSession(
           session,
           pictureIo: _RoomPicturePicker(),
         );
@@ -346,7 +628,7 @@ void main() {
             home: BotsCreateScreen(
               session: session,
               group: true,
-              createGroupSession: () => draft,
+              createGroupDraft: () => draft,
             ),
           ),
         );

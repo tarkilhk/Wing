@@ -18,8 +18,9 @@ import '../../widgets/studio_error.dart';
 import '../../widgets/wing_app_bar.dart';
 
 class BotGroupScreen extends StatefulWidget {
-  const BotGroupScreen({super.key, required this.createSession});
+  const BotGroupScreen({super.key, required this.createSession, this.onEdit});
   final BotGroupSession Function() createSession;
+  final Future<BotGroup?> Function(BotGroup)? onEdit;
   @override
   State<BotGroupScreen> createState() => _BotGroupScreenState();
 }
@@ -244,9 +245,25 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           PopupMenuButton<String>(
             tooltip: 'Group options',
             icon: const Icon(Icons.more_horiz),
-            onSelected: (_) => _openWorkingHistories(),
-            itemBuilder: (_) => const [
-              PopupMenuItem(
+            onSelected: (action) async {
+              if (action == 'histories') {
+                await _openWorkingHistories();
+              } else if (action == 'edit') {
+                _session.setVisible(false);
+                try {
+                  final updated = await widget.onEdit!(_session.group);
+                  if (mounted && updated != null) {
+                    _session.updateDetails(updated);
+                  }
+                } finally {
+                  if (mounted) _session.setVisible(_foreground && !_capturing);
+                }
+              }
+            },
+            itemBuilder: (_) => [
+              if (widget.onEdit != null)
+                const PopupMenuItem(value: 'edit', child: Text('Edit group')),
+              const PopupMenuItem(
                 value: 'histories',
                 child: Text('Bot working histories'),
               ),

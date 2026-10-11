@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../models/bots.dart';
+import '../../models/profile_colors.dart';
 import '../../services/bots_session.dart';
-import '../../services/bot_group_create_session.dart';
+import '../../services/bot_group_draft_session.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/bot_avatar.dart';
 import '../../widgets/bot_group_picture.dart';
@@ -16,12 +17,14 @@ class BotsCreateScreen extends StatefulWidget {
     required this.session,
     required this.group,
     this.clone,
-    this.createGroupSession,
+    this.createGroupDraft,
+    this.editGroup,
   });
   final BotsSession session;
   final bool group;
   final BotRecord? clone;
-  final BotGroupCreateSession Function()? createGroupSession;
+  final BotGroupDraftSession Function()? createGroupDraft;
+  final BotGroup? editGroup;
   @override
   State<BotsCreateScreen> createState() => _BotsCreateScreenState();
 }
@@ -30,8 +33,8 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
   final _name = TextEditingController();
   late final _opening = widget.session.state;
   late final _group = widget.group
-      ? widget.createGroupSession?.call() ??
-            BotGroupCreateSession(widget.session)
+      ? widget.createGroupDraft?.call() ??
+            BotGroupDraftSession(widget.session, existing: widget.editGroup)
       : null;
   final _search = TextEditingController();
   late String? _identity =
@@ -42,6 +45,7 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
   @override
   void initState() {
     super.initState();
+    if (_group != null) _name.text = _group.name;
     _group?.addListener(_changed);
   }
 
@@ -60,7 +64,7 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
   bool _canUse() => mounted && ModalRoute.of(context)?.isCurrent == true;
 
   Future<void> _saveGroup() async {
-    final saved = await _group!.create(canUse: _canUse);
+    final saved = await _group!.save(canUse: _canUse);
     if (mounted && saved) Navigator.pop(context, true);
   }
 
@@ -97,16 +101,75 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
     }
   }
 
+  Future<void> _chooseColor() async {
+    final draft = _group!;
+    final choice = await showModalBottomSheet<ProfileColorChoice>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (context) => SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Icon color', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final color in ProfileColorChoice.values.where(
+                  (color) => color.slot != null,
+                ))
+                  Semantics(
+                    selected: draft.iconColor == color,
+                    child: IconButton.filledTonal(
+                      key: ValueKey('group-color-${color.name}'),
+                      tooltip:
+                          '${color.name[0].toUpperCase()}${color.name.substring(1)}',
+                      isSelected: draft.iconColor == color,
+                      onPressed: () => Navigator.pop(context, color),
+                      icon: BotGroupPicture(
+                        name: draft.effectiveName,
+                        color: color,
+                        size: 32,
+                      ),
+                      selectedIcon: Stack(
+                        children: [
+                          BotGroupPicture(
+                            name: draft.effectiveName,
+                            color: color,
+                            size: 32,
+                          ),
+                          const Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Icon(Icons.check_circle, size: 16),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    if (mounted && choice != null) draft.chooseColor(choice);
+  }
+
   Widget _buildGroup(BuildContext context) {
     final draft = _group!;
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final editable = draft.editable;
-    final hint = draft.frozen && !draft.creating
+    final hint = draft.frozen && !draft.saving
         ? 'Retry with the same room details'
-        : draft.selected.length < 2
+        : draft.memberCount < 2
         ? 'Choose 2–6 bots'
-        : '${draft.selected.length} bots · ${draft.instance}';
+        : '${draft.memberCount} bots · ${draft.instance}';
     final name = TextField(
       key: const ValueKey('group-name'),
       controller: _name,
@@ -115,7 +178,7 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
       buildCounter:
           (_, {required currentLength, required isFocused, maxLength}) => null,
       decoration: InputDecoration(
-        labelText: 'Group name (optional)',
+        labelText: draft.editing ? 'Group name' : 'Group name (optional)',
         hintText: draft.suggestedName.isEmpty
             ? 'e.g. Launch team'
             : draft.suggestedName,
@@ -156,6 +219,11 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
+          tooltip: 'Choose icon color',
+          onPressed: editable ? _chooseColor : null,
+          icon: const Icon(Icons.palette_outlined),
+        ),
+        IconButton(
           tooltip: 'Upload room picture',
           onPressed: editable && !draft.pictureBusy
               ? () => draft.pickPicture(canUse: _canUse)
@@ -178,7 +246,10 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
       ],
     );
     return Scaffold(
-      appBar: WingAppBar(context: context, title: const Text('New group')),
+      appBar: WingAppBar(
+        context: context,
+        title: Text(draft.editing ? 'Edit group' : 'New group'),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -208,7 +279,9 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Saved to Hermes when you create the group',
+                            draft.editing
+                                ? 'Changes are saved to Hermes'
+                                : 'Saved to Hermes when you create the group',
                             style: theme.textTheme.bodySmall,
                           ),
                           const SizedBox(height: 16),
@@ -232,7 +305,9 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Saved to Hermes when you create the group',
+                                draft.editing
+                                    ? 'Changes are saved to Hermes'
+                                    : 'Saved to Hermes when you create the group',
                                 style: theme.textTheme.bodySmall,
                               ),
                             ),
@@ -243,7 +318,7 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                   },
                 ),
                 const SizedBox(height: WingSpacing.md),
-                if (draft.hosts.length > 1)
+                if (!draft.editing && draft.hosts.length > 1)
                   StudioSelect<String>(
                     value: draft.identity,
                     label: 'Hermes instance',
@@ -258,7 +333,7 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                           }
                         : null,
                   )
-                else if (draft.hosts.isNotEmpty)
+                else if (draft.instance.isNotEmpty)
                   Text(
                     'On ${draft.instance}',
                     style: theme.textTheme.bodySmall,
@@ -274,14 +349,24 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                     Semantics(
                       liveRegion: true,
                       child: Text(
-                        '${draft.selected.length} of 6 selected',
+                        draft.editing
+                            ? '${draft.memberCount} bots'
+                            : '${draft.selected.length} of 6 selected',
                         style: theme.textTheme.bodySmall,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: WingSpacing.md),
-                if (draft.identity == null)
+                if (draft.editing) ...[
+                  const Text('Members are fixed when the group is created.'),
+                  const SizedBox(height: 8),
+                  for (final member in draft.existing!.members)
+                    _ExistingGroupMember(
+                      member: member,
+                      bot: draft.appearance(member),
+                    ),
+                ] else if (draft.identity == null)
                   const Text(
                     'Group chats are unavailable. Return to Bots and check that your Hermes instance is ready.',
                   )
@@ -289,7 +374,7 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                   const Text(
                     'This instance needs at least 2 bots. Return to Bots to create them, or choose another instance.',
                   ),
-                if (draft.bots.isNotEmpty) ...[
+                if (!draft.editing && draft.bots.isNotEmpty) ...[
                   if (draft.selected.isNotEmpty) ...[
                     _PickedGroupMembers(
                       members: draft.selected,
@@ -426,18 +511,26 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                     ),
                     const SizedBox(width: 8),
                     IconButton.filled(
-                      key: const ValueKey('group-create'),
-                      tooltip: 'Create group',
-                      onPressed: draft.canCreate ? _saveGroup : null,
-                      icon: draft.creating
-                          ? const SizedBox.square(
+                      key: ValueKey(
+                        draft.editing ? 'group-save' : 'group-create',
+                      ),
+                      tooltip: draft.editing ? 'Save changes' : 'Create group',
+                      onPressed: draft.canSave ? _saveGroup : null,
+                      icon: draft.saving
+                          ? SizedBox.square(
                               dimension: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                semanticsLabel: 'Creating group',
+                                semanticsLabel: draft.editing
+                                    ? 'Saving group'
+                                    : 'Creating group',
                               ),
                             )
-                          : const Icon(Icons.group_add_outlined),
+                          : Icon(
+                              draft.editing
+                                  ? Icons.check
+                                  : Icons.group_add_outlined,
+                            ),
                     ),
                   ],
                 ),
@@ -614,4 +707,31 @@ class _PickedGroupMembers extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ExistingGroupMember extends StatelessWidget {
+  const _ExistingGroupMember({required this.member, required this.bot});
+  final BotGroupMember member;
+  final BotRecord? bot;
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    leading: bot == null
+        ? const SizedBox.square(
+            dimension: 32,
+            child: Icon(Icons.smart_toy_outlined),
+          )
+        : BotAvatar(
+            name: member.name,
+            shape: bot!.shape,
+            color: bot!.color,
+            image: bot!.avatar,
+            size: 32,
+          ),
+    title: Text(member.name),
+    subtitle: Text(
+      '@${member.handle}',
+      style: Theme.of(context).textTheme.bodySmall,
+    ),
+  );
 }

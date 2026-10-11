@@ -8,30 +8,47 @@ import 'bot_avatar_io.dart';
 import 'bots_session.dart';
 import 'bots_repository.dart';
 
-/// Owns the room draft, picture preparation and one immutable creation attempt.
-class BotGroupCreateSession extends ChangeNotifier {
-  BotGroupCreateSession(this._roster, {BotAvatarIo? pictureIo, Random? random})
-    : _opening = _roster.state,
-      iconColor = ProfileColorChoice
-          .values[(random ?? Random.secure()).nextInt(12) + 1],
-      _roomId = _roster.newRoomId(),
-      _pictureIo = pictureIo ?? BotAvatarIo() {
-    _identity = hosts.firstOrNull?.identity;
+/// Owns new and existing room drafts, picture preparation and immutable retries.
+class BotGroupDraftSession extends ChangeNotifier {
+  BotGroupDraftSession(
+    this._roster, {
+    this.existing,
+    BotAvatarIo? pictureIo,
+    Random? random,
+  }) : _opening = _roster.state,
+       _iconColor =
+           existing?.iconColor ??
+           ProfileColorChoice.values[(random ?? Random.secure()).nextInt(12) +
+               1],
+       _roomId = existing?.id ?? _roster.newRoomId(),
+       _renameEvent = _roster.newRoomId(),
+       _pictureIo = pictureIo ?? BotAvatarIo() {
+    _identity =
+        existing?.scope.connectionIdentity ?? hosts.firstOrNull?.identity;
+    _name = existing?.name ?? '';
+    _picture = existing?.picture;
+    _initialColor = _iconColor;
+    if (existing != null && existing!.iconRevision == null) {
+      _error =
+          'Group picture is unavailable. Refresh Bots and reopen Edit group.';
+    }
   }
 
   final BotsSession _roster;
-  final ProfileColorChoice iconColor;
+  final BotGroup? existing;
+  ProfileColorChoice _iconColor;
+  late final ProfileColorChoice _initialColor;
+  ProfileColorChoice get iconColor => _iconColor;
+  bool get editing => existing != null;
   final BotsSnapshot _opening;
   final String _roomId;
+  final String _renameEvent;
   final BotAvatarIo _pictureIo;
   final _members = <String>{};
   String? _identity, _error;
   String _name = '', _query = '';
   Uint8List? _picture;
-  bool _closed = false,
-      _creating = false,
-      _pictureBusy = false,
-      _frozen = false;
+  bool _closed = false, _saving = false, _pictureBusy = false, _frozen = false;
   int _pictureGeneration = 0;
   String? _attemptName;
 
@@ -40,6 +57,7 @@ class BotGroupCreateSession extends ChangeNotifier {
       .toList();
   String? get identity => _identity;
   String get instance =>
+      existing?.instance ??
       hosts.where((host) => host.identity == _identity).firstOrNull?.label ??
       '';
   List<BotRecord> get bots => _opening.bots
@@ -65,27 +83,48 @@ class BotGroupCreateSession extends ChangeNotifier {
     selected.map((bot) => bot.title).join(', ').runes.take(64),
   );
   String get effectiveName =>
-      _attemptName ?? (_name.trim().isEmpty ? suggestedName : _name.trim());
+      _attemptName ??
+      (!editing && _name.trim().isEmpty ? suggestedName : _name.trim());
   Uint8List? get picture => _picture;
   String? get error => _error;
-  bool get creating => _creating;
+  bool get saving => _saving;
   bool get pictureBusy => _pictureBusy;
-  bool get editable => !_closed && !_creating && !_frozen;
-  bool get canCreate =>
+  bool get editable =>
       !_closed &&
-      !_creating &&
+      !_saving &&
+      !_frozen &&
+      (!editing || existing!.iconRevision != null);
+  int get memberCount => existing?.members.length ?? selected.length;
+  bool get hasChanges =>
+      !editing ||
+      _name.trim() != existing!.name ||
+      _iconColor != _initialColor ||
+      !listEquals(_picture, existing!.picture);
+  bool get canSave =>
+      !_closed &&
+      !_saving &&
       !_pictureBusy &&
       _identity != null &&
-      selected.length >= 2 &&
-      selected.length <= 6 &&
+      memberCount >= 2 &&
+      memberCount <= 6 &&
+      (!editing || existing!.iconRevision != null) &&
+      (hasChanges || _frozen) &&
       effectiveName.isNotEmpty;
   bool get canGenerate =>
-      editable && !_pictureBusy && _identity != null && selected.length >= 2;
+      editable && !_pictureBusy && _identity != null && memberCount >= 2;
   bool get frozen => _frozen;
 
   bool contains(BotRecord bot) => _members.contains(bot.id);
+  BotRecord? appearance(BotGroupMember member) =>
+      bots.where((bot) => bot.profile.name == member.profile).firstOrNull;
   bool canSelect(BotRecord bot) =>
-      editable && (contains(bot) || _members.length < 6);
+      editable && !editing && (contains(bot) || _members.length < 6);
+  void chooseColor(ProfileColorChoice value) {
+    if (!editable || value.slot == null) return;
+    _iconColor = value;
+    notifyListeners();
+  }
+
   void setName(String value) {
     if (!editable) return;
     _name = String.fromCharCodes(value.runes.take(64));
@@ -100,6 +139,7 @@ class BotGroupCreateSession extends ChangeNotifier {
 
   void chooseInstance(String? value) {
     if (!editable ||
+        editing ||
         value == _identity ||
         !hosts.any((host) => host.identity == value)) {
       return;
@@ -131,7 +171,7 @@ class BotGroupCreateSession extends ChangeNotifier {
   }
 
   String get picturePrompt =>
-      'Group chat icon for an AI team called "$effectiveName", with ${selected.map((bot) => bot.title).join(', ')}. '
+      'Group chat icon for an AI team called "$effectiveName", with ${existing?.members.map((m) => m.name).join(', ') ?? selected.map((bot) => bot.title).join(', ')}. '
       'Friendly minimal emblem, bold flat illustration, solid color background, centered, no text.';
 
   Future<void> pickPicture({required bool Function() canUse}) =>
@@ -184,28 +224,37 @@ class BotGroupCreateSession extends ChangeNotifier {
     }
   }
 
-  Future<bool> create({required bool Function() canUse}) async {
-    if (!canCreate || !canUse()) return false;
+  Future<bool> save({required bool Function() canUse}) async {
+    if (!canSave || !canUse()) return false;
     _attemptName ??= effectiveName;
     _frozen = true;
-    _creating = true;
+    _saving = true;
     _error = null;
     notifyListeners();
-    final saved = await _roster.createGroup(
-      _identity!,
-      _roomId,
-      _attemptName!,
-      selected,
-      picture: _picture,
-      iconColor: iconColor,
-      canUse: () => !_closed && canUse(),
-    );
+    final saved = editing
+        ? await _roster.editGroup(
+            existing!,
+            _attemptName!,
+            iconColor,
+            _picture,
+            _renameEvent,
+            canUse: () => !_closed && canUse(),
+          )
+        : await _roster.createGroup(
+            _identity!,
+            _roomId,
+            _attemptName!,
+            selected,
+            picture: _picture,
+            iconColor: iconColor,
+            canUse: () => !_closed && canUse(),
+          );
     if (_closed) return false;
-    _creating = false;
+    _saving = false;
     if (!saved) {
       _error =
           _roster.state.errors.firstOrNull ??
-          'Group creation could not be confirmed. Try again.';
+          'Group save could not be confirmed. Try again.';
     }
     notifyListeners();
     return saved;

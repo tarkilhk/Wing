@@ -6298,11 +6298,11 @@
       ]
     },
     {
-      "id": "host-test-test/bot_group_create_session_test.dart",
+      "id": "host-test-test/bot_group_draft_session_test.dart",
       "kind": "host-test",
-      "path": "test/bot_group_create_session_test.dart",
-      "purpose": "Room draft, random palette icons, stock picture generation, backend CAS/readback and immutable retry lifetime",
-      "source": "internal/docs/TESTING.md; test/bot_group_create_session_test.dart",
+      "path": "test/bot_group_draft_session_test.dart",
+      "purpose": "Creation/editing drafts, captured icon revisions, random palette icons, stock picture generation, backend CAS/readback and immutable save retries",
+      "source": "internal/docs/TESTING.md; test/bot_group_draft_session_test.dart",
       "status": "supported",
       "selector": "main"
     }
@@ -8659,9 +8659,9 @@
       "provenance": "intentional-untracked"
     },
     {
-      "path": "lib/core/services/bot_group_create_session.dart",
+      "path": "lib/core/services/bot_group_draft_session.dart",
       "area": "lib",
-      "provenance": "intentional-untracked"
+      "provenance": "tracked"
     },
     {
       "path": "lib/core/services/bot_group_history_session.dart",
@@ -10499,9 +10499,9 @@
       "provenance": "intentional-untracked"
     },
     {
-      "path": "test/bot_group_create_session_test.dart",
+      "path": "test/bot_group_draft_session_test.dart",
       "area": "test",
-      "provenance": "intentional-untracked"
+      "provenance": "tracked"
     },
     {
       "path": "test/bot_group_history_test.dart",

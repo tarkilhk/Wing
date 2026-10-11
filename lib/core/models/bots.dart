@@ -137,6 +137,7 @@ class BotGroup {
     this.lastAnswerSequence = 0,
     this.pinned = false,
     this.iconColor,
+    this.iconRevision,
     Uint8List? picture,
   }) : members = List.unmodifiable(members),
        picture = picture?.asUnmodifiableView();
@@ -149,7 +150,32 @@ class BotGroup {
   final bool pinned;
   final Uint8List? picture;
   final ProfileColorChoice? iconColor;
+
+  /// Null means the backend icon metadata was not admitted for editing.
+  final int? iconRevision;
   String get key => '${scope.connectionIdentity}/$id';
+  BotGroup withDetails({
+    required String name,
+    required ProfileColorChoice color,
+    required Uint8List? picture,
+    required int revision,
+  }) => BotGroup(
+    scope: scope,
+    instance: instance,
+    id: id,
+    name: name,
+    members: members,
+    preview: preview,
+    working: working,
+    blocked: blocked,
+    lastMessageAt: lastMessageAt,
+    lastMessageSequence: lastMessageSequence,
+    lastAnswerSequence: lastAnswerSequence,
+    pinned: pinned,
+    picture: picture,
+    iconColor: color,
+    iconRevision: revision,
+  );
   BotGroup withPinned(bool value) => BotGroup(
     scope: scope,
     instance: instance,
@@ -165,24 +191,36 @@ class BotGroup {
     pinned: value,
     picture: picture,
     iconColor: iconColor,
+    iconRevision: iconRevision,
   );
-  BotGroup withIcon({Uint8List? picture, ProfileColorChoice? color}) =>
-      BotGroup(
-        scope: scope,
-        instance: instance,
-        id: id,
-        name: name,
-        members: members,
-        preview: preview,
-        working: working,
-        blocked: blocked,
-        lastMessageAt: lastMessageAt,
-        lastMessageSequence: lastMessageSequence,
-        lastAnswerSequence: lastAnswerSequence,
-        pinned: pinned,
-        picture: picture,
-        iconColor: color,
-      );
+  BotGroup withIcon({
+    Uint8List? picture,
+    ProfileColorChoice? color,
+    int? revision,
+  }) => BotGroup(
+    scope: scope,
+    instance: instance,
+    id: id,
+    name: name,
+    members: members,
+    preview: preview,
+    working: working,
+    blocked: blocked,
+    lastMessageAt: lastMessageAt,
+    lastMessageSequence: lastMessageSequence,
+    lastAnswerSequence: lastAnswerSequence,
+    pinned: pinned,
+    picture: picture,
+    iconColor: color,
+    iconRevision: revision,
+  );
+}
+
+class BotGroupEditConflict implements Exception {
+  const BotGroupEditConflict(this.message);
+  final String message;
+  @override
+  String toString() => message;
 }
 
 @immutable
