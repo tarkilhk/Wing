@@ -4,6 +4,10 @@
 
 The drawer opens Chats, Recents, Bots, Hermes instances, App settings, Hermes administration, Hermes health and Hermes analytics. Projects are organized within Chats.
 
+Recents and Bots show the shared Instance component below their title. Tap the
+instance name to choose an instance, or its icon and connection indicator for
+connection details.
+
 Chats browses profiles on the selected connection. Search sits above Status, Profile and Project filters. Each filter allows multiple selections; the cross clears the filters.
 
 The chat list's menu contains **Group by**, **Sort by**, **Show details**, **Show automated chats**, Collapse/Expand all, Mark all as read, Archived/Active chats and New project. Grouping starts with Project and sorting with Updated. Pinned chats appear once, followed by group previews. **Show more** reveals ten more chats. Token totals include matching chats outside the visible preview when the list is complete.

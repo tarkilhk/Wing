@@ -5,6 +5,9 @@ import '../../services/bot_group_history_session.dart';
 import 'bot_group_history_screen.dart';
 import '../../models/bots.dart';
 import '../../widgets/bot_group_picture.dart';
+import '../../widgets/bot_avatar.dart';
+import '../../widgets/conversation_activity_status.dart';
+import '../../widgets/composer_icon_button.dart';
 import '../../models/composer_reference.dart';
 import '../../widgets/mention_suggestions.dart';
 import '../../widgets/slash_command_suggestions.dart';
@@ -43,9 +46,9 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   final _scroll = ScrollController();
   final _rowHeights = <int, double>{};
   bool _following = true, _capturing = false, _foreground = true;
-  bool _inspectingHistory = false;
+  bool _inspectingDetails = false;
   bool _scrollScheduled = false;
-  int _lastSequence = 0;
+  bool _jumpingToLatest = false;
 
   void _acknowledgeLatest() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -53,7 +56,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           !_foreground ||
           ModalRoute.of(context)?.isCurrent != true ||
           _capturing ||
-          _inspectingHistory ||
+          _inspectingDetails ||
           !_following ||
           !_scroll.hasClients ||
           _scroll.position.extentAfter >= 80) {
@@ -70,7 +73,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   }
 
   void _scrollChanged() {
-    if (!_capturing && _scroll.hasClients) {
+    if (!_capturing && !_jumpingToLatest && _scroll.hasClients) {
       final following = _scroll.position.extentAfter < 80;
       if (following != _following && mounted) {
         setState(() => _following = following);
@@ -80,11 +83,17 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   }
 
   void _followLatest() {
-    if (!_following || _capturing || _scrollScheduled) return;
+    if (!_following || _capturing || _jumpingToLatest || _scrollScheduled) {
+      return;
+    }
     _scrollScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollScheduled = false;
-      if (mounted && _following && !_capturing && _scroll.hasClients) {
+      if (mounted &&
+          _following &&
+          !_capturing &&
+          !_jumpingToLatest &&
+          _scroll.hasClients) {
         _scroll.jumpTo(_scroll.position.maxScrollExtent);
         _acknowledgeLatest();
       }
@@ -94,7 +103,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   void _captureChanged(bool active) {
     _capturing = active;
     _session.setCapturing(active);
-    _session.setVisible(!active && _foreground && !_inspectingHistory);
+    _session.setVisible(!active && _foreground && !_inspectingDetails);
   }
 
   Widget _message(BotGroupEvent event) {
@@ -132,19 +141,165 @@ class _BotGroupScreenState extends State<BotGroupScreen>
 
   void _changed() {
     if (!mounted) return;
-    final sequence = _session.events.lastOrNull?.sequence ?? 0;
     setState(() {});
-    if (sequence != _lastSequence) {
-      _lastSequence = sequence;
-      _followLatest();
+    _followLatest();
+    _acknowledgeLatest();
+  }
+
+  Future<void> _latest() async {
+    setState(() {
+      _following = true;
+      _jumpingToLatest = true;
+    });
+    try {
+      if (_scroll.hasClients) {
+        await scrollToTranscriptLatest(
+          context,
+          _scroll,
+          offset: _scroll.position.maxScrollExtent,
+        );
+      }
+    } finally {
+      _jumpingToLatest = false;
+      if (mounted) {
+        _scrollChanged();
+        _followLatest();
+      }
     }
     _acknowledgeLatest();
+  }
+
+  Future<void> _showMembers() async {
+    _focus.unfocus();
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 360,
+            maxHeight: MediaQuery.sizeOf(context).height * .65,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Group members',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close members',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final member in _session.group.members)
+                        Builder(
+                          builder: (context) {
+                            final bot = _session.appearance(member.profile);
+                            final name = bot?.title ?? member.name;
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: BotAvatar(
+                                name: name,
+                                shape: bot?.shape ?? 'circle',
+                                color: bot?.color ?? '',
+                                image: bot?.avatar,
+                                size: 32,
+                              ),
+                              title: Text(name),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _activityStatus(BuildContext context) {
+    final runtime = _session.runtime;
+    final needsApproval =
+        runtime?.actions.any((a) => a.kind == 'approval') == true;
+    final interrupted =
+        runtime?.blocked == true || runtime?.actions.isNotEmpty == true;
+    final String? label;
+    final bool active;
+    final IconData icon;
+    if (_session.sending) {
+      label = 'Sending message…';
+      active = true;
+      icon = Icons.pending_outlined;
+    } else if (_session.acting) {
+      label = 'Updating group work…';
+      active = true;
+      icon = Icons.pending_outlined;
+    } else if (_session.pendingText != null) {
+      label = 'Message not confirmed · Retry the same message';
+      active = false;
+      icon = Icons.error_outline;
+    } else if (_session.loading) {
+      label = 'Loading conversation…';
+      active = true;
+      icon = Icons.pending_outlined;
+    } else if (_session.error != null) {
+      label = 'Group needs attention';
+      active = false;
+      icon = Icons.error_outline;
+    } else if (needsApproval) {
+      label = 'Waiting for your approval';
+      active = false;
+      icon = Icons.help_rounded;
+    } else if (interrupted) {
+      label = 'Group work is interrupted';
+      active = false;
+      icon = Icons.pause_circle_outline;
+    } else if (runtime?.working == true) {
+      label = 'Bots are working…';
+      active = true;
+      icon = Icons.pending_outlined;
+    } else {
+      label = null;
+      active = false;
+      icon = Icons.chat_bubble_outline;
+    }
+    final tokens = WingTokens.of(context);
+    return ConversationActivityStatus(
+      label: label,
+      active: active,
+      wrap: true,
+      leading: ConversationStatusIndicator(
+        running: active,
+        icon: icon,
+        color: active
+            ? tokens.running
+            : needsApproval || interrupted
+            ? tokens.blocked
+            : tokens.muted,
+      ),
+    );
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
-    _session.setVisible(_foreground && !_capturing && !_inspectingHistory);
+    _session.setVisible(_foreground && !_capturing && !_inspectingDetails);
     if (_foreground) _acknowledgeLatest();
   }
 
@@ -196,7 +351,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
 
   Future<void> _openWorkingHistories() async {
     _focus.unfocus();
-    _inspectingHistory = true;
+    _inspectingDetails = true;
     _session.setVisible(false);
     try {
       await Navigator.of(context).push<void>(
@@ -208,7 +363,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
         ),
       );
     } finally {
-      _inspectingHistory = false;
+      _inspectingDetails = false;
       if (mounted) _session.setVisible(_foreground && !_capturing);
     }
   }
@@ -217,6 +372,15 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final messages = _session.events.where((event) => event.isMessage).toList();
+    final canStop =
+        !_session.acting &&
+        (_session.runtime?.working == true ||
+            _session.runtime?.blocked == true);
+    final stopping =
+        canStop &&
+        !_session.sending &&
+        _session.pendingText == null &&
+        _composer.text.trim().isEmpty;
     final locked = _session.pendingText != null || _session.sending;
     return Scaffold(
       appBar: WingAppBar(
@@ -227,46 +391,57 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
-          IconButton(
-            tooltip: 'Refresh group',
-            onPressed: _session.loading ? null : _session.refresh,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            tooltip: 'Stop group work',
-            onPressed:
-                _session.acting ||
-                    !(_session.runtime?.working == true ||
-                        _session.runtime?.blocked == true)
-                ? null
-                : _session.stop,
-            icon: const Icon(Icons.stop_outlined),
-          ),
           PopupMenuButton<String>(
             tooltip: 'Group options',
             icon: const Icon(Icons.more_horiz),
             onSelected: (action) async {
-              if (action == 'histories') {
-                await _openWorkingHistories();
-              } else if (action == 'edit') {
-                _session.setVisible(false);
-                try {
-                  final updated = await widget.onEdit!(_session.group);
-                  if (mounted && updated != null) {
-                    _session.updateDetails(updated);
+              switch (action) {
+                case 'members':
+                  await _showMembers();
+                case 'histories':
+                  await _openWorkingHistories();
+                case 'refresh':
+                  await _session.refresh();
+                case 'stop':
+                  await _session.stop();
+                case 'edit':
+                  _focus.unfocus();
+                  _inspectingDetails = true;
+                  _session.setVisible(false);
+                  try {
+                    final updated = await widget.onEdit!(_session.group);
+                    if (mounted && updated != null) {
+                      _session.updateDetails(updated);
+                    }
+                  } finally {
+                    _inspectingDetails = false;
+                    if (mounted) {
+                      _session.setVisible(_foreground && !_capturing);
+                    }
                   }
-                } finally {
-                  if (mounted) _session.setVisible(_foreground && !_capturing);
-                }
               }
             },
             itemBuilder: (_) => [
               if (widget.onEdit != null)
                 const PopupMenuItem(value: 'edit', child: Text('Edit group')),
               const PopupMenuItem(
+                value: 'members',
+                child: Text('Group members'),
+              ),
+              const PopupMenuItem(
                 value: 'histories',
                 child: Text('Bot working histories'),
               ),
+              PopupMenuItem(
+                value: 'refresh',
+                enabled: !_session.loading,
+                child: const Text('Refresh group'),
+              ),
+              if (canStop)
+                const PopupMenuItem(
+                  value: 'stop',
+                  child: Text('Stop group work'),
+                ),
             ],
           ),
         ],
@@ -279,25 +454,51 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                     MediaQuery.textScalerOf(context).scale(16) < 24))
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Row(
-                  children: [
-                    BotGroupPicture(
-                      name: _session.group.name,
-                      color: _session.group.iconColor,
-                      image: _session.group.picture,
-                      size: 32,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '${_session.group.instance} · ${_session.group.members.length} bots',
-                        style: Theme.of(context).textTheme.bodySmall,
+                child: Semantics(
+                  button: true,
+                  label: 'Show group members',
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      key: const ValueKey('group-members-entry'),
+                      onTap: _showMembers,
+                      borderRadius: WingRadius.card,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: Row(
+                          children: [
+                            if (_session.group.picture != null)
+                              BotGroupPicture(
+                                name: _session.group.name,
+                                color: _session.group.iconColor,
+                                image: _session.group.picture,
+                                size: 32,
+                              )
+                            else
+                              Icon(
+                                Icons.group_outlined,
+                                size: 24,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${_session.group.instance} · ${_session.group.members.length} bots',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                            Icon(
+                              Icons.expand_more,
+                              size: 18,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            if (_session.loading) const LinearProgressIndicator(),
             Expanded(
               child: Stack(
                 children: [
@@ -351,11 +552,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                                       ),
                                     ),
                                   if (_session.runtime case final runtime?) ...[
-                                    if (runtime.working)
-                                      Semantics(
-                                        label: 'Bots are working',
-                                        child: const LinearProgressIndicator(),
-                                      ),
                                     if (runtime.blocked &&
                                         runtime.actions.isEmpty)
                                       const Text(
@@ -373,7 +569,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                                             Text(
                                               action.kind == 'retry'
                                                   ? 'Interrupted work'
-                                                  : '${action.member} needs approval',
+                                                  : '${_session.group.members.where((m) => m.id == action.member).firstOrNull?.name ?? 'A bot'} needs approval',
                                               style: Theme.of(
                                                 context,
                                               ).textTheme.titleSmall,
@@ -436,10 +632,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                         child: TranscriptLatestButton(
                           label: 'Jump to latest messages',
                           icon: Icons.arrow_downward,
-                          onPressed: () {
-                            setState(() => _following = true);
-                            _followLatest();
-                          },
+                          onPressed: _latest,
                         ),
                       ),
                     ),
@@ -461,6 +654,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                   },
                 ),
               ),
+            _activityStatus(context),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _composer,
               builder: (context, _, _) => Padding(
@@ -509,28 +703,32 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                             ),
                           ),
                         ),
-                        IconButton.filled(
-                          tooltip: _session.pendingText == null
+                        ComposerIconButton(
+                          focused: false,
+                          label: stopping
+                              ? 'Stop group work'
+                              : _session.pendingText == null
                               ? 'Send group message'
                               : 'Retry same message',
-                          onPressed:
-                              _session.sending ||
-                                  (_session.pendingText == null &&
-                                      _composer.text.trim().isEmpty)
+                          onPressed: stopping
+                              ? _session.stop
+                              : _session.sending ||
+                                    (_session.pendingText == null &&
+                                        _composer.text.trim().isEmpty)
                               ? null
                               : _send,
-                          icon: _session.sending
-                              ? const SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Icon(
-                                  _session.pendingText == null
-                                      ? Icons.arrow_upward
-                                      : Icons.refresh,
-                                ),
+                          icon: ComposerActionGlyph(
+                            icon: stopping
+                                ? Icons.stop
+                                : _session.pendingText == null
+                                ? Icons.arrow_upward
+                                : Icons.refresh,
+                            identity: stopping
+                                ? 'stop'
+                                : _session.pendingText == null
+                                ? 'send'
+                                : 'retry',
+                          ),
                         ),
                       ],
                     ),

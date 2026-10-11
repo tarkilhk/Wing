@@ -10,7 +10,24 @@ import '../../widgets/studio_error.dart';
 import '../../widgets/studio_select.dart';
 import '../../widgets/wing_app_bar.dart';
 
-/// Local input only. The roster owner admits, targets and settles creation.
+Future<BotGroup?> openGroupEditor(
+  BuildContext context,
+  BotsSession session,
+  BotGroup group,
+) async {
+  final saved = await Navigator.of(context).push<bool>(
+    MaterialPageRoute(
+      builder: (_) =>
+          BotsCreateScreen(session: session, group: true, editGroup: group),
+    ),
+  );
+  if (!context.mounted || saved != true) return null;
+  return session.state.groups
+      .where((room) => room.key == group.key)
+      .firstOrNull;
+}
+
+/// Local input only. The roster owner admits, targets and settles saving.
 class BotsCreateScreen extends StatefulWidget {
   const BotsCreateScreen({
     super.key,

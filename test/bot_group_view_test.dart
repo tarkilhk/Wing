@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:wing/core/services/bot_group_read_state.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -14,6 +15,9 @@ import 'package:wing/core/services/bot_group_session.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/mention_suggestions.dart';
 import 'support/bots_fixture.dart';
+import 'package:wing/core/widgets/conversation_activity_status.dart';
+import 'package:wing/core/widgets/activity_shimmer.dart';
+import 'package:wing/core/widgets/composer_icon_button.dart';
 import 'helpers/pump_markdown_widget.dart';
 
 const _capture = bool.fromEnvironment('CAPTURE_BOT_GROUPS');
@@ -34,7 +38,7 @@ Map<String, dynamic> _event(int seq, String kind, String actor, String text) =>
 
 Future<void> _settleGroupMarkdown(WidgetTester tester) async {
   for (var attempt = 0; attempt < 200; attempt++) {
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     final pending = tester
         .stateList<BackgroundMarkdownContentState>(
           find.byType(BackgroundMarkdownContent, skipOffstage: false),
@@ -69,6 +73,56 @@ Future<void> _render(WidgetTester tester, GlobalKey key, String name) async {
 }
 
 void main() {
+  testWidgets('covered group editor stays paused across app resume', (
+    tester,
+  ) async {
+    final fixture = BotsFixture();
+    final group = (await fixture.repository.groups()).first;
+    final appearances = await fixture.repository.bots();
+    var reads = 0;
+    fixture.readHook = (_, method, _) async {
+      if (method == 'groups.state') reads++;
+      return null;
+    };
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        home: BotGroupScreen(
+          createSession: () => BotGroupSession(
+            fixture.repository,
+            group,
+            reads: BotGroupReadState(),
+            appearances: appearances,
+          ),
+          onEdit: (_) async {
+            await navigator.currentState!.push<void>(
+              MaterialPageRoute(
+                builder: (_) => const Scaffold(body: Text('Group editor')),
+              ),
+            );
+            return null;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Group options'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit group'));
+    await tester.pumpAndSettle();
+    expect(find.text('Group editor'), findsOneWidget);
+    final coveredReads = reads;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 5));
+    expect(reads, coveredReads);
+    navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    expect(reads, greaterThan(coveredReads));
+    expect(tester.takeException(), isNull);
+  });
+
   setUpAll(() async {
     if (!_capture) return;
     for (final entry in {
@@ -136,7 +190,10 @@ void main() {
         tester.getCenter(copy).dy,
         closeTo(tester.getCenter(label).dy, .1),
       );
-      expect(tester.getRect(bubble).right, closeTo(366, .1));
+      expect(
+        tester.getRect(bubble).right,
+        closeTo(kind == 'bot-message-bubble' ? 350 : 366, .1),
+      );
     }
     expect(find.text('Atlas'), findsWidgets);
     expect(find.textContaining('**Read-only'), findsNothing);
@@ -212,7 +269,7 @@ void main() {
             group.picture,
           );
           expect(tester.takeException(), isNull);
-          expect(find.byType(BotAvatar), findsWidgets);
+          if (scale == 1) expect(find.byType(BotAvatar), findsWidgets);
           final input = find.byKey(const ValueKey('group-message-composer'));
           final send = find.byWidgetPredicate(
             (widget) =>
@@ -270,6 +327,13 @@ void main() {
           expect(find.byTooltip('Jump to latest messages'), findsOneWidget);
           await _render(tester, frame, 'reading-${brightness.name}-$scale');
           await tester.tap(find.byTooltip('Jump to latest messages'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 70));
+          expect(transcript.offset, greaterThan(0));
+          expect(
+            transcript.offset,
+            lessThan(transcript.position.maxScrollExtent),
+          );
           await tester.pumpAndSettle();
           await _render(tester, frame, 'draft-${brightness.name}-$scale');
           fixture.sendLost = true;
@@ -303,6 +367,187 @@ void main() {
           await tester.pumpWidget(const SizedBox());
         },
       );
+      testWidgets('group status and members ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = BotsFixture();
+        fixture.events.addAll([
+          _event(
+            1,
+            'message.member',
+            'atlas',
+            'I’m checking the evidence before the build. ${List.filled(8, 'The approved sources and calculation definitions are in our shared mission.').join(' ')}',
+          ),
+          _event(
+            2,
+            'message.user',
+            'you',
+            'Please review this evidence and explain what I need to do next.',
+          ),
+        ]);
+        final group = (await fixture.repository.groups()).first;
+        final appearances = await fixture.repository.bots();
+        var working = true, approval = false;
+        final initialRead = Completer<void>();
+        fixture.readHook = (profile, method, params) async {
+          if (method != 'groups.state') return null;
+          await initialRead.future;
+          return {
+            'room': fixture.room,
+            'driver_status': {
+              'working': working,
+              'blocked': approval,
+              'pending_actions': approval
+                  ? [
+                      {
+                        'kind': 'approval',
+                        'task_id': 'task-1',
+                        'member_id': 'atlas',
+                        'request_id': 'approval-1',
+                        'execution_generation': 1,
+                        'approval': {
+                          'command': 'build',
+                          'choices': ['once', 'deny'],
+                        },
+                      },
+                    ]
+                  : [],
+            },
+          };
+        };
+        final frame = GlobalKey();
+        final reduced = ValueNotifier<bool>(false);
+        addTearDown(reduced.dispose);
+        late BotGroupSession session;
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: frame,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => ValueListenableBuilder<bool>(
+                valueListenable: reduced,
+                builder: (context, value, _) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(scale),
+                    disableAnimations: value,
+                  ),
+                  child: child!,
+                ),
+              ),
+              home: BotGroupScreen(
+                createSession: () => session = BotGroupSession(
+                  fixture.repository,
+                  group,
+                  reads: BotGroupReadState(),
+                  appearances: appearances,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Loading conversation…'), findsOneWidget);
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        await _render(tester, frame, 'loading-${brightness.name}-$scale');
+        initialRead.complete();
+        await _settleGroupMarkdown(tester);
+        await _settleGroupMarkdown(tester);
+        expect(find.text('Bots are working…'), findsOneWidget);
+        expect(find.byType(ConversationActivityStatus), findsOneWidget);
+        expect(
+          tester.widget<ActivityShimmer>(find.byType(ActivityShimmer)).active,
+          isTrue,
+        );
+        expect(find.byTooltip('Refresh group'), findsNothing);
+        expect(find.byTooltip('Stop group work'), findsOneWidget);
+        expect(find.byType(ComposerIconButton), findsOneWidget);
+        expect(find.text('R'), findsNothing);
+        await _render(tester, frame, 'working-${brightness.name}-$scale');
+        final transcript = tester
+            .widget<ListView>(find.byKey(const ValueKey('group-transcript')))
+            .controller!;
+        transcript.jumpTo(0);
+        await tester.pump();
+        final readingOffset = transcript.offset;
+        approval = true;
+        await session.refresh();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(transcript.offset, readingOffset);
+        expect(find.text('Waiting for your approval'), findsOneWidget);
+        expect(
+          tester.widget<ActivityShimmer>(find.byType(ActivityShimmer)).active,
+          isFalse,
+        );
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        await _render(tester, frame, 'approval-${brightness.name}-$scale');
+        approval = false;
+        await session.refresh();
+        await tester.pump(const Duration(milliseconds: 300));
+        reduced.value = true;
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.text('Bots are working…'), findsOneWidget);
+        reduced.value = false;
+        await tester.pump();
+        final input = find.byKey(const ValueKey('group-message-composer'));
+        await tester.enterText(input, 'Keep this draft');
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byTooltip('Send group message'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('group-members-entry')));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byType(Dialog), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(Dialog),
+            matching: find.text('Atlas'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: find.byType(Dialog), matching: find.text('Mira')),
+          findsOneWidget,
+        );
+        await _render(tester, frame, 'members-${brightness.name}-$scale');
+        await tester.tap(find.byTooltip('Close members'));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(
+          tester.widget<TextField>(input).controller!.text,
+          'Keep this draft',
+        );
+        expect(fixture.commands, isEmpty);
+        final sending = Completer<void>();
+        fixture.commandHook = (profile, method, params) async {
+          if (method == 'groups.send') await sending.future;
+          return null;
+        };
+        await tester.tap(find.byTooltip('Send group message'));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Sending message…'), findsOneWidget);
+        expect(tester.widget<TextField>(input).readOnly, isTrue);
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(ComposerIconButton),
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsNothing,
+        );
+        await _render(tester, frame, 'sending-${brightness.name}-$scale');
+        sending.complete();
+        await _settleGroupMarkdown(tester);
+        working = false;
+        await session.refresh();
+        await tester.pumpAndSettle();
+        expect(find.text('Bots are working…'), findsNothing);
+        expect(find.byType(ActivityShimmer), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      });
     }
   }
 }

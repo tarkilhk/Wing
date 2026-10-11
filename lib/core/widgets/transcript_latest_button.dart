@@ -25,3 +25,21 @@ class TranscriptLatestButton extends StatelessWidget {
     ),
   );
 }
+
+/// One motion contract for either transcript direction.
+Future<void> scrollToTranscriptLatest(
+  BuildContext context,
+  ScrollController controller, {
+  required double offset,
+}) async {
+  if (!controller.hasClients) return;
+  if (MediaQuery.disableAnimationsOf(context)) {
+    controller.jumpTo(offset);
+  } else {
+    await controller.animateTo(
+      offset,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+}

@@ -1,4 +1,5 @@
 import 'bots/bot_group_screen.dart';
+import 'bots/bots_create_screen.dart';
 import '../models/composer_reference.dart';
 import '../models/recent_conversation.dart';
 import '../models/bots.dart';
@@ -3072,6 +3073,15 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     controller.setRouteVisibility(this, _hasChatFocus);
   }
 
+  Widget _instanceHeader() => Align(
+    alignment: Alignment.centerLeft,
+    child: ServerConnectionLabel(
+      label: controller.connection.label,
+      icon: controller.connection.icon,
+      status: controller.connectionStatus,
+    ),
+  );
+
   Widget _secondaryDestination(BuildContext context) => PopScope(
     canPop: false,
     onPopInvokedWithResult: (didPop, _) {
@@ -3088,6 +3098,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               context: context,
 
               title: Text(_destination.label, maxLines: 6, softWrap: true),
+              contextRow: _destination == AppDestination.activity
+                  ? _instanceHeader()
+                  : null,
               actions: [
                 if (_destination == AppDestination.settings &&
                     widget.configurationActions != null)
@@ -3143,6 +3156,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             child: switch (_destination) {
               AppDestination.bots => BotsContent(
                 session: _bots,
+                instanceHeader: _instanceHeader(),
                 viewState: _botsView,
                 onViewChanged: (view) => setState(() => _botsView = view),
                 onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
@@ -3179,6 +3193,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     MaterialPageRoute(
                       builder: (_) => BotGroupScreen(
                         createSession: () => _bots.openGroup(group),
+                        onEdit: (group) =>
+                            openGroupEditor(context, _bots, group),
                       ),
                     ),
                   );

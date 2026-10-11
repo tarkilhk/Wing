@@ -30,12 +30,14 @@ class BotsContent extends StatefulWidget {
   const BotsContent({
     super.key,
     required this.session,
+    required this.instanceHeader,
     required this.viewState,
     required this.onViewChanged,
     required this.onOpenMenu,
     required this.onOpenChat,
   });
   final BotsSession session;
+  final Widget instanceHeader;
   final BotsViewState viewState;
   final ValueChanged<BotsViewState> onViewChanged;
   final VoidCallback onOpenMenu;
@@ -195,24 +197,15 @@ class _BotsContentState extends State<BotsContent> {
     BotGroup group, {
     bool fromDiscussion = false,
   }) async {
-    final page = BotsCreateScreen(
-      session: widget.session,
-      group: true,
-      editGroup: group,
-    );
     if (fromDiscussion) {
-      final saved = await Navigator.push<bool>(
-        context,
-        MaterialPageRoute(builder: (_) => page),
-      );
-      if (saved != true) return null;
-    } else {
-      await _push(page);
+      return openGroupEditor(context, widget.session, group);
     }
-    if (!mounted) return null;
-    return widget.session.state.groups
-        .where((room) => room.key == group.key)
-        .firstOrNull;
+    widget.session.setVisible(false);
+    try {
+      return await openGroupEditor(context, widget.session, group);
+    } finally {
+      if (mounted) widget.session.setVisible(true);
+    }
   }
 
   Future<void> _openGroup(BotGroup group) => _push(
@@ -268,6 +261,7 @@ class _BotsContentState extends State<BotsContent> {
               icon: const Icon(Icons.menu),
             ),
             title: const Text('Bots'),
+            contextRow: widget.instanceHeader,
             actions: [
               PopupMenuButton<String>(
                 tooltip: 'Roster options',
