@@ -89,6 +89,7 @@ class UserMessageContent {
       }
     }
 
+    final imageParts = <({String target, String? name})>[];
     Object? withoutImages(Object? value) {
       if (value is List) return value.map(withoutImages).toList();
       if (value is! Map) return value;
@@ -97,11 +98,10 @@ class UserMessageContent {
       }
       final image = value['image_url'];
       final target = image is Map ? image['url'] : image ?? value['url'];
-      add(
-        target is String ? target : '',
-        true,
-        value['name'] is String ? value['name'] as String : null,
-      );
+      imageParts.add((
+        target: target is String ? target : '',
+        name: value['name'] is String ? value['name'] as String : null,
+      ));
       return '';
     }
 
@@ -113,6 +113,21 @@ class UserMessageContent {
       'content': content,
       'display_content': display,
     });
+    // Native vision replaces refs with tool-readable path hints. Flattened
+    // history retains these hints, matching screenshot stand-ins and sometimes
+    // a final model-only memory block. Require the complete producer suffix
+    // and image evidence so literal examples remain authored text.
+    final native = _nativeImageContent(text, imageParts.length);
+    if (native != null) {
+      text = native.text;
+      for (final target in native.targets) {
+        add(target, true);
+      }
+    } else {
+      for (final image in imageParts) {
+        add(image.target, true, image.name);
+      }
+    }
     // Gateway file uploads prepend one reference per line. Only those complete
     // lines become cards; references quoted or discussed in prose stay intact.
     var imageReferences = 0;
@@ -145,4 +160,30 @@ class UserMessageContent {
 final _referenceLine = RegExp(
   r'''^[ \t]*@(file|image):("[^"\n]+"|'[^'\n]+'|`[^`\n]+`|\S+)[ \t]*\r?$''',
   multiLine: true,
+);
+
+({String text, List<String> targets})? _nativeImageContent(
+  String text,
+  int imagePartCount,
+) {
+  final match = _nativeImageSuffix.firstMatch(text);
+  if (match == null) return null;
+  final targets = match.group(1)!.split(RegExp(r'\r?\n')).map((line) {
+    return line.substring('[Image attached at: '.length, line.length - 1);
+  }).toList();
+  if (targets.any((target) => target.trim().isEmpty)) return null;
+  final placeholders = '\n[screenshot]'
+      .allMatches(match.group(2)!.replaceAll('\r\n', '\n'))
+      .length;
+  if (placeholders != 0 && placeholders != targets.length) return null;
+  if (imagePartCount != 0 && imagePartCount != targets.length) return null;
+  if (placeholders == 0 && imagePartCount == 0) return null;
+  return (text: text.substring(0, match.start).trimRight(), targets: targets);
+}
+
+final _nativeImageSuffix = RegExp(
+  r'(?:^|\r?\n\r?\n)'
+  r'(\[Image attached at: [^\r\n\]]+\](?:\r?\n\[Image attached at: [^\r\n\]]+\])*)'
+  r'((?:\r?\n\[screenshot\])*)'
+  r'(?:\r?\n<memory-context>[\s\S]*?</memory-context>)?$',
 );
