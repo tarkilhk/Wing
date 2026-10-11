@@ -64,13 +64,11 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
 
   void _changed() {
     final value = widget.composer.value;
-    final next = value.isComposingRangeValid && !value.composing.isCollapsed
-        ? null
-        : MentionQuery.at(
-            value.text,
-            value.selection.extentOffset,
-            collapsed: value.selection.isValid && value.selection.isCollapsed,
-          );
+    final next = MentionQuery.at(
+      value.text,
+      value.selection.extentOffset,
+      collapsed: value.selection.isValid && value.selection.isCollapsed,
+    );
     if (_query?.text == next?.text && _query?.end == next?.end) return;
     _debounce?.cancel();
     final generation = ++_generation;
@@ -146,8 +144,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
     if (query == null ||
         query.text != value.text ||
         query.end != value.selection.extentOffset ||
-        !value.selection.isCollapsed ||
-        (value.isComposingRangeValid && !value.composing.isCollapsed)) {
+        !value.selection.isCollapsed) {
       return;
     }
     final next = query.insert(reference);

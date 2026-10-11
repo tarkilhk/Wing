@@ -30,8 +30,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   bool get _showReferences =>
       _session.pendingText == null &&
       !_session.sending &&
-      !(_composer.value.isComposingRangeValid &&
-          !_composer.value.composing.isCollapsed) &&
       MentionQuery.at(
             _composer.text,
             _composer.selection.extentOffset,

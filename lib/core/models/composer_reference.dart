@@ -59,8 +59,26 @@ final class ComposerReferenceSpan {
   final int? lastLine;
 }
 
+// Prose punctuation delimits names as it does slash skills. Hyphens and
+// underscores remain part of names; paths and URLs stay literal.
+const _mentionNameCharacter = r'[\p{L}\p{M}\p{N}_-]';
+const _mentionSeparator =
+    '(?![-_/@\\\\]|:$_mentionNameCharacter)[\\s\\p{P}\\p{S}]';
+final _mentionPrefixSeparator = RegExp('$_mentionSeparator\$', unicode: true);
+final _mentionUrlPrefix = RegExp(r'(?:^|\s)[^\s]*://[^\s]*$');
+
+bool _mentionHasBoundary(String text, int start) {
+  final prefix = text.substring(0, start);
+  return (start == 0 || _mentionPrefixSeparator.hasMatch(prefix)) &&
+      !_mentionUrlPrefix.hasMatch(prefix);
+}
+
+const _quotedAgentName = r'''(?:`[^`\n]+`|"(?:\\.|[^"\\\n])+"|'[^'\n]+')''';
 final _referencePattern = RegExp(
-  r'''(?<![\w/])@(?:(file|folder):((?:`[^`\n]+`|"[^"\n]+"|'[^'\n]+')(?::\d+(?:-\d+)?)?|\S+)|([a-z0-9][a-z0-9_-]{0,63})(?![\w:-]))''',
+  r'''@(?:(file|folder):((?:`[^`\n]+`|"[^"\n]+"|'[^'\n]+')(?::\d+(?:-\d+)?)?|\S+)|'''
+  '($_mentionNameCharacter+|$_quotedAgentName))'
+  '(?=$_mentionSeparator|\$)',
+  unicode: true,
 );
 
 /// Literal code and email addresses never acquire ordinary-chat reference work.
@@ -73,7 +91,8 @@ List<ComposerReferenceSpan> composerReferenceSpans(
   final names = agentNames.toSet();
   final spans = <ComposerReferenceSpan>[];
   for (final match in _referencePattern.allMatches(text)) {
-    if (_insideFence(text, match.start) ||
+    if (!_mentionHasBoundary(text, match.start) ||
+        _insideFence(text, match.start) ||
         _insideInlineCode(text, match.start)) {
       continue;
     }
@@ -168,6 +187,17 @@ List<ComposerReference> retainComposerReferences(
   );
 }
 
+/// Readable authored text; the selected reference retains canonical identity.
+String composerAgentToken(String name, {String? qualifier}) {
+  final label = name.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (label.isEmpty) throw const FormatException('Missing agent display name.');
+  final value = qualifier == null ? label : '$label ($qualifier)';
+  if (RegExp('^$_mentionNameCharacter+\$', unicode: true).hasMatch(value)) {
+    return '@$value';
+  }
+  return '@${value.contains('`') ? jsonEncode(value) : '`$value`'}';
+}
+
 String composerPathToken(ComposerReferenceKind kind, String path) {
   if (kind == ComposerReferenceKind.agent) return '@$path';
   if (path.isEmpty || path.contains(RegExp(r'[\r\n\x00]'))) {
@@ -212,6 +242,20 @@ final class MentionQuery {
   final int end;
   final String term;
 
+  bool get isQuotedAgent => term.isNotEmpty && '`"\''.contains(term[0]);
+
+  String get agentSearch {
+    if (!isQuotedAgent) return term;
+    if (term.startsWith('"')) {
+      try {
+        return jsonDecode('$term"') as String;
+      } on FormatException {
+        // An unfinished escape is still native editable query text.
+      }
+    }
+    return term.substring(1);
+  }
+
   static MentionQuery? at(String text, int cursor, {bool collapsed = true}) {
     if (!collapsed ||
         cursor < 0 ||
@@ -221,11 +265,16 @@ final class MentionQuery {
     }
     final prefix = text.substring(0, cursor);
     final match = RegExp(
-      r'''(?<![\w/])(@(?:[^\s`"']*|(?:file|folder):(?:`[^`\n]*|"[^"\n]*|'[^'\n]*)))$''',
+      r'''@(?:(?:file|folder):(?:[^\s`"']*|`[^`\n]*|"[^"\n]*|'[^'\n]*)|`[^`\n]*|"(?:\\.|[^"\\\n])*|'[^'\n]*|'''
+      '$_mentionNameCharacter*)\$',
+      unicode: true,
     ).firstMatch(prefix);
     if (match == null) return null;
-    final token = match.group(1)!;
-    if (_insideInlineCode(text, cursor - token.length)) return null;
+    final token = match.group(0)!;
+    final start = cursor - token.length;
+    if (!_mentionHasBoundary(text, start) || _insideInlineCode(text, start)) {
+      return null;
+    }
     return MentionQuery(
       text,
       cursor - token.length,
@@ -237,10 +286,10 @@ final class MentionQuery {
   ({String text, int cursor, ComposerReference reference}) insert(
     ComposerReference reference,
   ) {
-    final next =
-        '${text.substring(0, start)}${reference.token} ${text.substring(end)}';
+    final suffix = text.substring(end);
+    final insertion = '${reference.token}${suffix.startsWith(' ') ? '' : ' '}';
     return (
-      text: next,
+      text: '${text.substring(0, start)}$insertion$suffix',
       cursor: start + reference.token.length + 1,
       reference: reference,
     );
@@ -252,7 +301,20 @@ bool _insideInlineCode(String text, int offset) {
     offset == 0 ? 0 : text.lastIndexOf('\n', offset - 1) + 1,
     offset,
   );
-  return RegExp(r'(?<!\\)`').allMatches(line).length.isOdd;
+  var inside = false;
+  for (var index = 0; index < line.length; index++) {
+    if (!inside && line[index] == '@' && _mentionHasBoundary(line, index)) {
+      final reference = _referencePattern.matchAsPrefix(line, index);
+      if (reference != null) {
+        index = reference.end - 1;
+        continue;
+      }
+    }
+    if (line[index] == '`' && (index == 0 || line[index - 1] != r'\')) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }
 
 final class MentionCandidate {

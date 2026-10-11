@@ -956,7 +956,7 @@ void main() {
             .items
             .first;
         expect(choice.label, 'Atlas');
-        expect(choice.reference.token, '@bot_atlas');
+        expect(choice.reference.token, '@Atlas');
         expect(choice.reference.target, 'atlas');
         expect(choice.appearance!.title, 'Renamed Atlas');
         expect(choice.appearance!.shape, 'hexagon');
@@ -1006,8 +1006,8 @@ void main() {
       final choices = session.completeMentions(MentionQuery.at('@', 1)!).items;
       expect(choices.take(2).every((c) => c.appearance == null), isTrue);
       expect(choices.map((c) => c.reference.token), [
-        '@bot_atlas',
-        '@bot_mira',
+        '@Atlas',
+        '@Mira',
         '@everyone',
       ]);
       session.editMentions('@everyone', selected: choices.last.reference);
@@ -1092,6 +1092,77 @@ void main() {
     },
   );
   test(
+    'readable group names keep canonical routing and frozen retries',
+    () async {
+      final fixture = BotsFixture()..sendLost = true;
+      final group = (await fixture.repository.groups()).first;
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: const [],
+      );
+      addTearDown(session.dispose);
+      final choice = session
+          .completeMentions(MentionQuery.at('@atl', 4)!)
+          .items
+          .single;
+      expect(choice.reference.token, '@Atlas');
+      expect(choice.reference.target, 'atlas');
+      const authored = 'Please ask (@Atlas), then report.';
+      session.editMentions(authored, selected: choice.reference);
+      expect(await session.send(authored), isFalse);
+      expect(session.pendingText, authored);
+      (fixture.room['members'] as List).removeAt(0);
+      expect(await session.send(authored), isTrue);
+      final sends = fixture.commands
+          .where((call) => call.$2 == 'groups.send')
+          .toList();
+      expect(sends, hasLength(2));
+      expect(sends.first.$3, sends.last.$3);
+      expect(
+        sends.first.$3['payload']['text'],
+        'Please ask (@bot_atlas), then report.',
+      );
+    },
+  );
+
+  test(
+    'readable multiword and duplicate room names preserve selected identities',
+    () async {
+      final fixture = BotsFixture();
+      final members = fixture.room['members'] as List;
+      members[0]['display_name'] = 'Client Work';
+      members[1]['display_name'] = 'Client Work';
+      final group = (await fixture.repository.groups()).first;
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: const [],
+      );
+      addTearDown(session.dispose);
+      const typed = '@`Client Wo';
+      final choices = session
+          .completeMentions(MentionQuery.at(typed, typed.length)!)
+          .items;
+      expect(choices.map((c) => c.reference.token), [
+        '@`Client Work (bot_atlas)`',
+        '@`Client Work (bot_mira)`',
+      ]);
+      final first = choices.first.reference, second = choices.last.reference;
+      final text = 'Ask ${first.token}, then ${second.token}.';
+      session.editMentions(text, selected: first);
+      session.editMentions(text, selected: second);
+      expect(await session.send(text), isTrue);
+      expect(
+        fixture.commands
+            .lastWhere((call) => call.$2 == 'groups.send')
+            .$3['payload']['text'],
+        'Ask @bot_atlas, then @bot_mira .',
+      );
+    },
+  );
+
+  test(
     'group picker uses frozen members; removed identity pauses before stock send',
     () async {
       final fixture = BotsFixture();
@@ -1104,8 +1175,8 @@ void main() {
       addTearDown(session.dispose);
       final choices = session.completeMentions(MentionQuery.at('@', 1)!).items;
       expect(choices.map((c) => c.reference.token), [
-        '@bot_atlas',
-        '@bot_mira',
+        '@Atlas',
+        '@Mira',
         '@everyone',
       ]);
       final ref = choices.first.reference;
@@ -1140,9 +1211,9 @@ void main() {
         .items
         .single
         .reference;
-    session.editMentions('Hello @bot_atlas', selected: ref);
+    session.editMentions('Hello ${ref.token}', selected: ref);
     (fixture.room['members'] as List).removeAt(0);
-    expect(await session.send('Hello @bot_atlas'), isFalse);
+    expect(await session.send('Hello ${ref.token}'), isFalse);
     expect(fixture.commands.where((c) => c.$2 == 'groups.send'), isEmpty);
   });
   test(

@@ -292,11 +292,24 @@ class BotsSession extends ChangeNotifier {
     canRead: canRead,
   );
 
+  /// Exact profile display facts for reference search, without admitting assets.
+  Future<Map<WorkspaceScope, BotRecord>> identitiesForProfiles(
+    Iterable<WorkspaceScope> profiles, {
+    required bool Function() canRead,
+  }) => _appearancesFor(
+    profiles.toSet(),
+    (scope) => scope,
+    (bot, scope) => bot.scope == scope,
+    canRead: canRead,
+    enrich: false,
+  );
+
   Future<Map<K, BotRecord>> _appearancesFor<K>(
     Set<K> keys,
     WorkspaceScope Function(K) workspace,
     bool Function(BotRecord, K) matches, {
     required bool Function() canRead,
+    bool enrich = true,
   }) async {
     final version = _appearanceVersion;
     final appearances = <K, BotRecord>{};
@@ -324,6 +337,18 @@ class BotsSession extends ChangeNotifier {
           for (final bot in roster) {
             final owned = matching.where((key) => matches(bot, key)).toList();
             if (owned.isEmpty) continue;
+            if (!enrich) {
+              if (!admit()) continue;
+              final cached = _appearanceCache[bot.scope];
+              final identity =
+                  cached != null && _sameAppearanceMetadata(cached, bot)
+                  ? cached
+                  : bot;
+              for (final key in owned) {
+                appearances[key] = identity;
+              }
+              continue;
+            }
             var appearance = _appearanceCache[bot.scope];
             if (appearance == null ||
                 !_sameAppearanceMetadata(appearance, bot)) {
