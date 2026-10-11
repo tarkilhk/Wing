@@ -13,7 +13,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 - Edit existing group names, icon colors and pictures from the roster or discussion.
 - Use normal Wing activity animation and composer controls in groups, with
-  distinct user/bot alignment, a simpler header and tap-to-view members.
+  distinct user/bot alignment, a simpler header and a compact anchored member list.
+- Display recognized group mentions as bold, colored bot names and remove the
+  duplicate Members entry from the group menu.
 
 - Redesign group creation with picked bots above search, optional names,
   palette-colored letter icons and room pictures saved on Hermes.

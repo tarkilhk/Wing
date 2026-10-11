@@ -9,6 +9,7 @@ import 'package:markdown/markdown.dart' as md;
 
 import '../services/completion_diagnostics.dart';
 import 'retained_markdown_paragraph.dart';
+import 'bot_mention_scope.dart';
 
 /// Retains unchanged top-level prose blocks while a message grows.
 ///
@@ -149,7 +150,7 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
     final style = fallback
         .copyWith(textScaler: MediaQuery.textScalerOf(context))
         .merge(widget.styleSheet);
-    final nodes =
+    final parsed =
         (widget as BlockReusingMarkdownBody).parsedNodes ??
         md.Document(
           blockSyntaxes: widget.blockSyntaxes,
@@ -157,6 +158,7 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
           extensionSet: widget.extensionSet ?? md.ExtensionSet.gitHubFlavored,
           encodeHtml: false,
         ).parseLines(const LineSplitter().convert(widget.data));
+    final nodes = BotMentionScope.of(context)?.prose(parsed) ?? parsed;
     final next = <_RenderedBlock>[];
     // Heading padding builders mutate the AST and manage document scroll keys.
     // Keep their existing full-render behavior until their anchors are assigned

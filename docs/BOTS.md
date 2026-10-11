@@ -78,9 +78,13 @@ member; the picker inserts at the cursor. The conversation opens
 at its latest messages; scrolling up keeps your place as replies arrive. The down
 arrow returns to the latest messages with the same motion as normal chats.
 
-Tap the instance and bot count under the title to see the group’s members and
-saved avatars. The conversation uses a group icon when no picture is saved.
-The ellipsis menu contains member details, working histories, Refresh and Stop.
+Tap the instance and bot count under the title for a compact member list
+anchored beneath that row, with saved names and avatars. Tap outside or use Back
+to dismiss it. The conversation uses a group icon when no picture is saved.
+The ellipsis menu contains Edit group, working histories, Refresh and Stop.
+Refresh rereads messages, activity and approval state; it does not restart the bots. Wing also
+refreshes this state automatically. Recognized bot mentions display as bold,
+colored `@Name` text. Copy preserves the original message.
 While work is active, the empty composer offers Stop; entering a draft offers
 Send. A compact status above the composer shows sending, loading, work or
 approval needs. Hermes currently exposes group activity rather than individual
