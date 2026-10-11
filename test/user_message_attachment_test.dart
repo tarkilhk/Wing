@@ -846,6 +846,24 @@ void main() {
       controller.jumpTo(controller.position.maxScrollExtent);
       await settleImages(tester);
       expect(find.text('5 / 40'), findsOneWidget);
+      // The rail can be far from the selected image. Arrow navigation brings
+      // it back without acquiring every original swept by a long animation.
+      await tester.tap(find.byTooltip('Next image'));
+      await tester.pump();
+      for (var frame = 0; frame < 26; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await settleImages(tester);
+      expect(find.text('6 / 40'), findsOneWidget);
+      expect(
+        requests.where((path) {
+          final index = int.parse(path.split('/').last.split('.').first);
+          return index >= 12 && index <= 30;
+        }),
+        isEmpty,
+      );
+      controller.jumpTo(controller.position.maxScrollExtent);
+      await settleImages(tester);
       final last = find.byKey(const ValueKey('image-thumbnail-39'));
       expect(last, findsOneWidget);
       expect(tester.getSize(last).shortestSide, greaterThanOrEqualTo(48));
@@ -855,7 +873,7 @@ void main() {
       await tester.tap(last);
       await settleImages(tester);
       expect(find.text('40 / 40'), findsOneWidget);
-      expect(requests.length, lessThan(20));
+      expect(requests.toSet().length, lessThan(20));
       expect(
         tester.widget<ChatImageViewport>(find.byType(ChatImageViewport)).title,
         '39.png',

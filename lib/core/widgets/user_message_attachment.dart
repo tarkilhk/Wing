@@ -573,7 +573,10 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
       final offset =
           (_index + .5) * _thumbnailExtent - 4 - position.viewportDimension / 2;
       final target = offset.clamp(0.0, position.maxScrollExtent);
-      if (animate && !MediaQuery.disableAnimationsOf(context)) {
+      // Animate the local reveal, but skip a distant stretch of originals.
+      final nearby =
+          (target - position.pixels).abs() <= position.viewportDimension;
+      if (animate && nearby && !MediaQuery.disableAnimationsOf(context)) {
         _thumbnails.animateTo(
           target,
           duration: WingMotion.standard,
