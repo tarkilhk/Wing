@@ -3775,6 +3775,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
       unawaited(_loadChatProject(resource, chat));
       await refreshHistory(chat, propagateFailure: propagateHistoryFailure);
       chat._runtime.recovered();
+      if (!_closed &&
+          _current?.chat == chat &&
+          navigation == _navigationGeneration &&
+          isCurrentRequest?.call() != false &&
+          !chat.reading.historyLoading &&
+          chat.reading.historyError == null) {
+        // Direct Bot/Activity opens can select a restored profile without a
+        // browser refresh. Resume and fresh history restore its send authority.
+        resource._offlineSnapshot = false;
+      }
       if (!chat.runtime.blocksTurnAdmission &&
           chat.reading.historyError == null) {
         chat.reading.updateStreaming('');
