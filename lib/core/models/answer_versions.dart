@@ -111,12 +111,13 @@ String _structuredText(Map part, {bool displayImages = false}) {
   return '[structured content]';
 }
 
-String _answerInspectionText(Map<String, dynamic> message) =>
+/// Text for classifying a row without preparing attachment locations or bodies.
+String answerMessageInspectionText(Map<String, dynamic> message) =>
     _answerText(message['content'] ?? message['text'], displayImages: true);
 
 bool isBranchMessage(Map<String, dynamic> message) =>
     {'user', 'assistant'}.contains(message['role']) &&
-    _answerInspectionText(message).trim().isNotEmpty;
+    answerMessageInspectionText(message).trim().isNotEmpty;
 
 bool isHiddenAnswerMessage(Map<String, dynamic> message) {
   if (message['display_kind'] == 'hidden' ||
@@ -129,7 +130,7 @@ bool isHiddenAnswerMessage(Map<String, dynamic> message) {
     return false;
   }
   if (message['_todo_snapshot_synthetic'] == true ||
-      _answerInspectionText(message).trimLeft().startsWith('[System:')) {
+      answerMessageInspectionText(message).trimLeft().startsWith('[System:')) {
     return true;
   }
   final display = answerMessageDisplayText(message);

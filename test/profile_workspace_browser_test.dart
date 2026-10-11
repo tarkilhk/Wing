@@ -352,7 +352,7 @@ void main() {
     );
     expect(header, findsOneWidget);
     expect(find.byTooltip('Switch profile'), findsNothing);
-    await tester.tap(find.text(chat.title));
+    await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
     await tester.pumpAndSettle();
     expect(controller.current!.chat, same(chat));
     expect(find.text('work'), findsNothing);

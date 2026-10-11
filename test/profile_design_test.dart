@@ -266,7 +266,7 @@ void main() {
 
   test(
     'timeline preserves hidden continuity, empty card boundaries and latest review',
-    () {
+    () async {
       final source = <Map<String, dynamic>>[
         {'id': 1, 'role': 'tool', 'content': 'First'},
         {
@@ -280,10 +280,13 @@ void main() {
         {'id': 5, 'role': 'tool', 'content': 'Third'},
         {'id': 6, 'role': 'system', 'content': 'review: Details'},
       ];
-      final tokens = List<Object>.generate(source.length, (_) => Object());
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.reading.installSavedHistory(source);
+      final rows = chat.reading.messages;
+      final tokens = List<Object>.generate(rows.length, (_) => Object());
       final timeline = TranscriptTimeline.project(
-        source,
-        presentationId: (row) => tokens[source.indexOf(row)],
+        rows,
+        presentationId: (row) => tokens[rows.indexOf(row)],
       );
       final section = timeline.sections.single;
       expect(

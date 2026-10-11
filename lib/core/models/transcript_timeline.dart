@@ -211,7 +211,9 @@ _joinBotExchanges(List<Map<String, dynamic>> rows) {
             row['display_kind'] != 'process_complete')) {
       continue;
     }
-    final delivery = processCompletionDelivery(answerMessageText(row));
+    final delivery = processCompletionDelivery(
+      answerMessageInspectionText(row),
+    );
     if (delivery == null || delivery.processes.isEmpty) continue;
     final unmatched = <ProcessCompletion>[];
     final seconds = _savedTimestamp(row['timestamp']);
