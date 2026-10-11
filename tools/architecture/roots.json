@@ -14392,6 +14392,16 @@
       "path": "test/bot_group_create_session_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/models/transcript_reader.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/transcript_latest_button.dart",
+      "area": "lib",
+      "provenance": "tracked"
     }
   ],
   "direct_dependencies": {

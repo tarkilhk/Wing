@@ -185,8 +185,21 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ProfileTranscript(
-            chat: chat,
-            controller: controller,
+            reader: chat.reading,
+            identity: chat.key,
+            needsInput: chat.runtime.needsInput,
+            turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+            openingContent: chat.runtime.opening
+                ? ProfileTranscriptOpening(
+                    status: controller.connectionStatus,
+                    error: chat.runtime.openingError,
+                    onRetry: controller.resumeConnection,
+                  )
+                : null,
+            notificationReading: chat.reading,
+            onAnswerVisible: (target) =>
+                controller.notificationAnswerVisible(chat, target),
+            onRefreshHistory: () => controller.refreshHistory(chat),
             timeline: timeline,
             onLoadOlder: () async {},
             tail: const [],

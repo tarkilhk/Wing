@@ -16,6 +16,7 @@ enum TranscriptMessageKind {
   tool,
   dialogue,
   botMessage,
+  discussion,
 }
 
 /// Passive reading facts. This projection cannot hydrate or execute a runtime,
@@ -71,9 +72,7 @@ final class TranscriptMessage {
     String? sender,
     String? senderHandle,
   }) => TranscriptMessage._(
-    kind: sender == null
-        ? TranscriptMessageKind.dialogue
-        : TranscriptMessageKind.botMessage,
+    kind: TranscriptMessageKind.discussion,
     role: sender == null ? 'user' : 'assistant',
     id: id,
     text: text,

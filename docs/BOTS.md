@@ -69,9 +69,10 @@ the form fixes the room details so you can retry the same group.
 
 An unconfirmed send stays available for review/retry. Interrupted tasks ask for explicit confirmation before retrying. Approvals apply to the request shown in that discussion.
 
-Your messages use the ordinary chat bubbles. Bot replies show the sender's saved
-avatar and name, formatted text, links, code, timestamps and icon-only Copy.
-Member mentions sit beside Send and insert at the cursor. The conversation opens
+Your bubbles show User and an icon-only Copy aligned in the header. Bot replies
+show the sender's saved avatar and name, formatted text, links, code and
+timestamps, with Copy in the same header. Type `@` in the composer to choose a
+member; the picker inserts at the cursor. The conversation opens
 at its latest messages; scrolling up keeps your place as replies arrive. The down
 arrow returns to the latest messages.
 
@@ -141,7 +142,9 @@ Output to inspect the runner's command and result.
 Internal group-worker sessions stay out of Recents and ordinary chat notifications.
 To inspect one, open the group, choose **⋯ → Bot working histories**, then select
 a bot. The viewer is read only: it loads saved messages without starting a bot
-turn, and offers Refresh and Load older history. Back returns to the shared group
+turn. It uses the normal chat transcript, including reasoning and tool sections,
+automatic older-page loading and the latest-message arrow. Refresh rereads the
+saved history. Back returns to the shared group
 and preserves your draft. Send group messages from the group composer.
 
 If no current worker history is available, the viewer says so. A failed read

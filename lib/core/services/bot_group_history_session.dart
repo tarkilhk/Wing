@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/bots.dart';
-import '../models/transcript_message.dart';
+import '../models/transcript_reader.dart';
 import 'bots_repository.dart';
 
 /// One passive inspection route. No runtime admission, polling or commands.
@@ -13,62 +13,52 @@ class BotGroupHistorySession extends ChangeNotifier {
   final BotGroup group;
   BotGroupMember? _member;
   BotGroupMember? get member => _member;
-  String? _session;
-  int? _older;
-  final _rows = <int, Map<String, dynamic>>{};
-  bool _loading = false, _closed = false;
+  _BotGroupHistoryReading _reading = _BotGroupHistoryReading(null);
+  TranscriptReader get reader => _reading;
+  bool _closed = false;
   int _generation = 0;
-  String? _error;
-  bool get loading => _loading;
-  bool get hasOlder => _older != null;
-  String? get error => _error;
-  List<TranscriptMessage> get messages => [
-    for (final id in _rows.keys.toList()..sort())
-      TranscriptMessage.fromRow(_rows[id]!),
-  ].where((message) => message.kind != TranscriptMessageKind.hidden).toList();
 
   Future<void> select(BotGroupMember member) async {
     if (_closed) return;
     _member = member;
-    _session = null;
-    _older = null;
-    _rows.clear();
+    _reading = _BotGroupHistoryReading(member.id);
     await _load(refresh: true);
   }
 
   Future<void> refresh() async {
-    if (_closed || _loading || _member == null) return;
+    if (_closed || _reading._loading || _member == null) return;
     await _load(refresh: true);
   }
 
   Future<void> loadOlder() async {
-    if (_closed || _loading || _older == null) return;
+    if (_closed || _reading._loading || _reading._older == null) return;
     await _load(refresh: false);
   }
 
   Future<void> _load({required bool refresh}) async {
     final member = _member!;
+    final reading = _reading;
     final generation = ++_generation;
-    _loading = true;
-    _error = null;
+    reading._loading = true;
+    reading._error = null;
     notifyListeners();
     repository.retain();
     try {
       final session = refresh
           ? await repository.groupMemberSession(group, member)
-          : _session;
+          : reading._session;
       if (_closed || generation != _generation) return;
       if (session == null) {
-        _session = null;
-        _older = null;
-        _rows.clear();
+        reading._session = null;
+        reading._older = null;
+        reading._rows.clear();
         return;
       }
       final page = await repository.groupMemberHistory(
         group,
         member,
         session,
-        refresh ? 0 : _older!,
+        refresh ? 0 : reading._older!,
       );
       if (_closed || generation != _generation) return;
       // Validate the complete page before replacing a previously readable one.
@@ -80,18 +70,19 @@ class BotGroupHistorySession extends ChangeNotifier {
         }
         rows[id] = Map.unmodifiable(row);
       }
-      if (refresh) _rows.clear();
-      _rows.addAll(rows);
-      _session = session;
-      _older = page.nextOffset;
+      if (refresh) reading._rows.clear();
+      reading._rows.addAll(rows);
+      reading._session = session;
+      reading._older = page.nextOffset;
     } catch (_) {
       if (!_closed && generation == _generation) {
-        _error = 'Working history could not load. Refresh to try again.';
+        reading._error =
+            'Working history could not load. Refresh to try again.';
       }
     } finally {
       repository.release();
       if (!_closed && generation == _generation) {
-        _loading = false;
+        reading._loading = false;
         notifyListeners();
       }
     }
@@ -104,4 +95,40 @@ class BotGroupHistorySession extends ChangeNotifier {
     repository.release();
     super.dispose();
   }
+}
+
+/// A retired member keeps its own local scroll memory until its viewport disposes.
+/// It holds saved facts only; all I/O remains in BotGroupHistorySession.
+final class _BotGroupHistoryReading implements TranscriptReader {
+  _BotGroupHistoryReading(this._memberId);
+  final String? _memberId;
+  String? _session;
+  int? _older;
+  final _rows = <int, Map<String, dynamic>>{};
+  bool _loading = false;
+  String? _error;
+  double _scrollOffset = 0;
+  @override
+  bool get historyLoading => _loading;
+  @override
+  int? get nextHistoryOffset => _older;
+  @override
+  String? get historyError => _error;
+  @override
+  String? get historySessionId => _session;
+  @override
+  bool get historyUnavailable => false;
+  @override
+  String get streaming => '';
+  @override
+  double get historyScrollOffset => _scrollOffset;
+  @override
+  void recordScrollOffset(double offset) => _scrollOffset = offset;
+  @override
+  Object messagePresentationId(Map<String, dynamic> row) =>
+      (_memberId, row['id']);
+  @override
+  List<Map<String, dynamic>> get messages => List.unmodifiable([
+    for (final id in _rows.keys.toList()..sort()) _rows[id]!,
+  ]);
 }

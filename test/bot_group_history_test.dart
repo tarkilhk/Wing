@@ -87,15 +87,15 @@ void main() {
       final reader = BotGroupHistorySession(repository, ownedGroup);
       addTearDown(reader.dispose);
       await reader.select(ownedGroup.members.first);
-      expect(reader.error, isNull);
-      expect(reader.messages.single.text, 'Production snapshot');
+      expect(reader.reader.historyError, isNull);
+      expect(reader.reader.messages.single['content'], 'Production snapshot');
       offline = true;
       await reader.refresh();
-      expect(reader.error, isNotNull);
-      expect(reader.messages.single.text, 'Production snapshot');
+      expect(reader.reader.historyError, isNotNull);
+      expect(reader.reader.messages.single['content'], 'Production snapshot');
       offline = false;
       await reader.refresh();
-      expect(reader.error, isNull);
+      expect(reader.reader.historyError, isNull);
       expect(
         server.rpcRequests.every((read) => read == ('atlas', 'session.list')),
         isTrue,
@@ -122,11 +122,11 @@ void main() {
         'include_hidden': true,
       });
       expect(fixture.historyReads.single, ('atlas', 'atlas-tip', 0));
-      expect(session.messages.length, 100);
+      expect(session.reader.messages.length, 100);
       await session.loadOlder();
-      expect(session.messages.length, 102);
-      expect(session.messages.first.text, 'Saved 1');
-      expect(session.hasOlder, isFalse);
+      expect(session.reader.messages.length, 102);
+      expect(session.reader.messages.first['content'], 'Saved 1');
+      expect((session.reader.nextHistoryOffset != null), isFalse);
       fixture.workerRows['atlas'] = [_worker('atlas-new')];
       await session.refresh();
       expect(fixture.historyReads.last, ('atlas', 'atlas-new-tip', 0));
@@ -139,13 +139,13 @@ void main() {
     () async {
       fixture.workerRows['atlas'] = [];
       await session.select(group.members.first);
-      expect(session.error, isNull);
+      expect(session.reader.historyError, isNull);
       expect(fixture.historyReads, isEmpty);
       fixture.workerRows['atlas'] = [
         {..._worker('atlas'), 'source': 'cli'},
       ];
       await session.refresh();
-      expect(session.error, isNotNull);
+      expect(session.reader.historyError, isNotNull);
       expect(fixture.historyReads, isEmpty);
       fixture.workerRows['atlas'] = [_worker('atlas')];
       fixture.historyHook = (_, _, _) async => ProfileHistoryPage(
@@ -155,17 +155,17 @@ void main() {
         100,
       );
       await session.refresh();
-      expect(session.error, isNotNull);
-      expect(session.messages, isEmpty);
+      expect(session.reader.historyError, isNotNull);
+      expect(session.reader.messages, isEmpty);
       fixture.historyHook = null;
       fixture.workerMessages['atlas'] = [_message(1, 'Recovered')];
       await session.refresh();
-      expect(session.error, isNull);
-      expect(session.messages.single.text, 'Recovered');
+      expect(session.reader.historyError, isNull);
+      expect(session.reader.messages.single['content'], 'Recovered');
       fixture.historyHook = (_, _, _) async => throw StateError('Offline');
       await session.refresh();
-      expect(session.error, isNotNull);
-      expect(session.messages.single.text, 'Recovered');
+      expect(session.reader.historyError, isNotNull);
+      expect(session.reader.messages.single['content'], 'Recovered');
     },
   );
 
@@ -178,13 +178,18 @@ void main() {
           : ProfileHistoryPage(id, [_message(2, 'Mira only')], offset, 100);
       final first = session.select(group.members.first);
       await Future<void>.delayed(Duration.zero);
+      final retiredReader = session.reader;
+      retiredReader.recordScrollOffset(180);
       await session.select(group.members.last);
+      retiredReader.recordScrollOffset(420);
+      expect(session.reader.historyScrollOffset, 0);
+      expect(session.reader, isNot(same(retiredReader)));
       held.complete(
         ProfileHistoryPage('atlas-tip', [_message(1, 'Late Atlas')], 0, 100),
       );
       await first;
       expect(session.member?.profile, 'mira');
-      expect(session.messages.single.text, 'Mira only');
+      expect(session.reader.messages.single['content'], 'Mira only');
       final disposing = Completer<ProfileHistoryPage>();
       fixture.historyHook = (_, _, _) => disposing.future;
       final pending = session.refresh();

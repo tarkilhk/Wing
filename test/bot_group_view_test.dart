@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/bots/bot_group_screen.dart';
 import 'package:wing/core/services/bot_group_session.dart';
 import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/widgets/mention_suggestions.dart';
 import 'support/bots_fixture.dart';
 import 'helpers/pump_markdown_widget.dart';
 
@@ -83,6 +84,9 @@ void main() {
   testWidgets('group replies use shared formatted sender bubbles', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final fixture = BotsFixture();
     fixture.events.add({
       'room_id': 'room-1',
@@ -95,6 +99,9 @@ void main() {
       },
       'created_at': 1791756000.0,
     });
+    fixture.events.add(
+      _event(2, 'message.user', 'you', '**Literal user text**'),
+    );
     final group = (await fixture.repository.groups()).first;
     final appearances = await fixture.repository.bots();
     await tester.pumpWidget(
@@ -110,7 +117,25 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.settleMarkdown();
-    expect(find.byType(ProfileMessage), findsOneWidget);
+    expect(find.byType(ProfileMessage), findsNWidgets(2));
+    expect(find.text('User'), findsOneWidget);
+    for (final (kind, id, speaker) in [
+      ('bot-message-bubble', 'room-1:1', 'Atlas'),
+      ('user-message-bubble', 'room-1:2', 'User'),
+    ]) {
+      final bubble = find.byKey(ValueKey<(String, Object?)>((kind, id)));
+      final copy = find.descendant(
+        of: bubble,
+        matching: find.byTooltip('Copy message'),
+      );
+      final label = find.descendant(of: bubble, matching: find.text(speaker));
+      expect(copy, findsOneWidget);
+      expect(
+        tester.getCenter(copy).dy,
+        closeTo(tester.getCenter(label).dy, .1),
+      );
+      expect(tester.getRect(bubble).right, closeTo(366, .1));
+    }
     expect(find.text('Atlas'), findsWidgets);
     expect(find.textContaining('**Read-only'), findsNothing);
     await tester.pumpWidget(const SizedBox());
@@ -196,12 +221,20 @@ void main() {
             frame,
             'conversation-${brightness.name}-$scale',
           );
-          await tester.enterText(input, 'Review this evidence');
+          expect(find.byType(ActionChip), findsNothing);
+          await tester.enterText(input, 'Review @at this evidence');
           final controller = tester.widget<TextField>(input).controller!;
-          controller.selection = const TextSelection.collapsed(offset: 7);
-          await tester.tap(find.text('@bot_atlas'));
+          controller.selection = const TextSelection.collapsed(offset: 10);
+          await tester.pump(const Duration(milliseconds: 200));
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.descendant(
+              of: find.byType(MentionSuggestions),
+              matching: find.text('Atlas'),
+            ),
+          );
           await tester.pump();
-          expect(controller.text, 'Review @bot_atlas this evidence');
+          expect(controller.text, 'Review @Atlas this evidence');
           expect(tester.widget<TextField>(input).focusNode!.hasFocus, isTrue);
           final transcript = tester
               .widget<ListView>(find.byKey(const ValueKey('group-transcript')))
@@ -232,6 +265,7 @@ void main() {
           await tester.pumpAndSettle();
           expect(transcript.offset, before);
           expect(find.byTooltip('Jump to latest messages'), findsOneWidget);
+          await _render(tester, frame, 'reading-${brightness.name}-$scale');
           await tester.tap(find.byTooltip('Jump to latest messages'));
           await tester.pumpAndSettle();
           await _render(tester, frame, 'draft-${brightness.name}-$scale');
@@ -239,14 +273,9 @@ void main() {
           await tester.tap(send);
           await tester.pumpAndSettle();
           expect(tester.widget<TextField>(input).readOnly, isTrue);
-          expect(controller.text, 'Review @bot_atlas this evidence');
+          expect(controller.text, 'Review @Atlas this evidence');
           expect(find.byTooltip('Retry same message'), findsOneWidget);
-          expect(
-            tester
-                .widgetList<ActionChip>(find.byType(ActionChip))
-                .every((chip) => chip.onPressed == null),
-            isTrue,
-          );
+          expect(find.byType(ActionChip), findsNothing);
           await _render(tester, frame, 'uncertain-${brightness.name}-$scale');
           await tester.tap(find.byTooltip('Retry same message'));
           await tester.pumpAndSettle();

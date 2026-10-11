@@ -10,6 +10,7 @@ import '../../widgets/mention_suggestions.dart';
 import '../../widgets/slash_command_suggestions.dart';
 import '../../models/transcript_message.dart';
 import '../../widgets/profile_message.dart';
+import '../../widgets/transcript_latest_button.dart';
 import '../../widgets/scroll_capture_viewport.dart';
 import '../../utils/expansion_scroll_controller.dart';
 import '../../theme/wing_theme.dart';
@@ -69,34 +70,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     _capturing = active;
     _session.setCapturing(active);
     _session.setVisible(!active && _foreground && !_inspectingHistory);
-  }
-
-  void _mention(BotGroupMember member) {
-    final value = _composer.value;
-    final selection = value.selection.isValid
-        ? value.selection
-        : TextSelection.collapsed(offset: value.text.length);
-    final before = value.text.substring(0, selection.start);
-    final separator = before.isNotEmpty && !RegExp(r'\s$').hasMatch(before)
-        ? ' '
-        : '';
-    final insertion = '$separator@${member.handle} ';
-    _composer.value = TextEditingValue(
-      text: value.text.replaceRange(selection.start, selection.end, insertion),
-      selection: TextSelection.collapsed(
-        offset: selection.start + insertion.length,
-      ),
-    );
-    _session.editMentions(
-      _composer.text,
-      selected: ComposerReference(
-        kind: ComposerReferenceKind.agent,
-        token: '@${member.handle}',
-        target: member.id,
-      ),
-    );
-    _composer.observeReferences(_session.composerReferences);
-    _focus.requestFocus();
   }
 
   Widget _message(BotGroupEvent event) {
@@ -412,20 +385,18 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                     ),
                   ),
                   if (!_following)
-                    PositionedDirectional(
-                      end: 16,
+                    Positioned(
+                      left: 0,
+                      right: 0,
                       bottom: 8,
-                      child: Material(
-                        color: colors.surfaceContainerHigh,
-                        borderRadius: WingRadius.control,
-                        elevation: 2,
-                        child: IconButton(
-                          tooltip: 'Jump to latest messages',
+                      child: Center(
+                        child: TranscriptLatestButton(
+                          label: 'Jump to latest messages',
+                          icon: Icons.arrow_downward,
                           onPressed: () {
                             setState(() => _following = true);
                             _followLatest();
                           },
-                          icon: const Icon(Icons.arrow_downward),
                         ),
                       ),
                     ),
@@ -460,91 +431,63 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        TextField(
-                          key: const ValueKey('group-message-composer'),
-                          controller: _composer,
-                          focusNode: _focus,
-                          onChanged: (text) => _session.editMentions(text),
-                          readOnly: locked,
-                          minLines: 1,
-                          maxLines: _showReferences
-                              ? 1
-                              : MediaQuery.viewInsetsOf(context).bottom > 0 &&
-                                    MediaQuery.textScalerOf(
-                                          context,
-                                        ).scale(16) >=
-                                        24
-                              ? 2
-                              : 5,
-                          keyboardType: TextInputType.multiline,
-                          textInputAction: TextInputAction.newline,
-                          textCapitalization: TextCapitalization.sentences,
-                          decoration: InputDecoration(
-                            hintText: _composer.text.isEmpty
-                                ? 'Message the group'
-                                : null,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            filled: false,
-                            contentPadding: EdgeInsets.all(12),
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('group-message-composer'),
+                            controller: _composer,
+                            focusNode: _focus,
+                            onChanged: (text) => _session.editMentions(text),
+                            readOnly: locked,
+                            minLines: 1,
+                            maxLines: _showReferences
+                                ? 1
+                                : MediaQuery.viewInsetsOf(context).bottom > 0 &&
+                                      MediaQuery.textScalerOf(
+                                            context,
+                                          ).scale(16) >=
+                                          24
+                                ? 2
+                                : 5,
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: TextInputAction.newline,
+                            textCapitalization: TextCapitalization.sentences,
+                            decoration: InputDecoration(
+                              hintText: _composer.text.isEmpty
+                                  ? 'Message the group'
+                                  : null,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              filled: false,
+                              contentPadding: EdgeInsets.all(12),
+                            ),
                           ),
                         ),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  children: [
-                                    if (!_showReferences)
-                                      for (final member
-                                          in _session.group.members)
-                                        Padding(
-                                          padding:
-                                              const EdgeInsetsDirectional.only(
-                                                end: 8,
-                                              ),
-                                          child: ActionChip(
-                                            tooltip: 'Mention ${member.name}',
-                                            label: Text('@${member.handle}'),
-                                            onPressed: locked
-                                                ? null
-                                                : () => _mention(member),
-                                          ),
-                                        ),
-                                  ],
+                        IconButton.filled(
+                          tooltip: _session.pendingText == null
+                              ? 'Send group message'
+                              : 'Retry same message',
+                          onPressed:
+                              _session.sending ||
+                                  (_session.pendingText == null &&
+                                      _composer.text.trim().isEmpty)
+                              ? null
+                              : _send,
+                          icon: _session.sending
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Icon(
+                                  _session.pendingText == null
+                                      ? Icons.arrow_upward
+                                      : Icons.refresh,
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton.filled(
-                              tooltip: _session.pendingText == null
-                                  ? 'Send group message'
-                                  : 'Retry same message',
-                              onPressed:
-                                  _session.sending ||
-                                      (_session.pendingText == null &&
-                                          _composer.text.trim().isEmpty)
-                                  ? null
-                                  : _send,
-                              icon: _session.sending
-                                  ? const SizedBox.square(
-                                      dimension: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : Icon(
-                                      _session.pendingText == null
-                                          ? Icons.arrow_upward
-                                          : Icons.refresh,
-                                    ),
-                            ),
-                          ],
                         ),
                       ],
                     ),

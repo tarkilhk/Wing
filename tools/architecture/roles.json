@@ -486,6 +486,11 @@
       "feature": "conversation",
       "library": "lib/core/models/transcript_notice.dart"
     },
+    "lib/core/models/transcript_reader.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/transcript_reader.dart"
+    },
     "lib/core/models/transcript_reading.dart": {
       "role": "domain",
       "feature": "conversation",
@@ -2235,6 +2240,11 @@
       "role": "view",
       "feature": "chat-activity",
       "library": "lib/core/widgets/tool_activity_details.dart"
+    },
+    "lib/core/widgets/transcript_latest_button.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/transcript_latest_button.dart"
     },
     "lib/core/widgets/user_message_attachment.dart": {
       "role": "view",
