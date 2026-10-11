@@ -344,7 +344,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Widget _voiceActivity() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      VoiceInputActivity(controller: _voiceInput),
+      VoiceInputActivity(context: context, controller: _voiceInput),
       if (_voiceOutput.owner != null)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),

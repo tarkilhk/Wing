@@ -21,8 +21,19 @@ class VoiceInputButton extends StatelessWidget {
 
 /// Shared recording, transcription and recovery chrome for every composer.
 class VoiceInputActivity extends StatelessWidget {
-  const VoiceInputActivity({super.key, required this.controller});
+  VoiceInputActivity({
+    super.key,
+    required BuildContext context,
+    required this.controller,
+  }) : _errorMaxHeight =
+           ((MediaQuery.sizeOf(context).height -
+                       MediaQuery.viewInsetsOf(context).bottom -
+                       MediaQuery.paddingOf(context).vertical) *
+                   .18)
+               .clamp(0.0, double.infinity);
   final VoiceInputController controller;
+  // Capture the screen viewport before Scaffold consumes keyboard insets.
+  final double _errorMaxHeight;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -70,7 +81,13 @@ class VoiceInputActivity extends StatelessWidget {
           ),
         ),
       if (controller.error case final error?)
-        Padding(padding: const EdgeInsets.all(12), child: StudioError(error)),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: _errorMaxHeight),
+            child: SingleChildScrollView(child: StudioError(error)),
+          ),
+        ),
     ],
   );
 }

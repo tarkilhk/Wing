@@ -188,6 +188,39 @@ void main() {
           expect(editing.text, 'Plan: spoken later');
           expect(editing.selection.extentOffset, 12);
           expect(fixture.commands, isEmpty);
+          final speechError = List.filled(
+            3,
+            'Speech processing failed. Check your connection and profile speech settings, then retry.',
+          ).join(' ');
+          device.startError = StateError(speechError);
+          tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+          await tester.pump();
+          await tester.tap(find.byTooltip('Dictate message'));
+          await tester.pump();
+          expect(find.text(speechError), findsOneWidget);
+          expect(editing.text, 'Plan: spoken later');
+          expect(
+            tester.getRect(find.byTooltip('Dictate message')).bottom,
+            lessThanOrEqualTo(844 - 280),
+          );
+          await _render(tester, frame, 'voice-error-${brightness.name}-$scale');
+          final errorScroll = find.descendant(
+            of: find.byType(VoiceInputActivity),
+            matching: find.byType(Scrollable),
+          );
+          final errorPosition = tester
+              .state<ScrollableState>(errorScroll)
+              .position;
+          expect(errorPosition.maxScrollExtent, greaterThan(0));
+          await tester.drag(
+            find.descendant(
+              of: find.byType(VoiceInputActivity),
+              matching: find.byType(SingleChildScrollView),
+            ),
+            const Offset(0, -60),
+          );
+          await tester.pump();
+          expect(errorPosition.pixels, greaterThan(0));
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
         },

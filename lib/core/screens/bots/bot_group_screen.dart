@@ -494,6 +494,8 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final enlargedText = MediaQuery.textScalerOf(context).scale(16) >= 24;
     final messages = _session.events.where((event) => event.isMessage).toList();
     final canStop =
         !_session.acting &&
@@ -567,9 +569,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       body: SafeArea(
         child: Column(
           children: [
-            if (!_showReferences &&
-                (MediaQuery.viewInsetsOf(context).bottom == 0 ||
-                    MediaQuery.textScalerOf(context).scale(16) < 24))
+            if (!_showReferences && (!keyboardOpen || !enlargedText))
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Semantics(
@@ -779,7 +779,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                 ),
               ),
             _activityStatus(context),
-            VoiceInputActivity(controller: _voiceInput),
+            VoiceInputActivity(context: context, controller: _voiceInput),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _composer,
               builder: (context, _, _) => Padding(
@@ -805,15 +805,8 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                             minLines: 1,
                             maxLines: _showReferences
                                 ? 1
-                                : (_voiceInput.active ||
-                                          MediaQuery.viewInsetsOf(
-                                                context,
-                                              ).bottom >
-                                              0) &&
-                                      MediaQuery.textScalerOf(
-                                            context,
-                                          ).scale(16) >=
-                                          24
+                                : (_voiceInput.active || keyboardOpen) &&
+                                      enlargedText
                                 ? 2
                                 : 5,
                             keyboardType: TextInputType.multiline,
