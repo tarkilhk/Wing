@@ -1,3 +1,4 @@
+import 'package:wing/core/models/composer_reference.dart';
 import 'package:wing/core/models/attachment_draft.dart';
 import 'package:wing/core/models/queued_prompt_draft.dart';
 import 'package:wing/core/models/chat_runtime.dart';
@@ -194,6 +195,7 @@ class _HeldPromptDraftStore extends ComposerDraftStore {
     required String profileName,
     required String sessionId,
     required String text,
+    Iterable<ComposerReference> references = const [],
     required Iterable<AttachmentDraft> attachments,
     bool submissionUncertain = false,
     Iterable<QueuedPromptDraft> queuedPrompts = const [],
@@ -210,6 +212,7 @@ class _HeldPromptDraftStore extends ComposerDraftStore {
       profileName: profileName,
       sessionId: sessionId,
       text: text,
+      references: references,
       attachments: files,
       submissionUncertain: submissionUncertain,
       queuedPrompts: queue,

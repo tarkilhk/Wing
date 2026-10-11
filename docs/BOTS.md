@@ -34,7 +34,17 @@ Valid edits save automatically after a short pause. Back finishes pending saves;
 
 ## Discussion groups
 
-Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Tap a member's @handle to insert a mention. Rooms offer rename, stop and disband; their member roster is fixed when created.
+Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Type `@` anywhere in your message to choose a frozen room member or `@everyone`. Search by the bot's name or Hermes handle; selecting Pace inserts `@Pace`, while Wing retains its canonical Hermes identity. Members show their saved bot avatars when available; Everyone uses a group icon. Rooms offer rename, stop and disband; their member roster is fixed when created.
+
+In an ordinary chat, `@` anywhere in your message offers agents from the same Hermes server with their
+saved bot avatars when available. Search also matches saved bot titles; selection
+inserts the readable name. Names with spaces use quoted editable text. Duplicate
+names include a handle to distinguish them. Commas, quotes and brackets delimit bot names;
+hyphens and underscores remain part of the name. A mention
+identifies the agent to the current conversation; it does not forward your
+message or switch chats. Contact depends on whether the current chat has
+`message_agent`. If a selected profile is removed or renamed before dispatch,
+Wing pauses the message for correction. Changing its display name is harmless.
 
 Tap member rows to add 2–6 bots. Picked bots move into their own strip above
 search, with a remove icon for each. Search by name or @handle to find bots to
@@ -61,9 +71,10 @@ the form fixes the room details so you can retry the same group.
 
 An unconfirmed send stays available for review/retry. Interrupted tasks ask for explicit confirmation before retrying. Approvals apply to the request shown in that discussion.
 
-Your messages use the ordinary chat bubbles. Bot replies show the sender's saved
-avatar and name, formatted text, links, code, timestamps and icon-only Copy.
-Member mentions sit beside Send and insert at the cursor. The conversation opens
+Your bubbles show User and an icon-only Copy aligned in the header. Bot replies
+show the sender's saved avatar and name, formatted text, links, code and
+timestamps, with Copy in the same header. Type `@` in the composer to choose a
+member; the picker inserts at the cursor. The conversation opens
 at its latest messages; scrolling up keeps your place as replies arrive. The down
 arrow returns to the latest messages.
 
@@ -133,7 +144,9 @@ Output to inspect the runner's command and result.
 Internal group-worker sessions stay out of Recents and ordinary chat notifications.
 To inspect one, open the group, choose **⋯ → Bot working histories**, then select
 a bot. The viewer is read only: it loads saved messages without starting a bot
-turn, and offers Refresh and Load older history. Back returns to the shared group
+turn. It uses the normal chat transcript, including reasoning and tool sections,
+automatic older-page loading and the latest-message arrow. Refresh rereads the
+saved history. Back returns to the shared group
 and preserves your draft. Send group messages from the group composer.
 
 If no current worker history is available, the viewer says so. A failed read

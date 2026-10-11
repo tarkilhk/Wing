@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/bot_group_history_session.dart';
-import '../../utils/expansion_scroll_controller.dart';
+import '../profile_transcript.dart';
+import '../../models/transcript_timeline.dart';
 import '../../widgets/profile_message.dart';
-import '../../widgets/studio_error.dart';
 import '../../widgets/wing_app_bar.dart';
 
 class BotGroupHistoryScreen extends StatefulWidget {
@@ -16,8 +16,6 @@ class BotGroupHistoryScreen extends StatefulWidget {
 
 class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
   late final _session = widget.createSession();
-  final _scroll = ScrollController();
-  final _heights = <Object?, double>{};
 
   @override
   void initState() {
@@ -35,14 +33,16 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
   void dispose() {
     _session.removeListener(_changed);
     _session.dispose();
-    _scroll.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final messages = _session.messages.reversed.toList();
-    final errorRows = _session.error == null ? 0 : 1;
+    final reader = _session.reader;
+    final timeline = TranscriptTimeline.project(
+      reader.messages,
+      presentationId: reader.messagePresentationId,
+    );
     final colors = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: WingAppBar(
@@ -51,7 +51,7 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
         actions: [
           IconButton(
             tooltip: 'Refresh working history',
-            onPressed: _session.loading ? null : _session.refresh,
+            onPressed: reader.historyLoading ? null : _session.refresh,
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -83,8 +83,6 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
                         selected: _session.member?.id == member.id,
                         onSelected: (_) {
                           if (_session.member?.id == member.id) return;
-                          _heights.clear();
-                          if (_scroll.hasClients) _scroll.jumpTo(0);
                           unawaited(_session.select(member));
                         },
                       ),
@@ -101,62 +99,39 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
                 ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
               ),
             ),
-            if (_session.loading) const LinearProgressIndicator(),
             Expanded(
-              child: messages.isEmpty && errorRows == 0
+              child: timeline.sections.isEmpty && reader.historyError == null
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
-                        child: Text(
-                          _session.loading
-                              ? 'Loading working history…'
-                              : 'No working history is available for ${_session.member?.name ?? 'this bot'}.',
-                          textAlign: TextAlign.center,
-                        ),
+                        child: reader.historyLoading
+                            ? const CircularProgressIndicator(
+                                semanticsLabel: 'Loading working history',
+                              )
+                            : Text(
+                                'No working history is available for ${_session.member?.name ?? 'this bot'}.',
+                                textAlign: TextAlign.center,
+                              ),
                       ),
                     )
-                  : ListView.builder(
+                  : ProfileTranscript(
                       key: ValueKey(('worker-history', _session.member?.id)),
-                      controller: _scroll,
-                      reverse: true,
-                      padding: const EdgeInsets.all(16),
-                      itemCount:
-                          messages.length +
-                          errorRows +
-                          (_session.hasOlder ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (errorRows == 1 && index == 0) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: StudioError(_session.error!),
-                          );
-                        }
-                        index -= errorRows;
-                        if (index == messages.length) {
-                          return Center(
-                            child: IconButton(
-                              tooltip: 'Load older working history',
-                              onPressed: _session.loading
-                                  ? null
-                                  : _session.loadOlder,
-                              icon: const Icon(Icons.history),
-                            ),
-                          );
-                        }
-                        final message = messages[index];
-                        return TranscriptScrollAnchor(
-                          key: ValueKey(message.id),
-                          initialHeight: _heights[message.id] ?? 0,
-                          onHeightChanged: (_, height) {
-                            _heights[message.id] = height;
-                          },
-                          child: ProfileMessage(
-                            message: message,
-                            loadImages: false,
-                            attachmentImagesAvailable: false,
-                          ),
-                        );
-                      },
+                      reader: reader,
+                      identity: (_session.group.id, _session.member?.id),
+                      needsInput: false,
+                      turnAdmissionBlocked: false,
+                      openingContent: null,
+                      notificationReading: null,
+                      onAnswerVisible: null,
+                      onRefreshHistory: _session.refresh,
+                      onLoadOlder: _session.loadOlder,
+                      timeline: timeline,
+                      tail: const [],
+                      messageBuilder: (entry) => ProfileMessage(
+                        message: entry.message,
+                        loadImages: false,
+                        attachmentImagesAvailable: false,
+                      ),
                     ),
             ),
           ],

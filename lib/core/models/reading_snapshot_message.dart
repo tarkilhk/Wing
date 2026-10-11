@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'answer_versions.dart';
 import 'user_message_content.dart';
+import 'composer_reference.dart';
 
 /// Fields that describe a saved row's reading presentation, never live state.
 /// Capture is shallow: large content is validated by the snapshot encoder after
@@ -65,7 +66,27 @@ Map<String, dynamic> projectReadingSnapshotMessage(Map row) {
   if (timestamp is num && timestamp.isFinite) result['timestamp'] = timestamp;
   for (final key in ['content', 'text', 'display_content']) {
     final value = _content(row[key]);
-    if (value != null) result[key] = value;
+    final prepared = row['role'] == 'user'
+        ? PreparedComposerMessage.fromContent(value)
+        : null;
+    if (prepared != null) {
+      final display =
+          '${PreparedComposerMessage(message: prepared.message, context: '', references: prepared.references).wireText}${prepared.imageReferences}';
+      result[key] = value is List
+          ? [
+              {'type': 'text', 'text': display},
+              ...value.whereType<Map>().where(
+                (part) => {
+                  'image_url',
+                  'input_image',
+                  'image',
+                }.contains(part['type']),
+              ),
+            ]
+          : display;
+    } else if (value != null) {
+      result[key] = value;
+    }
   }
   final metadata = answerMessageDisplayMetadata(Map<String, dynamic>.from(row));
   final displayMetadata = <String, dynamic>{};

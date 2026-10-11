@@ -9,7 +9,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import '../theme/wing_theme.dart';
-import '../services/profile_workspace_controller.dart';
+import '../models/transcript_reader.dart';
+import '../services/transcript_reading.dart';
 import '../services/completion_diagnostics.dart';
 import '../utils/expansion_scroll_controller.dart';
 import '../widgets/anchored_expansion_tile.dart';
@@ -17,12 +18,19 @@ import '../widgets/background_markdown_content.dart';
 import '../widgets/profile_tool_activity.dart';
 import '../widgets/profile_activity_tabs.dart';
 import '../widgets/playful_portrait.dart';
+import '../widgets/transcript_latest_button.dart';
 
 /// Reversed layout opens at the newest row. Older pages grow at the far end;
 /// a visible durable row anchors the viewport when streaming changes the tail.
 class ProfileTranscript extends StatefulWidget {
-  final ProfileChat chat;
-  final ProfileWorkspaceController controller;
+  final TranscriptReader reader;
+  final Object identity;
+  final bool needsInput;
+  final bool turnAdmissionBlocked;
+  final Widget? openingContent;
+  final TranscriptReading? notificationReading;
+  final void Function(NotificationFocus)? onAnswerVisible;
+  final Future<void> Function() onRefreshHistory;
   final Widget Function(timeline_facts.TranscriptTimelineEntry) messageBuilder;
   final Widget? Function(timeline_facts.TranscriptTimelineSection)?
   activityTrailingBuilder;
@@ -40,8 +48,14 @@ class ProfileTranscript extends StatefulWidget {
   final Map<String, GlobalKey> notificationAnchors;
   const ProfileTranscript({
     super.key,
-    required this.chat,
-    required this.controller,
+    required this.reader,
+    required this.identity,
+    required this.needsInput,
+    required this.turnAdmissionBlocked,
+    required this.openingContent,
+    required this.notificationReading,
+    required this.onAnswerVisible,
+    required this.onRefreshHistory,
     required this.onLoadOlder,
     required this.messageBuilder,
     this.activityTrailingBuilder,
@@ -64,11 +78,11 @@ class ProfileTranscript extends StatefulWidget {
 class _ProfileTranscriptState extends State<ProfileTranscript> {
   late final _scroll = ExpansionScrollController(
     initialScrollOffset: widget.focusedMessageId == null
-        ? widget.chat.reading.historyScrollOffset
+        ? widget.reader.historyScrollOffset
         : 0,
     restoreInitialOffset:
         widget.focusedMessageId == null &&
-        widget.chat.reading.historyScrollOffset > 0,
+        widget.reader.historyScrollOffset > 0,
   );
   final _viewport = GlobalKey();
   final _focusedRow = GlobalKey();
@@ -96,11 +110,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   Object? _streamingPresentationId;
   String? _segment;
   late bool _restoringMarkdown =
-      widget.focusedMessageId == null &&
-      widget.chat.reading.historyScrollOffset > 0;
+      widget.focusedMessageId == null && widget.reader.historyScrollOffset > 0;
   late final _jumpLabel = ValueNotifier<String?>(
-    widget.focusedMessageId == null &&
-            widget.chat.reading.historyScrollOffset > 48
+    widget.focusedMessageId == null && widget.reader.historyScrollOffset > 48
         ? 'Latest'
         : null,
   );
@@ -112,12 +124,12 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         .where((entry) => !entry.streaming)
         .lastOrNull
         ?.id;
-    _streaming = widget.chat.reading.streaming;
+    _streaming = widget.reader.streaming;
     _streamingPresentationId = widget.timeline.entries
         .where((entry) => entry.streaming)
         .firstOrNull
         ?.presentationId;
-    _segment = widget.chat.reading.historySessionId;
+    _segment = widget.reader.historySessionId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.focusedMessageId == null) {
         _updateJump();
@@ -133,18 +145,16 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   void _scheduleLoadOlder() {
     if (_olderLoadScheduled) return;
     _olderLoadScheduled = true;
-    final chat = widget.chat;
-    final controller = widget.controller;
+    final reader = widget.reader;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _olderLoadScheduled = false;
       if (!mounted ||
-          !identical(widget.chat, chat) ||
-          !identical(widget.controller, controller) ||
+          !identical(widget.reader, reader) ||
           !_scroll.hasClients ||
           _scroll.position.extentAfter >= 180 ||
           _scroll.position.pixels <= 0 ||
-          chat.reading.historyLoading ||
-          chat.reading.historyError != null) {
+          reader.historyLoading ||
+          reader.historyError != null) {
         return;
       }
       unawaited(widget.onLoadOlder());
@@ -169,7 +179,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (!pending) {
       _cancelMarkdownRestoration();
       if (_scroll.hasClients) {
-        widget.chat.reading.recordScrollOffset(_scroll.offset);
+        widget.reader.recordScrollOffset(_scroll.offset);
       }
     }
   }
@@ -196,8 +206,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (target.kind == 'answer' || target.kind == 'status') {
       final answer =
           timeline_facts.TranscriptTimeline.notificationAnswerPresentation(
-            widget.chat.reading.messages,
-            presentationId: widget.chat.reading.messagePresentationId,
+            widget.reader.messages,
+            presentationId: widget.reader.messagePresentationId,
             messageId: target.messageId,
           );
       return answer == null ? null : _rows[answer];
@@ -206,26 +216,26 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   }
 
   void _scheduleNoticeVisibility() {
-    if (_noticeFrameScheduled) return;
+    if (_noticeFrameScheduled || widget.notificationReading == null) return;
     _noticeFrameScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _noticeFrameScheduled = false;
       if (!mounted ||
           !_scroll.hasClients ||
           widget.focusedMessageId != null ||
-          widget.chat.runtime.opening ||
-          widget.chat.reading.historyLoading) {
+          (widget.openingContent != null) ||
+          widget.reader.historyLoading) {
         return;
       }
-      final chat = widget.chat;
-      final focus = chat.reading.notificationFocus;
+      final notification = widget.notificationReading!;
+      final focus = notification.notificationFocus;
       if (focus != null &&
           _revealedNotificationGeneration !=
-              chat.reading.notificationFocusGeneration) {
+              notification.notificationFocusGeneration) {
         _cancelMarkdownRestoration();
         if (_noticeRevealGeneration !=
-            chat.reading.notificationFocusGeneration) {
-          _noticeRevealGeneration = chat.reading.notificationFocusGeneration;
+            notification.notificationFocusGeneration) {
+          _noticeRevealGeneration = notification.notificationFocusGeneration;
           _noticeRevealAttempts = 0;
           _scroll.jumpTo(0);
           _scheduleNoticeVisibility();
@@ -235,9 +245,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         final anchor = _notificationAnchor(focus)?.currentContext;
         if (anchor != null) {
           _revealedNotificationGeneration =
-              chat.reading.notificationFocusGeneration;
+              notification.notificationFocusGeneration;
           _noticeRevealAttempts = 0;
-          chat.reading.releaseNotificationFocus(focus, _noticeRevealGeneration);
+          notification.releaseNotificationFocus(focus, _noticeRevealGeneration);
           unawaited(
             Scrollable.ensureVisible(
               anchor,
@@ -257,11 +267,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             _scheduleNoticeVisibility();
           } else {
             _revealedNotificationGeneration =
-                chat.reading.notificationFocusGeneration;
+                notification.notificationFocusGeneration;
           }
         }
       }
-      final target = chat.reading.notificationReadTarget;
+      final target = notification.notificationReadTarget;
       if (target == null) return;
       final viewport = _viewport.currentContext?.findRenderObject();
       final answer = _notificationAnchor(
@@ -277,7 +287,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       final answerBounds = answer.localToGlobal(Offset.zero) & answer.size;
       if (bounds.intersect(answerBounds).height >= 16 &&
           bounds.overlaps(answerBounds)) {
-        widget.controller.notificationAnswerVisible(chat, target);
+        widget.onAnswerVisible?.call(target);
       }
     });
   }
@@ -287,7 +297,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     _scheduleNoticeVisibility();
     final distance = _scroll.offset.abs();
     if (distance <= 24) _hasNewContent = false;
-    final attention = widget.chat.runtime.needsInput;
+    final attention = widget.needsInput;
     _jumpLabel.value =
         distance <= 24 || (distance <= 48 && !_hasNewContent && !attention)
         ? null
@@ -329,20 +339,20 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         .where((entry) => !entry.streaming)
         .lastOrNull
         ?.id;
-    final segmentChanged = _segment != widget.chat.reading.historySessionId;
+    final segmentChanged = _segment != widget.reader.historySessionId;
     final growingRow =
         _rows[_streamingPresentationId]?.currentContext?.findRenderObject()
             as TranscriptAnchorBox?;
     if (!atBottom &&
         !segmentChanged &&
         ((_newestId != null && newest != null && newest != _newestId) ||
-            (widget.chat.reading.streaming.isNotEmpty &&
-                widget.chat.reading.streaming != _streaming))) {
+            (widget.reader.streaming.isNotEmpty &&
+                widget.reader.streaming != _streaming))) {
       _hasNewContent = true;
     }
     _newestId = newest;
-    _streaming = widget.chat.reading.streaming;
-    _segment = widget.chat.reading.historySessionId;
+    _streaming = widget.reader.streaming;
+    _segment = widget.reader.historySessionId;
     _preserveReaderAnchor(growingRow);
     _streamingPresentationId = widget.timeline.entries
         .where((entry) => entry.streaming)
@@ -358,7 +368,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         return;
       }
       if (!_restoringMarkdown) {
-        widget.chat.reading.recordScrollOffset(_scroll.offset);
+        widget.reader.recordScrollOffset(_scroll.offset);
       }
       _updateJump();
     });
@@ -419,7 +429,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (widget.focusedMessageId == null &&
         !_restoringMarkdown &&
         _scroll.hasClients) {
-      widget.chat.reading.recordScrollOffset(_scroll.offset);
+      widget.reader.recordScrollOffset(_scroll.offset);
     }
     _scroll.dispose();
     _jumpLabel.dispose();
@@ -432,7 +442,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final buildStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
         : 0;
-    final chat = widget.chat;
+    final reader = widget.reader;
     _scheduleNoticeVisibility();
     final timeline = widget.timeline;
     final rows = timeline.sections.reversed.toList();
@@ -445,7 +455,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       label: widget.liveToolCount > 0
           ? 'Activity · ${widget.liveToolCount} ${widget.liveToolCount == 1 ? 'tool' : 'tools'}'
           : 'Activity',
-      key: ValueKey(('activity', chat.key)),
+      key: ValueKey(('activity', widget.identity)),
       detailsBuilder: (_) => ProfileActivityTabs(
         tabs: [
           if (widget.currentActivity.isNotEmpty)
@@ -489,17 +499,17 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         ),
     ];
     final showOpening =
-        chat.runtime.opening &&
-        chat.reading.messages.isEmpty &&
-        chat.reading.streaming.isEmpty;
+        (widget.openingContent != null) &&
+        reader.messages.isEmpty &&
+        reader.streaming.isEmpty;
     final showWelcome =
-        !chat.runtime.opening &&
-        chat.reading.messages.isEmpty &&
-        !chat.reading.historyLoading &&
-        chat.reading.historyError == null &&
-        chat.reading.nextHistoryOffset == null &&
-        chat.reading.streaming.isEmpty &&
-        !chat.runtime.blocksTurnAdmission &&
+        !(widget.openingContent != null) &&
+        reader.messages.isEmpty &&
+        !reader.historyLoading &&
+        reader.historyError == null &&
+        reader.nextHistoryOffset == null &&
+        reader.streaming.isEmpty &&
+        !widget.turnAdmissionBlocked &&
         tail.isEmpty;
     final keysStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
@@ -570,7 +580,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         onNotification: (event) {
           if (event.depth == 0) {
             if (!_restoringMarkdown) {
-              widget.chat.reading.recordScrollOffset(event.metrics.pixels);
+              widget.reader.recordScrollOffset(event.metrics.pixels);
             }
             _updateJump();
           }
@@ -585,12 +595,12 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               _gestureGeneration++;
               _cancelMarkdownRestoration();
               _revealedNotificationGeneration =
-                  widget.chat.reading.notificationFocusGeneration;
+                  widget.notificationReading?.notificationFocusGeneration ?? -1;
               _jumping = false;
               _scroll.releaseExpansionAnchor();
             }
             if (!_restoringMarkdown) {
-              widget.chat.reading.recordScrollOffset(event.metrics.pixels);
+              widget.reader.recordScrollOffset(event.metrics.pixels);
             }
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _updateJump();
@@ -599,8 +609,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     event is ScrollEndNotification) &&
                 event.metrics.extentAfter < 180 &&
                 event.metrics.pixels > 0 &&
-                !chat.reading.historyLoading &&
-                chat.reading.historyError == null) {
+                !reader.historyLoading &&
+                reader.historyError == null) {
               _scheduleLoadOlder();
             }
             return false;
@@ -643,8 +653,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                               onOpenResource: widget.onOpenResource,
                               onShareResource: widget.onShareResource,
                               showLatestReview:
-                                  rowIndex == 0 &&
-                                  chat.reading.streaming.isEmpty,
+                                  rowIndex == 0 && reader.streaming.isEmpty,
                               tabs: rowIndex == 0 && joinCurrentActivity
                                   ? widget.activityTabs
                                   : const [],
@@ -681,48 +690,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                                   vertical: 48,
                                   horizontal: 16,
                                 ),
-                                child: ListenableBuilder(
-                                  listenable:
-                                      widget.controller.connectionStatus,
-                                  builder: (context, _) {
-                                    final status =
-                                        widget.controller.connectionStatus;
-                                    final waiting =
-                                        status.phase ==
-                                        ServerConnectionPhase.reconnecting;
-                                    return Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          chat.runtime.openingError ??
-                                              (waiting
-                                                  ? 'Reconnecting to ${status.label}'
-                                                  : 'Waiting for connection'),
-                                          textAlign: TextAlign.center,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.titleMedium,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          chat.runtime.openingError == null
-                                              ? 'This conversation will open automatically.'
-                                              : 'You can retry or return to your chats.',
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        if (!waiting)
-                                          TextButton(
-                                            onPressed: widget
-                                                .controller
-                                                .resumeConnection,
-                                            child: const Text(
-                                              'Retry connection',
-                                            ),
-                                          ),
-                                      ],
-                                    );
-                                  },
-                                ),
+                                child: widget.openingContent!,
                               ),
                             ),
                           )
@@ -756,7 +724,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                               ),
                             ),
                           )
-                        : _historyEdge(chat),
+                        : _historyEdge(),
                   ),
                 );
               },
@@ -769,25 +737,18 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       valueListenable: _jumpLabel,
       builder: (_, label, _) => label != null
           ? Center(
-              child: FilledButton.tonalIcon(
+              child: TranscriptLatestButton(
                 key: const ValueKey('jump-to-latest'),
                 onPressed: _latest,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(48, 36),
-                  tapTargetSize: MaterialTapTargetSize.padded,
-                ),
-                icon: Icon(
-                  label == 'Input needed'
-                      ? Icons.question_answer_outlined
-                      : Icons.arrow_downward,
-                  size: 18,
-                ),
-                label: Text(label),
+                label: label,
+                icon: label == 'Input needed'
+                    ? Icons.question_answer_outlined
+                    : Icons.arrow_downward,
               ),
             )
           : const SizedBox.shrink(),
     );
-    final needsInput = chat.runtime.needsInput;
+    final needsInput = widget.needsInput;
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.finish(
         'transcript.build_setup_sync',
@@ -796,8 +757,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           'newIdlessKeys': newIdlessKeys,
           'newDurableKeys': newDurableKeys,
           'sections': rows.length,
-          'streaming': chat.reading.streaming.isNotEmpty ? 1 : 0,
-          'busy': chat.runtime.blocksTurnAdmission ? 1 : 0,
+          'streaming': reader.streaming.isNotEmpty ? 1 : 0,
+          'busy': widget.turnAdmissionBlocked ? 1 : 0,
         },
       );
     }
@@ -936,9 +897,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     ),
   );
 
-  Widget _historyEdge(ProfileChat chat) {
-    if (chat.reading.historyUnavailable) return const SizedBox.shrink();
-    if (chat.reading.historyLoading) {
+  Widget _historyEdge() {
+    final reader = widget.reader;
+    if (reader.historyUnavailable) return const SizedBox.shrink();
+    if (reader.historyLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
         child: Center(
@@ -953,15 +915,15 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         ),
       );
     }
-    if (chat.reading.historyError != null) {
+    if (reader.historyError != null) {
       return Column(
         children: [
-          StudioError(chat.reading.historyError!),
+          StudioError(reader.historyError!),
           TextButton(
-            onPressed: () => widget.controller.refreshHistory(chat),
+            onPressed: widget.onRefreshHistory,
             child: const Text('Refresh history'),
           ),
-          if (chat.reading.nextHistoryOffset != null)
+          if (reader.nextHistoryOffset != null)
             TextButton(
               onPressed: () => widget.onLoadOlder(),
               child: const Text('Retry older messages'),
@@ -969,11 +931,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         ],
       );
     }
-    return chat.reading.nextHistoryOffset == null
+    return reader.nextHistoryOffset == null
         ? Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
-              chat.reading.messages.isEmpty
+              reader.messages.isEmpty
                   ? 'Start a conversation'
                   : 'Start of loaded history',
               textAlign: TextAlign.center,
@@ -987,4 +949,49 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             child: const Text('Load older messages'),
           );
   }
+}
+
+/// Live connection recovery is composed outside the reusable reading viewport.
+class ProfileTranscriptOpening extends StatelessWidget {
+  const ProfileTranscriptOpening({
+    super.key,
+    required this.status,
+    required this.error,
+    required this.onRetry,
+  });
+  final ServerConnectionStatus status;
+  final String? error;
+  final VoidCallback onRetry;
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: status,
+    builder: (context, _) {
+      final waiting = status.phase == ServerConnectionPhase.reconnecting;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            error ??
+                (waiting
+                    ? 'Reconnecting to ${status.label}'
+                    : 'Waiting for connection'),
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error == null
+                ? 'This conversation will open automatically.'
+                : 'You can retry or return to your chats.',
+            textAlign: TextAlign.center,
+          ),
+          if (!waiting)
+            TextButton(
+              onPressed: onRetry,
+              child: const Text('Retry connection'),
+            ),
+        ],
+      );
+    },
+  );
 }

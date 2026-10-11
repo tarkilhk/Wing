@@ -1,3 +1,4 @@
+import '../models/composer_reference.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -14,6 +15,7 @@ class _DraftWrites {
 
 class ComposerDraftSnapshot {
   final String text;
+  final List<ComposerReference> references;
   final List<AttachmentDraft> attachments;
   final bool submissionUncertain;
   final List<QueuedPromptDraft> queuedPrompts;
@@ -21,6 +23,7 @@ class ComposerDraftSnapshot {
 
   const ComposerDraftSnapshot({
     required this.text,
+    this.references = const [],
     required this.attachments,
     required this.submissionUncertain,
     this.queuedPrompts = const [],
@@ -56,7 +59,7 @@ class ComposerDraftStore {
   String _component(String value) => base64Url.encode(utf8.encode(value));
 
   String _profilePrefix(String profileName) =>
-      'composer_work_v2.${_component(connectionIdentity)}.'
+      'composer_work_v3.${_component(connectionIdentity)}.'
       '${_component(profileName)}.';
 
   String _recordKey(String profileName, String sessionId) {
@@ -101,6 +104,7 @@ class ComposerDraftStore {
     required String profileName,
     required String sessionId,
     required String text,
+    Iterable<ComposerReference> references = const [],
     required Iterable<AttachmentDraft> attachments,
     bool submissionUncertain = false,
     Iterable<QueuedPromptDraft> queuedPrompts = const [],
@@ -117,6 +121,7 @@ class ComposerDraftStore {
               profileName: profileName,
               sessionId: sessionId,
               text: text,
+              references: references.toList(growable: false),
               attachments: files,
               submissionUncertain: submissionUncertain,
               queuedPrompts: queue,
@@ -158,6 +163,7 @@ class ComposerDraftStore {
               profileName: profileName,
               sessionId: toSessionId,
               text: snapshot.text,
+              references: snapshot.references,
               attachments: snapshot.attachments,
               submissionUncertain: snapshot.submissionUncertain,
               queuedPrompts: snapshot.queuedPrompts,
@@ -239,9 +245,14 @@ class ComposerDraftStore {
   }) async {
     final text = record['text'];
     final rawAttachments = record['attachments'];
-    if (text is! String || rawAttachments is! List) return null;
+    if (text is! String ||
+        rawAttachments is! List ||
+        record['references'] is! List) {
+      return null;
+    }
     return ComposerDraftSnapshot(
       text: text,
+      references: ComposerReference.decode(record['references']),
       attachments: await _decodeAttachments(
         rawAttachments,
         forNewSession: forNewSession,
@@ -261,12 +272,14 @@ class ComposerDraftStore {
     required String text,
     required Iterable<AttachmentDraft> attachments,
     required bool submissionUncertain,
+    required Iterable<ComposerReference> references,
     required Iterable<QueuedPromptDraft> queuedPrompts,
     required bool queuePaused,
   }) => {
     'profile': profileName,
     'session': sessionId,
     'text': text,
+    'references': references.map((r) => r.toJson()).toList(),
     'submission_uncertain': submissionUncertain,
     'queue': queuedPrompts.map(_encodeQueuedPrompt).toList(),
     'queue_paused': queuePaused,
@@ -312,6 +325,7 @@ class ComposerDraftStore {
 
   Map<String, dynamic> _encodeQueuedPrompt(QueuedPromptDraft prompt) => {
     'text': prompt.text,
+    'references': prompt.references.map((r) => r.toJson()).toList(),
     'attachments': prompt.attachments.map(_encodeAttachment).toList(),
     if (prompt.submissionUncertain) 'submission_uncertain': true,
   };
@@ -330,6 +344,7 @@ class ComposerDraftStore {
         final submissionUncertain = record['submission_uncertain'];
         if (text is! String ||
             rawAttachments is! List ||
+            record['references'] is! List ||
             (submissionUncertain != null && submissionUncertain is! bool)) {
           throw const FormatException('Invalid queued prompt');
         }
@@ -341,6 +356,7 @@ class ComposerDraftStore {
           queued.add(
             QueuedPromptDraft(
               text: text,
+              references: ComposerReference.decode(record['references']),
               attachments: attachments,
               submissionUncertain: submissionUncertain == true,
             ),

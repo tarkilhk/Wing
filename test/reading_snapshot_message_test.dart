@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:wing/core/models/composer_reference.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/answer_versions.dart';
@@ -21,6 +22,137 @@ void main() {
             as Map,
       );
 
+  test(
+    'large prepared context retains authored text, images and reference identity',
+    () {
+      const ref = ComposerReference(
+        kind: ComposerReferenceKind.file,
+        token: '@file:/work/note.md',
+        target: '/work/note.md',
+      );
+      final prepared = PreparedComposerMessage(
+        message: 'Read ${ref.token}',
+        context: 'source' * 20000,
+        references: const [ref],
+      );
+      final saved = roundtrip({
+        'role': 'user',
+        'id': 19,
+        'content': '${prepared.wireText}\n@image:/cache/photo.png',
+      });
+      expect(
+        answerMessageDisplayText(saved),
+        'Read ${ref.token}\n@image:/cache/photo.png',
+      );
+      expect(jsonEncode(saved).length, lessThan(4096));
+      expect(
+        PreparedComposerMessage.fromContent(
+          saved['content'],
+        )!.references.single.target,
+        ref.target,
+      );
+    },
+  );
+
+  test('prepared structured reading retains native image parts', () {
+    final prepared = PreparedComposerMessage(
+      message: 'Read @hermes',
+      context: 'context' * 10000,
+    );
+    final saved = roundtrip({
+      'role': 'user',
+      'content': [
+        {'type': 'text', 'text': prepared.wireText},
+        {
+          'type': 'image_url',
+          'image_url': {'url': '/cache/photo.png'},
+        },
+      ],
+    });
+    final display = UserMessageContent.fromMessage(saved);
+    expect(display.text, 'Read @hermes');
+    expect(display.attachments.single.target, '/cache/photo.png');
+    expect(jsonEncode(saved).length, lessThan(4096));
+  });
+
+  test(
+    'prepared references retain native vision hints through reading cache',
+    () {
+      const reference = ComposerReference(
+        kind: ComposerReferenceKind.file,
+        token: '@file:/work/note.md',
+        target: '/work/note.md',
+      );
+      const authored = 'Read @file:/work/note.md and compare these images';
+      const paths = ['/cache/first image.png', '/cache/second.png'];
+      final suffix = [
+        '',
+        '',
+        ...paths.map((path) => '[Image attached at: $path]'),
+        ...List.filled(paths.length, '[screenshot]'),
+        '<memory-context>Model-only memory</memory-context>',
+      ].join('\n');
+      final prepared = PreparedComposerMessage(
+        message: authored,
+        context: 'large reference context' * 10000,
+        references: const [reference],
+      );
+      final wire = '${prepared.wireText}$suffix';
+      expect(PreparedComposerMessage.parse(wire)!.imageReferences, suffix);
+      for (final content in <Object>[
+        wire,
+        [
+          {'type': 'text', 'text': wire},
+          for (var i = 0; i < paths.length; i++)
+            {
+              'type': 'image_url',
+              'image_url': {'url': 'data:image/png;base64,image$i'},
+            },
+        ],
+      ]) {
+        final row = <String, dynamic>{'role': 'user', 'content': content};
+        final saved = roundtrip(row);
+        for (final value in [row, saved]) {
+          final message = TranscriptMessage.fromRow(value);
+          expect(message.text, authored);
+          expect(message.attachments.map((image) => image.target), paths);
+          expect(message.attachments.every((image) => image.isImage), isTrue);
+          expect(message.copyText, startsWith('$authored$suffix'));
+          expect(
+            message.copyText,
+            isNot(contains(PreparedComposerMessage.header)),
+          );
+          expect(
+            PreparedComposerMessage.fromContent(
+              value['content'],
+            )!.references.single.target,
+            reference.target,
+          );
+        }
+        expect(jsonEncode(saved).length, lessThan(4096));
+        expect(
+          PreparedComposerMessage.fromContent(saved['content'])!.context,
+          '',
+        );
+      }
+    },
+  );
+
+  test('prepared native hint without image evidence remains literal text', () {
+    const literal = '\n\n[Image attached at: /cache/example.png]';
+    final prepared = PreparedComposerMessage(
+      message: 'Explain this',
+      context: '',
+    );
+    for (final row in [
+      {'role': 'user', 'content': '${prepared.wireText}$literal'},
+      roundtrip({'role': 'user', 'content': '${prepared.wireText}$literal'}),
+    ]) {
+      final message = TranscriptMessage.fromRow(row);
+      expect(message.text, 'Explain this$literal');
+      expect(message.attachments, isEmpty);
+    }
+  });
   test(
     'tool reading facts survive without timestamps or execution authority',
     () {

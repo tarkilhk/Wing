@@ -205,7 +205,7 @@ class _BotsContentState extends State<BotsContent> {
   }
 
   Future<void> _openGroup(BotGroup group) => _push(
-    BotGroupScreen(createSession: () => widget.session.groupSession(group)),
+    BotGroupScreen(createSession: () => widget.session.openGroup(group)),
   );
   @override
   Widget build(BuildContext context) => AnimatedBuilder(

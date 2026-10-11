@@ -19,6 +19,8 @@ import 'package:wing/core/widgets/answer_actions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/process_batch_fixture.dart';
+import 'composer_references_test.dart' show ReferenceHost;
+import 'package:wing/core/models/composer_reference.dart';
 
 class AnswerHost {
   final gateways = <String, ProfileGateway>{};
@@ -40,6 +42,7 @@ class AnswerHost {
   bool clearListParent = false;
   int next = 0;
   int nextRow = 10000;
+  ReferenceHost? references;
 
   bool shown(Map<String, dynamic> message) => !isHiddenAnswerMessage(message);
 
@@ -96,7 +99,10 @@ class AnswerHost {
         currentName: 'a',
         activeName: 'a',
       ),
-      get: (path, query) async => path == 'sessions'
+      get: (path, query) async =>
+          references != null && (path == 'profiles' || path.startsWith('files'))
+          ? references!.read(path, query)
+          : path == 'sessions'
           ? {
               'offset': int.parse(query['offset']!),
               'limit': int.parse(query['limit']!),
@@ -143,6 +149,12 @@ class AnswerHost {
           'title': 'Branched chat',
         };
         switch (method) {
+          case 'session.context_breakdown':
+            return {
+              'context_used': 0,
+              'context_max': 32768,
+              'context_percent': 0,
+            };
           case 'projects.tree':
             return {'projects': <Map<String, dynamic>>[]};
           case 'session.resume':
@@ -723,13 +735,15 @@ void main() {}
     'regeneration replays visible text from duplicated persisted context',
     () async {
       const marker = '--- Attached Context ---';
-      const block = '''📄 @file:fixture.txt (4 tokens)
+      const block = '''📄 @file:/work/fixture.txt (4 tokens)
 ```text
 fixture-value-amber-729
 ```''';
-      const visible = '@file:fixture.txt\n\nSummarize this file.';
+      const visible = '@file:/work/fixture.txt\n\nSummarize this file.';
       const persisted =
           '$visible\n\n$marker\n\n$block\n\n$marker\n\n$block\n\n$block';
+      host.references = ReferenceHost()
+        ..files['/work/fixture.txt'] = 'Fresh source at replay';
       host.history('a', 'original')[0]
         ..remove('text')
         ..['content'] = persisted;
@@ -751,7 +765,9 @@ fixture-value-amber-729
       expect(regenerated, same(original));
       expect(submit.$2['session_id'], original.runtime.runtimeId);
       expect(submit.$2['truncate_before_row_id'], 1);
-      expect(submit.$2['text'], visible);
+      final prepared = PreparedComposerMessage.parse(submit.$2['text'])!;
+      expect(prepared.message, visible);
+      expect(prepared.context, contains('Fresh source at replay'));
       expect(submit.$2['text'], isNot(contains(marker)));
       expect(submit.$2['text'], isNot(contains('fixture-value-amber-729')));
       expect(original.composer.observation.text, 'Keep this draft');

@@ -126,6 +126,11 @@
       "feature": "conversation",
       "library": "lib/core/models/composer_action.dart"
     },
+    "lib/core/models/composer_reference.dart": {
+      "role": "domain",
+      "feature": "composer-references",
+      "library": "lib/core/models/composer_reference.dart"
+    },
     "lib/core/models/composer_work.dart": {
       "role": "domain",
       "feature": "conversation",
@@ -421,6 +426,11 @@
       "feature": "scheduled-tasks",
       "library": "lib/core/models/scheduled_task_edit.dart"
     },
+    "lib/core/models/server_reference.dart": {
+      "role": "domain",
+      "feature": "composer-references",
+      "library": "lib/core/models/server_reference.dart"
+    },
     "lib/core/models/session_control.dart": {
       "role": "domain",
       "feature": "conversation",
@@ -475,6 +485,11 @@
       "role": "domain",
       "feature": "conversation",
       "library": "lib/core/models/transcript_notice.dart"
+    },
+    "lib/core/models/transcript_reader.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/transcript_reader.dart"
     },
     "lib/core/models/transcript_reading.dart": {
       "role": "domain",
@@ -1166,6 +1181,16 @@
       "feature": "conversation",
       "library": "lib/core/services/composer_draft_store.dart"
     },
+    "lib/core/services/composer_reference_preparation.dart": {
+      "role": "application",
+      "feature": "composer-references",
+      "library": "lib/core/services/composer_reference_preparation.dart"
+    },
+    "lib/core/services/composer_reference_repository.dart": {
+      "role": "data",
+      "feature": "composer-references",
+      "library": "lib/core/services/composer_reference_repository.dart"
+    },
     "lib/core/services/composer_session.dart": {
       "role": "application",
       "feature": "conversation",
@@ -1487,6 +1512,11 @@
       "library": "lib/core/services/profile_workspace_controller.dart"
     },
     "lib/core/services/profile_workspace_recents.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/profile_workspace_controller.dart"
+    },
+    "lib/core/services/profile_workspace_references.dart": {
       "role": "application",
       "feature": "conversation",
       "library": "lib/core/services/profile_workspace_controller.dart"
@@ -1991,6 +2021,11 @@
       "feature": "markdown",
       "library": "lib/core/widgets/markdown_message_content.dart"
     },
+    "lib/core/widgets/mention_suggestions.dart": {
+      "role": "view",
+      "feature": "composer-references",
+      "library": "lib/core/widgets/mention_suggestions.dart"
+    },
     "lib/core/widgets/model_card.dart": {
       "role": "view",
       "feature": "model-selection",
@@ -2225,6 +2260,11 @@
       "role": "view",
       "feature": "chat-activity",
       "library": "lib/core/widgets/tool_activity_details.dart"
+    },
+    "lib/core/widgets/transcript_latest_button.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/transcript_latest_button.dart"
     },
     "lib/core/widgets/user_message_attachment.dart": {
       "role": "view",

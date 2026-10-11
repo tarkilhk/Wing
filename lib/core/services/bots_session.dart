@@ -24,11 +24,6 @@ class BotsSession extends ChangeNotifier {
     Future<BotsPreferences> Function()? loadPreferences,
   }) : _loadPreferences = loadPreferences ?? BotsPreferences.load;
   final groupReads = BotGroupReadState();
-  BotGroupSession groupSession(BotGroup group) => BotGroupSession(
-    repository(group.scope.connectionIdentity),
-    group,
-    reads: groupReads,
-  );
   final BotsSources _sources;
   final Future<BotsPreferences> Function() _loadPreferences;
   BotsPreferences? _preferences;
@@ -176,6 +171,15 @@ class BotsSession extends ChangeNotifier {
     return repository;
   }
 
+  /// Capture already enriched roster appearance for this room visit. Typing
+  /// references never starts another roster or avatar read.
+  BotGroupSession openGroup(BotGroup group) => BotGroupSession(
+    repository(group.scope.connectionIdentity),
+    group,
+    appearances: _bots[group.scope.connectionIdentity] ?? const [],
+    reads: groupReads,
+  );
+
   /// Screen identity is the profile, independent of its canonical conversation.
   /// Resolve actual roster metadata from the captured instance; opening a screen
   /// never creates a canonical chat or selects a different workspace.
@@ -273,10 +277,46 @@ class BotsSession extends ChangeNotifier {
   Future<Map<ProfileSessionKey, BotRecord>> appearancesForConversations(
     Iterable<ProfileSessionKey> conversations, {
     required bool Function() canRead,
+  }) => _appearancesFor(
+    conversations.toSet(),
+    (key) => key.workspace,
+    (bot, key) => bot.describesConversation(key),
+    canRead: canRead,
+  );
+
+  /// Reference candidates already supply canonical profile identity. Reuse
+  /// the passive cache and physical read admission without creating a chat.
+  Future<Map<WorkspaceScope, BotRecord>> appearancesForProfiles(
+    Iterable<WorkspaceScope> profiles, {
+    required bool Function() canRead,
+  }) => _appearancesFor(
+    profiles.toSet(),
+    (scope) => scope,
+    (bot, scope) => bot.scope == scope,
+    canRead: canRead,
+  );
+
+  /// Exact profile display facts for reference search, without admitting assets.
+  Future<Map<WorkspaceScope, BotRecord>> identitiesForProfiles(
+    Iterable<WorkspaceScope> profiles, {
+    required bool Function() canRead,
+  }) => _appearancesFor(
+    profiles.toSet(),
+    (scope) => scope,
+    (bot, scope) => bot.scope == scope,
+    canRead: canRead,
+    enrich: false,
+  );
+
+  Future<Map<K, BotRecord>> _appearancesFor<K>(
+    Set<K> keys,
+    WorkspaceScope Function(K) workspace,
+    bool Function(BotRecord, K) matches, {
+    required bool Function() canRead,
+    bool enrich = true,
   }) async {
-    final keys = conversations.toSet();
     final version = _appearanceVersion;
-    final appearances = <ProfileSessionKey, BotRecord>{};
+    final appearances = <K, BotRecord>{};
     final generation = _appearanceGeneration;
     bool current() => !_closed && generation == _appearanceGeneration;
     bool admit() => current() && canRead();
@@ -288,9 +328,9 @@ class BotsSession extends ChangeNotifier {
         final matching = keys
             .where(
               (key) =>
-                  source.scope.connectionId == key.workspace.connectionId &&
+                  source.scope.connectionId == workspace(key).connectionId &&
                   source.scope.connectionIdentity ==
-                      key.workspace.connectionIdentity,
+                      workspace(key).connectionIdentity,
             )
             .toSet();
         if (matching.isEmpty || !admit()) continue;
@@ -299,8 +339,20 @@ class BotsSession extends ChangeNotifier {
           final roster = await _appearanceRoster(source);
           if (!current()) return const {};
           for (final bot in roster) {
-            final owned = matching.where(bot.describesConversation).toList();
+            final owned = matching.where((key) => matches(bot, key)).toList();
             if (owned.isEmpty) continue;
+            if (!enrich) {
+              if (!admit()) continue;
+              final cached = _appearanceCache[bot.scope];
+              final identity =
+                  cached != null && _sameAppearanceMetadata(cached, bot)
+                  ? cached
+                  : bot;
+              for (final key in owned) {
+                appearances[key] = identity;
+              }
+              continue;
+            }
             var appearance = _appearanceCache[bot.scope];
             if (appearance == null ||
                 !_sameAppearanceMetadata(appearance, bot)) {

@@ -3,6 +3,7 @@ import 'studio_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/slash_command.dart';
+import '../models/composer_reference.dart';
 
 /// Slash emphasis is a text projection: selection, copy and IME stay native.
 class SkillComposerController extends TextEditingController {
@@ -11,11 +12,17 @@ class SkillComposerController extends TextEditingController {
 
   final _commands = <String, SlashCommand>{};
   Object? _scope;
+  List<ComposerReference> _references = const [];
+
+  void observeReferences(Iterable<ComposerReference> references) {
+    _references = List.unmodifiable(references);
+  }
 
   void setScope(Object? scope) {
     if (_scope == scope) return;
     _scope = scope;
     _commands.clear();
+    _references = const [];
   }
 
   void observeCommands(Iterable<SlashCommand> commands) {
@@ -35,7 +42,7 @@ class SkillComposerController extends TextEditingController {
     required bool withComposing,
   }) {
     final invocation = SlashInvocation.parse(text);
-    final references = SlashSkillReference.inText(text, _commands.keys)
+    final slashReferences = SlashSkillReference.inText(text, _commands.keys)
         .where(
           (reference) =>
               _commands[reference.text]!.isSkill ||
@@ -44,6 +51,7 @@ class SkillComposerController extends TextEditingController {
                   text.substring(0, reference.start).trim().isEmpty),
         )
         .toList();
+    final mentions = composerReferenceSpans(text, selected: _references);
     final composing =
         withComposing &&
             value.isComposingRangeValid &&
@@ -53,25 +61,34 @@ class SkillComposerController extends TextEditingController {
     final boundaries = <int>{
       0,
       text.length,
-      for (final reference in references) ...[reference.start, reference.end],
+      for (final reference in slashReferences) ...[
+        reference.start,
+        reference.end,
+      ],
+      for (final reference in mentions) ...[reference.start, reference.end],
       if (composing.isValid) ...[composing.start, composing.end],
     }.toList()..sort();
     TextSpan segment(int start, int end) {
-      final emphasized = references.where(
+      final emphasized = slashReferences.where(
         (reference) => reference.start <= start && reference.end >= end,
       );
       final command = emphasized.isEmpty
           ? null
           : _commands[emphasized.first.text];
+      final mention = mentions.any(
+        (reference) => reference.start <= start && reference.end >= end,
+      );
       final native = command != null && !command.isSkill;
       final mono = WingTokens.of(context).typography.mono;
       return TextSpan(
         text: text.substring(start, end),
         style: TextStyle(
-          color: command == null ? null : Theme.of(context).colorScheme.primary,
-          fontWeight: command == null
+          color: command == null && !mention
               ? null
-              : command.isSkill
+              : Theme.of(context).colorScheme.primary,
+          fontWeight: command == null && !mention
+              ? null
+              : mention || command?.isSkill == true
               ? FontWeight.w700
               : FontWeight.w400,
           fontFamily: native ? mono.fontFamily : null,

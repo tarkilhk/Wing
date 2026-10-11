@@ -1,3 +1,4 @@
+import 'composer_reference.dart';
 import 'attachment_draft.dart';
 import 'composer_action.dart';
 
@@ -31,12 +32,15 @@ final class ComposerQueueObservation {
   ComposerQueueObservation({
     required this.id,
     required this.text,
+    Iterable<ComposerReference> references = const [],
     required Iterable<ComposerAttachmentObservation> attachments,
     required this.submissionUncertain,
-  }) : attachments = List.unmodifiable(attachments);
+  }) : references = List.unmodifiable(references),
+       attachments = List.unmodifiable(attachments);
 
   final ComposerQueueId id;
   final String text;
+  final List<ComposerReference> references;
   final List<ComposerAttachmentObservation> attachments;
   final bool submissionUncertain;
 }
@@ -106,6 +110,7 @@ final class ComposerObservation {
   ComposerObservation({
     required this.revision,
     required this.text,
+    Iterable<ComposerReference> references = const [],
     required this.submissionUncertain,
     required Iterable<ComposerAttachmentObservation> attachments,
     required Iterable<ComposerQueueObservation> queue,
@@ -120,11 +125,13 @@ final class ComposerObservation {
     required this.steering,
     required this.restored,
     required this.error,
-  }) : attachments = List.unmodifiable(attachments),
+  }) : references = List.unmodifiable(references),
+       attachments = List.unmodifiable(attachments),
        queue = List.unmodifiable(queue);
 
   final int revision;
   final String text;
+  final List<ComposerReference> references;
   final bool submissionUncertain;
   final List<ComposerAttachmentObservation> attachments;
   final List<ComposerQueueObservation> queue;
@@ -148,10 +155,13 @@ final class ComposerObservation {
 final class ComposerSubmission {
   ComposerSubmission({
     required this.text,
+    Iterable<ComposerReference> references = const [],
     required Iterable<ComposerAttachmentObservation> attachments,
-  }) : attachments = List.unmodifiable(attachments);
+  }) : references = List.unmodifiable(references),
+       attachments = List.unmodifiable(attachments);
 
   final String text;
+  final List<ComposerReference> references;
   final List<ComposerAttachmentObservation> attachments;
 }
 
@@ -162,12 +172,15 @@ final class ComposerTransfer {
 final class ComposerSavedWork {
   ComposerSavedWork({
     required this.text,
+    Iterable<ComposerReference> references = const [],
     required Iterable<ComposerAttachmentObservation> attachments,
     required Iterable<ComposerQueueObservation> queuedPrompts,
     required this.queuePaused,
-  }) : attachments = List.unmodifiable(attachments),
+  }) : references = List.unmodifiable(references),
+       attachments = List.unmodifiable(attachments),
        queuedPrompts = List.unmodifiable(queuedPrompts);
   final String text;
+  final List<ComposerReference> references;
   final List<ComposerAttachmentObservation> attachments;
   final List<ComposerQueueObservation> queuedPrompts;
   final bool queuePaused;

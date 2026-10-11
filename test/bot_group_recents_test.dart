@@ -120,7 +120,12 @@ void main() {
     final reads = BotGroupReadState();
     addTearDown(reads.dispose);
     await reads.load();
-    final session = BotGroupSession(fixture.repository, group, reads: reads);
+    final session = BotGroupSession(
+      fixture.repository,
+      group,
+      reads: reads,
+      appearances: const [],
+    );
     addTearDown(session.dispose);
     await session.refresh();
     await session.acknowledgeVisibleMessages(1);

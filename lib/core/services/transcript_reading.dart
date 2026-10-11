@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../models/notification_focus.dart';
+import '../models/transcript_reader.dart';
 import '../models/gateway_activity.dart';
 import '../models/answer_versions.dart';
 import '../models/hermes_profile.dart';
@@ -15,7 +16,7 @@ import 'workspace_connection_failure.dart';
 
 /// Sole writer of a chat's transcript rows, read revisions and presentation IDs.
 /// It borrows transport; the coordinator supplies captured publication authority.
-final class TranscriptReading {
+final class TranscriptReading implements TranscriptReader {
   TranscriptReading({required this._gateway});
 
   static const _observedToolLimit = 256;
@@ -175,20 +176,30 @@ final class TranscriptReading {
     return true;
   }
 
+  @override
   List<Map<String, dynamic>> get messages => _messages;
+  @override
   String? get historySessionId => _historySessionId;
+  @override
   int? get nextHistoryOffset => _nextHistoryOffset;
   int get historyGeneration => _historyGeneration;
+  @override
   bool get historyLoading => _historyLoading;
+  @override
   String? get historyError => _historyError;
+  @override
   bool get historyUnavailable => _historyUnavailable;
+  @override
   double get historyScrollOffset => _historyScrollOffset;
+  @override
   String get streaming => _streaming;
   Map<String, dynamic>? get streamingMessage => _streamingMessage;
 
+  @override
   Object messagePresentationId(Map<String, dynamic> row) =>
       _messagePresentations[row] ??= Object();
 
+  @override
   void recordScrollOffset(double offset) {
     if (!_closed) _historyScrollOffset = offset;
   }

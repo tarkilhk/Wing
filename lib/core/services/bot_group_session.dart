@@ -4,12 +4,27 @@ import 'package:uuid/uuid.dart';
 import '../models/bots.dart';
 import 'bots_repository.dart';
 import 'bot_group_read_state.dart';
+import '../models/composer_reference.dart';
 
 /// The stock gateway drives group discussion, including while Wing is away.
 /// This owner replays its log and retains one immutable idempotent send attempt.
 class BotGroupSession extends ChangeNotifier {
-  BotGroupSession(this.repository, this.group, {required this.reads}) {
+  BotGroupSession(
+    this.repository,
+    this.group, {
+    required Iterable<BotRecord> appearances,
+    required this.reads,
+  }) {
     repository.retain();
+    for (final member in group.members) {
+      final matches = appearances.where(
+        (bot) =>
+            bot.scope.connectionId == group.scope.connectionId &&
+            bot.scope.connectionIdentity == group.scope.connectionIdentity &&
+            bot.profile.name == member.profile,
+      );
+      if (matches.length == 1) _appearances[member.id] = matches.single;
+    }
   }
   final BotGroupReadState reads;
   Future<void> acknowledgeVisibleMessages(int sequence) async {
@@ -28,10 +43,96 @@ class BotGroupSession extends ChangeNotifier {
 
   final BotsRepository repository;
   final BotGroup group;
+  final _appearances = <String, BotRecord>{};
+  List<ComposerReference> _references = const [];
+  List<ComposerReference> get composerReferences => _references;
+
+  MentionCompletion completeMentions(MentionQuery query) => MentionCompletion(
+    query: query,
+    items: [
+      for (final member in group.members)
+        if (member.handle.contains(query.agentSearch.toLowerCase()) ||
+            member.name.toLowerCase().contains(query.agentSearch.toLowerCase()))
+          MentionCandidate(
+            label: member.name,
+            detail: _memberToken(member),
+            appearance: _appearances[member.id],
+            reference: ComposerReference(
+              kind: ComposerReferenceKind.agent,
+              token: _memberToken(member),
+              target: member.id,
+            ),
+          ),
+      if ('everyone'.contains(query.agentSearch.toLowerCase()))
+        const MentionCandidate(
+          label: 'Everyone',
+          detail: 'All room members',
+          isCollective: true,
+          reference: ComposerReference(
+            kind: ComposerReferenceKind.agent,
+            token: '@everyone',
+            target: 'everyone',
+          ),
+        ),
+    ],
+  );
+
+  String _memberToken(BotGroupMember member) {
+    final base = composerAgentToken(member.name);
+    final duplicate =
+        group.members
+            .where(
+              (other) =>
+                  composerAgentToken(other.name).toLowerCase() ==
+                  base.toLowerCase(),
+            )
+            .length >
+        1;
+    return composerAgentToken(
+      member.name,
+      target: member.id,
+      claimed: _references,
+      qualifier:
+          base.toLowerCase() == '@everyone' ||
+              duplicate ||
+              _references.any(
+                (ref) => ref.token == base && ref.target != member.id,
+              )
+          ? member.handle
+          : null,
+    );
+  }
+
+  String _canonicalText(String text, List<ComposerReference> references) {
+    var wire = text;
+    for (final span in composerReferenceSpans(
+      text,
+      selected: references,
+    ).reversed) {
+      final ref = span.reference;
+      final token = ref.target == 'everyone' && ref.token == '@everyone'
+          ? '@everyone'
+          : '@${group.members.singleWhere((member) => member.id == ref.target).handle}';
+      // Stock room routing includes dots and colons in handles. Keep authored
+      // punctuation outside the canonical handle in the scalar wire payload.
+      final separator = span.end < text.length && '.:'.contains(text[span.end])
+          ? ' '
+          : '';
+      wire = wire.replaceRange(span.start, span.end, '$token$separator');
+    }
+    return wire;
+  }
+
+  void editMentions(String text, {ComposerReference? selected}) {
+    _references = retainComposerReferences(text, [..._references, ?selected]);
+  }
+
   final _events = <int, BotGroupEvent>{};
-  Map<String, BotRecord> _appearances = const {};
-  BotRecord? appearance(String profile) => _appearances[profile];
-  bool _appearanceStarted = false;
+  BotRecord? appearance(String profile) {
+    final matches = group.members.where((member) => member.profile == profile);
+    return matches.length == 1 ? _appearances[matches.single.id] : null;
+  }
+
   BotGroupRuntime? _runtime;
   BotGroupRuntime? get runtime => _runtime;
   bool _acting = false;
@@ -46,6 +147,7 @@ class BotGroupSession extends ChangeNotifier {
   String? _readError, _actionError;
   String? get error => _actionError ?? _readError;
   (String, String)? _pending;
+  String? _pendingWireText;
   String? get pendingText => _pending?.$2;
   Timer? _poll;
   bool _capturing = false;
@@ -58,39 +160,11 @@ class BotGroupSession extends ChangeNotifier {
     _visible = visible;
     _poll?.cancel();
     if (visible) {
-      if (!_appearanceStarted) {
-        _appearanceStarted = true;
-        unawaited(_loadAppearance());
-      }
       unawaited(refresh());
       _poll = Timer.periodic(
         const Duration(seconds: 3),
         (_) => unawaited(refresh()),
       );
-    }
-  }
-
-  Future<void> _loadAppearance() async {
-    try {
-      final roster = await repository.bots();
-      if (_closed) return;
-      for (final bot in roster.where(
-        (bot) =>
-            group.members.any((member) => member.profile == bot.profile.name),
-      )) {
-        final saved = await repository.enrich(
-          bot,
-          presence: BotPresence.unknown,
-        );
-        if (_closed) return;
-        _appearances = Map.unmodifiable({
-          ..._appearances,
-          bot.profile.name: saved,
-        });
-        notifyListeners();
-      }
-    } catch (_) {
-      // The room's delivered name/identity remains usable without appearance.
     }
   }
 
@@ -135,27 +209,65 @@ class BotGroupSession extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    final isNew = _pending == null;
     final attempt = _pending ?? (const Uuid().v4(), text.trim());
     _pending = attempt;
     _sending = true;
     _actionError = null;
     repository.retain();
     notifyListeners();
+    var dispatched = false;
     try {
+      if (isNew) {
+        final references = retainComposerReferences(attempt.$2, _references);
+        if (references.isNotEmpty) {
+          final members = await repository.groupMembers(group);
+          if (_closed) return false;
+          for (final ref in references) {
+            if (ref.target == 'everyone' && ref.token == '@everyone') continue;
+            final captured = group.members
+                .where((member) => member.id == ref.target)
+                .firstOrNull;
+            if (captured == null ||
+                !members.any(
+                  (member) =>
+                      member.id == captured.id &&
+                      member.handle == captured.handle &&
+                      member.profile == captured.profile,
+                )) {
+              _pending = null;
+              _pendingWireText = null;
+              _actionError =
+                  'A mentioned member is unavailable. Correct the mention before sending.';
+              return false;
+            }
+          }
+        }
+        _pendingWireText = _canonicalText(attempt.$2, references);
+      }
       await repository.sendGroup(
         group,
         attempt.$1,
-        attempt.$2,
+        _pendingWireText!,
         () => !_closed,
-        () {},
+        () {
+          dispatched = true;
+        },
       );
       _pending = null;
+      _pendingWireText = null;
+      _references = const [];
       if (!_closed) unawaited(refresh());
       return !_closed;
     } catch (_) {
       if (!_closed) {
-        _actionError =
-            'Message not confirmed. Retry sends the same message once.';
+        if (!dispatched) {
+          _pending = null;
+          _pendingWireText = null;
+        }
+        _actionError = dispatched
+            ? 'Message not confirmed. Retry sends the same message once.'
+            : 'The message could not be sent. Your text is kept. Retry.';
       }
       return false;
     } finally {

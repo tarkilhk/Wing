@@ -115,8 +115,21 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             listenable: controller,
             builder: (_, _) => ProfileTranscript(
               key: ValueKey(chat.key),
-              chat: chat,
-              controller: controller,
+              reader: chat.reading,
+              identity: chat.key,
+              needsInput: chat.runtime.needsInput,
+              turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+              openingContent: chat.runtime.opening
+                  ? ProfileTranscriptOpening(
+                      status: controller.connectionStatus,
+                      error: chat.runtime.openingError,
+                      onRetry: controller.resumeConnection,
+                    )
+                  : null,
+              notificationReading: chat.reading,
+              onAnswerVisible: (target) =>
+                  controller.notificationAnswerVisible(chat, target),
+              onRefreshHistory: () => controller.refreshHistory(chat),
               onLoadOlder:
                   loadOlder ?? () => controller.loadOlderMessages(chat),
               timeline: TranscriptTimeline.project(
@@ -235,8 +248,21 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                 final generation = callbackGeneration;
                 return ProfileTranscript(
                   key: ValueKey(chat.key),
-                  chat: chat,
-                  controller: controller,
+                  reader: chat.reading,
+                  identity: chat.key,
+                  needsInput: chat.runtime.needsInput,
+                  turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                  openingContent: chat.runtime.opening
+                      ? ProfileTranscriptOpening(
+                          status: controller.connectionStatus,
+                          error: chat.runtime.openingError,
+                          onRetry: controller.resumeConnection,
+                        )
+                      : null,
+                  notificationReading: chat.reading,
+                  onAnswerVisible: (target) =>
+                      controller.notificationAnswerVisible(chat, target),
+                  onRefreshHistory: () => controller.refreshHistory(chat),
                   onLoadOlder:
                       loadOlder ?? () => controller.loadOlderMessages(chat),
                   timeline: TranscriptTimeline.project(
@@ -499,8 +525,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ]);
       await rebuildPresentation(tester);
       expect(tester.getTopLeft(find.byKey(anchor)).dy, closeTo(before, 1));
-      expect(find.text('Latest'), findsOneWidget);
-      expect(find.text('New activity'), findsNothing);
+      expect(find.byTooltip('Latest'), findsOneWidget);
+      expect(find.byTooltip('New activity'), findsNothing);
       expect(find.byType(Text).evaluate().length, lessThan(35));
     },
   );
@@ -518,7 +544,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       await rebuildPresentation(tester);
       expect(find.byKey(anchor), findsOneWidget);
       expect(tester.getTopLeft(find.byKey(anchor)).dy, closeTo(before, 2));
-      expect(find.text('New activity'), findsOneWidget);
+      expect(find.byTooltip('New activity'), findsOneWidget);
       await tester.tap(jump);
       await tester.pumpAndSettle();
       expect(chat.reading.historyScrollOffset, closeTo(0, 1));
@@ -682,7 +708,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       chat.reading.installSavedHistory([...chat.reading.messages, row(621)]);
       await rebuildPresentation(tester);
       expect(tester.getTopLeft(find.byKey(anchor)).dy, closeTo(before, 2));
-      expect(find.text('New activity'), findsOneWidget);
+      expect(find.byTooltip('New activity'), findsOneWidget);
       await tester.tap(jump);
       await tester.pumpAndSettle();
       expect(chat.reading.historyScrollOffset, 0);
@@ -1331,7 +1357,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         'command': 'test command',
       });
       await rebuildPresentation(tester);
-      expect(find.text('Input needed'), findsOneWidget);
+      expect(find.byTooltip('Input needed'), findsOneWidget);
       final before = host.calls.length;
       await tester.tap(jump);
       await tester.pumpAndSettle();
@@ -1354,11 +1380,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       )!;
       runtime.receiveSecure(request);
       await rebuildPresentation(tester);
-      expect(find.text('Input needed'), findsOneWidget);
+      expect(find.byTooltip('Input needed'), findsOneWidget);
       runtime.reconcileOpenRequests(const []);
       await rebuildPresentation(tester);
-      expect(find.text('Input needed'), findsNothing);
-      expect(find.text('Latest'), findsOneWidget);
+      expect(find.byTooltip('Input needed'), findsNothing);
+      expect(find.byTooltip('Latest'), findsOneWidget);
       runtime.receiveSecure(request);
       await rebuildPresentation(tester);
       final before = host.calls.length;
@@ -1406,8 +1432,21 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             body: ListenableBuilder(
               listenable: controller,
               builder: (_, _) => ProfileTranscript(
-                chat: chat,
-                controller: controller,
+                reader: chat.reading,
+                identity: chat.key,
+                needsInput: chat.runtime.needsInput,
+                turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                openingContent: chat.runtime.opening
+                    ? ProfileTranscriptOpening(
+                        status: controller.connectionStatus,
+                        error: chat.runtime.openingError,
+                        onRetry: controller.resumeConnection,
+                      )
+                    : null,
+                notificationReading: chat.reading,
+                onAnswerVisible: (target) =>
+                    controller.notificationAnswerVisible(chat, target),
+                onRefreshHistory: () => controller.refreshHistory(chat),
                 onLoadOlder:
                     loadOlder ?? () => controller.loadOlderMessages(chat),
                 timeline: TranscriptTimeline.project(

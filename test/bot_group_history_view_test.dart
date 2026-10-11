@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/bots/bot_group_screen.dart';
 import 'package:wing/core/screens/bots/bot_group_history_screen.dart';
+import 'package:wing/core/screens/profile_transcript.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/services/bot_group_session.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
@@ -95,12 +97,15 @@ void main() {
             {
               'id': 2,
               'role': 'assistant',
+              'reasoning_content':
+                  'Inspect the delivered sources before drawing a conclusion.',
               'content':
                   '**Source review**\n\n- Read the project mission\n- Checked the evidence\n\nThe proposed changes are ready for discussion.',
               'timestamp': 1791756060.0,
             },
           ];
           final group = (await fixture.repository.groups()).single;
+          final appearances = await fixture.repository.bots();
           final frame = GlobalKey();
           await tester.pumpWidget(
             MaterialApp(
@@ -117,6 +122,7 @@ void main() {
                   fixture.repository,
                   group,
                   reads: BotGroupReadState(),
+                  appearances: appearances,
                 ),
               ),
             ),
@@ -136,6 +142,38 @@ void main() {
           await _settle(tester);
           expect(tester.takeException(), isNull, reason: 'Read-only history');
           expect(find.byType(BotGroupHistoryScreen), findsOneWidget);
+          expect(find.byType(ProfileTranscript), findsOneWidget);
+          final transcript = tester
+              .widget<ListView>(
+                find.byKey(const ValueKey('profile-transcript')),
+              )
+              .controller!;
+          transcript.jumpTo(transcript.position.maxScrollExtent);
+          await _settle(tester);
+          for (
+            var step = 0;
+            step < 20 &&
+                find.byType(ProfileToolActivitySection).evaluate().isEmpty &&
+                transcript.offset > 0;
+            step++
+          ) {
+            transcript.jumpTo(
+              (transcript.offset - 200).clamp(
+                0,
+                transcript.position.maxScrollExtent,
+              ),
+            );
+            await _settle(tester);
+          }
+          expect(find.byType(ProfileToolActivitySection), findsWidgets);
+          transcript.jumpTo(0);
+          await _settle(tester);
+          final shared = tester.widget<ProfileTranscript>(
+            find.byType(ProfileTranscript),
+          );
+          expect(shared.notificationReading, isNull);
+          expect(shared.onAnswerVisible, isNull);
+          expect(shared.openingContent, isNull);
           expect(find.byType(TextField), findsNothing);
           expect(
             find.text('Read only · This bot’s internal conversation'),
