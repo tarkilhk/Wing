@@ -33,6 +33,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/composer_action_button.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/widgets/wing_app_bar.dart';
+import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/core/widgets/health_alerts/health_alerts_scope.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
@@ -497,6 +498,10 @@ void main() {
         home: StatefulBuilder(
           builder: (_, setState) => BotsContent(
             session: session,
+            instanceHeader: const Align(
+              alignment: Alignment.centerLeft,
+              child: ServerConnectionLabel(label: 'Home server'),
+            ),
             viewState: view,
             onViewChanged: (next) => setState(() => view = next),
             onOpenMenu: () {},

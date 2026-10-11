@@ -30,12 +30,14 @@ class BotsContent extends StatefulWidget {
   const BotsContent({
     super.key,
     required this.session,
+    required this.instanceHeader,
     required this.viewState,
     required this.onViewChanged,
     required this.onOpenMenu,
     required this.onOpenChat,
   });
   final BotsSession session;
+  final Widget instanceHeader;
   final BotsViewState viewState;
   final ValueChanged<BotsViewState> onViewChanged;
   final VoidCallback onOpenMenu;
@@ -254,6 +256,7 @@ class _BotsContentState extends State<BotsContent> {
               icon: const Icon(Icons.menu),
             ),
             title: const Text('Bots'),
+            contextRow: widget.instanceHeader,
             actions: [
               PopupMenuButton<String>(
                 tooltip: 'Roster options',

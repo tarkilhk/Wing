@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/screens/bots/bots_content.dart';
 import 'package:wing/core/services/bots_session.dart';
@@ -378,6 +379,10 @@ void main() {
               ),
               home: StatefulBuilder(
                 builder: (context, setState) => BotsContent(
+                  instanceHeader: const Align(
+                    alignment: Alignment.centerLeft,
+                    child: ServerConnectionLabel(label: 'Home server'),
+                  ),
                   session: session,
                   viewState: view,
                   onViewChanged: (next) => setState(() => view = next),
@@ -413,7 +418,7 @@ void main() {
           final avatarAction = find.byTooltip(
             'Edit name & appearance for Atlas',
           );
-          expect(tester.getSize(avatarAction), const Size(48, 48));
+          expect(tester.getSize(avatarAction), const Size(56, 56));
           await tester.tap(find.text('Atlas').last);
           await tester.pump();
           expect(opened, ['atlas-chat']);

@@ -1,4 +1,5 @@
 import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'support/bots_fixture.dart';
 import 'package:wing/core/models/recent_conversation.dart';
@@ -250,6 +251,13 @@ void main() {
         await show(tester, scale: scale, brightness: brightness);
         await navigate(tester, AppDestination.activity);
         expect(find.text('Recents'), findsOneWidget);
+        expect(find.byType(ServerConnectionLabel), findsOneWidget);
+        expect(
+          tester
+              .widget<ServerConnectionLabel>(find.byType(ServerConnectionLabel))
+              .label,
+          controller.connection.label,
+        );
         expect(find.byType(FilterChip), findsNothing);
         await tester.scrollUntilVisible(
           find.text('Choose deployment region'),

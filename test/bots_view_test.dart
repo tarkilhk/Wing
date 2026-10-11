@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/transcript_message.dart';
@@ -1029,6 +1030,10 @@ void main() {
               ),
               home: StatefulBuilder(
                 builder: (context, setState) => BotsContent(
+                  instanceHeader: const Align(
+                    alignment: Alignment.centerLeft,
+                    child: ServerConnectionLabel(label: 'Home server'),
+                  ),
                   session: session,
                   viewState: view,
                   onViewChanged: (next) => setState(() => view = next),
@@ -1047,6 +1052,11 @@ void main() {
             lessThan(tester.getTopLeft(forge).dy),
           );
           expect(find.text('All saved instances'), findsNothing);
+          expect(find.byType(ServerConnectionLabel), findsOneWidget);
+          expect(
+            tester.getBottomLeft(find.byType(ServerConnectionLabel)).dy,
+            lessThanOrEqualTo(tester.getTopLeft(find.byType(TabBar)).dy),
+          );
           expect(find.byIcon(Icons.refresh), findsNothing);
           expect(find.byType(FloatingActionButton), findsOneWidget);
           expect(find.byTooltip('Create bot'), findsOneWidget);
@@ -1383,6 +1393,10 @@ void main() {
         theme: wingTheme(Brightness.dark),
         home: StatefulBuilder(
           builder: (context, setState) => BotsContent(
+            instanceHeader: const Align(
+              alignment: Alignment.centerLeft,
+              child: ServerConnectionLabel(label: 'Home server'),
+            ),
             session: session,
             viewState: view,
             onViewChanged: (next) => setState(() => view = next),
