@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:wing/core/models/answer_versions.dart';
 import 'package:wing/core/models/user_message_content.dart';
+import 'package:wing/core/models/reading_snapshot_message.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_image_preview.dart';
 import 'package:wing/core/widgets/profile_message.dart';
@@ -195,6 +196,149 @@ void main() {
         contains('[screenshot]'),
       );
     }
+  });
+
+  final nativePaths = List.generate(
+    5,
+    (index) => '/server/images/upload_${index + 6}.png',
+  );
+  final nativeCaption = 'Regarde les images, et prépare un assortiment.';
+  final nativeRaw = [
+    nativeCaption,
+    '',
+    ...nativePaths.map((path) => '[Image attached at: $path]'),
+    ...List.filled(5, '[screenshot]'),
+    '<memory-context>Private model context</memory-context>',
+  ].join('\n');
+  final nativeRow = <String, dynamic>{
+    'id': 42,
+    'role': 'user',
+    'content': nativeRaw,
+  };
+
+  test(
+    'native vision saved image markers survive history and reading cache',
+    () {
+      for (final row in [
+        nativeRow,
+        answerHistoryRows([nativeRow]).single,
+        projectReadingSnapshotMessage(nativeRow),
+      ]) {
+        final message = TranscriptMessage.fromRow(row);
+        expect(message.text, nativeCaption);
+        expect(message.attachments.map((file) => file.target), nativePaths);
+        expect(message.attachments.every((file) => file.isImage), isTrue);
+        expect(message.copyText, nativeRaw);
+      }
+    },
+  );
+
+  test('native vision markers retain spaces and CRLF server paths', () {
+    const raw =
+        'Compare these.\r\n\r\n'
+        '[Image attached at: /server/first image.png]\r\n'
+        '[Image attached at: /server/second image.png]\r\n'
+        '[screenshot]\r\n[screenshot]\r\n';
+    final message = TranscriptMessage.fromRow({'role': 'user', 'content': raw});
+    expect(message.text, 'Compare these.');
+    expect(message.attachments.map((file) => file.target), [
+      '/server/first image.png',
+      '/server/second image.png',
+    ]);
+    expect(message.copyText, raw.trim());
+  });
+
+  test('native vision image parts and hints describe the same attachments', () {
+    final message = TranscriptMessage.fromRow({
+      'role': 'user',
+      'content': [
+        {
+          'type': 'text',
+          'text':
+              'Compare these.\n\n'
+              '[Image attached at: /server/one.png]\n'
+              '[Image attached at: /server/two.png]',
+        },
+        {
+          'type': 'image_url',
+          'image_url': {'url': 'data:image/png;base64,AQ=='},
+        },
+        {
+          'type': 'image_url',
+          'image_url': {'url': 'data:image/png;base64,Ag=='},
+        },
+        {'type': 'text', 'text': '\n<memory-context>Context</memory-context>'},
+      ],
+    });
+    expect(message.text, 'Compare these.');
+    expect(message.attachments.map((file) => file.target), [
+      '/server/one.png',
+      '/server/two.png',
+    ]);
+  });
+
+  test('literal and incomplete native vision markers remain prose', () {
+    for (final raw in [
+      'Explain [Image attached at: /server/one.png]',
+      'Example:\n\n[Image attached at: /server/one.png]',
+      'Example:\n\n```\n[Image attached at: /server/one.png]\n[screenshot]\n```',
+      'Example:\n\n> [Image attached at: /server/one.png]\n[screenshot]',
+      'Compare.\n\n[Image attached at: ]\n[screenshot]',
+      'Compare.\n\n[Image attached at: /server/one.png]\n[screenshot]\n[screenshot]',
+      'Compare.\n\n[Image attached at: /server/one.png]\n[screenshot]\n'
+          '<memory-context>Incomplete context',
+      'Compare.\n\n[Image attached at: /server/one.png]\n[screenshot]\nMore prose.',
+    ]) {
+      final content = UserMessageContent.fromMessage({
+        'role': 'user',
+        'content': raw,
+      });
+      expect(content.text, raw);
+      expect(content.attachments, isEmpty);
+    }
+  });
+
+  testWidgets('native vision saved images display and open each original', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final requests = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ProfileMessage(
+              message: TranscriptMessage.fromRow(nativeRow),
+              loadAttachmentImage: (path) async {
+                requests.add(path);
+                return bytes;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await settleImages(tester);
+    expect(find.byType(UserMessageAttachmentTile), findsNWidgets(5));
+    expect(find.byType(Image), findsNWidgets(5));
+    expect(requests, nativePaths);
+    expect(find.textContaining('[Image attached at:'), findsNothing);
+    expect(find.textContaining('[screenshot]'), findsNothing);
+    expect(find.textContaining('Private model context'), findsNothing);
+    for (var index = 0; index < nativePaths.length; index++) {
+      await tester.tap(find.byType(UserMessageAttachmentTile).at(index));
+      await settleImages(tester);
+      final viewer = tester.widget<ChatImagePreview>(
+        find.byType(ChatImagePreview),
+      );
+      expect(viewer.title, 'upload_${index + 6}.png');
+      expect(viewer.bytes, orderedEquals(bytes));
+      await tester.pageBack();
+      await settleImages(tester);
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('image-only message is visible and opens a zoomable preview', (
