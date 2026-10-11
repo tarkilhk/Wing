@@ -10264,6 +10264,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "test/bot_avatar_animation_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/bots_contract_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"

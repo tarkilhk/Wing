@@ -916,7 +916,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             tooltip: 'Open navigation menu',
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
-          title: BotConversationTitle(title: chat.title, bot: bot),
+          title: BotConversationTitle(
+            title: chat.title,
+            bot: bot,
+            mood: chat.runtime.recovery == ChatRecovery.ready &&
+                    chat.runtime.liveSessionConfirmed &&
+                    !chat.runtime.needsInput &&
+                    (chat.runtime.executionActive || chat.runtime.compacting)
+                ? chat.runtime.mainActivity == ChatMainActivity.thinking
+                    ? BotAvatarMood.think
+                    : BotAvatarMood.work
+                : BotAvatarMood.idle,
+          ),
           contextHeight: stackChatScope ? 96 : 48,
           contextRow: LayoutBuilder(
             builder: (context, constraints) {

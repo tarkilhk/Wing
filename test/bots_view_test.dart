@@ -21,6 +21,7 @@ import 'package:wing/core/screens/bots/bots_create_screen.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/bots_fixture.dart';
+import 'support/composer_fixture.dart' show emitChatEvent;
 import 'support/administration_fixture.dart';
 import 'support/profile_browser_fixture.dart';
 import 'helpers/pump_markdown_widget.dart';
@@ -75,9 +76,18 @@ class _ReviewBinding extends AutomatedTestWidgetsFlutterBinding {
   bool get disableShadows => false;
 }
 
-Future<void> _capture(WidgetTester tester, GlobalKey frame, String name) async {
+Future<void> _capture(
+  WidgetTester tester,
+  GlobalKey frame,
+  String name, {
+  bool motion = false,
+}) async {
   if (!_export) return;
-  await tester.pumpAndSettle();
+  if (motion) {
+    await tester.pump(const Duration(milliseconds: 100));
+  } else {
+    await tester.pumpAndSettle();
+  }
   await tester.runAsync(() async {
     final boundary =
         frame.currentContext!.findRenderObject()! as RenderRepaintBoundary;
@@ -200,6 +210,132 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets(
+    'canonical header borrows only its own live activity for motion',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      final browser = _BotConversationBrowser();
+      final controller = ProfileWorkspaceController(
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Home server',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
+        ),
+        connectionIdentity: 'instance-1',
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: browser.gateway,
+      );
+      await controller.initialize();
+      final scope = controller.current!.scope;
+      await controller.openSession(ProfileSessionKey(scope, 'canonical-root'));
+      final bots = BotsFixture();
+      bots.profiles
+        ..clear()
+        ..add(BotsFixture.profile(scope.profileName, 'Atlas'));
+      bots.profiles.single['canonical_session'] = {
+        'id': 'canonical-root',
+        'resolved_id': 'canonical-tip',
+      };
+      bots.profiles.single['ui_meta']['hermes-bots']['imageKind'] = 'shape';
+      var reads = 0;
+      bots.readHook = (_, _, _) async {
+        reads++;
+        return null;
+      };
+      final frame = GlobalKey();
+      var brightness = Brightness.dark;
+      var scale = 1.0;
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      Widget host() => MaterialApp(
+        theme: wingTheme(brightness),
+        debugShowCheckedModeBanner: false,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
+        home: RepaintBoundary(
+          key: frame,
+          child: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () =>
+                BotsSession((_) async => [bots.repository]),
+          ),
+        ),
+      );
+      await tester.pumpWidget(host());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.settleMarkdown();
+      final face = find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byType(LiveBotAvatar),
+      );
+      expect(face, findsOneWidget);
+      BotAvatarMood mood() => tester.widget<LiveBotAvatar>(face).mood;
+      expect(mood(), BotAvatarMood.idle);
+      final chat = controller.current!.chat!;
+      emitChatEvent(controller, chat, 'message.start');
+      await tester.pump();
+      expect(mood(), BotAvatarMood.work);
+      emitChatEvent(controller, chat, 'reasoning.delta', {
+        'text': 'Considering the plan.',
+      });
+      await tester.pump();
+      expect(mood(), BotAvatarMood.think);
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.settleMarkdown();
+      await _capture(tester, frame, 'animated-canonical-header', motion: true);
+      for (final theme in Brightness.values) {
+        for (final textScale in [1.0, 2.0]) {
+          brightness = theme;
+          scale = textScale;
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          await tester.pumpWidget(host());
+          await tester.pump(const Duration(milliseconds: 450));
+          await tester.settleMarkdown();
+          expect(tester.getSize(face), const Size(32, 32));
+          await _capture(
+            tester,
+            frame,
+            'animated-canonical-header-${theme.name}-$scale',
+            motion: true,
+          );
+          expect(tester.takeException(), isNull);
+        }
+      }
+      emitChatEvent(controller, chat, 'message.complete', {
+        'text': 'The plan is ready.',
+      });
+      await tester.pump();
+      expect(mood(), BotAvatarMood.idle);
+      final before = reads;
+      await tester.pump(const Duration(seconds: 1));
+      expect(reads, before);
+      expect(bots.commands, isEmpty);
+      expect(tester.getSize(face), const Size(32, 32));
+      await controller.openSession(ProfileSessionKey(scope, 'ordinary'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.byType(LiveBotAvatar), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+      appPreferences.dispose();
+    },
+  );
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(

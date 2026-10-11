@@ -17,3 +17,27 @@ The New chat and Fork icons use Lucide's `square-pen` and `git-fork` from `lucid
 The website self-hosts Latin subsets of Manrope and Source Sans 3, distributed under the SIL Open Font License 1.1. Their copyright and license notices are retained in [Manrope's OFL notice](website/assets/fonts/MANROPE-OFL.txt) and [Source Sans 3's OFL notice](website/assets/fonts/SOURCE-SANS-3-OFL.txt). These web fonts are not bundled in the Android app.
 
 Syntax highlighting uses [re_highlight](https://pub.dev/packages/re_highlight) 0.0.3, and the read-only source viewport uses [re_editor](https://pub.dev/packages/re_editor) 0.10.0. Both are by Reqable and distributed under the MIT license. Their dependency licenses are retained in Flutter's bundled notices.
+
+Bot face motion adapts the timing formulas from [Hermes desktop's avatar renderer](https://github.com/NousResearch/hermes-agent/blob/ae3598c7cdf3a2e4a6f60d0d869602813dded97a/apps/desktop/src/plugins/hermes-bots/avatar.tsx), under the following license:
+
+MIT License
+
+Copyright (c) 2026 Nous Research
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

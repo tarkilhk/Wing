@@ -24,7 +24,8 @@ class BotProfileEditSession extends ChangeNotifier {
   String get shape => _shape;
   String get color => _color;
   Uint8List? _image;
-  Uint8List? get image => _assetDirty ? _image : _bot.avatar;
+  Uint8List? get image =>
+      _assetDirty || _imageMetadataPending ? _image : _bot.avatar;
   int _assetVersion = 0;
   Timer? _autosave;
   Completer<bool>? _pending;
@@ -48,12 +49,14 @@ class BotProfileEditSession extends ChangeNotifier {
     _shape = shape ?? _shape;
     _color = color ?? _color;
     if (shape != null) {
-      if (image != null) {
-        _image = null;
+      // A deliberate selection, including the current displayed default,
+      // establishes the shared appearance choice without inferring old assets.
+      if (image != null || _bot.hasAvatar) {
         _assetDirty = true;
-        _imageMetadataPending = true;
-        _assetVersion++;
       }
+      _image = null;
+      _imageMetadataPending = true;
+      _assetVersion++;
     }
     _trackEdits();
     if (!_conflicted) {
@@ -171,7 +174,9 @@ class BotProfileEditSession extends ChangeNotifier {
             _bot,
             {
               if (_edited.contains('title')) 'title': title.trim(),
-              if (_edited.contains('shape')) 'shape': shape,
+              if (_edited.contains('shape') ||
+                  (_imageMetadataPending && image == null))
+                'shape': shape,
               if (_edited.contains('color')) 'color': color,
               if (_edited.contains('shape') ||
                   _edited.contains('color') ||
@@ -228,8 +233,14 @@ class BotProfileEditSession extends ChangeNotifier {
       if (_closed) return;
       _bot = await repository.enrich(fresh);
       if (_closed) return;
+      if (_imageMetadataPending && _image == null && _bot.hasAvatar) {
+        _assetDirty = true;
+      }
       if (!_edited.contains('title')) _title = _bot.title;
-      if (!_edited.contains('shape')) _shape = _bot.shape;
+      if (!_edited.contains('shape') &&
+          !(_imageMetadataPending && image == null)) {
+        _shape = _bot.shape;
+      }
       if (!_edited.contains('color')) _color = _bot.color;
       _trackEdits();
       _conflicted = false;

@@ -965,6 +965,96 @@ void main() {
     expect(fixture.commands, isEmpty);
   });
   testWidgets(
+    'reselecting the displayed shape saves an explicit shared choice',
+    (tester) async {
+      final fixture = BotsFixture();
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        (await fixture.repository.bots()).first,
+      );
+      addTearDown(edit.dispose);
+      expect(edit.bot.metadata['imageKind'], isNull);
+      edit.change(shape: edit.shape);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(edit.bot.metadata['imageKind'], 'shape');
+      expect(edit.bot.metadata['shape'], edit.shape);
+      expect(edit.dirty, false);
+      expect(fixture.commands.single.$2, 'profiles.configure');
+    },
+  );
+  testWidgets('an in-flight save cannot acknowledge a later shape selection', (
+    tester,
+  ) async {
+    final fixture = BotsFixture();
+    final gate = Completer<void>();
+    fixture.beforeCommand = () => gate.future;
+    final edit = BotProfileEditSession(
+      fixture.repository,
+      (await fixture.repository.bots()).first,
+    );
+    addTearDown(edit.dispose);
+    edit.change(shape: edit.shape);
+    final saved = edit.flush();
+    await tester.pump();
+    edit.change(shape: 'triangle');
+    gate.complete();
+    await tester.pump();
+    expect(await saved, true);
+    expect(fixture.commands.length, 2);
+    expect(edit.bot.metadata['shape'], 'triangle');
+    expect(edit.bot.metadata['imageKind'], 'shape');
+    expect(edit.dirty, false);
+  });
+  testWidgets('selecting a shape clears an asset even when its read failed', (
+    tester,
+  ) async {
+    final fixture = BotsFixture();
+    fixture.profiles.first['has_avatar'] = true;
+    final bot = (await fixture.repository.bots()).first;
+    final edit = BotProfileEditSession(fixture.repository, bot);
+    addTearDown(edit.dispose);
+    expect(edit.image, isNull);
+    edit.change(shape: edit.shape);
+    expect(await edit.flush(), true);
+    expect(edit.bot.hasAvatar, false);
+    expect(edit.bot.metadata['imageKind'], 'shape');
+    expect(fixture.commands.last.$2, 'profiles.set_asset');
+    expect(fixture.commands.last.$3['clear'], true);
+  });
+  testWidgets(
+    'reload retains an explicit shape choice across a desktop conflict',
+    (tester) async {
+      final fixture = BotsFixture()..conflict = true;
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        (await fixture.repository.bots()).first,
+      );
+      addTearDown(edit.dispose);
+      final chosen = edit.shape;
+      edit.change(shape: chosen);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(edit.conflicted, true);
+      fixture.conflict = false;
+      fixture.profiles.first['ui_meta']['hermes-bots']['shape'] = 'triangle';
+      fixture.profiles.first['ui_meta']['hermes-bots']['imageKind'] = 'photo';
+      fixture.profiles.first['has_avatar'] = true;
+      fixture.profiles.first['ui_meta_revisions']['hermes-bots'] = 3;
+      fixture.readHook = (_, method, _) async => method == 'profiles.get_asset'
+          ? {'found': true, 'data': _avatarPng}
+          : null;
+      await edit.reload();
+      expect(edit.shape, chosen);
+      expect(edit.image, isNull);
+      expect(edit.needsReview, true);
+      await tester.pump(const Duration(seconds: 1));
+      expect(fixture.commands.length, 1);
+      expect(await edit.flush(), true);
+      expect(edit.bot.metadata['shape'], chosen);
+      expect(edit.bot.metadata['imageKind'], 'shape');
+      expect(edit.bot.hasAvatar, false);
+    },
+  );
+  testWidgets(
     'appearance autosave coalesces typing and drains edits made during a write',
     (tester) async {
       final fixture = BotsFixture();
