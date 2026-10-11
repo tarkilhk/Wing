@@ -43,6 +43,70 @@ extension _WorkspaceReferences on ProfileWorkspaceController {
     );
   }
 
+  Future<MentionCompletion> _completeMention(
+    ProfileChat chat,
+    MentionQuery query, {
+    required BotsSession bots,
+    required bool Function() canRead,
+    String? directory,
+  }) async {
+    final resource = _owned(chat), runtime = chat.runtime.runtimeId;
+    void requireCurrent() {
+      if (_closed ||
+          !canRead() ||
+          !identical(_owned(chat), resource) ||
+          chat.runtime.runtimeId != runtime) {
+        throw StateError('The reference completion owner changed.');
+      }
+    }
+
+    final cwd = await _referenceCwd(chat, requireCurrent);
+    final completion = await _referencePreparation(chat, requireCurrent)
+        .complete(
+          query,
+          cwd: cwd,
+          directory: directory,
+          currentAgent: chat.key.workspace.profileName,
+          requireCurrent: requireCurrent,
+        );
+    final workspace = chat.key.workspace;
+    WorkspaceScope scope(String profile) => WorkspaceScope(
+      connectionId: workspace.connectionId,
+      connectionIdentity: workspace.connectionIdentity,
+      profileName: profile,
+    );
+    final profiles = completion.items
+        .where((item) => item.reference.kind == ComposerReferenceKind.agent)
+        .map((item) => scope(item.reference.target));
+    if (profiles.isEmpty) return completion;
+    final appearances = await bots.appearancesForProfiles(
+      profiles,
+      canRead: () =>
+          !_closed &&
+          canRead() &&
+          identical(_owned(chat), resource) &&
+          chat.runtime.runtimeId == runtime,
+    );
+    requireCurrent();
+    return MentionCompletion(
+      query: completion.query,
+      directory: completion.directory,
+      parent: completion.parent,
+      warning: completion.warning,
+      items: [
+        for (final item in completion.items)
+          MentionCandidate(
+            reference: item.reference,
+            label: item.label,
+            detail: item.detail,
+            appearance: item.reference.kind == ComposerReferenceKind.agent
+                ? appearances[scope(item.reference.target)]
+                : null,
+          ),
+      ],
+    );
+  }
+
   Future<String?> _referenceCwd(
     ProfileChat chat,
     void Function() requireCurrent,

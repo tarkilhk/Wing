@@ -5794,26 +5794,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<MentionCompletion> completeMention(
     ProfileChat chat,
     MentionQuery query, {
+    required BotsSession bots,
+    required bool Function() canRead,
     String? directory,
-  }) async {
-    final resource = _owned(chat), runtime = chat.runtime.runtimeId;
-    void requireCurrent() {
-      if (_closed ||
-          !identical(_owned(chat), resource) ||
-          chat.runtime.runtimeId != runtime) {
-        throw StateError('The reference completion owner changed.');
-      }
-    }
-
-    final cwd = await _referenceCwd(chat, requireCurrent);
-    return _referencePreparation(chat, requireCurrent).complete(
-      query,
-      cwd: cwd,
-      directory: directory,
-      currentAgent: chat.key.workspace.profileName,
-      requireCurrent: requireCurrent,
-    );
-  }
+  }) => _completeMention(
+    chat,
+    query,
+    bots: bots,
+    canRead: canRead,
+    directory: directory,
+  );
 
   Future<SlashCompletion> completeCommand(ProfileChat chat, String text) async {
     final resource = _owned(chat);

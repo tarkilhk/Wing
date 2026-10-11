@@ -1956,11 +1956,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       key: ValueKey(('references', chat.key, referenceEdit)),
                       composer: _composer,
                       composerFocus: _composerFocus,
-                      load: (query, directory) => controller.completeMention(
-                        chat,
-                        query,
-                        directory: directory,
-                      ),
+                      load: (query, directory, canRead) =>
+                          controller.completeMention(
+                            chat,
+                            query,
+                            directory: directory,
+                            bots: _bots,
+                            canRead: canRead,
+                          ),
                       select: (text, reference) async {
                         if (chat.composer.observation.editing !=
                             referenceEdit) {
