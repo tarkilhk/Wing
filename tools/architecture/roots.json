@@ -10469,6 +10469,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/composer_attachment_preparation_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
       "path": "test/composer_draft_record_work_test.dart",
       "area": "test",
       "provenance": "tracked"

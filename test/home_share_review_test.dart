@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/attachment_draft.dart';
+import 'package:wing/core/widgets/composer_attachment_tile.dart';
 import 'package:wing/core/services/android_share_intent_service.dart';
 import 'package:wing/core/services/attachment_draft_service.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -489,7 +490,11 @@ void main() {
       final appPreferences = fixture.appPreferences;
       await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
       final connection = manager.getConnections().single;
+      final expectedText = outcome == 'saved'
+          ? 'Existing draft updated'
+          : 'Existing draft';
       final attachments = _CameraAttachments()
+        ..delay = outcome == 'cancelled' ? null : Completer<void>()
         ..fail = outcome == 'preparation failed';
       final controller = _controller(
         connection,
@@ -531,7 +536,7 @@ void main() {
               expect((call.arguments as Map)['id'], payload.id);
               final saved = drafts.summaries(profileName: 'default').single;
               expect(saved.sessionId, chat.key.sessionId);
-              expect(saved.text, 'Existing draft');
+              expect(saved.text, expectedText);
               expect(saved.attachmentCount, 1);
               if (outcome == 'acknowledgement failed') {
                 throw PlatformException(code: 'ack-failed');
@@ -555,7 +560,39 @@ void main() {
       await tester.tap(find.byTooltip('Attach file'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Camera'));
+      if (outcome != 'cancelled') {
+        for (var attempt = 0; attempt < 100; attempt++) {
+          await tester.pump(const Duration(milliseconds: 10));
+          if (chat.composer.observation.preparing) break;
+        }
+        expect(chat.composer.observation.preparing, isTrue);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.byType(ComposerPendingAttachmentTile), findsOneWidget);
+        expect(find.byTooltip('Adding photo…'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('composer-image-thumbnail')),
+          findsNothing,
+        );
+        expect(
+          tester.state(find.byType(ProfileWorkspaceScreen)),
+          same(originalScreen),
+        );
+        expect(
+          tester.widget<TextField>(composerFinder).controller,
+          same(composer.controller),
+        );
+        expect(tester.widget<TextField>(composerFinder).enabled, isTrue);
+        if (outcome == 'saved') {
+          await tester.enterText(composerFinder, expectedText);
+          await tester.pump();
+          composer.controller!.selection = const TextSelection.collapsed(
+            offset: 4,
+          );
+        }
+        attachments.delay!.complete();
+      }
       await tester.pumpAndSettle();
+      expect(find.byType(ComposerPendingAttachmentTile), findsNothing);
 
       expect(find.text('Add shared content'), findsNothing);
       expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
@@ -572,7 +609,7 @@ void main() {
         composer.controller!.selection,
         const TextSelection.collapsed(offset: 4),
       );
-      expect(chat.composer.observation.text, 'Existing draft');
+      expect(chat.composer.observation.text, expectedText);
       expect(chat.reading.messages, isEmpty);
       final added = !attachments.fail && outcome != 'cancelled';
       expect(acknowledgements, added ? 1 : 0);
@@ -610,7 +647,7 @@ void main() {
               if (call.method == 'acknowledgeShare') {
                 acknowledgements++;
                 final saved = drafts.summaries(profileName: 'default').single;
-                expect(saved.text, 'Existing draft');
+                expect(saved.text, expectedText);
                 expect(saved.attachmentCount, 2);
               }
               return null;
