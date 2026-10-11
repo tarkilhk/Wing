@@ -1,5 +1,6 @@
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
+import 'package:wing/core/widgets/recent_identity_card.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'support/bots_fixture.dart';
 import 'package:wing/core/models/recent_conversation.dart';
@@ -266,10 +267,22 @@ void main() {
         );
         expect(find.text('Choose deployment region'), findsOneWidget);
         await snapshot(tester, 'recents-${brightness.name}-$scale');
+        tester
+            .state<ScrollableState>(find.byType(Scrollable).first)
+            .position
+            .jumpTo(0);
         final pending = Completer<void>();
         fixture.pageDelays[('personal', 0)] = pending;
         final refresh = controller.refreshRecents();
         await tester.pump();
+        expect(
+          tester.getTopLeft(find.byType(RecentIdentityCard).first).dy -
+              tester
+                  .getBottomLeft(find.byType(LinearProgressIndicator).first)
+                  .dy,
+          greaterThanOrEqualTo(8),
+          reason: 'The refresh animation needs space above the first chat.',
+        );
         await snapshot(tester, 'recents-loading-${brightness.name}-$scale');
         pending.complete();
         await refresh;
