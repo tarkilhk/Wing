@@ -84,7 +84,9 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                   ),
                 ),
                 if (state.loading && state.hasLoadedMessages)
-                  const LinearProgressIndicator(),
+                  const LinearProgressIndicator(
+                    semanticsLabel: 'Searching messages',
+                  ),
                 Expanded(
                   child: state.loading && !state.hasLoadedMessages
                       ? const Center(child: CircularProgressIndicator())
@@ -213,11 +215,7 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                                 onPressed: state.loading || state.retired
                                     ? null
                                     : _session.loadOlder,
-                                child: Text(
-                                  state.loading
-                                      ? 'Searching older messages…'
-                                      : 'Search older messages',
-                                ),
+                                child: const Text('Search older messages'),
                               ),
                           ],
                         ),

@@ -55,7 +55,7 @@ class _ReviewState extends State<NotificationApprovalReview> {
       final status = !pending
           ? 'This approval is no longer pending.'
           : sending
-          ? 'Sending decision…'
+          ? null
           : error ??
                 (offline
                     ? 'Offline—approval not sent. Reconnect to retry.'

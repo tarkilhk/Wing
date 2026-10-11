@@ -111,7 +111,7 @@ void main() {
   }
 
   Future<void> openConfirmation(WidgetTester tester) async {
-    await tester.tap(find.text('Update backend'));
+    await tester.tap(find.byTooltip('Update backend'));
     await tester.pumpAndSettle();
   }
 
@@ -129,11 +129,11 @@ void main() {
     expect(find.text('1.2.3'), findsOneWidget);
     expect(find.text('Install method: pipx'), findsOneWidget);
     expect(find.text('Up to date'), findsOneWidget);
-    expect(find.text('Changes in this update'), findsNothing);
-    expect(find.text('Update backend'), findsNothing);
-    expect(find.text('Check update progress'), findsNothing);
+    expect(find.byTooltip('Changes in this update'), findsNothing);
+    expect(find.byTooltip('Update backend'), findsNothing);
+    expect(find.byTooltip('Check update progress'), findsNothing);
 
-    await tester.tap(find.text('Check for updates'));
+    await tester.tap(find.byTooltip('Check for updates'));
     await tester.pumpAndSettle();
     expect(host.reads, hasLength(4));
   });
@@ -149,7 +149,7 @@ void main() {
         findsOneWidget,
       );
       final reads = host.reads.length;
-      await tester.tap(find.text('Changes in this update'));
+      await tester.tap(find.byTooltip('Changes in this update'));
       await tester.pumpAndSettle();
       expect(find.text('Production host'), findsOneWidget);
       expect(
@@ -163,7 +163,7 @@ void main() {
       expect(host.posts, isEmpty);
       await tester.pageBack();
       await tester.pumpAndSettle();
-      expect(find.text('Update backend'), findsOneWidget);
+      expect(find.byTooltip('Update backend'), findsOneWidget);
     },
   );
 
@@ -263,7 +263,7 @@ void main() {
     await tester.pumpAndSettle();
     host.statusFails = true;
 
-    await tester.tap(find.text('Check update progress'));
+    await tester.tap(find.byTooltip('Check update progress'));
     await tester.pumpAndSettle();
 
     expect(
@@ -298,7 +298,7 @@ void main() {
       'summary': 'partial',
     };
 
-    await tester.tap(find.text('Check update progress'));
+    await tester.tap(find.byTooltip('Check update progress'));
     await tester.pumpAndSettle();
 
     expect(
@@ -452,6 +452,13 @@ void main() {
       MaterialApp(home: BackendVersionCard(updateController: controller)),
     );
     await tester.pump();
+    expect(find.text('Checking for updates…'), findsNothing);
+    expect(find.text('Checking…'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.bySemanticsLabel('Checking for updates'), findsOneWidget);
+    expect(find.text('Check for updates'), findsNothing);
+    expect(find.byTooltip('Check for updates'), findsOneWidget);
+
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     pending.complete(_available);
     await tester.pump();
@@ -465,7 +472,7 @@ void main() {
     await showCard(tester, host, size: const Size(320, 640), textScale: 2);
     await check(tester);
     expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.text('Update backend'));
+    await tester.ensureVisible(find.byTooltip('Update backend'));
     await tester.pumpAndSettle();
     await openConfirmation(tester);
     expect(find.text('Update backend on Production host?'), findsOneWidget);

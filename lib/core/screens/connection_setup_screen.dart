@@ -795,38 +795,42 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
     };
     return Semantics(
       liveRegion: true,
-      child: Row(
-        children: [
-          SizedBox(
-            width: 24,
-            height: 24,
-            child: pending && !MediaQuery.disableAnimationsOf(context)
-                ? CircularProgressIndicator(strokeWidth: 2, color: color)
-                : Icon(
-                    failed
-                        ? Icons.error_outline
-                        : available
-                        ? Icons.link
-                        : Icons.more_horiz,
-                    color: color,
-                  ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: Theme.of(context).textTheme.titleSmall),
-                Text(
-                  detail,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: color),
-                ),
-              ],
+      label: '$label, $detail',
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: pending && !MediaQuery.disableAnimationsOf(context)
+                  ? CircularProgressIndicator(strokeWidth: 2, color: color)
+                  : Icon(
+                      failed
+                          ? Icons.error_outline
+                          : available
+                          ? Icons.link
+                          : Icons.more_horiz,
+                      color: color,
+                    ),
             ),
-          ),
-        ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: Theme.of(context).textTheme.titleSmall),
+                  if (!pending)
+                    Text(
+                      detail,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: color),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

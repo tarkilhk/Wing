@@ -74,7 +74,9 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('Loading usage…'), findsOneWidget);
+      expect(find.text('Loading usage…'), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.bySemanticsLabel('Loading usage'), findsOneWidget);
       expect(server.requests, hasLength(3));
       expect(
         server.requests.every((r) => r.$3['profile'] == 'personal'),
@@ -273,8 +275,11 @@ void main() {
               find.textContaining('Could not load daily usage.'),
               findsOneWidget,
             );
-            await tester.scrollUntilVisible(find.text('Refresh'), 300);
-            await tester.tap(find.text('Refresh'));
+            await tester.scrollUntilVisible(
+              find.byTooltip('Refresh usage'),
+              300,
+            );
+            await tester.tap(find.byTooltip('Refresh usage'));
             await finishReads();
             expect(find.textContaining('Could not load'), findsWidgets);
             debugPrint(

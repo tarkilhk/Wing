@@ -472,16 +472,16 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('Reconnect MCP tools'), findsNothing);
-        expect(find.text('Check update progress'), findsNothing);
+        expect(find.byTooltip('Check update progress'), findsNothing);
         expect(
           admin.requests.where((r) => r.$2 == 'hermes/update/check').length,
           checksBefore + 1,
         );
         await screenshot(tester, '${brightness.name}-$scale-versions');
-        await tester.ensureVisible(find.text('Changes in this update'));
+        await tester.ensureVisible(find.byTooltip('Changes in this update'));
         await tester.pumpAndSettle();
         final requestCount = admin.requests.length;
-        await tester.tap(find.text('Changes in this update'));
+        await tester.tap(find.byTooltip('Changes in this update'));
         await tester.pumpAndSettle();
         expect(find.text('Showing 2 of 3 commits'), findsOneWidget);
         await tester.scrollUntilVisible(
@@ -533,7 +533,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
-        await tester.ensureVisible(find.text('Update backend'));
+        await tester.ensureVisible(find.byTooltip('Update backend'));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
       });

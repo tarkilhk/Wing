@@ -58,10 +58,12 @@ class _InstalledAppVersionCardState extends State<InstalledAppVersionCard> {
               leading: SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  semanticsLabel: 'Loading version information',
+                ),
               ),
               title: Text('App version'),
-              subtitle: Text('Loading version information…'),
             ),
           );
         }

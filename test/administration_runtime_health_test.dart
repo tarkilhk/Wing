@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'package:wing/core/screens/administration/admin_health_section.dart';
+import 'package:wing/core/services/administration_operation_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_runtime_health.dart';
@@ -9,6 +12,66 @@ import 'support/administration_fixture.dart';
 import 'support/administration_operation_fixture.dart';
 
 void main() {
+  testWidgets(
+    'pending section and operation use accessible progress without captions',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AdminHealthSectionHeading(
+              title: 'Profile',
+              checkedAt: null,
+              checking: true,
+              incomplete: false,
+              refresh: const CircularProgressIndicator(
+                semanticsLabel: 'Refreshing profile status',
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Checking…'), findsNothing);
+      expect(
+        find.bySemanticsLabel('Refreshing profile status'),
+        findsOneWidget,
+      );
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      final gate = Completer<Map<String, dynamic>>();
+      fixture.override = (_, _, _, _) => gate.future;
+      final operation = AdministrationOperationSession(
+        fixture.server,
+        const AdministrationAction('doctor', 7),
+      );
+      addTearDown(operation.dispose);
+      final reading = operation.refresh();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdminActionPage(
+            operation: operation,
+            title: 'Doctor',
+            scope: 'Test host',
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Checking operation…'), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.bySemanticsLabel('Checking operation'), findsOneWidget);
+      gate.complete({
+        'name': 'doctor',
+        'pid': 7,
+        'running': false,
+        'exit_code': 0,
+        'lines': <String>[],
+      });
+      await reading;
+      await tester.pumpAndSettle();
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final kind in AdministrationDiagnostic.values) {
     for (final replacementPid in [null, 8]) {
       testWidgets(

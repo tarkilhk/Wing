@@ -54,11 +54,9 @@ class AdminHostHealth extends StatelessWidget {
                                       context,
                                     ).textTheme.bodySmall,
                                   )
-                                else
+                                else if (!state.refreshing)
                                   Text(
-                                    state.refreshing
-                                        ? 'Reading machine details…'
-                                        : 'Machine details unavailable',
+                                    'Machine details unavailable',
                                     style: Theme.of(
                                       context,
                                     ).textTheme.bodySmall,
@@ -295,9 +293,7 @@ class _HostHeading extends StatelessWidget {
               MaterialLocalizations.of(context).formatShortDate(at),
             TimeOfDay.fromDateTime(at).format(context),
           ].join(', ');
-    final label = state.refreshing
-        ? 'Reading resources…'
-        : time == null
+    final label = time == null
         ? 'Not read'
         : state.stats.error != null
         ? 'Last read $time · refresh failed'
@@ -313,19 +309,23 @@ class _HostHeading extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Host', style: Theme.of(context).textTheme.titleMedium),
-                Text(label, style: Theme.of(context).textTheme.bodySmall),
+                if (!state.refreshing)
+                  Text(label, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),
           IconButton(
             tooltip: 'Refresh host resources',
             onPressed: state.refreshing ? null : resources.refresh,
-            icon: state.refreshing && !MediaQuery.disableAnimationsOf(context)
-                ? const SizedBox.square(
+            icon: state.refreshing
+                ? SizedBox.square(
                     dimension: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       semanticsLabel: 'Reading host resources',
+                      value: MediaQuery.disableAnimationsOf(context)
+                          ? .5
+                          : null,
                     ),
                   )
                 : const Icon(Icons.refresh),

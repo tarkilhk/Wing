@@ -321,6 +321,12 @@ void main() {
     await _signIn(tester);
     await _tap(tester, 'Check connection');
     await tester.pump();
+    expect(find.text('Checking…'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Profiles & access, Checking…'),
+      findsOneWidget,
+    );
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     fixture.discoveryGate!.complete(connectionDiscovery);

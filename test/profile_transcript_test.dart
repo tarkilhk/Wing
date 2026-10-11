@@ -397,7 +397,9 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(chat.reading.historyLoading, isTrue);
     await tester.pump();
     expect(find.byType(PlayfulPortrait), findsNothing);
-    expect(find.text('Loading history…'), findsOneWidget);
+    expect(find.text('Loading history…'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.bySemanticsLabel('Loading history'), findsOneWidget);
 
     gate.complete();
     await loading;
@@ -1167,13 +1169,9 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await show(tester);
     expect(find.text('· 1m 24s'), findsOneWidget);
     expect(find.text('Used 1 tool'), findsOneWidget);
-    tester.binding.handleAppLifecycleStateChanged(
-      AppLifecycleState.paused,
-    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump(const Duration(minutes: 10));
-    tester.binding.handleAppLifecycleStateChanged(
-      AppLifecycleState.resumed,
-    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(find.text('· 1m 24s'), findsOneWidget);
     expect(tester.takeException(), isNull);

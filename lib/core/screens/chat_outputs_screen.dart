@@ -544,7 +544,9 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
       body: Column(
         children: [
           if (_working || _observation.loading && outputs.isNotEmpty)
-            const LinearProgressIndicator(),
+            LinearProgressIndicator(
+              semanticsLabel: _working ? 'Opening output' : 'Loading outputs',
+            ),
           const Padding(
             padding: EdgeInsets.all(16),
             child: Text('Open a file or link shared in this chat.'),
@@ -637,11 +639,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                         onPressed: _working || _observation.loading
                             ? null
                             : () => _load(),
-                        child: Text(
-                          _observation.loading
-                              ? 'Loading older outputs…'
-                              : 'Load older outputs',
-                        ),
+                        child: const Text('Load older outputs'),
                       ),
                     if (_observation.error != null && outputs.isEmpty)
                       TextButton(

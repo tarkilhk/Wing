@@ -295,7 +295,9 @@ void main() {
       host.reads.clear();
       await tester.tap(find.text('Pin'));
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('Updating chats…'), findsOneWidget);
+      expect(find.text('Updating chats…'), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.bySemanticsLabel('Updating chats…'), findsOneWidget);
       expect(
         tester
             .widget<FloatingActionButton>(
@@ -367,7 +369,9 @@ void main() {
             .onPressed,
         isNotNull,
       );
-      expect(find.text('Refreshing chats…'), findsOneWidget);
+      expect(find.text('Refreshing chats…'), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.bySemanticsLabel('Refreshing chats…'), findsOneWidget);
       if (action == 'Archive' || action == 'Delete') {
         expect(
           find.byKey(const ValueKey('chat-personal-newest')),
@@ -410,6 +414,7 @@ void main() {
           );
           await tester.pump(const Duration(milliseconds: 200));
           final progress = find.byType(LinearProgressIndicator);
+          expect(find.text('Refreshing chats…'), findsNothing);
           final bounds = tester.getRect(progress);
           expect(
             tester.widget<LinearProgressIndicator>(progress).value,

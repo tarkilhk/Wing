@@ -341,7 +341,7 @@ void main() {
         'output_tokens': 0,
       }),
     ];
-    await tap(tester, find.text('Refresh'));
+    await tap(tester, find.byTooltip('Refresh usage'));
     await reveal(tester, find.text('< USD 0.01'));
     expect(find.textContaining('USD 0.00'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -352,14 +352,14 @@ void main() {
   ) async {
     await show(tester);
     offline = true;
-    await tap(tester, find.text('Refresh'));
+    await tap(tester, find.byTooltip('Refresh usage'));
     await reveal(tester, find.text('USD 5.44'));
     await reveal(tester, find.textContaining('Showing retained data'));
     expect(find.textContaining('Showing retained data'), findsOneWidget);
     await snapshot(tester, 'refresh-error');
     offline = false;
     rows = [_astra()];
-    await tap(tester, find.text('Refresh'));
+    await tap(tester, find.byTooltip('Refresh usage'));
     await reveal(tester, find.text('USD 5.00'));
     expect(find.textContaining('Could not load'), findsNothing);
   });
@@ -382,7 +382,7 @@ void main() {
     expect(find.text('No recorded model usage in this period.'), findsNothing);
     fixture.override = (_, path, _, _) async =>
         path == 'analytics/models' ? {'models': []} : {'daily': []};
-    await tap(tester, find.text('Refresh'));
+    await tap(tester, find.byTooltip('Refresh usage'));
     await reveal(tester, find.text('No recorded model usage in this period.'));
     expect(find.textContaining('Could not load'), findsNothing);
   });
@@ -401,7 +401,9 @@ void main() {
     await show(tester);
     await tester.tap(find.text('30D'));
     await tester.pump();
-    expect(find.text('Loading usage…'), findsOneWidget);
+    expect(find.text('Loading usage…'), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.bySemanticsLabel('Loading usage'), findsOneWidget);
     await tester.tap(find.text('7D'));
     await tester.pumpAndSettle(const Duration(milliseconds: 250));
     pending.complete({
@@ -581,8 +583,8 @@ void main() {
         await tap(tester, find.text('gpt-6-astra'));
         await reveal(tester, find.text('gpt-6-astra'));
         await snapshot(tester, '${brightness.name}-$scale-breakdown');
-        await reveal(tester, find.text('Refresh'));
-        expect(find.text('Refresh').hitTestable(), findsOneWidget);
+        await reveal(tester, find.byTooltip('Refresh usage'));
+        expect(find.byTooltip('Refresh usage').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
     }

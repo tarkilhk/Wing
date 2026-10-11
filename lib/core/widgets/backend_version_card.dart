@@ -124,15 +124,13 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
               if (check?.installMethod case final method?)
                 Text('Install method: $method'),
               const SizedBox(height: 4),
-              Text(
-                controller.checking
-                    ? 'Checking for updates…'
-                    : _checkStatus(check, controller.phase),
-              ),
+              if (!controller.checking)
+                Text(_checkStatus(check, controller.phase)),
               if (check?.canApply == false)
                 const Text('Updates must be applied from the server host.'),
               if (check?.updateAvailable == true)
-                TextButton.icon(
+                IconButton(
+                  tooltip: 'Changes in this update',
                   onPressed: controller.checking || controller.starting
                       ? null
                       : () => Navigator.of(context).push(
@@ -144,7 +142,6 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                           ),
                         ),
                   icon: const Icon(Icons.notes_outlined, size: 18),
-                  label: const Text('Changes in this update'),
                 ),
               if (controller.phase != BackendUpdatePhase.idle &&
                   controller.phase != BackendUpdatePhase.ready &&
@@ -184,39 +181,43 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                 spacing: 8,
                 runSpacing: 4,
                 children: [
-                  TextButton.icon(
+                  IconButton(
+                    tooltip: 'Check for updates',
                     onPressed: busy || controller.requestOutstanding
                         ? null
                         : controller.checkForUpdate,
                     icon: controller.checking
                         ? const SizedBox.square(
                             dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              semanticsLabel: 'Checking for updates',
+                            ),
                           )
                         : const Icon(Icons.search, size: 18),
-                    label: Text(
-                      controller.checking ? 'Checking…' : 'Check for updates',
-                    ),
                   ),
                   if (controller.canStart)
-                    FilledButton.icon(
+                    IconButton.filled(
+                      tooltip: 'Update backend',
                       onPressed: _confirmAndStart,
                       icon: const Icon(Icons.system_update_alt, size: 18),
-                      label: const Text('Update backend'),
                     ),
                   if (controller.requestOutstanding ||
                       controller.status != null)
-                    TextButton.icon(
+                    IconButton(
+                      tooltip: 'Check update progress',
                       onPressed: controller.statusLoading || controller.starting
                           ? null
                           : controller.refreshStatus,
                       icon: controller.statusLoading
                           ? const SizedBox.square(
                               dimension: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                semanticsLabel: 'Checking update progress',
+                              ),
                             )
                           : const Icon(Icons.refresh, size: 18),
-                      label: const Text('Check update progress'),
                     ),
                 ],
               ),

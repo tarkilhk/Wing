@@ -941,17 +941,15 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (chat.reading.historyLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+        child: Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              semanticsLabel: 'Loading history',
             ),
-            SizedBox(width: 10),
-            Text('Loading history…'),
-          ],
+          ),
         ),
       );
     }

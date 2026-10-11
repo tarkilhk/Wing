@@ -16,6 +16,7 @@ void main() {
     final fixture = AdministrationFixture();
     var current = 'old-model';
     var failWrite = true;
+    final write = Completer<void>();
     fixture.override = (method, path, query, body) async {
       if (path == 'profiles') {
         return {
@@ -55,6 +56,7 @@ void main() {
       }
       if (path == 'tools/toolsets/image_gen/model' && method == 'PUT') {
         if (failWrite) {
+          await write.future;
           throw const DashboardHttpException(
             400,
             'tools/toolsets/image_gen/model',
@@ -110,6 +112,11 @@ void main() {
     );
     expect(fixture.requests.where((request) => request.$1 == 'PUT'), isEmpty);
     await tester.tap(find.text('Use model'));
+    await tester.pump();
+    expect(find.text('Saving…'), findsNothing);
+    expect(find.text('Use model'), findsOneWidget);
+    expect(find.bySemanticsLabel('Saving model'), findsOneWidget);
+    write.complete();
     await tester.pumpAndSettle();
     expect(find.textContaining('Your edits are kept'), findsOneWidget);
     expect(current, 'old-model');
