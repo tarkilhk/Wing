@@ -273,10 +273,33 @@ class BotsSession extends ChangeNotifier {
   Future<Map<ProfileSessionKey, BotRecord>> appearancesForConversations(
     Iterable<ProfileSessionKey> conversations, {
     required bool Function() canRead,
+  }) => _appearancesFor(
+    conversations.toSet(),
+    (key) => key.workspace,
+    (bot, key) => bot.describesConversation(key),
+    canRead: canRead,
+  );
+
+  /// Reference candidates already supply canonical profile identity. Reuse
+  /// the passive cache and physical read admission without creating a chat.
+  Future<Map<WorkspaceScope, BotRecord>> appearancesForProfiles(
+    Iterable<WorkspaceScope> profiles, {
+    required bool Function() canRead,
+  }) => _appearancesFor(
+    profiles.toSet(),
+    (scope) => scope,
+    (bot, scope) => bot.scope == scope,
+    canRead: canRead,
+  );
+
+  Future<Map<K, BotRecord>> _appearancesFor<K>(
+    Set<K> keys,
+    WorkspaceScope Function(K) workspace,
+    bool Function(BotRecord, K) matches, {
+    required bool Function() canRead,
   }) async {
-    final keys = conversations.toSet();
     final version = _appearanceVersion;
-    final appearances = <ProfileSessionKey, BotRecord>{};
+    final appearances = <K, BotRecord>{};
     final generation = _appearanceGeneration;
     bool current() => !_closed && generation == _appearanceGeneration;
     bool admit() => current() && canRead();
@@ -288,9 +311,9 @@ class BotsSession extends ChangeNotifier {
         final matching = keys
             .where(
               (key) =>
-                  source.scope.connectionId == key.workspace.connectionId &&
+                  source.scope.connectionId == workspace(key).connectionId &&
                   source.scope.connectionIdentity ==
-                      key.workspace.connectionIdentity,
+                      workspace(key).connectionIdentity,
             )
             .toSet();
         if (matching.isEmpty || !admit()) continue;
@@ -299,7 +322,7 @@ class BotsSession extends ChangeNotifier {
           final roster = await _appearanceRoster(source);
           if (!current()) return const {};
           for (final bot in roster) {
-            final owned = matching.where(bot.describesConversation).toList();
+            final owned = matching.where((key) => matches(bot, key)).toList();
             if (owned.isEmpty) continue;
             var appearance = _appearanceCache[bot.scope];
             if (appearance == null ||

@@ -63,15 +63,22 @@ void main() {
       final root = canonical('atlas'), tip = canonical('atlas', suffix: 'tip');
       final a = owner.appearancesForConversations([root], canRead: () => true);
       final b = owner.botForConversation(tip);
+      final c = owner.appearancesForProfiles([
+        root.workspace,
+      ], canRead: () => true);
       await started.future;
       roster.complete(null);
       await Future<void>.delayed(Duration.zero);
       expect(rosters, 1);
       expect(assets, 1);
       asset.complete({'found': true, 'data': _avatarPng});
-      final results = await Future.wait<Object?>([a, b]);
+      final results = await Future.wait<Object?>([a, b, c]);
       final map = results[0] as Map<ProfileSessionKey, BotRecord>;
       expect(map[root], same(results[1]));
+      expect(
+        (results[2] as Map<WorkspaceScope, BotRecord>)[root.workspace],
+        same(map[root]),
+      );
       expect(map[root]!.avatar, base64Decode(_avatarPng));
       expect(owner.cachedAppearance(tip), same(map[root]));
       final changes = notifications;
@@ -80,6 +87,47 @@ void main() {
       expect(assets, 1);
       expect(notifications, changes);
       expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test(
+    'profile appearance never borrows a same-named bot from another connection',
+    () async {
+      final fixture = BotsFixture();
+      var reads = 0;
+      fixture.readHook = (_, _, _) async {
+        reads++;
+        return null;
+      };
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      final wrongSavedId = WorkspaceScope(
+        connectionId: 'another-saved-connection',
+        connectionIdentity: 'instance-1',
+        profileName: 'atlas',
+      );
+      final wrongInstance = WorkspaceScope(
+        connectionId: 'host',
+        connectionIdentity: 'another-instance',
+        profileName: 'atlas',
+      );
+      expect(
+        await owner.appearancesForProfiles([
+          wrongSavedId,
+          wrongInstance,
+        ], canRead: () => true),
+        isEmpty,
+      );
+      expect(reads, 0);
+      final scope = canonical('atlas').workspace;
+      final result = await owner.appearancesForProfiles([
+        scope,
+        wrongSavedId,
+        wrongInstance,
+      ], canRead: () => true);
+      expect(result.keys, [scope]);
+      expect(result[scope]!.title, 'Atlas');
+      expect(reads, 1);
     },
   );
 

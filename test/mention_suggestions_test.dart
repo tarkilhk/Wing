@@ -127,7 +127,12 @@ void main() {
     FocusNode focus, {
     Brightness brightness = Brightness.light,
     double scale = 1,
-    required Future<MentionCompletion> Function(MentionQuery, String?) load,
+    required Future<MentionCompletion> Function(
+      MentionQuery,
+      String?,
+      bool Function(),
+    )
+    load,
     required Future<void> Function(String, ComposerReference) select,
   }) async {
     await tester.pumpWidget(
@@ -215,7 +220,7 @@ void main() {
         tester,
         composer,
         focus,
-        load: (query, directory) async {
+        load: (query, directory, canRead) async {
           browsed.add(directory);
           return MentionCompletion(
             query: query,
@@ -248,20 +253,24 @@ void main() {
     composer.selection = const TextSelection.collapsed(offset: 2);
     final focus = FocusNode(), held = Completer<MentionCompletion>();
     MentionQuery? issued;
+    bool Function()? canReadAppearance;
     addTearDown(composer.dispose);
     addTearDown(focus.dispose);
     await host(
       tester,
       composer,
       focus,
-      load: (query, directory) {
+      load: (query, directory, canRead) {
         issued = query;
+        canReadAppearance = canRead;
         return held.future;
       },
       select: (text, ref) async {},
     );
+    expect(canReadAppearance!(), isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
+    expect(canReadAppearance!(), isFalse);
     held.complete(MentionCompletion(query: issued!, items: [_agent]));
     await tester.pump();
     expect(find.text('Hermes'), findsNothing);
@@ -286,7 +295,7 @@ void main() {
         composer,
         focus,
         scale: 2,
-        load: (query, directory) async {
+        load: (query, directory, canRead) async {
           if (++calls == 1) throw StateError('Read failed');
           return MentionCompletion(
             query: query,
@@ -327,7 +336,7 @@ void main() {
         tester,
         composer,
         focus,
-        load: (query, directory) async {
+        load: (query, directory, canRead) async {
           requests++;
           return MentionCompletion(query: query, items: [_agent]);
         },
@@ -362,7 +371,7 @@ void main() {
           focus,
           brightness: brightness,
           scale: scale,
-          load: (query, directory) async => MentionCompletion(
+          load: (query, directory, canRead) async => MentionCompletion(
             query: query,
             items: [
               _agent,

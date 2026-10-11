@@ -24,6 +24,7 @@ class MentionSuggestions extends StatefulWidget {
   final Future<MentionCompletion> Function(
     MentionQuery query,
     String? directory,
+    bool Function() canRead,
   )
   load;
   final Future<void> Function(String text, ComposerReference reference) select;
@@ -96,7 +97,11 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
     int generation,
   ) async {
     try {
-      final completion = await widget.load(query, directory);
+      final completion = await widget.load(
+        query,
+        directory,
+        () => mounted && generation == _generation && !_dismissed,
+      );
       if (!mounted || generation != _generation || _dismissed) return;
       setState(() {
         _completion = completion;

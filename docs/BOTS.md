@@ -34,7 +34,8 @@ Valid edits save automatically after a short pause. Back finishes pending saves;
 
 Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Type `@` to choose a frozen room member or `@everyone`. Members show their saved bot avatars when available; Everyone uses a group icon. Rooms offer rename, stop and disband; their member roster is fixed when created.
 
-In an ordinary chat, `@` offers agents from the same Hermes server. A mention
+In an ordinary chat, `@` offers agents from the same Hermes server with their
+saved bot avatars when available. A mention
 identifies the agent to the current conversation; it does not forward your
 message or switch chats. Contact depends on whether the current chat has
 `message_agent`. If a selected profile is removed or renamed before dispatch,

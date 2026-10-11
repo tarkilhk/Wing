@@ -225,7 +225,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                 child: MentionSuggestions(
                   composer: _composer,
                   composerFocus: _composerFocus,
-                  load: (query, directory) async =>
+                  load: (query, directory, canRead) async =>
                       _session.completeMentions(query),
                   select: (text, reference) async {
                     _session.editMentions(text, selected: reference);
