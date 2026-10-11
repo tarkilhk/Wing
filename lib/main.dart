@@ -75,6 +75,50 @@ void main() async {
   );
 }
 
+/// All app entry routes compose the same workspace capabilities here.
+ProfileWorkspaceScreen _buildWorkspaceScreen({
+  GlobalKey<ProfileWorkspaceScreenState>? key,
+  required ProfileWorkspaceController controller,
+  required ConnectionManager connectionManager,
+  required AndroidShareIntentService? shareIntents,
+  required BotsSession Function()? createBotsSession,
+  required Future<void> Function(ProfileSessionKey, bool Function())?
+  onOpenBotChat,
+  required Future<void> Function()? enableNotifications,
+  required ValueListenable<BackgroundMonitoringState>?
+  backgroundMonitoringState,
+  required Future<void> Function()? openMonitoringBatterySettings,
+  required VoidCallback onConnections,
+  required Widget Function(BuildContext, VoidCallback) configurationActions,
+  required Future<void> Function(SavedConnection, AppDestination)
+  onSelectConnection,
+  required VoidCallback? onPreferencesChanged,
+  required AppDestination destination,
+  ProfileSessionKey? initialBotSession,
+  bool initialQuickChat = false,
+  bool initialSearchChats = false,
+}) => ProfileWorkspaceScreen(
+  key: key,
+  controller: controller,
+  createBotsSession: createBotsSession,
+  onOpenBotChat: onOpenBotChat,
+  initialBotSession: initialBotSession,
+  initialDestination: destination,
+  initialQuickChat: initialQuickChat,
+  initialSearchChats: initialSearchChats,
+  enableNotifications: enableNotifications,
+  backgroundMonitoringState: backgroundMonitoringState,
+  openMonitoringBatterySettings: openMonitoringBatterySettings,
+  onConnections: onConnections,
+  configurationActions: configurationActions,
+  savedConnections: connectionManager.getConnections,
+  onSelectConnection: onSelectConnection,
+  onPreferencesChanged: onPreferencesChanged,
+  onCapturePhoto: shareIntents == null
+      ? null
+      : (target) => shareIntents.capturePhoto(target.toJson()),
+);
+
 class WingApp extends StatefulWidget {
   final ConnectionManager connManager;
 
@@ -150,21 +194,22 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     ProfileWorkspaceController controller, {
     GlobalKey<ProfileWorkspaceScreenState>? key,
     required AppDestination destination,
-  }) => ProfileWorkspaceScreen(
+  }) => _buildWorkspaceScreen(
     key: key,
     controller: controller,
+    connectionManager: widget.connManager,
+    shareIntents: widget.shareIntents,
     createBotsSession: () =>
         savedBotsSession(widget.connManager, _profileControllers),
     onOpenBotChat: (key, canUse) async =>
         _homeKey.currentState?.selectBotChat(key, canUse),
-    initialDestination: destination,
+    destination: destination,
     enableNotifications: enableProfileNotifications,
     backgroundMonitoringState: _backgroundMonitoring.state,
     openMonitoringBatterySettings: _backgroundMonitoring.openBatterySettings,
     onConnections: openConnections,
     configurationActions: (context, onRestored) =>
         _homeKey.currentState!.buildConfigurationActions(context, onRestored),
-    savedConnections: widget.connManager.getConnections,
     onSelectConnection: (connection, destination) async {
       await _homeKey.currentState?.selectWorkspaceConnection(
         connection,
@@ -941,21 +986,19 @@ class HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ProfileWorkspaceScreen(
+        builder: (_) => _buildWorkspaceScreen(
           controller: controller,
+          connectionManager: widget.connManager,
+          shareIntents: widget.shareIntents,
           createBotsSession: widget.createBotsSession,
           onOpenBotChat: selectBotChat,
           initialBotSession: botChat,
-          savedConnections: widget.connManager.getConnections,
           onSelectConnection: selectWorkspaceConnection,
           configurationActions: buildConfigurationActions,
-          onCapturePhoto: widget.shareIntents == null
-              ? null
-              : (key) => widget.shareIntents!.capturePhoto(key.toJson()),
           enableNotifications: widget.enableProfileNotifications,
           backgroundMonitoringState: widget.backgroundMonitoringState,
           openMonitoringBatterySettings: widget.openMonitoringBatterySettings,
-          initialDestination: switch (launchAction) {
+          destination: switch (launchAction) {
             AndroidLaunchAction.activity => AppDestination.activity,
             AndroidLaunchAction.quickChat ||
             AndroidLaunchAction.searchChats => AppDestination.chats,

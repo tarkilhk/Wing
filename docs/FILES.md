@@ -2,7 +2,7 @@
 
 ## Add something to a chat
 
-In the composer, choose **Camera**, **Photos** or **Files**. You can also share text, a link, an image or a file from another Android app into Wing. Incoming shares open a review so you can choose the connection, profile and chat. Nothing is sent until you tap **Send** in the chat.
+In the composer, choose **Camera**, **Photos** or **Files**. These actions are available whether you opened the chat from the chat list, a notification or a health alert. You can also share text, a link, an image or a file from another Android app into Wing. Incoming shares open a review so you can choose the connection, profile and chat. Nothing is sent until you tap **Send** in the chat.
 
 With **Camera**, confirm the picture to add it to your current draft while keeping the chat open. You can take another picture to add it alongside the first. Cancelling the camera leaves the draft unchanged.
 

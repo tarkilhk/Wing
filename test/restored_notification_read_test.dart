@@ -15,6 +15,7 @@ import 'package:wing/core/models/notification_focus.dart';
 import 'package:wing/core/models/notification_input.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/chat_notification_coordinator.dart';
+import 'package:wing/core/services/android_share_intent_service.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -326,9 +327,22 @@ void main() {
             {'id': 101, 'role': 'assistant', 'content': answer},
           ];
         final app = GlobalKey<WingAppState>();
+        final captures = <Object?>[];
+        const shares = MethodChannel(AndroidShareIntentService.channelName);
+        messenger.setMockMethodCallHandler(shares, (call) async {
+          if (call.method == 'capturePhoto') captures.add(call.arguments);
+          return null;
+        });
+        final shareIntents = AndroidShareIntentService();
+        addTearDown(() {
+          shareIntents.dispose();
+          messenger.setMockMethodCallHandler(shares, null);
+        });
+        await shareIntents.initialize();
         await tester.pumpWidget(
           WingApp(
             key: app,
+            shareIntents: shareIntents,
             connManager: manager,
             appPreferences: appPreferences,
             gatewayFactory: (_, scope) => host.gateway(scope),
@@ -414,6 +428,22 @@ void main() {
         expect(chat.runtime.offline, isFalse);
         expect(cancelled, contains(seedSink.shown.first.id));
         expect(controller.visible, isTrue);
+        await tester.tap(find.byTooltip('Attach file'));
+        await tester.pumpAndSettle();
+        final camera = find.ancestor(
+          of: find.text('Camera'),
+          matching: find.byType(ListTile),
+        );
+        expect(
+          tester.widget<ListTile>(camera).enabled,
+          isTrue,
+          reason: 'Notification-opened chats retain the app camera capability',
+        );
+        await tester.tap(camera);
+        await tester.pumpAndSettle();
+        expect(captures, [
+          {'target': key.toJson()},
+        ]);
         await tester.pumpWidget(const SizedBox.shrink());
         shown.clear();
         cancelled.clear();
