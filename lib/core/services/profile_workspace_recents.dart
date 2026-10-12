@@ -59,47 +59,45 @@ final class _WorkspaceRecentConversationSource
     implements RecentConversationSource {
   _WorkspaceRecentConversationSource(
     this.controller,
-    this.bots,
+    this.recents,
     this.onOpenGroup, {
     required this.routeOrigin,
     required this.onOpenChat,
-  });
+  }) {
+    if (!identical(controller, recents.workspaceOwner)) {
+      throw ArgumentError('Recents belongs to another workspace');
+    }
+  }
   final RecentConversationKey? routeOrigin;
   final Future<void> Function(RecentConversationKey)? onOpenChat;
   final Future<void> Function(BotGroup) onOpenGroup;
   BotGroup? _group(RecentConversationKey key) =>
       key.group == null ? null : bots.groupForKey(key.group!);
-  final BotsSession bots;
+  final WorkspaceRecentsCache recents;
+  BotsSession get bots => recents.bots;
   Set<ProfileSessionKey> _appearanceDemand = {};
   int _appearanceEpoch = -1;
   final ProfileWorkspaceController controller;
-  final _readingRevisions = Expando<Object>();
+  @override
+  RecentConversationSnapshots get snapshots => recents.snapshots;
 
   @override
   Future<RecentConversationCatalog> loadRecents({required bool refresh}) async {
-    if (refresh) bots.invalidateAppearances();
-    await Future.wait([controller.refreshRecents(), bots.refresh()]);
+    setVisible(true);
+    await recents.refresh(force: refresh);
     if (!current) throw StateError('Workspace is no longer available');
     return catalog;
   }
 
   @override
-  RecentConversationCatalog get catalog => RecentConversationCatalog(
-    entries: [
-      for (final item in workspaceRecentItems(
-        controller,
-        bots,
-        appearances: const {},
-      ))
-        item.conversation,
-    ],
-    error: controller.recentsProfileErrors.isEmpty && bots.state.errors.isEmpty
-        ? null
-        : 'Some recent conversations could not be loaded.',
-  );
+  RecentConversationCatalog get catalog => recents.catalog;
+
+  @override
+  void setVisible(bool visible) => recents.setVisible(this, visible);
 
   @override
   bool get current =>
+      recents.current &&
       !controller._closed &&
       (routeOrigin == null || _group(routeOrigin!) != null);
   @override
@@ -153,9 +151,7 @@ final class _WorkspaceRecentConversationSource
     // Canonical immutable row identity makes this cheap even for large chats.
     return (
       chat?.title ?? saved?.title,
-      chat == null
-          ? null
-          : (_readingRevisions[chat.reading.messages] ??= Object()),
+      chat == null ? null : recents.readingRevision(chat.reading.messages),
       chat?.reading.streaming,
       chat?.composer.observation.displayedText,
       chat?.model,
@@ -198,13 +194,14 @@ final class _WorkspaceRecentConversationSource
   @override
   void addListener(VoidCallback listener) {
     controller.addListener(listener);
-    bots.addListener(listener);
+    recents.addListener(listener);
   }
 
   @override
   void removeListener(VoidCallback listener) {
     controller.removeListener(listener);
-    bots.removeListener(listener);
+    recents.removeListener(listener);
+    setVisible(false);
   }
 
   @override

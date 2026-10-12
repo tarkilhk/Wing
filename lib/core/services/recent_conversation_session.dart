@@ -5,9 +5,12 @@ import 'package:flutter/foundation.dart';
 
 import '../models/bots.dart';
 import '../models/recent_conversation.dart';
+import 'recent_conversation_snapshots.dart';
 
 /// Captured workspace reads and commands. Preview reads grant no runtime lease.
 abstract interface class RecentConversationSource implements Listenable {
+  RecentConversationSnapshots get snapshots;
+  void setVisible(bool visible);
   bool get current;
   RecentConversationKey? get selected;
   bool admits(RecentConversationKey key);
@@ -94,6 +97,9 @@ final class RecentConversationSession extends ChangeNotifier {
   final _cards = <RecentConversationKey, RecentConversationCard>{};
   final _reads = <RecentConversationKey, int>{};
   final _wanted = <RecentConversationKey>[];
+  bool _openingPreparation = false;
+  Set<RecentConversationKey> _openingPrepared = {};
+  final _openingEntries = <RecentConversationKey, RecentConversationEntry>{};
   final _revisions = <RecentConversationKey, Object>{};
   final _readTimers = <RecentConversationKey, Timer>{};
   final _nudge = ValueNotifier<ConversationNudge?>(null);
@@ -102,6 +108,8 @@ final class RecentConversationSession extends ChangeNotifier {
   RecentConversationKey? get selected => _selected;
   RecentConversationKey? _opening;
   bool get selecting => _opening != null;
+  RecentConversationSnapshots get snapshots => _source.snapshots;
+  void setVisible(bool visible) => _source.setVisible(visible && modeEnabled);
   bool opensRoute(RecentConversationKey key) => _source.opensRoute(key);
   String? _error;
   String? get error => _error;
@@ -282,6 +290,9 @@ final class RecentConversationSession extends ChangeNotifier {
   /// Admit a bounded priority list. Reads retain no execution authority.
   void prepare(Iterable<RecentConversationKey> priorities) {
     if (!active || entries.isEmpty) return;
+    _openingPreparation = false;
+    _openingPrepared.clear();
+    _openingEntries.clear();
     final wanted = priorities.toSet();
     if (wanted.length > preparationLimit ||
         wanted.any((key) => !entries.any((entry) => entry.key == key))) {
@@ -310,9 +321,60 @@ final class RecentConversationSession extends ChangeNotifier {
     if (evicted || changed) _emit();
   }
 
+  /// Read only the two opening neighbors while geometry remains frozen. The
+  /// departing live page already has its own pixels; rendering stays in the view.
+  void prepareOpeningNeighbors(Set<RecentConversationKey> preparedPixels) {
+    if (!modeEnabled || selecting) return;
+    _openingPreparation = true;
+    _openingPrepared = Set.of(preparedPixels);
+    _prepareOpeningNeighbors();
+  }
+
+  void _prepareOpeningNeighbors() {
+    if (!active || !_openingPreparation) return;
+    final catalog = _pendingCatalog;
+    final available = catalog == null ? entries : _orderedEntries(catalog);
+    final center = available.indexWhere((entry) => entry.key == _selected);
+    if (center < 0) return;
+    final neighbors = <RecentConversationKey, RecentConversationEntry>{
+      if (available.length > 1)
+        for (final offset in [-1, 1])
+          if (!_openingPrepared.contains(
+            available[(center + offset) % available.length].key,
+          ))
+            available[(center + offset) % available.length].key:
+                available[(center + offset) % available.length],
+    };
+    if (!listEquals(_wanted, neighbors.keys.toList())) {
+      _preparationGeneration++;
+    }
+    _openingEntries
+      ..clear()
+      ..addAll(neighbors);
+    _wanted
+      ..clear()
+      ..addAll(neighbors.keys);
+    _cards.removeWhere((key, _) => !neighbors.containsKey(key));
+    _revisions.removeWhere((key, _) => !neighbors.containsKey(key));
+    final preparation = _preparationGeneration;
+    unawaited(
+      _source.prepareAppearances(
+        neighbors.keys,
+        () =>
+            active &&
+            preparation == _preparationGeneration &&
+            neighbors.keys.every(_wanted.contains),
+      ),
+    );
+    if (_pumpPreviews()) _emit();
+  }
+
   /// Stops new admission during motion/exit without pretending physical I/O
   /// has been canceled. Its slot remains occupied until the source settles.
   void pausePreparation() {
+    _openingPreparation = false;
+    _openingPrepared.clear();
+    _openingEntries.clear();
     _preparationGeneration++;
     _wanted.clear();
   }
@@ -322,7 +384,10 @@ final class RecentConversationSession extends ChangeNotifier {
     for (final key in List<RecentConversationKey>.of(_wanted)) {
       if (!active) return changed;
       if (!_wanted.contains(key)) continue;
-      final entry = entries.firstWhere((entry) => entry.key == key);
+      final entry =
+          entries.where((entry) => entry.key == key).firstOrNull ??
+          _openingEntries[key];
+      if (entry == null) continue;
       if (_cards[key]?.preview != null ||
           _cards[key]?.error != null ||
           _reads.containsKey(key)) {
@@ -426,12 +491,11 @@ final class RecentConversationSession extends ChangeNotifier {
       ++_selectionGeneration;
       _discardCue();
     }
-    if (modeEnabled &&
-        !selecting &&
-        (_catalogReading || _catalogError == null)) {
+    if (modeEnabled && !selecting) {
       final catalog = _source.catalog;
       final canonical = _orderedEntries(catalog);
       final matches =
+          catalog.error == _catalogError &&
           canonical.length == entries.length &&
           Iterable.generate(canonical.length).every(
             (index) =>
@@ -450,6 +514,7 @@ final class RecentConversationSession extends ChangeNotifier {
         _cards.remove(key);
       }
     }
+    _prepareOpeningNeighbors();
     _emit();
   }
 

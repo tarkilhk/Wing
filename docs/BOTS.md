@@ -114,6 +114,11 @@ use Back to return; Back again returns to the screen that opened the group.
 Opening another conversation uses its normal chat window; Back restores the
 group's cards. Cards do not mark group messages as read.
 
+Recents and the card browser share a cached list and screenshots. Reopening uses
+the saved view while background reads refresh it. If a group or profile refresh
+fails, its known conversations stay available with an error; a confirmed removal
+deletes the entry.
+
 Tap the instance and bot count under the title for a compact member list
 anchored beneath that row, with saved names and avatars. Tap outside or use Back
 to dismiss it. The conversation uses a group icon when no picture is saved.

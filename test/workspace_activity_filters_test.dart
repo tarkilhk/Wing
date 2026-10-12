@@ -1,3 +1,4 @@
+import 'package:wing/core/services/workspace_recents_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'package:wing/core/widgets/bot_avatar.dart';
 import 'support/bots_fixture.dart';
@@ -158,6 +159,7 @@ void main() {
   late ProfileWorkspaceController controller;
   late AppPreferences preferences;
   late BotsSession bots;
+  late WorkspaceRecentsSession recents;
   late BotsFixture fixture;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -232,8 +234,10 @@ void main() {
       ],
     );
     await bots.refresh();
+    recents = WorkspaceRecentsSession(controller, bots);
   });
   tearDown(() {
+    recents.dispose();
     bots.dispose();
     controller.dispose();
     preferences.dispose();
@@ -264,8 +268,7 @@ void main() {
             home: Scaffold(
               appBar: AppBar(title: const Text('Recents')),
               body: WorkspaceActivityContent(
-                controller: controller,
-                bots: bots,
+                recents: recents,
                 visible: false,
                 onOpen: (item, rows) {
                   opened = item;
@@ -374,8 +377,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: WorkspaceActivityContent(
-            controller: controller,
-            bots: bots,
+            recents: recents,
             visible: false,
             onOpen: (_, _) {},
             onOpenGroup: (_) async {},

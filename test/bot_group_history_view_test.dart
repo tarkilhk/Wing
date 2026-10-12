@@ -105,7 +105,9 @@ void main() {
               'timestamp': 1791756060.0,
             },
           ];
-          final group = (await fixture.repository.groups()).single;
+          final group = (await fixture.repository.groups(
+            groupMessages: null,
+          )).single;
           final appearances = await fixture.repository.bots();
           final frame = GlobalKey();
           await tester.pumpWidget(
@@ -126,6 +128,7 @@ void main() {
                   fixture.repository,
                   group,
                   reads: BotGroupReadState(),
+                  groupMessages: null,
                   appearances: appearances,
                 ),
               ),

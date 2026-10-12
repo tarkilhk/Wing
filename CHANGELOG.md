@@ -4,6 +4,12 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Keep known chats and group discussions in Recents when a refresh fails. Share
+  the cached conversation list, screenshots and recent group messages across
+  visits, and reuse prepared cards while background refreshes run.
+- Start preparing nearby cards during opening, show saved bot identity while
+  loading, and keep usable screenshots visible until refreshed pixels are ready.
+
 - Group discussions now share their live and Recents rendering, with the icon
   beside the title and consistent mention/composer styling. Two-finger swipes
   switch conversations directly, without requiring a first pinch.

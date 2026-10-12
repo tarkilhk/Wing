@@ -12,6 +12,7 @@ import 'package:wing/core/services/bot_group_session.dart';
 import 'package:wing/core/services/bot_profile_edit_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/services/recent_conversation_snapshots.dart';
 import 'support/bots_fixture.dart';
 import 'support/administration_fixture.dart';
 import 'package:wing/core/services/bot_avatar_io.dart';
@@ -28,14 +29,231 @@ class _AvatarPicker extends BotAvatarIo {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('passive group preview reuses the discovery message tail', () async {
+    final fixture = BotsFixture();
+    final groupMessages = RecentGroupMessages();
+    addTearDown(groupMessages.dispose);
+    for (var seq = 1; seq <= 6; seq++) {
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': seq,
+        'kind': 'message.member',
+        'created_at': 1700000000 + seq,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Saved answer $seq'},
+      });
+    }
+    var logReads = 0;
+    fixture.readHook = (_, method, _) async {
+      if (method == 'groups.log') logReads++;
+      return null;
+    };
+    final group = (await fixture.repository.groups(
+      groupMessages: groupMessages,
+    )).single;
+    final discoveryReads = logReads;
+    final preview = BotGroupSession(
+      fixture.repository,
+      group,
+      appearances: const [],
+      reads: BotGroupReadState(),
+      groupMessages: groupMessages,
+    );
+    addTearDown(preview.dispose);
+    final messages = await preview.readRecentMessages(
+      limit: 6,
+      canRead: () => true,
+    );
+    expect(messages.map((event) => event.text), [
+      for (var seq = 1; seq <= 6; seq++) 'Saved answer $seq',
+    ]);
+    expect(
+      logReads,
+      discoveryReads,
+      reason: 'Discovery already fetched this immutable message tail',
+    );
+    expect(fixture.commands, isEmpty);
+  });
+
+  test(
+    'standalone group previews read stock logs without a shared store',
+    () async {
+      final fixture = BotsFixture();
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': 1700000001,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Saved answer'},
+      });
+      var logReads = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method == 'groups.log') logReads++;
+        return null;
+      };
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
+      final discoveryReads = logReads;
+      final preview = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: const [],
+        reads: BotGroupReadState(),
+        groupMessages: null,
+      );
+      addTearDown(preview.dispose);
+      expect(
+        (await preview.readRecentMessages(
+          limit: 6,
+          canRead: () => true,
+        )).map((event) => event.text),
+        ['Saved answer'],
+      );
+      expect(logReads, discoveryReads + 1);
+      expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test(
+    'backward discovery keeps the newest shared messages across pages',
+    () async {
+      final fixture = BotsFixture();
+      final groupMessages = RecentGroupMessages();
+      addTearDown(groupMessages.dispose);
+      for (var seq = 1; seq <= 120; seq++) {
+        fixture.events.add({
+          'room_id': 'room-1',
+          'seq': seq,
+          'kind': seq == 1 ? 'message.member' : 'message.user',
+          'created_at': 1700000000 + seq,
+          'actor': {'kind': seq == 1 ? 'member' : 'user', 'id': 'atlas'},
+          'payload': {'text': 'Answer $seq'},
+        });
+      }
+      var logReads = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method == 'groups.log') logReads++;
+        return null;
+      };
+      final group = (await fixture.repository.groups(
+        groupMessages: groupMessages,
+      )).single;
+      expect(logReads, 2);
+      final preview = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: const [],
+        reads: BotGroupReadState(),
+        groupMessages: groupMessages,
+      );
+      addTearDown(preview.dispose);
+      expect(
+        (await preview.readRecentMessages(
+          limit: 6,
+          canRead: () => true,
+        )).map((event) => event.sequence),
+        [115, 116, 117, 118, 119, 120],
+      );
+      expect(
+        logReads,
+        2,
+        reason: 'Older scan pages must not replace the newer tail',
+      );
+      expect(groupMessages.borrow(group, limit: 11), isNull);
+    },
+  );
+
+  test(
+    'group tail cache fences replacements and incomplete coverage',
+    () async {
+      final fixture = BotsFixture();
+      final groupMessages = RecentGroupMessages();
+      addTearDown(groupMessages.dispose);
+      void append(int seq) => fixture.events.add({
+        'room_id': 'room-1',
+        'seq': seq,
+        'kind': 'message.member',
+        'created_at': 1700000000 + seq,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Answer $seq'},
+      });
+      for (var seq = 1; seq <= 6; seq++) {
+        append(seq);
+      }
+      final old = (await fixture.repository.groups(
+        groupMessages: groupMessages,
+      )).single;
+      expect(groupMessages.borrow(old, limit: 6), hasLength(6));
+      for (var seq = 7; seq <= 11; seq++) {
+        append(seq);
+      }
+      final current = (await fixture.repository.groups(
+        groupMessages: groupMessages,
+      )).single;
+      expect(groupMessages.borrow(old, limit: 6), isNull);
+      expect(
+        groupMessages.borrow(current, limit: 6)!.map((event) => event.sequence),
+        [6, 7, 8, 9, 10, 11],
+      );
+      expect(
+        groupMessages.borrow(current, limit: 11),
+        isNull,
+        reason:
+            'A bounded retained tail cannot claim earlier messages are absent',
+      );
+      final visit = BotGroupSession(
+        fixture.repository,
+        current,
+        groupMessages: groupMessages,
+        appearances: const [],
+        reads: BotGroupReadState(),
+      );
+      addTearDown(visit.dispose);
+      expect(
+        await visit.readRecentMessages(limit: 11, canRead: () => true),
+        hasLength(11),
+      );
+      await expectLater(
+        visit.readRecentMessages(limit: 6, canRead: () => false),
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
+    'group tail cache excludes payloads beyond its retained byte budget',
+    () async {
+      final fixture = BotsFixture();
+      final groupMessages = RecentGroupMessages();
+      addTearDown(groupMessages.dispose);
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': 1700000000,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'x' * (1024 * 1024)},
+      });
+      final group = (await fixture.repository.groups(
+        groupMessages: groupMessages,
+      )).single;
+      expect(groupMessages.borrow(group, limit: 6), isNull);
+    },
+  );
+
   test(
     'group dictation requires the captured visit and exact draft revision',
     () async {
       final fixture = BotsFixture();
-      final group = (await fixture.repository.groups()).single;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
       BotGroupSession open() => BotGroupSession(
         fixture.repository,
         group,
+        groupMessages: null,
         appearances: const [],
         reads: BotGroupReadState(),
       )..setVisible(true);
@@ -71,7 +289,9 @@ void main() {
     () async {
       final server = AdministrationFixture();
       final fixture = BotsFixture(server: server.server);
-      final group = (await fixture.repository.groups()).single;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
       server.mutationOverride =
           (method, path, query, body, canDispatch, onDispatched) async {
             expect(canDispatch(), isTrue);
@@ -146,6 +366,14 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(rosters, 1);
       expect(assets, 1);
+      expect(owner.cachedAppearance(root)?.title, 'Atlas');
+      expect(owner.cachedAppearance(root)?.avatar, isNull);
+      expect(
+        notifications,
+        greaterThan(0),
+        reason:
+            'Canonical placeholder identity must publish before held assets',
+      );
       asset.complete({'found': true, 'data': _avatarPng});
       final results = await Future.wait<Object?>([a, b, c]);
       final map = results[0] as Map<ProfileSessionKey, BotRecord>;
@@ -762,6 +990,138 @@ void main() {
       reopened.dispose();
     },
   );
+  test('roster activity includes stock background worker heartbeats', () async {
+    final now = DateTime.utc(2026, 10, 12, 12);
+    final fixture = BotsFixture(now: () => now);
+    fixture.profiles.first['worker_session'] = {
+      'id': 'private-worker',
+      'source': 'kanban',
+      'title': 'Background work',
+      'last_active': now.millisecondsSinceEpoch / 1000,
+    };
+    fixture.readHook = (_, method, _) async =>
+        method == 'session.active_list' ? {'sessions': []} : null;
+    final owner = BotsSession((_) async => [fixture.repository]);
+    addTearDown(owner.dispose);
+    await owner.refresh();
+    expect(owner.state.bots.first.presence, BotPresence.working);
+    expect(owner.state.bots.skip(1).map((bot) => bot.presence), [
+      BotPresence.idle,
+      BotPresence.idle,
+    ]);
+    expect(owner.state.bots.first.chat!.sessionId, 'atlas-chat');
+    expect(owner.state.bots.first.preview, contains('three useful approaches'));
+    expect(fixture.commands, isEmpty);
+  });
+
+  test('worker heartbeat expiry and renewal update the same bot', () async {
+    var now = DateTime.utc(2026, 10, 12, 12);
+    final fixture = BotsFixture(now: () => now);
+    final worker = {
+      'id': 'private-worker',
+      'source': 'tool',
+      'last_active': now.millisecondsSinceEpoch / 1000,
+    };
+    fixture.profiles.first['worker_session'] = worker;
+    fixture.readHook = (_, method, _) async =>
+        method == 'session.active_list' ? {'sessions': []} : null;
+    final owner = BotsSession((_) async => [fixture.repository]);
+    addTearDown(owner.dispose);
+    for (final (elapsed, expected) in [
+      (0, BotPresence.working),
+      (149999, BotPresence.working),
+      (150000, BotPresence.idle),
+    ]) {
+      now = DateTime.utc(2026, 10, 12, 12).add(Duration(milliseconds: elapsed));
+      await owner.refresh();
+      expect(owner.state.bots.first.presence, expected);
+      expect(
+        owner.state.bots.first.workerLastActive,
+        DateTime.utc(2026, 10, 12, 12),
+      );
+    }
+    worker['last_active'] = now.millisecondsSinceEpoch / 1000;
+    await owner.refresh();
+    expect(owner.state.bots.first.presence, BotPresence.working);
+    fixture.profiles.first['worker_session'] = null;
+    await owner.refresh();
+    expect(owner.state.bots.first.presence, BotPresence.idle);
+    expect(fixture.commands, isEmpty);
+  });
+
+  test('fresh worker evidence survives unavailable live sessions', () async {
+    final now = DateTime.utc(2026, 10, 12, 12);
+    final fixture = BotsFixture(now: () => now);
+    fixture.profiles.first['worker_session'] = {
+      'id': 'private-worker',
+      'source': 'kanban',
+      'last_active': now.millisecondsSinceEpoch / 1000,
+    };
+    fixture.readHook = (_, method, _) async {
+      if (method == 'session.active_list') throw StateError('Disconnected');
+      return null;
+    };
+    final roster = await fixture.repository.bots();
+    final presence = await fixture.repository.presence(roster);
+    expect(presence[roster.first.id], BotPresence.working);
+    expect(presence[roster[1].id], BotPresence.unknown);
+  });
+
+  test('pending input takes precedence over worker motion', () async {
+    final now = DateTime.utc(2026, 10, 12, 12);
+    final fixture = BotsFixture(now: () => now);
+    fixture.profiles[1]['worker_session'] = {
+      'id': 'private-worker',
+      'source': 'tool',
+      'last_active': now.millisecondsSinceEpoch / 1000,
+    };
+    final roster = await fixture.repository.bots();
+    expect(
+      (await fixture.repository.presence(roster))[roster[1].id],
+      BotPresence.needsInput,
+    );
+  });
+
+  test('invalid worker observations never animate an idle bot', () async {
+    final now = DateTime.utc(2026, 10, 12, 12);
+    final fixture = BotsFixture(now: () => now);
+    fixture.readHook = (_, method, _) async => switch (method) {
+      'session.active_list' => {'sessions': []},
+      'profiles.list' => {
+        'profiles': fixture.profiles,
+        'bot_mode_protocol': true,
+        'install_id': 'install-1',
+      },
+      _ => null,
+    };
+    for (final value in [
+      null,
+      'invalid',
+      {},
+      {
+        'id': '',
+        'source': 'tool',
+        'last_active': now.millisecondsSinceEpoch / 1000,
+      },
+      for (final timestamp in [
+        'invalid',
+        0,
+        -1,
+        double.nan,
+        double.infinity,
+        1e30,
+        now.millisecondsSinceEpoch / 1000 + 1,
+      ])
+        {'id': 'private-worker', 'source': 'tool', 'last_active': timestamp},
+    ]) {
+      fixture.profiles.first['worker_session'] = value;
+      final roster = await fixture.repository.bots();
+      expect(
+        (await fixture.repository.presence(roster))[roster.first.id],
+        BotPresence.idle,
+      );
+    }
+  });
   test(
     'failed asset write leaves metadata acknowledgement and retries only asset',
     () async {
@@ -972,138 +1332,7 @@ void main() {
       );
     },
   );
-  test('roster activity includes stock background worker heartbeats', () async {
-    final now = DateTime.utc(2026, 10, 12, 12);
-    final fixture = BotsFixture(now: () => now);
-    fixture.profiles.first['worker_session'] = {
-      'id': 'private-worker',
-      'source': 'kanban',
-      'title': 'Background work',
-      'last_active': now.millisecondsSinceEpoch / 1000,
-    };
-    fixture.readHook = (_, method, _) async =>
-        method == 'session.active_list' ? {'sessions': []} : null;
-    final owner = BotsSession((_) async => [fixture.repository]);
-    addTearDown(owner.dispose);
-    await owner.refresh();
-    expect(owner.state.bots.first.presence, BotPresence.working);
-    expect(owner.state.bots.skip(1).map((bot) => bot.presence), [
-      BotPresence.idle,
-      BotPresence.idle,
-    ]);
-    expect(owner.state.bots.first.chat!.sessionId, 'atlas-chat');
-    expect(owner.state.bots.first.preview, contains('three useful approaches'));
-    expect(fixture.commands, isEmpty);
-  });
 
-  test('worker heartbeat expiry and renewal update the same bot', () async {
-    var now = DateTime.utc(2026, 10, 12, 12);
-    final fixture = BotsFixture(now: () => now);
-    final worker = {
-      'id': 'private-worker',
-      'source': 'tool',
-      'last_active': now.millisecondsSinceEpoch / 1000,
-    };
-    fixture.profiles.first['worker_session'] = worker;
-    fixture.readHook = (_, method, _) async =>
-        method == 'session.active_list' ? {'sessions': []} : null;
-    final owner = BotsSession((_) async => [fixture.repository]);
-    addTearDown(owner.dispose);
-    for (final (elapsed, expected) in [
-      (0, BotPresence.working),
-      (149999, BotPresence.working),
-      (150000, BotPresence.idle),
-    ]) {
-      now = DateTime.utc(2026, 10, 12, 12).add(Duration(milliseconds: elapsed));
-      await owner.refresh();
-      expect(owner.state.bots.first.presence, expected);
-      expect(
-        owner.state.bots.first.workerLastActive,
-        DateTime.utc(2026, 10, 12, 12),
-      );
-    }
-    worker['last_active'] = now.millisecondsSinceEpoch / 1000;
-    await owner.refresh();
-    expect(owner.state.bots.first.presence, BotPresence.working);
-    fixture.profiles.first['worker_session'] = null;
-    await owner.refresh();
-    expect(owner.state.bots.first.presence, BotPresence.idle);
-    expect(fixture.commands, isEmpty);
-  });
-
-  test('fresh worker evidence survives unavailable live sessions', () async {
-    final now = DateTime.utc(2026, 10, 12, 12);
-    final fixture = BotsFixture(now: () => now);
-    fixture.profiles.first['worker_session'] = {
-      'id': 'private-worker',
-      'source': 'kanban',
-      'last_active': now.millisecondsSinceEpoch / 1000,
-    };
-    fixture.readHook = (_, method, _) async {
-      if (method == 'session.active_list') throw StateError('Disconnected');
-      return null;
-    };
-    final roster = await fixture.repository.bots();
-    final presence = await fixture.repository.presence(roster);
-    expect(presence[roster.first.id], BotPresence.working);
-    expect(presence[roster[1].id], BotPresence.unknown);
-  });
-
-  test('pending input takes precedence over worker motion', () async {
-    final now = DateTime.utc(2026, 10, 12, 12);
-    final fixture = BotsFixture(now: () => now);
-    fixture.profiles[1]['worker_session'] = {
-      'id': 'private-worker',
-      'source': 'tool',
-      'last_active': now.millisecondsSinceEpoch / 1000,
-    };
-    final roster = await fixture.repository.bots();
-    expect(
-      (await fixture.repository.presence(roster))[roster[1].id],
-      BotPresence.needsInput,
-    );
-  });
-
-  test('invalid worker observations never animate an idle bot', () async {
-    final now = DateTime.utc(2026, 10, 12, 12);
-    final fixture = BotsFixture(now: () => now);
-    fixture.readHook = (_, method, _) async => switch (method) {
-      'session.active_list' => {'sessions': []},
-      'profiles.list' => {
-        'profiles': fixture.profiles,
-        'bot_mode_protocol': true,
-        'install_id': 'install-1',
-      },
-      _ => null,
-    };
-    for (final value in [
-      null,
-      'invalid',
-      {},
-      {
-        'id': '',
-        'source': 'tool',
-        'last_active': now.millisecondsSinceEpoch / 1000,
-      },
-      for (final timestamp in [
-        'invalid',
-        0,
-        -1,
-        double.nan,
-        double.infinity,
-        1e30,
-        now.millisecondsSinceEpoch / 1000 + 1,
-      ])
-        {'id': 'private-worker', 'source': 'tool', 'last_active': timestamp},
-    ]) {
-      fixture.profiles.first['worker_session'] = value;
-      final roster = await fixture.repository.bots();
-      expect(
-        (await fixture.repository.presence(roster))[roster.first.id],
-        BotPresence.idle,
-      );
-    }
-  });
   test(
     'metadata CAS preserves unknown fields and conflicts leave the draft intact',
     () async {
@@ -1153,7 +1382,7 @@ void main() {
       other.metadata(bot, {'pinned': false}, () => true, () {}),
       throwsStateError,
     );
-    final group = (await fixture.repository.groups()).first;
+    final group = (await fixture.repository.groups(groupMessages: null)).first;
     await expectLater(
       other.sendGroup(group, 'event', 'hello', () => true, () {}),
       throwsStateError,
@@ -1256,7 +1485,9 @@ void main() {
     'room avatar admission rejects foreign and ambiguous profile observations',
     () async {
       final fixture = BotsFixture();
-      final group = (await fixture.repository.groups()).single;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
       final roster = await fixture.repository.bots();
       final bot = roster.first;
       final foreign = BotRecord(
@@ -1279,6 +1510,7 @@ void main() {
       final session = BotGroupSession(
         fixture.repository,
         group,
+        groupMessages: null,
         appearances: [foreign, roster[1], roster[1]],
 
         reads: BotGroupReadState(),
@@ -1299,7 +1531,9 @@ void main() {
     'group capture retires held reads and resumes the exact log cursor',
     () async {
       final fixture = BotsFixture();
-      final group = (await fixture.repository.groups()).first;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).first;
       fixture.events.add({
         'room_id': group.id,
         'seq': 1,
@@ -1317,6 +1551,7 @@ void main() {
         fixture.repository,
         group,
         reads: BotGroupReadState(),
+        groupMessages: null,
         appearances: const [],
       );
       addTearDown(session.dispose);
@@ -1351,11 +1586,14 @@ void main() {
     'lost group-send acknowledgement retries the same frozen id and text exactly once',
     () async {
       final fixture = BotsFixture()..sendLost = true;
-      final group = (await fixture.repository.groups()).first;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).first;
       final session = BotGroupSession(
         fixture.repository,
         group,
         reads: BotGroupReadState(),
+        groupMessages: null,
         appearances: const [],
       );
       addTearDown(session.dispose);
@@ -1378,10 +1616,13 @@ void main() {
     'readable group names keep canonical routing and frozen retries',
     () async {
       final fixture = BotsFixture()..sendLost = true;
-      final group = (await fixture.repository.groups()).first;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).first;
       final session = BotGroupSession(
         fixture.repository,
         group,
+        groupMessages: null,
         appearances: const [],
 
         reads: BotGroupReadState(),
@@ -1418,10 +1659,13 @@ void main() {
       final members = fixture.room['members'] as List;
       members[0]['display_name'] = 'Client Work';
       members[1]['display_name'] = 'Client Work';
-      final group = (await fixture.repository.groups()).first;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).first;
       final session = BotGroupSession(
         fixture.repository,
         group,
+        groupMessages: null,
         appearances: const [],
 
         reads: BotGroupReadState(),
@@ -1460,10 +1704,11 @@ void main() {
       'handle': 'bot_forge',
       'display_name': 'Foo',
     });
-    final group = (await fixture.repository.groups()).first;
+    final group = (await fixture.repository.groups(groupMessages: null)).first;
     final session = BotGroupSession(
       fixture.repository,
       group,
+      groupMessages: null,
       appearances: const [],
 
       reads: BotGroupReadState(),
@@ -1497,10 +1742,13 @@ void main() {
     'group picker uses frozen members; removed identity pauses before stock send',
     () async {
       final fixture = BotsFixture();
-      final group = (await fixture.repository.groups()).first;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).first;
       final session = BotGroupSession(
         fixture.repository,
         group,
+        groupMessages: null,
         appearances: const [],
 
         reads: BotGroupReadState(),
@@ -1532,10 +1780,11 @@ void main() {
   test('a member id named everyone is still a selected identity', () async {
     final fixture = BotsFixture();
     (fixture.room['members'] as List).first['member_id'] = 'everyone';
-    final group = (await fixture.repository.groups()).first;
+    final group = (await fixture.repository.groups(groupMessages: null)).first;
     final session = BotGroupSession(
       fixture.repository,
       group,
+      groupMessages: null,
       appearances: const [],
 
       reads: BotGroupReadState(),
@@ -1611,7 +1860,9 @@ void main() {
           'choices': ['once', 'deny'],
         },
       });
-      final group = (await fixture.repository.groups()).first;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).first;
       final runtime = await fixture.repository.groupRuntime(group);
       final action = runtime.actions.single;
       await expectLater(

@@ -14,6 +14,7 @@ import 'package:wing/core/models/session_visibility.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/workspace_recents_session.dart';
+import 'package:wing/core/services/recent_conversation_session.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
@@ -117,6 +118,18 @@ void main() {
         appPreferences: appPreferences,
         gatewayFactory: fixture.gateway,
       );
+
+  WorkspaceRecentsSession recentsFor(BotsSession bots) {
+    final recents = WorkspaceRecentsSession(controller, bots);
+    addTearDown(recents.dispose);
+    return recents;
+  }
+
+  WorkspaceRecentsSession emptyRecents() {
+    final bots = BotsSession((_) async => const []);
+    addTearDown(bots.dispose);
+    return recentsFor(bots);
+  }
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -267,7 +280,7 @@ void main() {
           for (final key in keys)
             RecentConversationEntry.chat(key: key, title: 'Saved title'),
         ],
-        bots: bots,
+        recents: recentsFor(bots),
         activity: activity,
       );
       addTearDown(visit.dispose);
@@ -313,7 +326,7 @@ void main() {
       final activity = ValueNotifier<ChatNoticeActivity?>(null);
       final visit = controller.chatRecentConversationSession(
         onOpenGroup: (_) async {},
-        bots: BotsSession((_) async => const []),
+        recents: emptyRecents(),
         chat: chat,
         activity: () => activity,
       );
@@ -348,6 +361,219 @@ void main() {
       );
     },
   );
+
+  test('Recents reuses its cached list between observations', () async {
+    await controller.refreshRecents();
+    final bots = BotsSession((_) async => [BotsFixture().repository]);
+    final recents = WorkspaceRecentsSession(controller, bots);
+    addTearDown(recents.dispose);
+    addTearDown(bots.dispose);
+    final items = recents.items();
+    expect(items, isNotEmpty);
+    expect(identical(recents.items(), items), isTrue);
+  });
+
+  test(
+    'cached Recents openings share one background refresh and visibility lease',
+    () async {
+      final fixture = BotsFixture();
+      var groupReads = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method == 'groups.list') groupReads++;
+        return null;
+      };
+      final bots = BotsSession((_) async => [fixture.repository]);
+      final recents = recentsFor(bots);
+      addTearDown(bots.dispose);
+      final held = Completer<void>(), started = Completer<void>();
+      fixture.readHook = (_, method, _) async {
+        if (method == 'groups.list') {
+          groupReads++;
+          if (!started.isCompleted) started.complete();
+          await held.future;
+        }
+        return null;
+      };
+      final first = recents.refresh();
+      await started.future;
+      final second = recents.refresh(force: true);
+      expect(identical(first, second), isTrue);
+      expect(groupReads, 1);
+      held.complete();
+      await first;
+      final catalog = recents.catalog;
+      final items = recents.items();
+      final reader = Object(), other = Object();
+      recents.setVisible(reader, true);
+      recents.setVisible(other, true);
+      await recents.refresh();
+      await Future<void>.delayed(Duration.zero);
+      expect(groupReads, 1);
+      expect(identical(recents.catalog, catalog), isTrue);
+      expect(identical(recents.items(), items), isTrue);
+      recents.setVisible(reader, false);
+      recents.setVisible(other, false);
+      await recents.refresh(force: true);
+      expect(groupReads, 2);
+    },
+  );
+
+  testWidgets(
+    'visible borrowing defers refresh and cancels admission if hidden immediately',
+    (tester) async {
+      final fixture = BotsFixture();
+      var groupReads = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method == 'groups.list') groupReads++;
+        return null;
+      };
+      final bots = BotsSession((_) async => [fixture.repository]);
+      final recents = recentsFor(bots);
+      addTearDown(bots.dispose);
+      final reader = Object();
+      recents.setVisible(reader, true);
+      expect(controller.recentsLoading, isFalse);
+      recents.setVisible(reader, false);
+      await tester.pump();
+      expect(groupReads, 0);
+      recents.setVisible(reader, true);
+      await tester.runAsync(() async {
+        await Future<void>.delayed(Duration.zero);
+        await recents.refresh();
+      });
+      expect(groupReads, 1);
+      recents.setVisible(reader, false);
+    },
+  );
+
+  testWidgets(
+    'Recents polls while any reader is visible and stops when hidden',
+    (tester) async {
+      final fixture = BotsFixture();
+      var groupReads = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method == 'groups.list') groupReads++;
+        return null;
+      };
+      final bots = BotsSession((_) async => [fixture.repository]);
+      final recents = recentsFor(bots);
+      addTearDown(bots.dispose);
+      await recents.refresh();
+      final reader = Object(), other = Object();
+      recents.setVisible(reader, true);
+      recents.setVisible(other, true);
+      await tester.pump();
+      expect(groupReads, 1);
+      recents.setVisible(reader, false);
+      await tester.pump(WorkspaceRecentsSession.refreshInterval);
+      await tester.pump();
+      expect(groupReads, 2);
+      recents.setVisible(other, false);
+      await tester.pump(WorkspaceRecentsSession.refreshInterval);
+      expect(groupReads, 2);
+    },
+  );
+
+  test(
+    'new conversation sources share cached reading revision and screenshot ownership',
+    () async {
+      await controller.openSession(
+        ProfileSessionKey(controller.current!.scope, 'recent-5'),
+      );
+      final bots = BotsSession((_) async => const []);
+      addTearDown(bots.dispose);
+      final recents = recentsFor(bots);
+      final activity = ValueNotifier<ChatNoticeActivity?>(null);
+      addTearDown(activity.dispose);
+      final chat = controller.current!.chat!;
+      RecentConversationSession open() =>
+          controller.chatRecentConversationSession(
+            chat: chat,
+            recents: recents,
+            onOpenGroup: (_) async {},
+            activity: () => activity,
+          );
+      final first = open();
+      final key = RecentConversationKey.chat(chat.key);
+      final revision = first.previewRevision(key);
+      expect(first.snapshots, same(recents.snapshots));
+      first.dispose();
+      final second = open();
+      addTearDown(second.dispose);
+      expect(second.snapshots, same(recents.snapshots));
+      expect(second.previewRevision(key), revision);
+    },
+  );
+
+  for (final method in ['groups.state', 'groups.log']) {
+    test(
+      'failed $method observation retains the cached group slot until recovery',
+      () async {
+        final fixture = BotsFixture();
+        fixture.room['name'] = 'Build Pace Health Analysis';
+        fixture.events.add({
+          'room_id': 'room-1',
+          'seq': 1,
+          'kind': 'message.member',
+          'created_at': DateTime.now().millisecondsSinceEpoch / 1000 - 120,
+          'actor': {'kind': 'member', 'id': 'atlas'},
+          'payload': {'text': 'Recent group answer'},
+        });
+        final bots = BotsSession((_) async => [fixture.repository]);
+        final recents = WorkspaceRecentsSession(controller, bots);
+        addTearDown(recents.dispose);
+        addTearDown(bots.dispose);
+        await bots.refresh();
+        await Future<void>.delayed(Duration.zero);
+        final group = recents.items().single.group!;
+        final activity = ValueNotifier<ChatNoticeActivity?>(null);
+        addTearDown(activity.dispose);
+        final visit = controller.recentConversationSession(
+          recents: recents,
+          entries: recents.catalog.entries,
+          onOpenGroup: (_) async {},
+          activity: activity,
+        );
+        addTearDown(visit.dispose);
+        fixture.readHook = (_, requested, _) async {
+          if (requested == method) {
+            throw StateError('Group read unavailable');
+          }
+          return null;
+        };
+        await bots.refresh();
+        await Future<void>.delayed(Duration.zero);
+        expect(recents.items().single.group!.key, group.key);
+        expect(
+          recents.items().single.lastMessage,
+          group.lastMessageAt!.millisecondsSinceEpoch / 1000,
+        );
+        expect(bots.state.errors, isNotEmpty);
+        expect(visit.catalogError, isNotNull);
+        fixture.readHook = null;
+        fixture.room['name'] = 'Recovered Build Pace Health Analysis';
+        await bots.refresh();
+        await Future<void>.delayed(Duration.zero);
+        expect(recents.items().single.group!.key, group.key);
+        expect(bots.state.errors, isEmpty);
+        expect(visit.catalogError, isNull);
+        expect(
+          visit.entries.single.title,
+          'Recovered Build Pace Health Analysis',
+        );
+        fixture.readHook = (_, method, _) async {
+          if (method == 'groups.list') {
+            return {'rooms': [], 'next_offset': null};
+          }
+          return null;
+        };
+        await bots.refresh();
+        await Future<void>.delayed(Duration.zero);
+        expect(recents.items(), isEmpty);
+        expect(visit.entries, isEmpty);
+      },
+    );
+  }
 
   test(
     'pinch catalog matches merged Recents freshness order including rooms',
@@ -388,7 +614,7 @@ void main() {
           await bots.refresh();
           await closeRoom.future;
         },
-        bots: bots,
+        recents: merged,
         chat: controller.current!.chat!,
         activity: () => activity,
       );
@@ -456,7 +682,7 @@ void main() {
         final group = bots.observedGroups.single;
         final visit = controller.groupRecentConversationSession(
           group: group,
-          bots: bots,
+          recents: recentsFor(bots),
           onOpenGroup: (_) async {},
           onOpenChat: (key) async {
             opened = key;
@@ -548,7 +774,7 @@ void main() {
           recents.dispose();
           bots.dispose();
         });
-        recents.setVisible(true);
+        recents.setVisible(recents, true);
         await started.future;
         await Future<void>.delayed(Duration.zero);
         expect(recents.items().where((item) => item.chat != null), isNotEmpty);
@@ -583,7 +809,7 @@ void main() {
       final activity = ValueNotifier<ChatNoticeActivity?>(null);
       final visit = controller.chatRecentConversationSession(
         onOpenGroup: (_) async {},
-        bots: bots,
+        recents: recentsFor(bots),
         chat: controller.current!.chat!,
         activity: () => activity,
       );
@@ -695,6 +921,27 @@ void main() {
       expect(controller.recentChats(), hasLength(106));
       expect(controller.recentsAvailableProfiles, 1);
       expect(controller.recentsProfileErrors['work'], isNotNull);
+    },
+  );
+
+  test(
+    'partial profile refresh retains known cached chats until recovery',
+    () async {
+      final recents = emptyRecents();
+      await recents.refresh();
+      final previous = recents.items().map((item) => item.chat!.key).toList();
+      expect(
+        previous.any((key) => key.workspace.profileName == 'work'),
+        isTrue,
+      );
+      fixture.failWork = true;
+      await recents.refresh(force: true);
+      expect(recents.items().map((item) => item.chat!.key), previous);
+      expect(recents.catalog.error, isNotNull);
+      fixture.failWork = false;
+      await recents.refresh(force: true);
+      expect(recents.catalog.error, isNull);
+      expect(recents.items().map((item) => item.chat!.key), previous);
     },
   );
 

@@ -43,7 +43,9 @@ void main() {
           'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
         };
       };
-      final group = (await fixture.repository.groups()).single;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
       expect(group.lastMessageAt!.millisecondsSinceEpoch, 1002000);
       expect(group.lastMessageSequence, 2);
       expect(group.lastAnswerSequence, 1);
@@ -58,8 +60,11 @@ void main() {
     'read receipts persist, stay monotonic and isolate authenticated rooms',
     () async {
       final fixture = BotsFixture();
-      final base = (await fixture.repository.groups()).single;
+      final base = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
       final group = BotGroup(
+        observationComplete: true,
         scope: base.scope,
         instance: base.instance,
         id: base.id,
@@ -83,6 +88,7 @@ void main() {
       await restored.load();
       expect(restored.sequence(group), 9);
       final other = BotGroup(
+        observationComplete: true,
         scope: WorkspaceScope(
           connectionId: 'other',
           connectionIdentity: 'another authenticated server',
@@ -117,7 +123,7 @@ void main() {
         'payload': {},
       },
     ]);
-    final group = (await fixture.repository.groups()).single;
+    final group = (await fixture.repository.groups(groupMessages: null)).single;
     final reads = BotGroupReadState();
     addTearDown(reads.dispose);
     await reads.load();
@@ -125,6 +131,7 @@ void main() {
       fixture.repository,
       group,
       reads: reads,
+      groupMessages: null,
       appearances: const [],
     );
     addTearDown(session.dispose);
@@ -145,8 +152,11 @@ void main() {
     'retired passive tail stops paging without receipts or commands',
     () async {
       final fixture = BotsFixture();
-      final base = (await fixture.repository.groups()).single;
+      final base = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
       final group = BotGroup(
+        observationComplete: true,
         scope: base.scope,
         instance: base.instance,
         id: base.id,
@@ -161,6 +171,7 @@ void main() {
       final session = BotGroupSession(
         fixture.repository,
         group,
+        groupMessages: null,
         appearances: const [],
         reads: reads,
       );

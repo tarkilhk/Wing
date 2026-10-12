@@ -7,6 +7,7 @@ import 'bot_group_read_state.dart';
 import '../models/composer_reference.dart';
 import '../models/recent_conversation.dart';
 import 'hermes_voice.dart';
+import 'recent_conversation_snapshots.dart';
 
 /// Exact group visit and text revision captured before microphone admission.
 final class BotGroupVoiceDraft {
@@ -24,6 +25,7 @@ class BotGroupSession extends ChangeNotifier {
     BotGroup group, {
     required Iterable<BotRecord> appearances,
     required this.reads,
+    required this.groupMessages,
   }) : _group = group {
     repository.retain();
     for (final member in group.members) {
@@ -37,6 +39,7 @@ class BotGroupSession extends ChangeNotifier {
     }
   }
   final BotGroupReadState reads;
+  final RecentGroupMessages? groupMessages;
   Future<void> acknowledgeVisibleMessages(int sequence) async {
     if (_closed ||
         !_visible ||
@@ -242,6 +245,12 @@ class BotGroupSession extends ChangeNotifier {
     required bool Function() canRead,
   }) async {
     if (limit < 1) throw ArgumentError.value(limit, 'limit');
+    if (_closed || !canRead()) throw StateError('Group preview retired');
+    if (group.scope != repository.scope) {
+      throw StateError('Group belongs to another instance');
+    }
+    final cached = groupMessages?.borrow(group, limit: limit);
+    if (cached != null) return cached;
     final messages = <BotGroupEvent>[];
     var end = group.lastMessageSequence;
     while (end > 0 && messages.length < limit) {

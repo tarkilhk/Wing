@@ -497,7 +497,10 @@ void main() {
       () => true,
       () {},
     );
-    expect((await fixture.repository.groups()).single.picture, _photo());
+    expect(
+      (await fixture.repository.groups(groupMessages: null)).single.picture,
+      _photo(),
+    );
   });
 
   test(
@@ -517,7 +520,9 @@ void main() {
       expect(await draft.save(canUse: () => true), true);
       fixture.room['room_id'] = fixture.commands.first.$3['room_id'];
       fixture.room['name'] = 'Research team';
-      final saved = (await fixture.repository.groups()).single;
+      final saved = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
       expect(saved.iconColor, color);
       expect(saved.picture, isNull);
       expect(saved.withPinned(true).iconColor, color);
@@ -844,7 +849,10 @@ void main() {
         first,
       );
       expect(backend.profile['ui_meta']['hermes-bots']['title'], 'Hermes');
-      expect((await fixture.repository.groups()).single.picture, picture);
+      expect(
+        (await fixture.repository.groups(groupMessages: null)).single.picture,
+        picture,
+      );
       expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);
     },
   );
@@ -884,7 +892,10 @@ void main() {
       expect(fresh.state.groups.single.picture, draft.picture);
       expect(backend.profile['ui_meta']['hermes-bots']['unrelated'], isNotNull);
       final other = BotsFixture();
-      expect((await other.repository.groups()).single.picture, isNull);
+      expect(
+        (await other.repository.groups(groupMessages: null)).single.picture,
+        isNull,
+      );
       expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);
     },
   );

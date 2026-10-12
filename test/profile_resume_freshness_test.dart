@@ -1,3 +1,4 @@
+import 'package:wing/core/services/workspace_recents_session.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/recent_conversation.dart';
@@ -46,9 +47,11 @@ void main() {
 
   RecentConversationSession recentVisit(Iterable<ProfileChat> chats) {
     final activity = ValueNotifier<ChatNoticeActivity?>(null);
+    final bots = BotsSession((_) async => const []);
+    final recents = WorkspaceRecentsSession(controller, bots);
     final visit = controller.recentConversationSession(
       onOpenGroup: (_) async {},
-      bots: BotsSession((_) async => const []),
+      recents: recents,
       entries: chats.map(
         (chat) =>
             RecentConversationEntry.chat(key: chat.key, title: chat.title),
@@ -57,6 +60,8 @@ void main() {
     );
     addTearDown(() {
       visit.dispose();
+      recents.dispose();
+      bots.dispose();
       activity.dispose();
     });
     return visit;

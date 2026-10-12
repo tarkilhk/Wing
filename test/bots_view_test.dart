@@ -161,7 +161,9 @@ void main() {
             profile['ui_meta']['hermes-bots']['shape'] = botShapes[index];
           }
           final bots = await fixture.repository.bots();
-          final saved = (await fixture.repository.groups()).single;
+          final saved = (await fixture.repository.groups(
+            groupMessages: null,
+          )).single;
           final frame = GlobalKey();
           await tester.pumpWidget(
             MaterialApp(

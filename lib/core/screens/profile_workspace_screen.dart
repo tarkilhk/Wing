@@ -7,6 +7,7 @@ import '../models/recent_conversation.dart';
 import '../models/bots.dart';
 import 'bots/bot_screen_view.dart';
 import '../services/recent_conversation_session.dart';
+import '../services/workspace_recents_session.dart';
 import '../widgets/chat_notice_activity_scope.dart';
 import '../widgets/recent_conversations/recent_conversation_switcher.dart';
 import '../widgets/recent_conversations/conversation_preview.dart';
@@ -160,17 +161,34 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     with WidgetsBindingObserver {
   ProfileWorkspaceController get controller => widget.controller;
   BotsSession? _botsOwner;
+  WorkspaceRecentsSession? _recentsOwner;
   BotsViewState _botsView = const BotsViewState();
   final _senderAppearances =
       <(ProfileSessionKey, String), Future<BotRecord?>>{};
   int _botNavigation = 0;
-  BotsSession get _bots => _botsOwner ??=
-      widget.createBotsSession?.call() ??
-      BotsSession(
-        (canUse) async => [
-          BotsRepository.forServer(controller.healthSession().server),
-        ],
-      );
+  WorkspaceRecentsSession? get _borrowedRecents => context
+      .getInheritedWidgetOfExactType<RecentConversationRouteScope>()
+      ?.recents;
+  BotsSession get _bots {
+    if (_borrowedRecents case final borrowed?) return borrowed.bots;
+    if (_botsOwner == null) {
+      final bots = _botsOwner =
+          widget.createBotsSession?.call() ??
+          BotsSession(
+            (canUse) async => [
+              BotsRepository.forServer(controller.healthSession().server),
+            ],
+          );
+      _recentsOwner = WorkspaceRecentsSession(controller, bots);
+    }
+    return _botsOwner!;
+  }
+
+  WorkspaceRecentsSession get _recents {
+    if (_borrowedRecents case final borrowed?) return borrowed;
+    final bots = _bots;
+    return _recentsOwner ??= WorkspaceRecentsSession(controller, bots);
+  }
 
   Future<void> _openBotChat(ProfileSessionKey key) => _run(() async {
     if (_destination != AppDestination.bots) return;
@@ -406,43 +424,40 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   );
 
   Future<void> _openRecentGroup(BotGroup group) {
-    late RecentConversationSession visit;
     return Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (groupContext) => GroupConversationSwitcher(
           groupKey: RecentConversationEntry.group(group).key,
-          createSession: () =>
-              visit = controller.groupRecentConversationSession(
-                group: group,
-                bots: _bots,
-                onOpenGroup: _openRecentGroup,
-                activity: () => ChatNoticeActivityScope.of(groupContext),
-                onOpenChat: (_) => Navigator.of(groupContext).push<void>(
-                  MaterialPageRoute(
-                    builder: (chatContext) => RecentConversationRouteScope(
-                      entries: visit.entries,
-                      onLeave: () => Navigator.of(chatContext).pop(),
-                      child: ProfileWorkspaceScreen(
-                        controller: controller,
-                        enableNotifications: widget.enableNotifications,
-                        backgroundMonitoringState:
-                            widget.backgroundMonitoringState,
-                        openMonitoringBatterySettings:
-                            widget.openMonitoringBatterySettings,
-                        onConnections: widget.onConnections,
-                        configurationActions: widget.configurationActions,
-                        savedConnections: widget.savedConnections,
-                        onSelectConnection: widget.onSelectConnection,
-                        onPreferencesChanged: widget.onPreferencesChanged,
-                        onCapturePhoto: widget.onCapturePhoto,
-                        voiceDevice: widget.voiceDevice,
-                        createBotsSession: widget.createBotsSession,
-                        onOpenBotChat: widget.onOpenBotChat,
-                      ),
-                    ),
+          createSession: () => controller.groupRecentConversationSession(
+            group: group,
+            recents: _recents,
+            onOpenGroup: _openRecentGroup,
+            activity: () => ChatNoticeActivityScope.of(groupContext),
+            onOpenChat: (_) => Navigator.of(groupContext).push<void>(
+              MaterialPageRoute(
+                builder: (chatContext) => RecentConversationRouteScope(
+                  recents: _recents,
+                  onLeave: () => Navigator.of(chatContext).pop(),
+                  child: ProfileWorkspaceScreen(
+                    controller: controller,
+                    enableNotifications: widget.enableNotifications,
+                    backgroundMonitoringState: widget.backgroundMonitoringState,
+                    openMonitoringBatterySettings:
+                        widget.openMonitoringBatterySettings,
+                    onConnections: widget.onConnections,
+                    configurationActions: widget.configurationActions,
+                    savedConnections: widget.savedConnections,
+                    onSelectConnection: widget.onSelectConnection,
+                    onPreferencesChanged: widget.onPreferencesChanged,
+                    onCapturePhoto: widget.onCapturePhoto,
+                    voiceDevice: widget.voiceDevice,
+                    createBotsSession: widget.createBotsSession,
+                    onOpenBotChat: widget.onOpenBotChat,
                   ),
                 ),
               ),
+            ),
+          ),
           previewBuilder: _recentPreview,
           child: BotGroupScreen(
             voiceInputSettings: () =>
@@ -463,7 +478,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   ) async {
     _pendingRecentVisit?.dispose();
     final visit = controller.recentConversationSession(
-      bots: _bots,
+      recents: _recents,
       entries: displayed.map((item) => item.conversation),
       onOpenGroup: _openRecentGroup,
       activity: ChatNoticeActivityScope.of(context),
@@ -498,14 +513,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       final route = RecentConversationRouteScope.maybeOf(context);
       _recentVisit = route == null
           ? controller.chatRecentConversationSession(
-              bots: _bots,
+              recents: _recents,
               chat: chat,
               onOpenGroup: _openRecentGroup,
               activity: () => ChatNoticeActivityScope.of(context),
             )
           : controller.recentConversationSession(
-              bots: _bots,
-              entries: route.entries,
+              recents: route.recents,
+              entries: route.recents.catalog.entries,
               onOpenGroup: _openRecentGroup,
               activity: ChatNoticeActivityScope.of(context),
             );
@@ -666,8 +681,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   @override
   void dispose() {
-    _botsOwner?.dispose();
     _disposeRecentVisit();
+    _recentsOwner?.dispose();
+    _botsOwner?.dispose();
     _composerFocus.removeListener(_composerFocusChanged);
     _composerEditing.dispose();
     if (_renderedReadingFocus case final rendered?) {
@@ -3215,8 +3231,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 },
               ),
               AppDestination.activity => WorkspaceActivityContent(
-                controller: controller,
-                bots: _bots,
+                recents: _recents,
                 visible: _appIsActive && _routeIsCurrent,
                 onOpenGroup: _openRecentGroup,
                 onOpen: (item, displayed) => unawaited(

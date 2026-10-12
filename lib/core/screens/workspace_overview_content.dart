@@ -10,14 +10,14 @@ export 'administration/administration_content.dart';
 class WorkspaceActivityContent extends StatefulWidget {
   const WorkspaceActivityContent({
     super.key,
-    required this.controller,
-    required this.bots,
+    required this.recents,
     required this.onOpen,
     required this.onOpenGroup,
     required this.visible,
   });
-  final ProfileWorkspaceController controller;
-  final BotsSession bots;
+  final WorkspaceRecentsSession recents;
+  ProfileWorkspaceController get controller => recents.controller;
+  BotsSession get bots => recents.bots;
   final bool visible;
   final void Function(ProfileRecentChat, List<WorkspaceRecentItem>) onOpen;
   final Future<void> Function(BotGroup) onOpenGroup;
@@ -30,22 +30,28 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
   late WorkspaceRecentsSession _session;
   bool _opening = false;
   void _attach() {
-    _session = WorkspaceRecentsSession(widget.controller, widget.bots);
+    _session = widget.recents;
     _session.addListener(_changed);
     _syncVisibility();
+    final session = _session;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(_session, session)) {
+        session.prepareAppearances();
+      }
+    });
   }
 
   void _syncVisibility() {
     final session = _session;
     // Hiding cancels polling immediately and cannot publish a refresh.
     if (!widget.visible) {
-      session.setVisible(false);
+      session.setVisible(this, false);
       return;
     }
     // Both attachment and widget updates can run during route composition.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && identical(_session, session)) {
-        session.setVisible(widget.visible);
+        session.setVisible(this, widget.visible);
       }
     });
   }
@@ -63,9 +69,9 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
   @override
   void didUpdateWidget(WorkspaceActivityContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller ||
-        oldWidget.bots != widget.bots) {
-      _session.dispose();
+    if (oldWidget.recents != widget.recents) {
+      _session.removeListener(_changed);
+      _session.setVisible(this, false);
       _attach();
     } else {
       _syncVisibility();
@@ -74,19 +80,20 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
 
   @override
   void dispose() {
-    _session.dispose();
+    _session.removeListener(_changed);
+    _session.setVisible(this, false);
     super.dispose();
   }
 
   Future<void> _openGroup(BotGroup group) async {
     if (_opening) return;
     setState(() => _opening = true);
-    _session.setVisible(false);
+    _session.setVisible(this, false);
     try {
       await widget.onOpenGroup(group);
     } finally {
       if (mounted) {
-        _session.setVisible(widget.visible);
+        _session.setVisible(this, widget.visible);
         setState(() => _opening = false);
       }
     }

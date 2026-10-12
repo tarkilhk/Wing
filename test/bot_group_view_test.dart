@@ -101,7 +101,9 @@ void main() {
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
           final fixture = BotsFixture();
-          final group = (await fixture.repository.groups()).single;
+          final group = (await fixture.repository.groups(
+            groupMessages: null,
+          )).single;
           final device = VoiceDeviceFixture();
           addTearDown(device.stream.close);
           final frame = GlobalKey();
@@ -127,6 +129,7 @@ void main() {
                   createSession: () => BotGroupSession(
                     fixture.repository,
                     group,
+                    groupMessages: null,
                     appearances: const [],
                     reads: BotGroupReadState(),
                   ),
@@ -238,7 +241,7 @@ void main() {
     tester,
   ) async {
     final fixture = BotsFixture();
-    final group = (await fixture.repository.groups()).single;
+    final group = (await fixture.repository.groups(groupMessages: null)).single;
     final device = VoiceDeviceFixture();
     addTearDown(device.stream.close);
     final visible = ValueNotifier(true);
@@ -250,6 +253,7 @@ void main() {
       createSession: () => BotGroupSession(
         fixture.repository,
         group,
+        groupMessages: null,
         appearances: const [],
         reads: BotGroupReadState(),
       ),
@@ -308,7 +312,9 @@ void main() {
     (tester) async {
       final server = AdministrationFixture();
       final fixture = BotsFixture(server: server.server);
-      final group = (await fixture.repository.groups()).single;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
       final device = VoiceDeviceFixture()
         ..startError = StateError('Microphone unavailable');
       addTearDown(device.stream.close);
@@ -329,6 +335,7 @@ void main() {
             createSession: () => BotGroupSession(
               fixture.repository,
               group,
+              groupMessages: null,
               appearances: const [],
               reads: BotGroupReadState(),
             ),
@@ -367,7 +374,7 @@ void main() {
     tester,
   ) async {
     final fixture = BotsFixture();
-    final group = (await fixture.repository.groups()).first;
+    final group = (await fixture.repository.groups(groupMessages: null)).first;
     final appearances = await fixture.repository.bots();
     var reads = 0;
     fixture.readHook = (_, method, _) async {
@@ -385,6 +392,7 @@ void main() {
             fixture.repository,
             group,
             reads: BotGroupReadState(),
+            groupMessages: null,
             appearances: appearances,
           ),
           onEdit: (_) async {
@@ -449,7 +457,7 @@ void main() {
     fixture.events.add(
       _event(2, 'message.user', 'you', '**Literal user text** @bot_atlas'),
     );
-    final group = (await fixture.repository.groups()).first;
+    final group = (await fixture.repository.groups(groupMessages: null)).first;
     final appearances = await fixture.repository.bots();
     await tester.pumpWidget(
       MaterialApp(
@@ -460,6 +468,7 @@ void main() {
             fixture.repository,
             group,
             reads: BotGroupReadState(),
+            groupMessages: null,
             appearances: appearances,
           ),
         ),
@@ -558,9 +567,11 @@ void main() {
               'I’ll review the scientific assumptions before implementation. The comparison windows and missing-data rules need your approval.',
             ),
           ]);
-          final group = (await fixture.repository.groups()).first.withIcon(
-            picture: File('assets/icon/icon.png').readAsBytesSync(),
-          );
+          final group = (await fixture.repository.groups(groupMessages: null))
+              .first
+              .withIcon(
+                picture: File('assets/icon/icon.png').readAsBytesSync(),
+              );
           final appearances = await fixture.repository.bots();
           final frame = GlobalKey();
           final keyboard = ValueNotifier<bool>(false);
@@ -589,6 +600,7 @@ void main() {
                     fixture.repository,
                     group,
                     reads: BotGroupReadState(),
+                    groupMessages: null,
                     appearances: appearances,
                   ),
                 ),
@@ -722,7 +734,9 @@ void main() {
             '@bot_atlas, please review this evidence and explain what I need to do next.',
           ),
         ]);
-        final group = (await fixture.repository.groups()).first;
+        final group = (await fixture.repository.groups(
+          groupMessages: null,
+        )).first;
         final appearances = await fixture.repository.bots();
         var working = true, approval = false;
         final initialRead = Completer<void>();
@@ -780,6 +794,7 @@ void main() {
                   fixture.repository,
                   group,
                   reads: BotGroupReadState(),
+                  groupMessages: null,
                   appearances: appearances,
                 ),
               ),

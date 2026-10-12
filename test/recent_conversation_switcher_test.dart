@@ -1,3 +1,4 @@
+import 'package:wing/core/services/recent_conversation_snapshots.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/models/notification_focus.dart';
@@ -55,6 +56,16 @@ class _ReviewBinding extends AutomatedTestWidgetsFlutterBinding {
 }
 
 class _UiSource extends ChangeNotifier implements RecentConversationSource {
+  @override
+  final snapshots = RecentConversationSnapshots();
+  @override
+  void dispose() {
+    snapshots.dispose();
+    super.dispose();
+  }
+
+  @override
+  void setVisible(bool visible) {}
   _UiSource({int count = 3}) {
     final scope = WorkspaceScope(
       connectionId: 'host',
@@ -365,7 +376,9 @@ void main() {
         final fixture = BotsFixture();
         final roster = await fixture.repository.bots();
         fixture.room['name'] = 'Build Pace Health Analysis Research team';
-        final group = (await fixture.repository.groups()).single;
+        final group = (await fixture.repository.groups(
+          groupMessages: null,
+        )).single;
         final entry = RecentConversationEntry.group(group);
         final frame = GlobalKey();
         tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
@@ -714,6 +727,7 @@ void main() {
       (tester) async {
         final room = RecentConversationEntry.group(
           BotGroup(
+            observationComplete: true,
             scope: source.entries[0].key.chat!.workspace,
             instance: 'Host',
             id: 'room-1',
@@ -759,6 +773,45 @@ void main() {
         await _finishFrames(tester);
         expect(find.text('Choose a conversation'), findsOneWidget);
         expect(session.selected, source.entries[0].key);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'opening reads neighbors before the first motion or capture frame',
+      (tester) async {
+        enterDormant();
+        final pending = <Completer<RecentConversationPreview>>[];
+        for (final entry in source.entries.skip(1)) {
+          final read = Completer<RecentConversationPreview>();
+          pending.add(read);
+          source.waitingPreviews[entry.key] = read;
+        }
+        source.catalogRead = Completer<RecentConversationCatalog>();
+        await mount(tester, dormant: true);
+        switcher.currentState!.openStack();
+        expect(
+          source.previewOrder,
+          containsAll([source.entries[1].key, source.entries[2].key]),
+          reason: 'Opening data reads must overlap motion and live readback',
+        );
+        expect(session.entries, hasLength(1));
+        expect(source.historyReads, 2);
+        expect(
+          find.byKey(ValueKey((source.entries[1].key, 'snapshot'))),
+          findsNothing,
+          reason:
+              'Early reads must not start offscreen rendering during motion',
+        );
+        source.catalogRead!.complete(source.catalog);
+        for (var i = 0; i < pending.length; i++) {
+          pending[i].complete(source._readyPreview(source.entries[i + 1]));
+        }
+        await _finishFrames(tester);
+        expect(
+          find.byKey(ValueKey((source.entries[1].key, 'snapshot'))),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
       },
     );
@@ -917,6 +970,66 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('closed composer keyboard changes preserve neighbor pixels', (
+      tester,
+    ) async {
+      await mount(tester);
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      final key = source.entries[1].key;
+      final pixels = find.byKey(ValueKey((key, 'snapshot')));
+      final old = tester.widget<RawImage>(pixels).image!;
+      switcher.currentState!.dismissStack();
+      await _finishFrames(tester);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+      await tester.pump();
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pump();
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      expect(
+        old.debugDisposed,
+        isFalse,
+        reason: 'Unchanged card pixels must survive the normal composer IME',
+      );
+      expect(
+        tester.widget<RawImage>(pixels).image,
+        same(old),
+        reason: 'Unchanged card pixels must survive the normal composer IME',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a new visit borrows retained workspace screenshot images', (
+      tester,
+    ) async {
+      await mount(tester);
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      final neighbor = source.entries[1].key;
+      final finder = find.byKey(ValueKey((neighbor, 'snapshot')));
+      final image = tester.widget<RawImage>(finder).image!;
+      final bytes = source.snapshots.retainedBytes;
+      await tester.pumpWidget(const SizedBox());
+      expect(image.debugDisposed, isFalse);
+      expect(source.snapshots.retainedBytes, bytes);
+      session.dispose();
+      session = RecentConversationSession.fromRecents(
+        entries: source.entries,
+        source: source,
+        activity: activity,
+      );
+      source.previewReads = source.historyReads = 0;
+      await mount(tester);
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      expect(tester.widget<RawImage>(finder).image, same(image));
+      expect(source.previewReads, 0);
+      expect(source.historyReads, 0);
+      expect(image.debugDisposed, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('equivalent workspace themes preserve prepared images', (
       tester,
     ) async {
@@ -946,6 +1059,62 @@ void main() {
       );
       expect(built, before);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'reopening retains pixels while an updated preview is pending',
+      (tester) async {
+        await mount(tester);
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        final entry = source.entries[1];
+        final pixels = find.byKey(ValueKey((entry.key, 'snapshot')));
+        final old = tester.widget<RawImage>(pixels).image!;
+        switcher.currentState!.dismissStack();
+        await _finishFrames(tester);
+        final pending = Completer<RecentConversationPreview>();
+        source.waitingPreviews[entry.key] = pending;
+        source.revisions[entry.key] = 1;
+        source.notifyListeners();
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        expect(
+          pixels,
+          findsOneWidget,
+          reason: 'A refresh must not replace usable pixels with a blank card',
+        );
+        expect(tester.widget<RawImage>(pixels).image, same(old));
+        expect(old.debugDisposed, isFalse);
+        pending.complete(source._readyPreview(entry));
+        await _finishFrames(tester);
+        expect(tester.widget<RawImage>(pixels).image, isNot(same(old)));
+        expect(old.debugDisposed, isTrue);
+        expect(source.opens, isEmpty);
+      },
+    );
+
+    testWidgets('pending bot placeholder updates to its resolved identity', (
+      tester,
+    ) async {
+      final entry = source.entries[1];
+      source.entries[1] = RecentConversationEntry.chat(
+        key: entry.key.chat!,
+        title: 'Bot Chat',
+      );
+      final pending = Completer<RecentConversationPreview>();
+      source.waitingPreviews[entry.key] = pending;
+      await mount(tester);
+      switcher.currentState!.openStack();
+      await _finishFrames(tester);
+      final fixture = BotsFixture();
+      source.appearances[entry.key] = (await fixture.repository.bots()).first;
+      source.notifyListeners();
+      await tester.pump();
+      expect(find.text('Atlas'), findsOneWidget);
+      expect(find.text('Bot Chat'), findsNothing);
+      expect(find.byType(BotAvatar), findsOneWidget);
+      pending.complete(source._readyPreview(entry));
+      await _finishFrames(tester);
     });
 
     testWidgets('resizing the stack restarts its image batch', (tester) async {
@@ -1551,8 +1720,13 @@ void main() {
           return image!;
         }
 
-        final cache = ConversationCardSnapshots(byteLimit: 3200);
-        addTearDown(cache.clear);
+        final store = RecentConversationSnapshots(byteLimit: 3200);
+        final cache = ConversationCardSnapshots(
+          store,
+          environment: () => 'test',
+          liveEnvironment: () => 'test',
+        );
+        addTearDown(store.dispose);
         final images = [for (var i = 0; i < 3; i++) await pixels(20)];
         for (var i = 0; i < 3; i++) {
           cache.record(
@@ -1597,7 +1771,7 @@ void main() {
           isFalse,
           reason: 'Visited real viewports survive ring neighborhood changes.',
         );
-        cache.clear();
+        store.clear();
         expect(images[1].debugDisposed, isTrue);
         expect(visited.debugDisposed, isTrue);
       },

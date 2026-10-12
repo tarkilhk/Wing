@@ -1,81 +1,61 @@
 import 'dart:ui' as ui;
 
 import '../../models/recent_conversation.dart';
+import '../../services/recent_conversation_snapshots.dart';
 
-/// Disposable viewport pixels for one Recents visit, without transcript owners.
-/// Reads never capture, decode, load history or acquire execution authority.
+/// Rendering adapter. Image retention, eviction and disposal belong to the
+/// workspace catalog; this borrower only supplies and reads raster resources.
 final class ConversationCardSnapshots {
-  ConversationCardSnapshots({this.byteLimit = 32 * 1024 * 1024});
+  ConversationCardSnapshots(
+    this._cache, {
+    required this.environment,
+    required this.liveEnvironment,
+  });
+  final RecentConversationSnapshots _cache;
+  final Object Function() environment, liveEnvironment;
 
-  final int byteLimit;
-  final _images =
-      <RecentConversationKey, ({ui.Image image, bool live, Object revision})>{};
-  int _bytes = 0;
-  int _reserved = 0;
-  Set<RecentConversationKey> _neighborhood = {};
+  int get byteLimit => _cache.byteLimit;
+  Iterable<RecentConversationKey> get keys => {
+    ..._cache.keysFor(environment()),
+    ..._cache.keysFor(liveEnvironment()),
+  };
 
-  ui.Image? imageFor(RecentConversationKey key) => _images[key]?.image;
-  bool isLive(RecentConversationKey key) => _images[key]?.live ?? false;
-  Object? revisionFor(RecentConversationKey key) => _images[key]?.revision;
-
-  /// Includes readback in flight in the same memory budget as retained pixels.
-  void reserve(int bytes) {
-    _reserved += bytes;
-    _evictToFit(0);
+  ui.Image? imageFor(RecentConversationKey key) {
+    final resource =
+        _cache.snapshotFor(key, environment: liveEnvironment()) ??
+        _cache.snapshotFor(key, environment: environment());
+    return (resource as _ImageSnapshot?)?.image;
   }
 
-  void release(int bytes) => _reserved -= bytes;
-  void invalidate(RecentConversationKey key) => _remove(key);
+  bool isLive(RecentConversationKey key) =>
+      _cache.isLive(key, environment: liveEnvironment());
+  Object? revisionFor(RecentConversationKey key) =>
+      _cache.revisionFor(key, environment: liveEnvironment()) ??
+      _cache.revisionFor(key, environment: environment());
 
-  void _evictToFit(int bytes) {
-    while (_bytes + _reserved + bytes > byteLimit && _images.isNotEmpty) {
-      final victim = _images.keys.firstWhere(
-        (key) => !_neighborhood.contains(key),
-        orElse: () => _images.keys.first,
-      );
-      _remove(victim);
-    }
-  }
+  void reserve(int bytes) => _cache.reserve(bytes);
+  void release(int bytes) => _cache.release(bytes);
+  void retain(Set<RecentConversationKey> keys) => _cache.retain(keys);
 
-  /// Takes ownership, including disposal when the image exceeds the budget.
   void record(
     RecentConversationKey key,
     ui.Image image, {
     required bool live,
     required Object revision,
-  }) {
-    final bytes = image.width * image.height * 4;
-    if (bytes + _reserved > byteLimit) {
-      image.dispose();
-      return;
-    }
-    _remove(key);
-    _evictToFit(bytes);
-    _images[key] = (image: image, live: live, revision: revision);
-    _bytes += bytes;
-  }
+  }) => _cache.record(
+    key,
+    _ImageSnapshot(image),
+    live: live,
+    revision: revision,
+    environment: live ? liveEnvironment() : environment(),
+  );
+}
 
-  void retain(Set<RecentConversationKey> keys) {
-    _neighborhood = Set.of(keys);
-    // Both genuine and prepared images survive neighborhood changes. Byte
-    // eviction favors the visible cards without undoing outward preparation.
-    for (final key in keys) {
-      final entry = _images.remove(key);
-      if (entry != null) _images[key] = entry;
-    }
-  }
-
-  void _remove(RecentConversationKey key) {
-    final entry = _images.remove(key);
-    if (entry == null) return;
-    _bytes -= entry.image.width * entry.image.height * 4;
-    entry.image.dispose();
-  }
-
-  void clear() {
-    _neighborhood = {};
-    for (final key in _images.keys.toList()) {
-      _remove(key);
-    }
-  }
+final class _ImageSnapshot implements RecentConversationSnapshot {
+  _ImageSnapshot(this.image);
+  final ui.Image image;
+  @override
+  int get byteSize => image.width * image.height * 4;
+  @override
+  void dispose() => image.dispose();
 }

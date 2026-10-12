@@ -53,12 +53,23 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     vsync: this,
     duration: const Duration(milliseconds: 100),
   );
-  final _snapshots = ConversationCardSnapshots();
+  late ConversationCardSnapshots _snapshots = _snapshotAdapter();
+  ConversationCardSnapshots _snapshotAdapter() => ConversationCardSnapshots(
+    widget.session.snapshots,
+    environment: () => (_renderEnvironment, _size),
+    liveEnvironment: () => (_renderEnvironment, _size, _liveInsets),
+  );
+
+  void _snapshotsChanged() {
+    if (mounted) setState(() {});
+  }
+
   final _previewBoundary = GlobalKey();
   final _stackFooter = GlobalKey();
   double _footerHeight = 0;
   bool _footerMeasurementPending = false;
-  final _placeholders = <RecentConversationKey, Widget>{};
+  final _placeholders =
+      <RecentConversationKey, ({Object revision, Widget child})>{};
   Widget? _stagingView;
   final _failures = <RecentConversationKey, Object>{};
   final _initialBatch = <RecentConversationKey>{};
@@ -70,7 +81,9 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
 
   Timer? _idleTimer;
   bool _preparing = false, _preparationRequested = false, _liveDirty = true;
+  bool _openingPreparation = false;
   Object? _renderEnvironment;
+  EdgeInsets? _liveInsets;
   Completer<void>? _selectionCompletion;
   Completer<void>? _expansionCompletion;
   Widget? _selectionChild;
@@ -110,6 +123,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     super.initState();
     _membership = widget.session.entries;
     _base = math.max(0, _indexOf(widget.chatKey));
+    widget.session.snapshots.addListener(_snapshotsChanged);
     _motion.addListener(_motionChanged);
     widget.session.addListener(_sessionChanged);
     widget.session.nudges.addListener(_nudgeChanged);
@@ -120,11 +134,15 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   void didUpdateWidget(RecentConversationSwitcher oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session != widget.session) {
+      oldWidget.session.setVisible(false);
+      oldWidget.session.snapshots.removeListener(_snapshotsChanged);
+      widget.session.snapshots.addListener(_snapshotsChanged);
       oldWidget.session.removeListener(_sessionChanged);
       oldWidget.session.nudges.removeListener(_nudgeChanged);
       widget.session.addListener(_sessionChanged);
       widget.session.nudges.addListener(_nudgeChanged);
       _clearCaptures();
+      _snapshots = _snapshotAdapter();
       _completeSelection();
       _active = _stack = _selecting = false;
       _base = math.max(0, _indexOf(widget.chatKey));
@@ -159,7 +177,6 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       theme.platform,
       media.size,
       media.padding,
-      media.viewInsets,
       media.devicePixelRatio,
       media.textScaler,
       Directionality.of(context),
@@ -169,6 +186,10 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       _clearCaptures();
       if (_stack) _beginBatch();
       _queueIdleWork();
+    }
+    if (_liveInsets != media.viewInsets) {
+      _liveInsets = media.viewInsets;
+      _liveDirty = true;
     }
     _syncCueAdmission();
   }
@@ -197,6 +218,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   }
 
   void _syncCueAdmission() {
+    widget.session.setVisible(widget.gesturesEnabled);
     widget.session.setMembershipPaused(_moving);
     final enabled =
         widget.session.modeEnabled &&
@@ -234,13 +256,22 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   void _motionChanged() {
     if (_moving) {
       widget.session.setMembershipPaused(true);
-      _pausePreparation();
+      if (_openingPreparation && _gesture == null && _stack && !_selecting) {
+        _pauseCaptures();
+      } else {
+        _pausePreparation();
+      }
     }
   }
 
   void _pausePreparation() {
-    _idleTimer?.cancel();
+    _openingPreparation = false;
     widget.session.pausePreparation();
+    _pauseCaptures();
+  }
+
+  void _pauseCaptures() {
+    _idleTimer?.cancel();
     final cancel = _preparationCancel;
     if (cancel != null && !cancel.isCompleted) cancel.complete();
   }
@@ -290,7 +321,10 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     }
     // This is event-driven gesture settling, not recurring prewarming or
     // Priority.idle: an animated progress indicator cannot starve this queue.
-    _idleTimer = Timer(const Duration(milliseconds: 80), () {
+    final delay = _openingPreparation
+        ? Duration.zero
+        : const Duration(milliseconds: 80);
+    _idleTimer = Timer(delay, () {
       if (mounted && !_moving) {
         widget.session.setMembershipPaused(false);
         unawaited(_prepareIdle());
@@ -306,7 +340,9 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
         _size.isEmpty) {
       return;
     }
+    final snapshots = _snapshots;
     _preparing = true;
+    _openingPreparation = false;
     _preparationRequested = false;
     final generation = _captureGeneration;
     final cancel = _preparationCancel = Completer<void>();
@@ -334,15 +370,15 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
           .take(RecentConversationSession.preparationLimit)
           .toList();
       _failures.removeWhere((key, _) => !priorities.contains(key));
-      _snapshots.retain(neighborhood.toSet());
+      snapshots.retain(neighborhood.toSet());
       final needed = <RecentConversationKey>[];
       for (final key in priorities) {
         final revision = _snapshotRevision(key);
-        if (_snapshots.imageFor(key) != null &&
-            _snapshots.revisionFor(key) != revision) {
-          _snapshots.invalidate(key);
-        }
-        if (_snapshots.imageFor(key) != null || _failures[key] == revision) {
+        // Retain the last usable pixels while refreshing this same identity.
+        // record() replaces/disposes them atomically after a completed paint.
+        if (snapshots.imageFor(key) != null &&
+                snapshots.revisionFor(key) == revision ||
+            _failures[key] == revision) {
           _completeCard(key);
         } else {
           needed.add(key);
@@ -392,23 +428,23 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
           }
           final ratio = _captureRatio();
           final bytes = _captureBytes(ratio);
-          _snapshots.reserve(bytes);
+          snapshots.reserve(bytes);
           ui.Image? image;
           try {
             image = await boundary.toImage(pixelRatio: ratio);
           } catch (_) {
             // This card is terminal for the batch; other ready cards continue.
           } finally {
-            _snapshots.release(bytes);
+            snapshots.release(bytes);
           }
           if (!current() || revision != _snapshotRevision(key)) {
             image?.dispose();
             return;
           }
           if (image != null) {
-            _snapshots.record(key, image, live: false, revision: revision);
+            snapshots.record(key, image, live: false, revision: revision);
           }
-          if (image == null || _snapshots.imageFor(key) == null) {
+          if (image == null || snapshots.imageFor(key) == null) {
             _failures[key] = revision;
           } else {
             _failures.remove(key);
@@ -497,14 +533,16 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     if (_liveCapture != null || !_liveDirty || _active || _size.isEmpty) return;
     final boundary = _liveBoundary.currentContext?.findRenderObject();
     if (boundary is! RenderRepaintBoundary || !boundary.attached) return;
+    final snapshots = _snapshots;
     final key = widget.chatKey;
     final session = widget.session;
     final environment = _renderEnvironment;
+    final insets = _liveInsets;
     final size = _size;
     final revision = session.previewRevision(key);
     final ratio = _captureRatio();
     final bytes = _captureBytes(ratio);
-    _snapshots.reserve(bytes);
+    snapshots.reserve(bytes);
     // Called at gesture/menu admission, while the last completed real paint is
     // still available. Do not wait for a frame that would hide it Offstage.
     final readback = boundary.toImage(pixelRatio: ratio);
@@ -516,19 +554,20 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
           } catch (_) {
             // Missing pixels leave a title card; passive preparation can fill it.
           } finally {
-            _snapshots.release(bytes);
+            snapshots.release(bytes);
           }
           if (!mounted ||
               widget.session != session ||
               !session.active ||
               environment != _renderEnvironment ||
+              insets != _liveInsets ||
               size != _size ||
               revision != session.previewRevision(key)) {
             image?.dispose();
             return;
           }
           if (image != null) {
-            _snapshots.record(key, image, live: true, revision: revision);
+            snapshots.record(key, image, live: true, revision: revision);
             if (widget.chatKey == key) _liveDirty = false;
             setState(() {});
           }
@@ -541,7 +580,6 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   void _clearCaptures() {
     ++_captureGeneration;
     _endBatch();
-    _snapshots.clear();
     _failures.clear();
     _liveDirty = true;
     _placeholders.clear();
@@ -557,6 +595,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
         sample.kind == ConversationGestureKind.slide && !_canSlide) {
       return;
     }
+    _pausePreparation();
     _idleTimer?.cancel();
     ++_captureGeneration;
     _captureLive();
@@ -688,8 +727,13 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     widget.session.setMembershipPaused(true);
     widget.session.activate();
     _beginBatch();
-    _notifyPresentation();
+    _openingPreparation = true;
+    widget.session.prepareOpeningNeighbors({
+      for (final key in _snapshots.keys)
+        if (_snapshots.revisionFor(key) == _snapshotRevision(key)) key,
+    });
     _settleStack(_motion.position.roundToDouble());
+    _notifyPresentation();
   }
 
   void _settleStack(double position) {
@@ -1103,18 +1147,19 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   }
 
   Widget _placeholder(int index) {
-    final key = widget.session.entryAt(index).key;
+    final card = widget.session.cardAt(index);
+    final key = card.entry.key;
     if (_placeholders.length >= 6 && !_placeholders.containsKey(key)) {
       _placeholders.remove(_placeholders.keys.first);
     }
-    return _placeholders.putIfAbsent(
-      key,
-      () => RepaintBoundary(
-        child: ConversationCardPlaceholder(
-          entry: widget.session.entryAt(index),
-        ),
-      ),
+    final revision = (card.entry.title, card.entry.group, card.bot);
+    final previous = _placeholders[key];
+    if (previous?.revision == revision) return previous!.child;
+    final child = RepaintBoundary(
+      child: ConversationCardPlaceholder(card: card),
     );
+    _placeholders[key] = (revision: revision, child: child);
+    return child;
   }
 
   Widget _nudge() {
@@ -1198,7 +1243,14 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                         enabled: false,
                         child: RepaintBoundary(
                           key: _previewBoundary,
-                          child: view,
+                          child: MediaQuery.removeViewInsets(
+                            context: context,
+                            removeLeft: true,
+                            removeTop: true,
+                            removeRight: true,
+                            removeBottom: true,
+                            child: view,
+                          ),
                         ),
                       ),
                     ),
@@ -1438,7 +1490,9 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
 
   @override
   void dispose() {
+    widget.session.setVisible(false);
     widget.session.setInteractive(false, origin: null);
+    widget.session.snapshots.removeListener(_snapshotsChanged);
     widget.session.removeListener(_sessionChanged);
     widget.session.nudges.removeListener(_nudgeChanged);
     _motion.removeListener(_motionChanged);

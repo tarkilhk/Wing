@@ -9144,6 +9144,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/services/recent_conversation_snapshots.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/remote_file_saver.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -9255,6 +9260,11 @@
     },
     {
       "path": "lib/core/services/workspace_entry_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/workspace_recents_cache.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
     },
@@ -12110,6 +12120,11 @@
     },
     {
       "path": "test/recent_conversation_session_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/recent_conversation_snapshots_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },

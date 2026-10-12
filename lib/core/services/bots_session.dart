@@ -12,6 +12,7 @@ import 'bots_preferences.dart';
 import 'bot_screen_session.dart';
 import 'bot_group_read_state.dart';
 import 'bot_group_session.dart';
+import 'recent_conversation_snapshots.dart';
 
 typedef BotsSources =
     Future<List<BotsRepository>> Function(bool Function() canUse);
@@ -37,6 +38,22 @@ class BotsSession extends ChangeNotifier {
   bool _closed = false, _loading = false, _busy = false, _visible = false;
   int _readGeneration = 0;
   Timer? _poll;
+  Future<void>? _refreshOperation;
+  RecentGroupMessages? _groupMessages;
+  RecentGroupMessages? get groupMessages => _groupMessages;
+
+  void attachGroupMessages(RecentGroupMessages messages) {
+    if (_closed ||
+        (_groupMessages != null && !identical(_groupMessages, messages))) {
+      throw StateError('Group messages already have a workspace cache owner');
+    }
+    _groupMessages = messages;
+  }
+
+  void detachGroupMessages(RecentGroupMessages messages) {
+    if (identical(_groupMessages, messages)) _groupMessages = null;
+  }
+
   final _unconfirmedCreates = <String>{};
   Future<List<BotsRepository>>? _appearanceSources;
   final _appearanceRosters = <WorkspaceScope, Future<List<BotRecord>>>{};
@@ -186,6 +203,7 @@ class BotsSession extends ChangeNotifier {
   BotGroupSession openGroup(BotGroup group) => BotGroupSession(
     repository(group.scope.connectionIdentity),
     group,
+    groupMessages: _groupMessages,
     appearances: _bots[group.scope.connectionIdentity] ?? const [],
     reads: groupReads,
   );
@@ -372,6 +390,9 @@ class BotsSession extends ChangeNotifier {
                 bot,
                 assetRead: !bot.hasAvatar || bot.avatar != null,
               );
+              // Publish canonical name/shape now; an image read must not keep
+              // a known bot in a generic title-only placeholder.
+              notifyListeners();
             }
             if (!_avatarRead.contains(bot.scope) && admit()) {
               final admissions = _appearanceAdmissions.putIfAbsent(
@@ -420,7 +441,25 @@ class BotsSession extends ChangeNotifier {
     return Map.unmodifiable(appearances);
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh() {
+    if (_closed || _busy) return Future.value();
+    if (_refreshOperation case final pending?) return pending;
+    final completion = Completer<void>();
+    _refreshOperation = completion.future;
+    unawaited(() async {
+      try {
+        await _refresh();
+        completion.complete();
+      } catch (error, stack) {
+        completion.completeError(error, stack);
+      } finally {
+        _refreshOperation = null;
+      }
+    }());
+    return completion.future;
+  }
+
+  Future<void> _refresh() async {
     if (_closed || _loading || _busy) return;
     final generation = ++_readGeneration;
     _invalidateAppearances();
@@ -517,9 +556,22 @@ class BotsSession extends ChangeNotifier {
           try {
             final ready = await source.groupsReady();
             if (!current()) return;
-            final rooms = await source.groups();
+            final rooms = await source.groups(groupMessages: _groupMessages);
             if (!current()) return;
-            _groups[identity] = rooms;
+            final previous = {
+              for (final room in _groups[identity] ?? const <BotGroup>[])
+                room.key: room,
+            };
+            _groups[identity] = List.unmodifiable([
+              for (final room in rooms)
+                if (!room.observationComplete && previous.containsKey(room.key))
+                  room.withRetainedObservation(previous[room.key]!)
+                else
+                  room,
+            ]);
+            if (rooms.any((room) => !room.observationComplete)) {
+              errors.add('${source.instance}: some groups could not refresh.');
+            }
             if (ready) {
               _ready.add(identity);
             } else {
@@ -653,6 +705,7 @@ class BotsSession extends ChangeNotifier {
         return true;
       }, canUse: canUse) ==
       true;
+
   String? groupPicturePrompt(String identity, String roomId) =>
       _preferences?.picturePrompt(identity, roomId);
 

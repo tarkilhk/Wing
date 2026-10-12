@@ -135,6 +135,7 @@ class BotGroup {
     required this.id,
     required this.name,
     required Iterable<BotGroupMember> members,
+    required this.observationComplete,
     this.preview = '',
     this.working = false,
     this.blocked = false,
@@ -151,6 +152,9 @@ class BotGroup {
   final String instance, id, name, preview;
   final List<BotGroupMember> members;
   final bool working, blocked;
+
+  /// False means runtime/message reads failed; absent fields are unknown.
+  final bool observationComplete;
   final DateTime? lastMessageAt;
   final int lastMessageSequence, lastAnswerSequence;
   final bool pinned;
@@ -171,6 +175,7 @@ class BotGroup {
     id: id,
     name: name,
     members: members,
+    observationComplete: observationComplete,
     preview: preview,
     working: working,
     blocked: blocked,
@@ -188,6 +193,7 @@ class BotGroup {
     id: id,
     name: name,
     members: members,
+    observationComplete: observationComplete,
     preview: preview,
     working: working,
     blocked: blocked,
@@ -209,6 +215,7 @@ class BotGroup {
     id: id,
     name: name,
     members: members,
+    observationComplete: observationComplete,
     preview: preview,
     working: working,
     blocked: blocked,
@@ -220,6 +227,33 @@ class BotGroup {
     iconColor: color,
     iconRevision: revision,
   );
+
+  /// Keep confirmed runtime/message facts when only room identity refreshed.
+  BotGroup withRetainedObservation(BotGroup previous) {
+    if (key != previous.key || observationComplete) {
+      throw ArgumentError(
+        'Expected the same room with an unavailable observation',
+      );
+    }
+    return BotGroup(
+      scope: scope,
+      instance: instance,
+      id: id,
+      name: name,
+      members: members,
+      observationComplete: false,
+      preview: previous.preview,
+      working: previous.working,
+      blocked: previous.blocked,
+      lastMessageAt: previous.lastMessageAt,
+      lastMessageSequence: previous.lastMessageSequence,
+      lastAnswerSequence: previous.lastAnswerSequence,
+      pinned: pinned,
+      picture: picture,
+      iconColor: iconColor,
+      iconRevision: iconRevision,
+    );
+  }
 }
 
 class BotGroupEditConflict implements Exception {

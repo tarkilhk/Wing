@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import '../../models/recent_conversation.dart';
 import '../bot_avatar.dart';
 import '../bot_group_conversation.dart';
+import '../bot_group_identity.dart';
 import '../composer_icon_button.dart';
 import '../voice_input_activity.dart';
 import '../../models/transcript_message.dart';
@@ -219,10 +220,10 @@ class ConversationPreview extends StatelessWidget {
   }
 }
 
-/// A stable title-only card while pixels are unavailable.
+/// Lightweight saved identity while transcript pixels are unavailable.
 class ConversationCardPlaceholder extends StatelessWidget {
-  const ConversationCardPlaceholder({super.key, required this.entry});
-  final RecentConversationEntry entry;
+  const ConversationCardPlaceholder({super.key, required this.card});
+  final RecentConversationCard card;
 
   @override
   Widget build(BuildContext context) => ColoredBox(
@@ -236,11 +237,22 @@ class ConversationCardPlaceholder extends StatelessWidget {
             horizontal: WingSpacing.lg,
             vertical: WingSpacing.md,
           ),
-          child: Text(
-            entry.title,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
+          child: DefaultTextStyle(
             style: WingAppBar.titleStyle(context),
+            child: card.entry.group != null
+                ? WingConversationTitle(
+                    title: card.entry.group!.name,
+                    avatar: BotGroupIdentity(
+                      group: card.entry.group!,
+                      bots: card.preview?.group?.appearances.values ?? const [],
+                      size: 32,
+                    ),
+                  )
+                : BotConversationTitle(
+                    title: card.entry.title,
+                    bot: card.bot,
+                    mood: null,
+                  ),
           ),
         ),
       ),

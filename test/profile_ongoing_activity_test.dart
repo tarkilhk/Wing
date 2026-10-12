@@ -1,3 +1,4 @@
+import 'package:wing/core/services/workspace_recents_session.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/chat_runtime.dart';
@@ -22,6 +23,7 @@ void main() {
   late ProfileChat chat;
   late AppPreferences appPreferences;
   late BotsSession bots;
+  late WorkspaceRecentsSession recents;
 
   setUp(() async {
     bots = BotsSession((_) async => []);
@@ -53,9 +55,11 @@ void main() {
         'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
       },
     ]);
+    recents = WorkspaceRecentsSession(controller, bots);
   });
 
   tearDown(() {
+    recents.dispose();
     bots.dispose();
     controller.dispose();
     appPreferences.dispose();
@@ -79,8 +83,7 @@ void main() {
           body: WorkspaceActivityContent(
             visible: false,
             onOpenGroup: (_) async {},
-            bots: bots,
-            controller: controller,
+            recents: recents,
             onOpen: (_, displayed) {},
           ),
         ),
@@ -128,8 +131,7 @@ void main() {
                     child: WorkspaceActivityContent(
                       visible: false,
                       onOpenGroup: (_) async {},
-                      bots: bots,
-                      controller: controller,
+                      recents: recents,
                       onOpen: (_, displayed) {},
                     ),
                   ),

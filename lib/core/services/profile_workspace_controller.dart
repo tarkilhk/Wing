@@ -6,6 +6,8 @@ import '../models/recent_conversation.dart';
 import '../models/transcript_message.dart';
 import 'recent_conversation_session.dart';
 import 'bots_session.dart';
+import 'workspace_recents_cache.dart';
+import 'recent_conversation_snapshots.dart';
 import '../models/bots.dart';
 import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
@@ -1039,14 +1041,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   RecentConversationSession recentConversationSession({
     required Iterable<RecentConversationEntry> entries,
-    required BotsSession bots,
+    required WorkspaceRecentsCache recents,
     required Future<void> Function(BotGroup) onOpenGroup,
     required ValueListenable<ChatNoticeActivity?> activity,
   }) => RecentConversationSession.fromRecents(
     entries: entries,
     source: _WorkspaceRecentConversationSource(
       this,
-      bots,
+      recents,
       onOpenGroup,
       routeOrigin: null,
       onOpenChat: null,
@@ -1056,14 +1058,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   RecentConversationSession chatRecentConversationSession({
     required ProfileChat chat,
-    required BotsSession bots,
+    required WorkspaceRecentsCache recents,
     required Future<void> Function(BotGroup) onOpenGroup,
     required ValueListenable<ChatNoticeActivity?> Function() activity,
   }) => RecentConversationSession.fromChat(
     chat: RecentConversationEntry.chat(key: chat.key, title: chat.title),
     source: _WorkspaceRecentConversationSource(
       this,
-      bots,
+      recents,
       onOpenGroup,
       routeOrigin: null,
       onOpenChat: null,
@@ -1073,7 +1075,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   RecentConversationSession groupRecentConversationSession({
     required BotGroup group,
-    required BotsSession bots,
+    required WorkspaceRecentsCache recents,
     required Future<void> Function(BotGroup) onOpenGroup,
     required Future<void> Function(RecentConversationKey) onOpenChat,
     required ValueListenable<ChatNoticeActivity?> Function() activity,
@@ -1081,7 +1083,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat: RecentConversationEntry.group(group),
     source: _WorkspaceRecentConversationSource(
       this,
-      bots,
+      recents,
       onOpenGroup,
       routeOrigin: RecentConversationEntry.group(group).key,
       onOpenChat: onOpenChat,
@@ -1110,7 +1112,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> _refreshRecents() async {
     final generation = ++_recentsGeneration;
     _recentsLoading = true;
-    _recentSessionRows.clear();
     _changed();
     final liveRefresh = refreshActivity();
     try {
@@ -1120,6 +1121,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         profiles.profiles.map((profile) async {
           final resource = _resource(profile.name);
           final items = <ProfileSessionKey, ProfileRecentChat>{};
+          final rows = <ProfileSessionKey, Map<String, dynamic>>{};
           final checkedSessions = <String>{};
           String? profileError;
           try {
@@ -1175,6 +1177,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                   return (
                     profile: profile.name,
                     items: <ProfileRecentChat>[],
+                    rows: <ProfileSessionKey, Map<String, dynamic>>{},
                     error: null as String?,
                   );
                 }
@@ -1186,7 +1189,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                     resource.scope,
                     row['id'] as String,
                   );
-                  _recentSessionRows[key] = row;
+                  rows[key] = row;
                   _recentMessageTimes[key] = time;
                   final title = row['title'] as String?;
                   items[key] = ProfileRecentChat(
@@ -1207,12 +1210,32 @@ class ProfileWorkspaceController extends ChangeNotifier {
           return (
             profile: profile.name,
             items: items.values.toList(),
+            rows: rows,
             error: profileError,
           );
         }),
       );
       if (_closed || generation != _recentsGeneration) return;
-      _savedRecents = [for (final result in results) ...result.items];
+      final previousRows = Map.of(_recentSessionRows);
+      final previousChats = _savedRecents;
+      _recentSessionRows.clear();
+      final retained = <ProfileSessionKey, ProfileRecentChat>{};
+      for (final result in results) {
+        if (result.error != null) {
+          for (final chat in previousChats) {
+            if (chat.key.workspace.profileName != result.profile) continue;
+            retained[chat.key] = chat;
+            if (previousRows[chat.key] case final row?) {
+              _recentSessionRows[chat.key] = row;
+            }
+          }
+        }
+        for (final chat in result.items) {
+          retained[chat.key] = chat;
+        }
+        _recentSessionRows.addAll(result.rows);
+      }
+      _savedRecents = List.unmodifiable(retained.values);
       _recentsProfileErrors = {
         for (final result in results)
           if (result.error != null) result.profile: result.error!,

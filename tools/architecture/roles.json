@@ -1566,6 +1566,11 @@
       "feature": "conversation",
       "library": "lib/core/services/recent_conversation_session.dart"
     },
+    "lib/core/services/recent_conversation_snapshots.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/recent_conversation_snapshots.dart"
+    },
     "lib/core/services/remote_file_saver.dart": {
       "role": "platform",
       "feature": "outputs-and-viewers",
@@ -1680,6 +1685,11 @@
       "role": "application",
       "feature": "app-shell",
       "library": "lib/core/services/workspace_entry_session.dart"
+    },
+    "lib/core/services/workspace_recents_cache.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/workspace_recents_cache.dart"
     },
     "lib/core/services/workspace_recents_session.dart": {
       "role": "application",

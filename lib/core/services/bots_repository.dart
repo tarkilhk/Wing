@@ -13,6 +13,7 @@ import 'connection_diagnostics.dart';
 import 'workspace_connection_failure.dart';
 import 'hermes_voice.dart';
 import '../models/bot_display.dart';
+import 'recent_conversation_snapshots.dart';
 
 typedef BotsRead =
     Future<Map<String, dynamic>> Function(
@@ -693,7 +694,9 @@ class BotsRepository {
     return revision + 1;
   }
 
-  Future<List<BotGroup>> groups() async {
+  Future<List<BotGroup>> groups({
+    required RecentGroupMessages? groupMessages,
+  }) async {
     final groups = <BotGroup>[];
     var offset = 0;
     do {
@@ -706,6 +709,9 @@ class BotsRepository {
         var preview = '';
         var working = false, blocked = false;
         BotGroupEvent? message, answer;
+        final recentMessages = <BotGroupEvent>[];
+        var complete = false;
+        var observationComplete = false;
         try {
           final state = await _read('default', 'groups.state', {
             'room_id': base.id,
@@ -729,6 +735,10 @@ class BotsRepository {
           while (end > 0 && (message == null || answer == null)) {
             final start = (end - 100).clamp(0, end);
             final page = await groupLog(base, since: start);
+            recentMessages.insertAll(
+              0,
+              page.events.where((e) => e.sequence <= end && e.isMessage),
+            );
             for (final event
                 in page.events
                     .where((e) => e.sequence <= end && e.isMessage)
@@ -739,9 +749,11 @@ class BotsRepository {
             }
             end = start;
           }
+          complete = end == 0;
           preview = message?.text ?? '';
+          observationComplete = true;
         } catch (_) {
-          // Identity stays usable; absent message evidence grants no freshness.
+          // Publish identity and explicit uncertainty, never an empty-history fact.
         }
         groups.add(
           BotGroup(
@@ -750,6 +762,7 @@ class BotsRepository {
             id: base.id,
             name: base.name,
             members: base.members,
+            observationComplete: observationComplete,
             preview: preview,
             working: working,
             blocked: blocked,
@@ -758,6 +771,7 @@ class BotsRepository {
             lastAnswerSequence: answer?.sequence ?? 0,
           ),
         );
+        groupMessages?.record(groups.last, recentMessages, complete: complete);
       }
       final next = result['next_offset'];
       if (next == null) break;
@@ -766,40 +780,46 @@ class BotsRepository {
       }
       offset = next;
     } while (true);
-    if (groups.isEmpty) return const [];
+    if (groups.isEmpty) return List.unmodifiable(groups);
     try {
       final row = await _groupIconProfile();
       if (row == null) return List.unmodifiable(groups);
       final meta = row['ui_meta'] == null
           ? <String, dynamic>{}
           : _map(row['ui_meta']);
-      return List.unmodifiable(
-        groups.map((room) {
-          try {
-            final key = '$_groupIconPrefix${room.id}';
-            final revision = _map(row['ui_meta_revisions'])[key] ?? 0;
-            if (revision is! int || revision < 0) return room;
-            final value = meta[key];
-            if (value == null) return room.withIcon(revision: revision);
-            final picture = _map(value);
-            final data = picture['data'];
-            final slot = picture['color'];
-            if (picture['version'] != 1 ||
-                slot is! int ||
-                slot < 0 ||
-                slot >= 12 ||
-                (data != null && (data is! String || data.length > 60000))) {
-              return room;
-            }
-            return room.withIcon(
-              picture: data == null ? null : _image(data, maxBytes: 2000000),
-              color: ProfileColorChoice.values[slot + 1],
-              revision: revision,
-            );
-          } catch (_) {
-            // Invalid decoration cannot prevent access to the hosted room.
+      BotGroup decorate(BotGroup room) {
+        try {
+          final key = '$_groupIconPrefix${room.id}';
+          final revision = _map(row['ui_meta_revisions'])[key] ?? 0;
+          if (revision is! int || revision < 0) return room;
+          final value = meta[key];
+          if (value == null) return room.withIcon(revision: revision);
+          final picture = _map(value);
+          final data = picture['data'];
+          final slot = picture['color'];
+          if (picture['version'] != 1 ||
+              slot is! int ||
+              slot < 0 ||
+              slot >= 12 ||
+              (data != null && (data is! String || data.length > 60000))) {
             return room;
           }
+          return room.withIcon(
+            picture: data == null ? null : _image(data, maxBytes: 2000000),
+            color: ProfileColorChoice.values[slot + 1],
+            revision: revision,
+          );
+        } catch (_) {
+          // Invalid decoration cannot prevent access to the hosted room.
+          return room;
+        }
+      }
+
+      return List.unmodifiable(
+        groups.map((room) {
+          final updated = decorate(room);
+          groupMessages?.rebind(room, updated);
+          return updated;
         }),
       );
     } catch (_) {
@@ -813,6 +833,7 @@ class BotsRepository {
     instance: instance,
     id: _requiredText(row['room_id']),
     name: _requiredText(row['name']),
+    observationComplete: false,
     members: _rows(row['members']).map(
       (m) => BotGroupMember(
         id: _requiredText(m['member_id']),

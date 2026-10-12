@@ -1,3 +1,4 @@
+import 'package:wing/core/services/recent_conversation_snapshots.dart';
 import 'package:wing/core/models/bots.dart';
 import 'dart:async';
 
@@ -30,6 +31,16 @@ RecentConversationPreview _preview(RecentConversationEntry entry) =>
     );
 
 class _Source extends ChangeNotifier implements RecentConversationSource {
+  @override
+  final snapshots = RecentConversationSnapshots();
+  @override
+  void dispose() {
+    snapshots.dispose();
+    super.dispose();
+  }
+
+  @override
+  void setVisible(bool visible) {}
   @override
   bool current = true;
   @override
@@ -518,6 +529,50 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(session.cardAt(0).error, isNull);
     expect(session.cardAt(0).preview, isNotNull);
+  });
+
+  test(
+    'opening reads pending neighbors without moving membership and pauses',
+    () async {
+      source.selected = _entry(0).key;
+      session.dispose();
+      source.catalogRead = Completer<RecentConversationCatalog>();
+      session = RecentConversationSession.fromChat(
+        chat: _entry(0),
+        source: source,
+        activity: () => activity,
+      );
+      session.setMembershipPaused(true);
+      session.activate();
+      session.prepareOpeningNeighbors({});
+      expect(session.entries, hasLength(1));
+      expect(
+        source.reads.keys,
+        unorderedEquals([_entry(7).key, _entry(1).key]),
+      );
+      session.pausePreparation();
+      source.reads[_entry(7).key]!.complete(_preview(_entry(7)));
+      source.reads[_entry(1).key]!.complete(_preview(_entry(1)));
+      await Future<void>.delayed(Duration.zero);
+      source.currentEntries.add(_entry(8));
+      source.notifyListeners();
+      expect(
+        source.reads,
+        hasLength(2),
+        reason: 'A pointer interruption must stop new opening admission',
+      );
+      expect(session.entries, hasLength(1));
+      source.catalogRead!.complete(source.catalog);
+      await Future<void>.delayed(Duration.zero);
+    },
+  );
+
+  test('opening skips neighbors with ready pixel cache entries', () {
+    enterChat();
+    session.setMembershipPaused(true);
+    session.activate();
+    session.prepareOpeningNeighbors({_entry(7).key, _entry(1).key});
+    expect(source.reads, isEmpty);
   });
 
   test('cached previews publish without I/O or a motion tick', () {
