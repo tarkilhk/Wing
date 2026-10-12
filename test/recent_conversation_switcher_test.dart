@@ -2259,6 +2259,67 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    for (final dx in [-170.0, 170.0]) {
+      for (final dy in [-240.0, -120.0, 120.0, 240.0]) {
+        testWidgets(
+          'two-finger diagonal swipe switches with dx $dx and dy $dy',
+          (tester) async {
+            await mount(tester);
+            final a = Offset(dx < 0 ? 220 : 80, 400);
+            final b = a + const Offset(80, 0);
+            final delta = Offset(dx, dy);
+            await _twoContacts(tester, a, b, a + delta, b + delta);
+            expect(source.opens, [source.entries[dx < 0 ? 1 : 2].key]);
+            expect(find.text('Swipe to browse · tap to open'), findsNothing);
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+
+    testWidgets('two-finger swipe accepts vertical movement before direction', (
+      tester,
+    ) async {
+      await mount(tester);
+      final first = await tester.startGesture(
+        const Offset(220, 400),
+        pointer: 1,
+      );
+      final second = await tester.startGesture(
+        const Offset(300, 400),
+        pointer: 2,
+      );
+      await first.moveBy(const Offset(0, 100));
+      await second.moveBy(const Offset(0, 100));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(source.opens, isEmpty);
+      await first.moveBy(const Offset(-170, 40));
+      await second.moveBy(const Offset(-170, 40));
+      await tester.pump(const Duration(milliseconds: 16));
+      await first.up();
+      await second.up();
+      await _finishFrames(tester);
+      expect(source.opens, [source.entries[1].key]);
+      expect(find.text('Swipe to browse · tap to open'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('two-finger vertical movement alone does not switch', (
+      tester,
+    ) async {
+      await mount(tester);
+      await _twoContacts(
+        tester,
+        const Offset(180, 400),
+        const Offset(260, 400),
+        const Offset(180, 640),
+        const Offset(260, 640),
+      );
+      expect(source.opens, isEmpty);
+      expect(find.text('Swipe to browse · tap to open'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     for (final earlyNarrowing in [false, true]) {
       testWidgets(
         'two-finger swipe with ${earlyNarrowing ? 'early' : 'late'} narrowing stays a swipe',
@@ -2475,6 +2536,46 @@ void main() {
       expect(source.opens, [source.entries[1].key]);
       expect(tester.takeException(), isNull);
     });
+
+    for (final dormant in [false, true]) {
+      testWidgets(
+        'normal scrolling and subsequent pinch work with Recents dormant $dormant',
+        (tester) async {
+          if (dormant) enterDormant();
+          await mount(tester, dormant: dormant);
+          final scrollable = tester.state<ScrollableState>(
+            find.descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            ),
+          );
+          final initial = scrollable.position.pixels;
+          await tester.dragFrom(
+            const Offset(220, 500),
+            const Offset(-50, -180),
+          );
+          await _finishFrames(tester);
+          expect(scrollable.position.pixels, greaterThan(initial + 100));
+          final afterUpwardScroll = scrollable.position.pixels;
+          expect(source.opens, isEmpty);
+          expect(find.text('Swipe to browse · tap to open'), findsNothing);
+          await tester.dragFrom(const Offset(170, 350), const Offset(40, 100));
+          await _finishFrames(tester);
+          expect(scrollable.position.pixels, lessThan(afterUpwardScroll));
+          expect(source.opens, isEmpty);
+          await _twoContacts(
+            tester,
+            const Offset(80, 400),
+            const Offset(280, 400),
+            const Offset(145, 400),
+            const Offset(215, 400),
+          );
+          expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+          expect(source.opens, isEmpty);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
 
     testWidgets('double tap and one-finger drag never switch chats', (
       tester,

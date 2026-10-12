@@ -67,8 +67,8 @@ final class ConversationGestureSample {
   final Duration timeStamp;
 }
 
-/// Participates in Flutter's arena: a normal vertical scroll wins before the
-/// expert gesture is recognized; excluded controls never enter this arena.
+/// Participates in Flutter's arena: normal one-finger scrolling wins before a
+/// second contact; excluded controls never enter this arena.
 class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
   bool Function(PointerDownEvent) admits = (_) => false;
   bool allowSlide = false;
@@ -198,10 +198,9 @@ class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
             contraction > 32 &&
             contraction > delta.distance * 2) {
           _claim(ConversationGestureKind.pinch);
-        } else if (allowSlide &&
-            delta.dx.abs() > kTouchSlop &&
-            delta.dx.abs() > delta.dy.abs() * 1.4 &&
-            delta.dx.abs() * 2 > contraction) {
+        } else if (allowSlide && delta.dx.abs() > kTouchSlop) {
+          // Two contacts establish swipe intent. Only left/right displacement
+          // matters; vertical travel and uneven finger spacing impose no limit.
           _claim(ConversationGestureKind.slide);
         }
       }
@@ -213,10 +212,6 @@ class ConversationGestureRecognizer extends OneSequenceGestureRecognizer {
       return;
     }
     if (_started && _contacts.isNotEmpty) {
-      if (_kind != ConversationGestureKind.pinch && delta.dy.abs() > 60) {
-        _cancel();
-        return;
-      }
       onUpdate?.call(_sample);
     }
   }
