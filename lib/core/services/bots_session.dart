@@ -653,6 +653,21 @@ class BotsSession extends ChangeNotifier {
         return true;
       }, canUse: canUse) ==
       true;
+  String? groupPicturePrompt(String identity, String roomId) =>
+      _preferences?.picturePrompt(identity, roomId);
+
+  Future<void> rememberGroupPicturePrompt(
+    String identity,
+    String roomId,
+    String prompt,
+  ) async {
+    final preferences = _preferences;
+    if (preferences == null) {
+      throw StateError('Device preferences are unavailable');
+    }
+    await preferences.writePicturePrompt(identity, roomId, prompt);
+  }
+
   Future<bool> createBot(
     String identity,
     String name, {

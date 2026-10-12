@@ -120,6 +120,32 @@ void main() {
   });
 
   group('wingTheme', () {
+    for (final brightness in Brightness.values) {
+      testWidgets('default dialogs use Studio section type in $brightness', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            home: const Scaffold(
+              body: AlertDialog(
+                title: Text('Room picture'),
+                content: Text('Describe the image'),
+              ),
+            ),
+          ),
+        );
+        final titleStyle = DefaultTextStyle.of(
+          tester.element(find.text('Room picture')),
+        ).style;
+        expect(
+          titleStyle.fontSize,
+          WingTypography.ramp(brightness).section.fontSize,
+        );
+        expect(titleStyle.fontFamily, WingTypography.sans);
+      });
+    }
+
     testWidgets('attaches tokens to the dark theme', (tester) async {
       final theme = wingTheme(Brightness.dark);
       expect(_tokensFrom(theme), isNotNull);

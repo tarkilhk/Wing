@@ -29,6 +29,9 @@ class BotGroupDraftSession extends ChangeNotifier {
         existing?.scope.connectionIdentity ?? hosts.firstOrNull?.identity;
     _name = existing?.name ?? '';
     _picture = existing?.picture;
+    _picturePrompt = _identity == null
+        ? null
+        : _roster.groupPicturePrompt(_identity!, _roomId);
     _initialColor = _iconColor;
     if (existing != null && existing!.iconRevision == null) {
       _error =
@@ -47,11 +50,13 @@ class BotGroupDraftSession extends ChangeNotifier {
   final String _renameEvent;
   final BotAvatarIo _pictureIo;
   final _members = <String>{};
-  String? _identity, _error;
+  String? _identity, _error, _picturePromptError;
   String _name = '', _query = '';
+  String? _picturePrompt;
   Uint8List? _picture;
   bool _closed = false, _saving = false, _pictureBusy = false, _frozen = false;
   int _pictureGeneration = 0;
+  int _picturePromptRevision = 0;
   String? _attemptName;
 
   List<BotInstance> get hosts => _opening.instances
@@ -90,7 +95,7 @@ class BotGroupDraftSession extends ChangeNotifier {
       _attemptName ??
       (!editing && _name.trim().isEmpty ? suggestedName : _name.trim());
   Uint8List? get picture => _picture;
-  String? get error => _error;
+  String? get error => _picturePromptError ?? _error;
   bool get saving => _saving;
   bool get pictureBusy => _pictureBusy;
   bool get editable =>
@@ -152,6 +157,8 @@ class BotGroupDraftSession extends ChangeNotifier {
     _members.clear();
     _query = '';
     _picture = null;
+    _picturePrompt = _roster.groupPicturePrompt(value!, _roomId);
+    _picturePromptError = null;
     _pictureGeneration++;
     _pictureBusy = false;
     _error = null;
@@ -175,8 +182,47 @@ class BotGroupDraftSession extends ChangeNotifier {
   }
 
   String get picturePrompt =>
+      _picturePrompt ??
       'Group chat icon for an AI team called "$effectiveName", with ${existing?.members.map((m) => m.name).join(', ') ?? selected.map((bot) => bot.title).join(', ')}. '
-      'Friendly minimal emblem, bold flat illustration, solid color background, centered, no text.';
+          'Friendly minimal emblem, bold flat illustration, solid color background, centered, no text.';
+
+  void setPicturePrompt(String value) {
+    if (!editable || _pictureBusy) return;
+    _picturePrompt = value;
+    _picturePromptRevision++;
+    notifyListeners();
+  }
+
+  Future<bool> rememberPicturePrompt() async {
+    if (_closed || _identity == null || _picturePrompt == null) return true;
+    final identity = _identity!;
+    final generation = _pictureGeneration;
+    final revision = _picturePromptRevision;
+    bool current() =>
+        !_closed &&
+        identity == _identity &&
+        generation == _pictureGeneration &&
+        revision == _picturePromptRevision;
+    try {
+      await _roster.rememberGroupPicturePrompt(
+        identity,
+        _roomId,
+        _picturePrompt!,
+      );
+      if (current() && _picturePromptError != null) {
+        _picturePromptError = null;
+        notifyListeners();
+      }
+      return true;
+    } catch (_) {
+      if (current()) {
+        _picturePromptError =
+            'Prompt could not be saved on this device. Reopen Room picture to retry.';
+        notifyListeners();
+      }
+      return false;
+    }
+  }
 
   Future<void> pickPicture({required bool Function() canUse}) =>
       _preparePicture(
@@ -188,7 +234,8 @@ class BotGroupDraftSession extends ChangeNotifier {
     String prompt, {
     required bool Function() canUse,
   }) async {
-    if (!canGenerate || prompt.trim().isEmpty) return;
+    if (!canGenerate || prompt.trim().isEmpty || !canUse()) return;
+    setPicturePrompt(prompt);
     final identity = _identity!;
     await _preparePicture(
       () => _roster.generateGroupPicture(
@@ -198,6 +245,7 @@ class BotGroupDraftSession extends ChangeNotifier {
       ),
       operation: 'generate',
       canUse: canUse,
+      beforeRead: rememberPicturePrompt,
     );
   }
 
@@ -205,6 +253,7 @@ class BotGroupDraftSession extends ChangeNotifier {
     Future<Uint8List?> Function() read, {
     required String operation,
     required bool Function() canUse,
+    Future<bool> Function()? beforeRead,
   }) async {
     if (!editable || _pictureBusy || !canUse()) return;
     final generation = ++_pictureGeneration;
@@ -218,6 +267,8 @@ class BotGroupDraftSession extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
+      if (beforeRead != null && !await beforeRead()) return;
+      if (!current()) return;
       final bytes = await read();
       if (!current() || bytes == null) return;
       inputBytes = bytes.lengthInBytes;

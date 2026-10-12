@@ -546,7 +546,12 @@ void main() {
                 .initialValue,
             contains('Atlas, Mira'),
           );
-          await tester.tap(find.byTooltip('Cancel'));
+          await _capture(
+            tester,
+            frame,
+            'group-editing-prompt-${brightness.name}-$scale',
+          );
+          await tester.tap(find.byTooltip('Close'));
           await tester.pumpAndSettle();
           expect(fixture.commands, isEmpty);
           await _revealGroup(tester, name, delta: -120);
@@ -942,6 +947,38 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Room picture'), findsOneWidget);
         expect(
+          tester.widget<Text>(find.text('Room picture')).style!.fontSize,
+          WingTypography.ramp(brightness).section.fontSize,
+        );
+        expect(
+          tester
+              .widget<TextField>(
+                find.descendant(
+                  of: find.byType(TextFormField),
+                  matching: find.byType(TextField),
+                ),
+              )
+              .style!
+              .fontSize,
+          16,
+        );
+        for (final tooltip in ['Close', 'Generate picture']) {
+          final target = tester.getRect(find.byTooltip(tooltip));
+          expect(target.width, greaterThanOrEqualTo(48));
+          expect(target.height, greaterThanOrEqualTo(48));
+        }
+        final panel = tester.getRect(
+          find
+              .descendant(
+                of: find.byType(Dialog),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+        final promptField = tester.getRect(find.byType(TextFormField));
+        expect(promptField.left - panel.left, WingSpacing.lg);
+        expect(panel.right - promptField.right, WingSpacing.lg);
+        expect(
           tester.widget<TextFormField>(find.byType(TextFormField)).initialValue,
           contains('Atlas, Mira'),
         );
@@ -950,7 +987,103 @@ void main() {
           frame,
           'group-creation-prompt-${brightness.name}-$scale',
         );
-        await tester.tap(find.byTooltip('Cancel'));
+        const editedPrompt = 'Two friendly robots beside a teal wing, no text.';
+        await tester.enterText(find.byType(TextFormField), editedPrompt);
+        await tester.tap(find.byTooltip('Close'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Generate room picture'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextFormField>(find.byType(TextFormField)).initialValue,
+          editedPrompt,
+          reason: 'Closing the prompt must retain the text for the next edit.',
+        );
+        tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+        await tester.pumpAndSettle();
+        expect(
+          tester.getRect(find.byTooltip('Generate picture')).bottom,
+          lessThanOrEqualTo(tester.view.physicalSize.height - 240),
+        );
+        await _capture(
+          tester,
+          frame,
+          'group-prompt-keyboard-${brightness.name}-$scale',
+        );
+        await tester.enterText(find.byType(TextFormField), '   ');
+        await tester.pump();
+        expect(
+          tester
+              .widget<IconButton>(
+                find.byWidgetPredicate(
+                  (widget) =>
+                      widget is IconButton &&
+                      widget.tooltip == 'Generate picture',
+                ),
+              )
+              .onPressed,
+          isNull,
+        );
+        await _capture(
+          tester,
+          frame,
+          'group-prompt-empty-${brightness.name}-$scale',
+        );
+        await tester.enterText(find.byType(TextFormField), editedPrompt);
+        await tester.pump();
+        expect(
+          tester
+              .widget<IconButton>(
+                find.byWidgetPredicate(
+                  (widget) =>
+                      widget is IconButton &&
+                      widget.tooltip == 'Generate picture',
+                ),
+              )
+              .onPressed,
+          isNotNull,
+        );
+        for (final tooltip in ['Close', 'Generate picture']) {
+          final target = tester.getRect(find.byTooltip(tooltip));
+          expect(target.top, greaterThanOrEqualTo(0));
+          expect(
+            target.bottom,
+            lessThanOrEqualTo(tester.view.physicalSize.height - 240),
+          );
+          expect(find.byTooltip(tooltip).hitTestable(), findsOneWidget);
+        }
+        await tester.tap(find.byTooltip('Close'));
+        await tester.pumpAndSettle();
+        tester.view.viewInsets = const FakeViewPadding();
+        await tester.pumpAndSettle();
+        fixture.commandHook = (_, method, _) async {
+          if (method == 'image.generate') {
+            throw StateError('Provider unavailable');
+          }
+          return null;
+        };
+        await tester.tap(find.byTooltip('Generate room picture'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Generate picture'));
+        await tester.pumpAndSettle();
+        expect(draft.error, contains('could not be prepared'));
+        expect(draft.picture, isNotNull);
+        expect(fixture.commands.single.$3['prompt'], editedPrompt);
+        await _capture(
+          tester,
+          frame,
+          'group-prompt-error-${brightness.name}-$scale',
+        );
+        await _revealGroup(
+          tester,
+          find.byTooltip('Generate room picture'),
+        );
+        await tester.tap(find.byTooltip('Generate room picture'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextFormField>(find.byType(TextFormField)).initialValue,
+          editedPrompt,
+        );
+        await tester.tap(find.byTooltip('Close'));
         await tester.pumpAndSettle();
         await _revealGroup(tester, find.byTooltip('Remove Atlas'));
         await tester.tap(find.byTooltip('Remove Atlas'));
@@ -970,7 +1103,7 @@ void main() {
         await tester.tap(find.byTooltip('Remove room picture'));
         await tester.pumpAndSettle();
         expect(draft.picture, isNull);
-        expect(fixture.commands, isEmpty);
+        expect(fixture.commands.single.$2, 'image.generate');
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
       });

@@ -562,6 +562,12 @@ ThemeData wingTheme(Brightness brightness, {Color? accent}) {
       backgroundColor: tokens.raised,
       surfaceTintColor: Colors.transparent,
       shape: panelShape,
+      titleTextStyle: tokens.typography.section.copyWith(
+        color: tokens.onSurface,
+      ),
+      contentTextStyle: tokens.typography.body.copyWith(
+        color: tokens.onSurface,
+      ),
     ),
     tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(

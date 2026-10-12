@@ -12,6 +12,7 @@ import 'package:wing/core/services/bot_avatar_io.dart';
 import 'package:wing/core/services/bot_group_draft_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/services/bots_preferences.dart';
 
 import 'support/bots_fixture.dart';
 
@@ -20,6 +21,22 @@ class _Picker extends BotAvatarIo {
   final Future<Uint8List?> Function() read;
   @override
   Future<Uint8List?> pick() => read();
+}
+
+class _PromptPreferences extends BotsPreferences {
+  _PromptPreferences(super.preferences);
+  bool fail = true;
+  Completer<void>? held;
+  @override
+  Future<void> writePicturePrompt(
+    String identity,
+    String roomId,
+    String prompt,
+  ) async {
+    if (fail) throw StateError('Device write failed');
+    await held?.future;
+    await super.writePicturePrompt(identity, roomId, prompt);
+  }
 }
 
 Uint8List _photo() => Uint8List.fromList(
@@ -98,6 +115,139 @@ void main() {
     await session.refresh();
     return (fixture, session, backend);
   }
+
+  test(
+    'room picture prompt survives editor and preferences reconstruction',
+    () async {
+      final (fixture, session, _) = await editingRoster();
+      final draft = BotGroupDraftSession(
+        session,
+        existing: session.state.groups.single,
+      );
+      const prompt = '  Teal robots, paper cut shapes.\nNo letters.  ';
+      draft.setPicturePrompt(prompt);
+      expect(await draft.rememberPicturePrompt(), true);
+      expect(
+        draft.canSave,
+        false,
+        reason: 'Prompt edits do not change the Hermes room.',
+      );
+      draft.dispose();
+      SharedPreferences.resetStatic();
+      final reopenedRoster = BotsSession((_) async => [fixture.repository]);
+      addTearDown(reopenedRoster.dispose);
+      await reopenedRoster.refresh();
+      final reopened = BotGroupDraftSession(
+        reopenedRoster,
+        existing: reopenedRoster.state.groups.single,
+      );
+      addTearDown(reopened.dispose);
+      expect(reopened.picturePrompt, prompt);
+      reopened.setName('Renamed room');
+      expect(reopened.picturePrompt, prompt);
+      reopened.setPicturePrompt('');
+      expect(await reopened.rememberPicturePrompt(), true);
+      final blank = BotGroupDraftSession(
+        reopenedRoster,
+        existing: reopenedRoster.state.groups.single,
+      );
+      addTearDown(blank.dispose);
+      expect(
+        blank.picturePrompt,
+        isEmpty,
+        reason: 'An empty edit must not restore the default.',
+      );
+      final preferences = await BotsPreferences.load();
+      expect(preferences.picturePrompt('instance-1', 'other-room'), isNull);
+      expect(preferences.picturePrompt('other-instance', 'room-1'), isNull);
+      expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test(
+    'failed generation retains the prompt for another editor visit',
+    () async {
+      final (fixture, session, backend) = await editingRoster();
+      fixture.commandHook = (profile, method, params) =>
+          method == 'image.generate'
+          ? Future.error(StateError('Provider unavailable'))
+          : backend.command(profile, method, params);
+      final draft = BotGroupDraftSession(
+        session,
+        existing: session.state.groups.single,
+      );
+      addTearDown(draft.dispose);
+      final oldPicture = draft.picture;
+      await draft.generatePicture(
+        'My last attempted prompt',
+        canUse: () => true,
+      );
+      expect(draft.error, contains('could not be prepared'));
+      expect(draft.picture, oldPicture);
+      final reopened = BotGroupDraftSession(
+        session,
+        existing: session.state.groups.single,
+      );
+      addTearDown(reopened.dispose);
+      expect(reopened.picturePrompt, 'My last attempted prompt');
+      expect(fixture.commands.single.$3['prompt'], 'My last attempted prompt');
+    },
+  );
+
+  test(
+    'prompt persistence failure retains editable text and permits retry',
+    () async {
+      final fixture = BotsFixture();
+      final preferences = _PromptPreferences(
+        await SharedPreferences.getInstance(),
+      );
+      final session = BotsSession(
+        (_) async => [fixture.repository],
+        loadPreferences: () async => preferences,
+      );
+      addTearDown(session.dispose);
+      await session.refresh();
+      final draft = BotGroupDraftSession(session);
+      addTearDown(draft.dispose);
+      draft.setPicturePrompt('Keep this edit');
+      expect(await draft.rememberPicturePrompt(), false);
+      expect(draft.picturePrompt, 'Keep this edit');
+      expect(draft.error, contains('Reopen Room picture to retry'));
+      preferences.fail = false;
+      expect(await draft.rememberPicturePrompt(), true);
+      expect(draft.error, isNull);
+      expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test(
+    'held prompt persistence reserves generation and retires without dispatch',
+    () async {
+      final fixture = BotsFixture();
+      final preferences =
+          _PromptPreferences(await SharedPreferences.getInstance())
+            ..fail = false
+            ..held = Completer<void>();
+      final session = BotsSession(
+        (_) async => [fixture.repository],
+        loadPreferences: () async => preferences,
+      );
+      addTearDown(session.dispose);
+      await session.refresh();
+      final draft = BotGroupDraftSession(session);
+      for (final bot in draft.bots.take(2)) {
+        draft.select(bot, true);
+      }
+      final pending = draft.generatePicture('First prompt', canUse: () => true);
+      expect(draft.pictureBusy, true);
+      await draft.generatePicture('Second prompt', canUse: () => true);
+      expect(draft.picturePrompt, 'First prompt');
+      draft.dispose();
+      preferences.held!.complete();
+      await pending;
+      expect(fixture.commands, isEmpty);
+    },
+  );
 
   test(
     'existing draft retains its saved details and fixed membership without writes',

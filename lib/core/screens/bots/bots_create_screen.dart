@@ -87,34 +87,93 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
 
   Future<void> _generatePicture() async {
     final draft = _group!;
-    var prompt = draft.picturePrompt;
-    final value = await showDialog<String>(
+    final generate = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Room picture'),
-        content: TextFormField(
-          initialValue: prompt,
-          onChanged: (value) => prompt = value,
-          minLines: 3,
-          maxLines: 6,
-          decoration: const InputDecoration(labelText: 'Prompt'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, updateDialog) => Dialog(
+          insetPadding: const EdgeInsets.all(WingSpacing.lg),
+          child: SizedBox(
+            width: 392,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    WingSpacing.lg,
+                    WingSpacing.xs,
+                    WingSpacing.sm,
+                    0,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          namesRoute: true,
+                          child: Text(
+                            'Room picture',
+                            style: Theme.of(context).dialogTheme.titleTextStyle,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(
+                      WingSpacing.lg,
+                      WingSpacing.sm,
+                      WingSpacing.lg,
+                      WingSpacing.md,
+                    ),
+                    child: TextFormField(
+                      initialValue: draft.picturePrompt,
+                      onChanged: (value) =>
+                          updateDialog(() => draft.setPicturePrompt(value)),
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      minLines: 4,
+                      maxLines: 6,
+                      decoration: const InputDecoration(
+                        labelText: 'Prompt',
+                        alignLabelWithHint: true,
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    WingSpacing.lg,
+                    0,
+                    WingSpacing.lg,
+                    WingSpacing.sm,
+                  ),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: IconButton.filled(
+                      tooltip: 'Generate picture',
+                      onPressed: draft.picturePrompt.trim().isEmpty
+                          ? null
+                          : () => Navigator.pop(context, true),
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Cancel',
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close),
-          ),
-          IconButton.filled(
-            tooltip: 'Generate picture',
-            onPressed: () => Navigator.pop(context, prompt),
-            icon: const Icon(Icons.auto_awesome_outlined),
-          ),
-        ],
       ),
     );
-    if (mounted && value != null) {
-      await draft.generatePicture(value, canUse: _canUse);
+    if (!mounted) return;
+    if (generate == true) {
+      await draft.generatePicture(draft.picturePrompt, canUse: _canUse);
+    } else {
+      await draft.rememberPicturePrompt();
     }
   }
 
