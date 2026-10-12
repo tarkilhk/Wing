@@ -42,6 +42,7 @@ import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 
 const _export = bool.fromEnvironment('STUDIO_REVIEW');
@@ -2395,6 +2396,167 @@ void main() {
         await tester.pumpWidget(const SizedBox());
       },
     );
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'Chats profile long press opens exact Bot chat and returns to Chats ${brightness.name} $scale',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          final preferences = await SharedPreferences.getInstance();
+          final appPreferences = AppPreferences(preferences);
+          final browser = _BotConversationBrowser();
+          final controller = ProfileWorkspaceController(
+            access: ConnectionAccess(
+              connection: SavedConnection(
+                id: 'host',
+                label: 'Home server',
+                host: 'localhost',
+                port: 1,
+                apiKey: '',
+              ),
+              dashboardOAuth: null,
+            ),
+            connectionIdentity: 'instance-1',
+            preferences: preferences,
+            appPreferences: appPreferences,
+            gatewayFactory: (scope) {
+              final base = browser.gateway(scope);
+              return ProfileGateway(
+                scope: scope,
+                discover: base.discover,
+                get: base.read,
+                rpc: base.call,
+                ownedPatch: (endpoint, body, canDispatch, onDispatched) async {
+                  expect(canDispatch(), isTrue);
+                  expect(body['unread'], isFalse);
+                  onDispatched();
+                  return {'ok': true, 'unread': false};
+                },
+              );
+            },
+          );
+          addTearDown(controller.dispose);
+          addTearDown(appPreferences.dispose);
+          await controller.initialize();
+          final bots = BotsFixture();
+          bots.profiles
+            ..clear()
+            ..addAll([
+              BotsFixture.profile('personal', 'Personal Bot'),
+              BotsFixture.profile('work', 'Work Bot'),
+            ]);
+          for (final profile in bots.profiles) {
+            profile['canonical_session'] = {
+              'id': 'canonical-root',
+              'resolved_id': 'canonical-tip',
+            };
+          }
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final frame = GlobalKey();
+          await tester.pumpMarkdownWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: frame,
+                child: ProfileWorkspaceScreen(
+                  controller: controller,
+                  createBotsSession: () =>
+                      BotsSession((_) async => [bots.repository]),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+          await tester.pumpAndSettle();
+          expect(controller.current!.chat, isNull);
+          expect(find.text('Profile 1'), findsOneWidget);
+          for (final profile in ['personal', 'work']) {
+            await tester.longPress(
+              find.byKey(ValueKey('chat-profile-$profile')),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              controller.current!.chat!.key.workspace.profileName,
+              profile,
+            );
+            expect(controller.current!.chat!.key.sessionId, 'canonical-root');
+            expect(controller.current!.chat!.markReadFailed, isFalse);
+            expect(
+              find.text(profile == 'personal' ? 'Personal Bot' : 'Work Bot'),
+              findsOneWidget,
+            );
+            expect(find.byType(BotAvatar), findsOneWidget);
+            expect(find.byType(BotsContent), findsNothing);
+            expect(bots.commands, isEmpty);
+            expect(
+              browser.calls.where((call) => call.$2 == 'session.create'),
+              isEmpty,
+            );
+            await tester.settleMarkdown();
+            await tester.pumpAndSettle();
+            expect(
+              find.text(
+                'Of course. What would you like to make time for this week?',
+                findRichText: true,
+              ),
+              findsOneWidget,
+            );
+            await _capture(
+              tester,
+              frame,
+              'profile-shortcut-$profile-${brightness.name}-$scale',
+            );
+            await tester.binding.handlePopRoute();
+            await tester.pumpAndSettle();
+            expect(controller.current!.chat, isNull);
+            expect(
+              find.byKey(const ValueKey('chat-profile-work')),
+              findsOneWidget,
+            );
+            expect(find.text('Profile 1'), findsOneWidget);
+          }
+          final held = Completer<void>();
+          final started = Completer<void>();
+          bots.readHook = (profile, method, params) async {
+            if (method == 'profiles.list') {
+              if (!started.isCompleted) started.complete();
+              await held.future;
+            }
+            return null;
+          };
+          await tester.longPress(
+            find.byKey(const ValueKey('chat-profile-personal')),
+          );
+          await tester.pump();
+          expect(started.isCompleted, isTrue);
+          tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('nav-settings')));
+          await tester.pump(const Duration(milliseconds: 400));
+          held.complete();
+          await tester.pump(const Duration(milliseconds: 500));
+          expect(controller.current!.chat, isNull);
+          expect(
+            find.byKey(const ValueKey('chat-profile-personal')),
+            findsNothing,
+          );
+          expect(bots.commands, isEmpty);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
   }
 
   testWidgets(

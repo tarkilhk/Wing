@@ -43,6 +43,7 @@ class ProfileWorkspaceBrowser extends StatefulWidget {
     required this.createColors,
     required this.deletionRecovery,
     required this.newProject,
+    required this.onOpenBotChat,
     this.drawer,
     this.searchFocusNode,
   });
@@ -53,6 +54,7 @@ class ProfileWorkspaceBrowser extends StatefulWidget {
   final ProfileColorsSession Function() createColors;
   final Widget deletionRecovery;
   final Future<void> Function(ChatBrowserData) newProject;
+  final ValueChanged<String> onOpenBotChat;
   final Widget? drawer;
   final FocusNode? searchFocusNode;
   @override
@@ -1196,6 +1198,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
                   profiles: workspace.profiles,
                   createColors: widget.createColors,
                   selectedProfiles: _profiles,
+                  onOpenBotChat: widget.onOpenBotChat,
                   onSelected: (name) => _chooseView(
                     BrowserPreferenceIntent.exclusiveProfile(name),
                   ),

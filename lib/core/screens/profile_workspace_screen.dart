@@ -30,6 +30,7 @@ import '../models/transcript_timeline.dart';
 import '../models/transcript_message.dart';
 import 'package:wing/core/services/chat_outputs_session.dart';
 import '../models/profile_session_key.dart';
+import '../models/hermes_profile.dart';
 import 'package:wing/core/models/model_choice.dart';
 import '../models/side_question_delivery.dart';
 import '../services/workspace_connection_failure.dart';
@@ -192,13 +193,37 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     return _recentsOwner ??= WorkspaceRecentsSession(controller, bots);
   }
 
-  Future<void> _openBotChat(ProfileSessionKey key) => _run(() async {
-    if (_destination != AppDestination.bots) return;
+  Future<void> _openProfileBotChat(String profile) => _run(() async {
+    if (_destination != AppDestination.chats ||
+        controller.current?.chat != null) {
+      return;
+    }
     final navigation = ++_botNavigation;
+    final owner = controller;
     bool current() =>
         mounted &&
+        controller == owner &&
         navigation == _botNavigation &&
-        _destination == AppDestination.bots;
+        _destination == AppDestination.chats &&
+        controller.current?.chat == null;
+    final scope = WorkspaceScope(
+      connectionId: controller.connection.id,
+      connectionIdentity: controller.connectionIdentity,
+      profileName: profile,
+    );
+    final key = await _bots.openProfile(scope, canUse: current);
+    if (!current() || key == null) return;
+    await _openBotChat(key, origin: AppDestination.chats);
+  });
+
+  Future<void> _openBotChat(
+    ProfileSessionKey key, {
+    AppDestination origin = AppDestination.bots,
+  }) => _run(() async {
+    if (_destination != origin) return;
+    final navigation = ++_botNavigation;
+    bool current() =>
+        mounted && navigation == _botNavigation && _destination == origin;
     if (!controller.owns(key)) {
       final open = widget.onOpenBotChat;
       if (open == null) {
@@ -214,7 +239,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
     if (!current()) return;
     _selectDestination(AppDestination.chats);
-    _chatOrigin = AppDestination.bots;
+    _chatOrigin = origin;
   });
   (ProfileWorkspaceController, ChatReadingFocus)? _renderedReadingFocus;
   final _composer = SkillComposerController();
@@ -948,6 +973,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               presentation: controller.deletedDraftCleanupPresentation,
             ),
             newProject: _projectDialog,
+            onOpenBotChat: _openProfileBotChat,
             drawer: _drawer(),
             searchFocusNode: _chatSearchFocus,
           );

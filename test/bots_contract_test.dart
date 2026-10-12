@@ -30,6 +30,64 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test(
+    'profile chat entry resolves the exact profile and creates only if absent',
+    () async {
+      final fixture = BotsFixture();
+      final session = BotsSession((_) async => [fixture.repository]);
+      addTearDown(session.dispose);
+      final scope = WorkspaceScope(
+        connectionId: 'host',
+        connectionIdentity: 'instance-1',
+        profileName: 'mira',
+      );
+      final existing = await session.openProfile(scope, canUse: () => true);
+      expect(existing, ProfileSessionKey(scope, 'mira-chat'));
+      expect(fixture.commands, isEmpty);
+      fixture.profiles[1]['canonical_session'] = null;
+      session.invalidateAppearances();
+      final created = await session.openProfile(scope, canUse: () => true);
+      expect(created!.workspace, scope);
+      expect(
+        fixture.commands.where((command) => command.$2 == 'session.create'),
+        hasLength(1),
+      );
+      expect(fixture.commands.every((command) => command.$1 == 'mira'), isTrue);
+    },
+  );
+
+  test(
+    'profile chat entry retired during discovery cannot create a chat',
+    () async {
+      final fixture = BotsFixture();
+      final session = BotsSession((_) async => [fixture.repository]);
+      addTearDown(session.dispose);
+      final started = Completer<void>();
+      final held = Completer<void>();
+      var current = true;
+      fixture.readHook = (profile, method, params) async {
+        if (method == 'profiles.list') {
+          if (!started.isCompleted) started.complete();
+          await held.future;
+        }
+        return null;
+      };
+      final opening = session.openProfile(
+        WorkspaceScope(
+          connectionId: 'host',
+          connectionIdentity: 'instance-1',
+          profileName: 'mira',
+        ),
+        canUse: () => current,
+      );
+      await started.future;
+      current = false;
+      held.complete();
+      expect(await opening, isNull);
+      expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test(
     'live groups borrow the same canonical appearance updates as cards',
     () async {
       final fixture = BotsFixture();

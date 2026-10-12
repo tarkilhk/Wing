@@ -30,6 +30,7 @@ void main() {
         theme: wingTheme(Brightness.dark),
         home: Scaffold(
           body: ChatProfileBar(
+            onOpenBotChat: (_) {},
             profiles: const [HermesProfile(name: 'work')],
             selectedProfiles: const {},
             createColors: () => ProfileColorsSession(
@@ -79,6 +80,7 @@ void main() {
     );
     final semantics = tester.ensureSemantics();
     String? selected;
+    final opened = <String>[];
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.dark),
@@ -89,6 +91,7 @@ void main() {
               width: 144,
               child: StatefulBuilder(
                 builder: (context, setState) => ChatProfileBar(
+                  onOpenBotChat: opened.add,
                   createColors: createColors,
                   profiles: [
                     for (var i = 0; i < 12; i++)
@@ -96,7 +99,11 @@ void main() {
                         name: 'profile-${i.toString().padLeft(2, '0')}',
                       ),
                     const HermesProfile(name: 'aaa'),
-                    const HermesProfile(name: 'default', displayName: 'Zebra'),
+                    const HermesProfile(
+                      name: 'default',
+                      displayName: 'Zebra',
+                      isDefault: true,
+                    ),
                   ],
                   selectedProfiles: {if (selected != null) selected!},
                   onSelected: (name) => setState(() => selected = name),
@@ -134,13 +141,18 @@ void main() {
       tester.getSemantics(find.bySemanticsLabel('profile-11')),
       matchesSemantics(
         label: 'profile-11',
-        hint: 'Clear profile filter',
+        hint: 'Clear profile filter. Long press to open Bot chat',
         isButton: true,
         isSelected: true,
         hasSelectedState: true,
         hasTapAction: true,
+        hasLongPressAction: true,
       ),
     );
+    await tester.longPress(last);
+    await tester.pumpAndSettle();
+    expect(opened, ['profile-11']);
+    expect(selected, 'profile-11');
     await tester.drag(bar, const Offset(600, 0));
     await tester.pumpAndSettle();
     expect(
@@ -148,6 +160,15 @@ void main() {
       findsOneWidget,
     );
     expect(tester.getSize(bar), const Size(120, 48));
+    final home = find.byKey(const ValueKey('chat-profile-default'));
+    expect(
+      find.descendant(of: home, matching: find.byIcon(Icons.home_outlined)),
+      findsOneWidget,
+    );
+    await tester.longPress(home);
+    await tester.pumpAndSettle();
+    expect(opened, ['profile-11', 'default']);
+    expect(selected, 'profile-11');
     semantics.dispose();
   });
 }

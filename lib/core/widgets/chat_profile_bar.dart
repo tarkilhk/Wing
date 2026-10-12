@@ -13,12 +13,14 @@ class ChatProfileBar extends StatefulWidget {
     required this.profiles,
     required this.selectedProfiles,
     required this.onSelected,
+    required this.onOpenBotChat,
     required this.createColors,
   });
 
   final List<HermesProfile> profiles;
   final Set<String> selectedProfiles;
   final ValueChanged<String> onSelected;
+  final ValueChanged<String> onOpenBotChat;
   final ProfileColorsSession Function() createColors;
 
   @override
@@ -94,11 +96,14 @@ class _ChatProfileBarState extends State<ChatProfileBar> {
                           button: true,
                           selected: selected,
                           label: profile.label,
-                          hint: hint,
+                          hint: '$hint. Long press to open Bot chat',
                           excludeSemantics: true,
                           onTap: () => widget.onSelected(profile.name),
+                          onLongPress: () => widget.onOpenBotChat(profile.name),
                           child: Tooltip(
-                            message: '${profile.label} · $hint',
+                            triggerMode: TooltipTriggerMode.manual,
+                            message:
+                                '${profile.label} · $hint · Long press to open Bot chat',
                             child: TextButton(
                               key: ValueKey('chat-profile-${profile.name}'),
                               style: TextButton.styleFrom(
@@ -115,6 +120,8 @@ class _ChatProfileBarState extends State<ChatProfileBar> {
                                 ),
                               ),
                               onPressed: () => widget.onSelected(profile.name),
+                              onLongPress: () =>
+                                  widget.onOpenBotChat(profile.name),
                               child: Opacity(
                                 opacity: selected ? 1 : .55,
                                 child: Container(

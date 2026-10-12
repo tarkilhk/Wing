@@ -25,6 +25,10 @@ group indication.
 
 Bot Chats stay hidden from the default Chats list. Enable **Show automated chats** in Chats to reveal them, or open them directly through Bots. Displayed Bot Chats show a small version of the bot's avatar before their name. Other conversations retain their saved titles.
 
+In Chats, long press a profile icon beside the connection name to open that
+profile’s Bot Chat. A normal tap filters the list. Back returns to Chats with
+the existing filters.
+
 ## Profile options
 
 The row menu offers View screen, Pin to top/Unpin, Hide bot/Show bot and **Bot settings**. The roster menu offers Show hidden bots. Bot pins and appearance synchronize through Hermes; group pins are saved on this device.

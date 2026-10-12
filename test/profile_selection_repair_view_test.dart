@@ -207,6 +207,7 @@ void main() {
           ),
         ),
         home: ProfileWorkspaceBrowser(
+          onOpenBotChat: (_) {},
           createData: () => ChatBrowserData(controller),
           connectionLabel: controller.connection.label,
           connectionIcon: controller.connection.icon,

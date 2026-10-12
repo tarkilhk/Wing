@@ -740,6 +740,24 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     }
   }
 
+  /// Open the exact captured profile's continuing chat without visiting Bots.
+  Future<ProfileSessionKey?> openProfile(
+    WorkspaceScope scope, {
+    required bool Function() canUse,
+  }) async {
+    bool current() => !_closed && canUse();
+    if (!current()) return null;
+    final identities = await identitiesForProfiles([scope], canRead: current);
+    if (!current()) return null;
+    final bot = identities[scope];
+    if (bot == null) throw StateError('Bot profile is unavailable');
+    final key = await open(bot, canUse: current);
+    if (key == null && current()) {
+      throw StateError(_operationError ?? 'Bot chat could not be opened');
+    }
+    return key;
+  }
+
   Future<ProfileSessionKey?> open(
     BotRecord bot, {
     required bool Function() canUse,

@@ -82,6 +82,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ProfileWorkspaceBrowser(
+            onOpenBotChat: (_) {},
             createData: () => ChatBrowserData(controller),
             connectionLabel: controller.connection.label,
             connectionIcon: controller.connection.icon,
@@ -150,6 +151,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ProfileWorkspaceBrowser(
+            onOpenBotChat: (_) {},
             createData: () => ChatBrowserData(controller),
             connectionLabel: controller.connection.label,
             connectionIcon: controller.connection.icon,

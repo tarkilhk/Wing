@@ -205,6 +205,7 @@ void main() {
           home: workspace
               ? ProfileWorkspaceScreen(controller: controller)
               : ProfileWorkspaceBrowser(
+                onOpenBotChat: (_) {},
                   createData: () => ChatBrowserData(
                     controller,
                     readBotAppearances: fixture.botAppearances,
