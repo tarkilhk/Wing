@@ -6,8 +6,9 @@ import 'package:wing/core/services/profile_gateway.dart';
 
 /// Modern stock shapes, with explicit authority and per-key revisions.
 class BotsFixture {
-  BotsFixture({this.server});
+  BotsFixture({this.server, this.now});
   final AdministrationRepository? server;
+  final DateTime Function()? now;
   final profiles = <Map<String, dynamic>>[
     profile(
       'atlas',
@@ -76,6 +77,7 @@ class BotsFixture {
     savedHistory: savedHistory,
     command: command,
     ownership: ownership,
+    now: now,
   );
   Future<ProfileHistoryPage> savedHistory(
     String profile,

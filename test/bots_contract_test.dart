@@ -972,6 +972,138 @@ void main() {
       );
     },
   );
+  test('roster activity includes stock background worker heartbeats', () async {
+    final now = DateTime.utc(2026, 10, 12, 12);
+    final fixture = BotsFixture(now: () => now);
+    fixture.profiles.first['worker_session'] = {
+      'id': 'private-worker',
+      'source': 'kanban',
+      'title': 'Background work',
+      'last_active': now.millisecondsSinceEpoch / 1000,
+    };
+    fixture.readHook = (_, method, _) async =>
+        method == 'session.active_list' ? {'sessions': []} : null;
+    final owner = BotsSession((_) async => [fixture.repository]);
+    addTearDown(owner.dispose);
+    await owner.refresh();
+    expect(owner.state.bots.first.presence, BotPresence.working);
+    expect(owner.state.bots.skip(1).map((bot) => bot.presence), [
+      BotPresence.idle,
+      BotPresence.idle,
+    ]);
+    expect(owner.state.bots.first.chat!.sessionId, 'atlas-chat');
+    expect(owner.state.bots.first.preview, contains('three useful approaches'));
+    expect(fixture.commands, isEmpty);
+  });
+
+  test('worker heartbeat expiry and renewal update the same bot', () async {
+    var now = DateTime.utc(2026, 10, 12, 12);
+    final fixture = BotsFixture(now: () => now);
+    final worker = {
+      'id': 'private-worker',
+      'source': 'tool',
+      'last_active': now.millisecondsSinceEpoch / 1000,
+    };
+    fixture.profiles.first['worker_session'] = worker;
+    fixture.readHook = (_, method, _) async =>
+        method == 'session.active_list' ? {'sessions': []} : null;
+    final owner = BotsSession((_) async => [fixture.repository]);
+    addTearDown(owner.dispose);
+    for (final (elapsed, expected) in [
+      (0, BotPresence.working),
+      (149999, BotPresence.working),
+      (150000, BotPresence.idle),
+    ]) {
+      now = DateTime.utc(2026, 10, 12, 12).add(Duration(milliseconds: elapsed));
+      await owner.refresh();
+      expect(owner.state.bots.first.presence, expected);
+      expect(
+        owner.state.bots.first.workerLastActive,
+        DateTime.utc(2026, 10, 12, 12),
+      );
+    }
+    worker['last_active'] = now.millisecondsSinceEpoch / 1000;
+    await owner.refresh();
+    expect(owner.state.bots.first.presence, BotPresence.working);
+    fixture.profiles.first['worker_session'] = null;
+    await owner.refresh();
+    expect(owner.state.bots.first.presence, BotPresence.idle);
+    expect(fixture.commands, isEmpty);
+  });
+
+  test('fresh worker evidence survives unavailable live sessions', () async {
+    final now = DateTime.utc(2026, 10, 12, 12);
+    final fixture = BotsFixture(now: () => now);
+    fixture.profiles.first['worker_session'] = {
+      'id': 'private-worker',
+      'source': 'kanban',
+      'last_active': now.millisecondsSinceEpoch / 1000,
+    };
+    fixture.readHook = (_, method, _) async {
+      if (method == 'session.active_list') throw StateError('Disconnected');
+      return null;
+    };
+    final roster = await fixture.repository.bots();
+    final presence = await fixture.repository.presence(roster);
+    expect(presence[roster.first.id], BotPresence.working);
+    expect(presence[roster[1].id], BotPresence.unknown);
+  });
+
+  test('pending input takes precedence over worker motion', () async {
+    final now = DateTime.utc(2026, 10, 12, 12);
+    final fixture = BotsFixture(now: () => now);
+    fixture.profiles[1]['worker_session'] = {
+      'id': 'private-worker',
+      'source': 'tool',
+      'last_active': now.millisecondsSinceEpoch / 1000,
+    };
+    final roster = await fixture.repository.bots();
+    expect(
+      (await fixture.repository.presence(roster))[roster[1].id],
+      BotPresence.needsInput,
+    );
+  });
+
+  test('invalid worker observations never animate an idle bot', () async {
+    final now = DateTime.utc(2026, 10, 12, 12);
+    final fixture = BotsFixture(now: () => now);
+    fixture.readHook = (_, method, _) async => switch (method) {
+      'session.active_list' => {'sessions': []},
+      'profiles.list' => {
+        'profiles': fixture.profiles,
+        'bot_mode_protocol': true,
+        'install_id': 'install-1',
+      },
+      _ => null,
+    };
+    for (final value in [
+      null,
+      'invalid',
+      {},
+      {
+        'id': '',
+        'source': 'tool',
+        'last_active': now.millisecondsSinceEpoch / 1000,
+      },
+      for (final timestamp in [
+        'invalid',
+        0,
+        -1,
+        double.nan,
+        double.infinity,
+        1e30,
+        now.millisecondsSinceEpoch / 1000 + 1,
+      ])
+        {'id': 'private-worker', 'source': 'tool', 'last_active': timestamp},
+    ]) {
+      fixture.profiles.first['worker_session'] = value;
+      final roster = await fixture.repository.bots();
+      expect(
+        (await fixture.repository.presence(roster))[roster.first.id],
+        BotPresence.idle,
+      );
+    }
+  });
   test(
     'metadata CAS preserves unknown fields and conflicts leave the draft intact',
     () async {

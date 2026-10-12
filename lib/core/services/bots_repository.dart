@@ -52,8 +52,10 @@ class BotsRepository {
     this.displayConnect,
     void Function()? retain,
     void Function()? release,
+    DateTime Function()? now,
   }) : _retain = retain ?? _noop,
-       _release = release ?? _noop;
+       _release = release ?? _noop,
+       _now = now ?? DateTime.now;
 
   factory BotsRepository.forServer(
     AdministrationRepository server, {
@@ -135,6 +137,7 @@ class BotsRepository {
   final BotsOwnership _ownership;
   final BotsSavedHistory _savedHistory;
   final void Function() _retain, _release;
+  final DateTime Function() _now;
   void retain() => _retain();
   void release() => _release();
   void _owns(BotRecord bot) {
@@ -224,6 +227,7 @@ class BotsRepository {
                   _requiredText(canonical['resolved_id']),
                 ),
           preview: canonical == null ? '' : _text(canonical['preview']),
+          workerLastActive: _workerLastActive(row['worker_session']),
         );
       }),
     );
@@ -233,7 +237,13 @@ class BotsRepository {
     for (final bot in roster) {
       _owns(bot);
     }
-    final unknown = {for (final bot in roster) bot.id: BotPresence.unknown};
+    final now = _now();
+    final unavailable = {
+      for (final bot in roster)
+        bot.id: _workerIsActive(bot, now)
+            ? BotPresence.working
+            : BotPresence.unknown,
+    };
     try {
       // Stock active_list is process-wide and carries no profile owner.
       // Prove unique ownership in every profile's hidden-inclusive store first.
@@ -251,10 +261,10 @@ class BotsRepository {
         owners[bot.id] = await _ownership(bot.profile.name, keys);
       }
       return {
-        for (final bot in roster) bot.id: _presenceFor(bot, live, owners),
+        for (final bot in roster) bot.id: _presenceFor(bot, live, owners, now),
       };
     } catch (_) {
-      return unknown;
+      return unavailable;
     }
   }
 
@@ -262,6 +272,7 @@ class BotsRepository {
     BotRecord bot,
     List<Map<String, dynamic>> live,
     Map<String, Set<String>> owners,
+    DateTime now,
   ) {
     final keys = owners[bot.id]!;
     if (keys.any(
@@ -273,10 +284,38 @@ class BotsRepository {
     return matching.any((r) => r['status'] == 'waiting')
         ? BotPresence.needsInput
         : matching.any(
-            (r) => r['status'] == 'working' || r['status'] == 'starting',
-          )
+                (r) => r['status'] == 'working' || r['status'] == 'starting',
+              ) ||
+              _workerIsActive(bot, now)
         ? BotPresence.working
         : BotPresence.idle;
+  }
+
+  // Stock workers heartbeat at least every 60 s. Match the desktop's 150 s
+  // window so one delayed heartbeat does not park a working bot's avatar.
+  bool _workerIsActive(BotRecord bot, DateTime now) {
+    final lastActive = bot.workerLastActive;
+    if (lastActive == null) return false;
+    final age = now.difference(lastActive);
+    return age >= Duration.zero && age < const Duration(seconds: 150);
+  }
+
+  DateTime? _workerLastActive(Object? value) {
+    if (value is! Map ||
+        value['id'] is! String ||
+        (value['id'] as String).isEmpty ||
+        value['source'] is! String ||
+        (value['source'] as String).isEmpty) {
+      return null;
+    }
+    final timestamp = value['last_active'];
+    if (timestamp is! num || !timestamp.isFinite || timestamp <= 0) return null;
+    final milliseconds = timestamp * 1000;
+    if (!milliseconds.isFinite || milliseconds > 8640000000000000) return null;
+    return DateTime.fromMillisecondsSinceEpoch(
+      milliseconds.round(),
+      isUtc: true,
+    );
   }
 
   Future<BotRecord> enrich(
@@ -312,6 +351,7 @@ class BotsRepository {
       metadata: bot.metadata,
       chat: bot.chat,
       resolvedChat: bot.resolvedChat,
+      workerLastActive: bot.workerLastActive,
       preview: bot.preview,
       presence: presence,
       avatar: avatar,

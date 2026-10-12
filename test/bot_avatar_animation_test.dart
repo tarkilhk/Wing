@@ -353,7 +353,13 @@ void main() {
       testWidgets(
         'roster and header motion at ${brightness.name} $scale text',
         (tester) async {
-          final fixture = BotsFixture();
+          var now = DateTime.utc(2026, 10, 12, 12);
+          final fixture = BotsFixture(now: () => now);
+          fixture.profiles.first['worker_session'] = {
+            'id': 'private-worker',
+            'source': 'kanban',
+            'last_active': now.millisecondsSinceEpoch / 1000,
+          };
           for (final row in fixture.profiles) {
             row['ui_meta']['hermes-bots']['imageKind'] = 'shape';
           }
@@ -395,6 +401,32 @@ void main() {
           );
           await tester.pump();
           final writes = fixture.commands.length;
+          final workerAvatar = find.byWidgetPredicate(
+            (widget) =>
+                widget is LiveBotAvatar && widget.bot.profile.name == 'atlas',
+          );
+          expect(
+            tester.widget<LiveBotAvatar>(workerAvatar).mood,
+            BotAvatarMood.work,
+          );
+          expect(find.text('Running'), findsNWidgets(2));
+          Future<Uint8List> workerPixels() async =>
+              (await tester.runAsync(() async {
+                final boundary = tester.renderObject<RenderRepaintBoundary>(
+                  find.descendant(
+                    of: workerAvatar,
+                    matching: find.byType(RepaintBoundary),
+                  ),
+                );
+                final image = await boundary.toImage();
+                final bytes = await image.toByteData(
+                  format: ui.ImageByteFormat.rawRgba,
+                );
+                image.dispose();
+                return Uint8List.fromList(bytes!.buffer.asUint8List());
+              }))!;
+          await tester.pump(const Duration(milliseconds: 150));
+          final before = await workerPixels();
           for (final elapsed in [150, 450, 950]) {
             await tester.pump(Duration(milliseconds: elapsed));
             await _pixels(
@@ -403,6 +435,15 @@ void main() {
               filename: 'roster-${brightness.name}-$scale-$elapsed',
             );
           }
+          expect(await workerPixels(), isNot(orderedEquals(before)));
+          now = now.add(const Duration(seconds: 150));
+          await session.refresh();
+          await tester.pump();
+          expect(
+            tester.widget<LiveBotAvatar>(workerAvatar).mood,
+            BotAvatarMood.idle,
+          );
+          expect(find.text('Ready'), findsOneWidget);
           expect(fixture.commands.length, writes);
           expect(
             tester

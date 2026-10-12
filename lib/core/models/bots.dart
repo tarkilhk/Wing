@@ -34,6 +34,7 @@ class BotRecord {
     required Map<String, Object?> metadata,
     this.chat,
     this.resolvedChat,
+    this.workerLastActive,
     this.preview = '',
     this.presence = BotPresence.unknown,
     Uint8List? avatar,
@@ -56,6 +57,9 @@ class BotRecord {
       botShapes.contains(shape);
   final ProfileSessionKey? chat;
   final ProfileSessionKey? resolvedChat;
+
+  /// Profile-owned background work reported by stock profiles.list.
+  final DateTime? workerLastActive;
   bool describesConversation(ProfileSessionKey key) =>
       key == chat || key == resolvedChat;
   final BotPresence presence;
@@ -77,6 +81,7 @@ class BotRecord {
     metadata: metadata,
     chat: chat,
     resolvedChat: resolvedChat,
+    workerLastActive: workerLastActive,
     preview: preview,
     presence: presence,
     avatar: image,
@@ -104,6 +109,7 @@ class BotRecord {
     metadata: metadata,
     chat: chat,
     resolvedChat: resolvedChat,
+    workerLastActive: workerLastActive,
     preview: preview,
     presence: presence,
     avatar: avatar,
