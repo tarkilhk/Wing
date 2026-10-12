@@ -3071,9 +3071,30 @@ void main() {
           await _finishFrames(tester);
           await tester.tap(find.text('Groups').first);
           await _finishFrames(tester);
+          final landingRead = Completer<void>();
+          botFixture.readHook = (_, method, _) async {
+            if (method == 'groups.state') await landingRead.future;
+            return null;
+          };
           await tester.tap(find.text('Research team').first);
           await _finishFrames(tester);
           expect(find.byType(BotGroupScreen), findsOneWidget);
+          final landingViewport = find.byKey(
+            const ValueKey('group-transcript'),
+          );
+          final landingBounds = tester.getRect(landingViewport);
+          expect(find.bySemanticsLabel('Loading conversation'), findsOneWidget);
+          landingRead.complete();
+          for (var frame = 0; frame < 24; frame++) {
+            await tester.pump(const Duration(milliseconds: 16));
+            expect(
+              tester.getRect(landingViewport),
+              landingBounds,
+              reason:
+                  'A group landing must not resize while initial loading feedback clears.',
+            );
+          }
+          expect(find.byType(LinearProgressIndicator), findsNothing);
           final switcherState = tester.state<RecentConversationSwitcherState>(
             find.byType(RecentConversationSwitcher),
           );
@@ -3121,6 +3142,56 @@ void main() {
           expect(visit.modeEnabled, isTrue);
           expect(find.byType(ProfileTranscript), findsOneWidget);
           expect(find.byType(BotGroupScreen), findsNothing);
+          final chatSwitcher = tester.state<RecentConversationSwitcherState>(
+            find.byType(RecentConversationSwitcher),
+          );
+          final chatVisit = tester
+              .widget<RecentConversationSwitcher>(
+                find.byType(RecentConversationSwitcher),
+              )
+              .session;
+          final groupIndex = chatVisit.entries.indexWhere(
+            (entry) => entry.key == groupKey,
+          );
+          final groupLandingRead = Completer<void>();
+          botFixture.readHook = (_, method, _) async {
+            if (method == 'groups.state') await groupLandingRead.future;
+            return null;
+          };
+          unawaited(
+            chatSwitcher.selectAdjacent(groupIndex - chatVisit.selectedIndex),
+          );
+          await _finishFrames(tester);
+          expect(find.byType(BotGroupScreen), findsOneWidget);
+          final switchedViewport = find.byKey(
+            const ValueKey('group-transcript'),
+          );
+          final switchedBounds = tester.getRect(switchedViewport);
+          expect(find.bySemanticsLabel('Loading conversation'), findsOneWidget);
+          await _capture(
+            tester,
+            frame,
+            'group-switched-loading-${brightness.name}-$scale',
+          );
+          groupLandingRead.complete();
+          for (var frame = 0; frame < 24; frame++) {
+            await tester.pump(const Duration(milliseconds: 16));
+            expect(
+              tester.getRect(switchedViewport),
+              switchedBounds,
+              reason:
+                  'Switching from an ordinary chat to a group keeps its viewport fixed.',
+            );
+          }
+          expect(find.byType(LinearProgressIndicator), findsNothing);
+          await _capture(
+            tester,
+            frame,
+            'group-switched-ready-${brightness.name}-$scale',
+          );
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          expect(find.byType(ProfileTranscript), findsOneWidget);
           await tester.binding.handlePopRoute();
           await _finishFrames(tester);
           expect(find.byType(BotGroupScreen), findsOneWidget);

@@ -116,7 +116,8 @@ timestamps, with Copy in the same header. Type `@` in the composer to choose a
 member; the picker inserts at the cursor. The conversation opens
 at its latest messages and renders older messages as you scroll up. Your reading
 window stays in place as replies arrive; reaching the bottom or using the down
-arrow shows those replies. The arrow uses the same motion as normal chats.
+arrow shows those replies. The arrow uses the same motion as normal chats. Loading
+uses a thin bar above the messages, keeping the reading viewport fixed.
 
 Pinch inward on the discussion to open the same cards as normal chat Recents.
 The group remains mounted with its draft and reading position. Tap its card or

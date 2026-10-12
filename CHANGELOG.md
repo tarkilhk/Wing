@@ -5,6 +5,7 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 ## Unreleased
 
 - Accept diagonal two-finger swipes for Recents switching, without an angle requirement or vertical movement limit.
+- Keep group messages in place when initial loading finishes during Recents switching.
 
 - Reveal cached Recents chats without waiting for a profile browser load, allow
   swipes during opening, and render group discussions from the bottom without

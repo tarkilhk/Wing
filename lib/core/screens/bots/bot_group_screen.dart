@@ -378,10 +378,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       label = 'Message not confirmed · Retry the same message';
       active = false;
       icon = Icons.error_outline;
-    } else if (_session.loading) {
-      label = 'Loading conversation…';
-      active = true;
-      icon = Icons.pending_outlined;
     } else if (_session.error != null) {
       label = 'Group needs attention';
       active = false;
@@ -695,6 +691,20 @@ class _BotGroupScreenState extends State<BotGroupScreen>
               ),
             ),
           ),
+          if (_session.loading)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Semantics(
+                liveRegion: true,
+                child: LinearProgressIndicator(
+                  minHeight: 2,
+                  value: MediaQuery.disableAnimationsOf(context) ? .5 : null,
+                  semanticsLabel: 'Loading conversation',
+                ),
+              ),
+            ),
           if (!_following)
             Positioned(
               left: 0,

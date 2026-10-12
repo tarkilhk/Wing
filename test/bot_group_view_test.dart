@@ -1,3 +1,4 @@
+import 'package:wing/core/services/recent_conversation_snapshots.dart';
 import 'package:wing/core/widgets/bot_group_conversation.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
@@ -93,6 +94,86 @@ Future<void> _render(WidgetTester tester, GlobalKey key, String name) async {
 }
 
 void main() {
+  for (final reduced in [false, true]) {
+    testWidgets(
+      'group cached landing keeps viewport geometry across first runtime refresh reduced=$reduced',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = BotsFixture();
+        fixture.events.add(
+          _event(
+            1,
+            'message.member',
+            'atlas',
+            'Cached reply with **bold** text.',
+          ),
+        );
+        final cache = RecentGroupMessages();
+        addTearDown(cache.dispose);
+        final group = (await fixture.repository.groups(
+          groupMessages: cache,
+        )).single;
+        final waiting = Completer<void>();
+        fixture.readHook = (_, method, _) async {
+          if (method == 'groups.state') await waiting.future;
+          return null;
+        };
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: reduced),
+              child: child!,
+            ),
+            home: BotGroupScreen(
+              stopVoicePlayback: () async {},
+              voiceInputSettings: () => null,
+              createSession: () => BotGroupSession(
+                fixture.repository,
+                group,
+                reads: BotGroupReadState(),
+                groupMessages: cache,
+                appearances: FixedGroupAppearances(const []),
+              ),
+            ),
+          ),
+        );
+        final viewport = find.byKey(const ValueKey('group-transcript'));
+        final reply = find.byKey(const ValueKey(('group-message', 1)));
+        final before = tester.getRect(viewport);
+        final bottom = tester.getRect(reply).bottom;
+        await _settleGroupMarkdown(tester);
+        expect(tester.getRect(viewport), before);
+        expect(tester.getRect(reply).bottom, closeTo(bottom, .01));
+        expect(find.text('Loading conversation…'), findsNothing);
+        expect(find.bySemanticsLabel('Loading conversation'), findsOneWidget);
+        expect(
+          tester
+              .getSemantics(find.byType(LinearProgressIndicator))
+              .getSemanticsData()
+              .flagsCollection
+              .isLiveRegion,
+          isTrue,
+        );
+        expect(
+          tester
+              .widget<LinearProgressIndicator>(
+                find.byType(LinearProgressIndicator),
+              )
+              .value,
+          reduced ? .5 : null,
+        );
+        waiting.complete();
+        await _settleGroupMarkdown(tester);
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(tester.getRect(viewport), before);
+        expect(tester.getRect(reply).bottom, closeTo(bottom, .01));
+      },
+    );
+  }
+
   testWidgets('live group prepares only the bottom on its first loaded frame', (
     tester,
   ) async {
@@ -852,9 +933,10 @@ void main() {
           ),
         );
         await tester.pump(const Duration(milliseconds: 300));
-        expect(find.text('Loading conversation…'), findsOneWidget);
-        expect(find.byType(LinearProgressIndicator), findsNothing);
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.text('Loading conversation…'), findsNothing);
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
+        expect(find.bySemanticsLabel('Loading conversation'), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
         await _render(tester, frame, 'loading-${brightness.name}-$scale');
         initialRead.complete();
         await _settleGroupMarkdown(tester);
