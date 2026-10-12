@@ -18,6 +18,7 @@ import '../administration/admin_profiles_page.dart';
 import 'bot_profile_editor.dart';
 import 'bots_create_screen.dart';
 import '../administration/admin_defaults_page.dart';
+import '../administration/admin_connector_routes.dart';
 import '../administration/admin_identity_page.dart';
 import '../administration/admin_plugins_page.dart';
 import '../administration/admin_provider_credentials.dart';
@@ -173,6 +174,12 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
                   'Capabilities, library, hub and plugins',
                   Icons.extension_outlined,
                   () => _capabilities(context),
+                ),
+                (
+                  'MCP connectors',
+                  'Status, tools, authentication and access',
+                  Icons.link,
+                  () => profileConnectorsPage(profile),
                 ),
               ])
             ListTile(

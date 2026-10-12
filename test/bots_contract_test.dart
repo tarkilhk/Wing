@@ -636,8 +636,42 @@ void main() {
       expect(assets, 1);
       expect(notifications, changes);
       expect(fixture.commands, isEmpty);
+      expect(
+        owner.repository(root.workspace.connectionIdentity),
+        same(fixture.repository),
+      );
     },
   );
+
+  test('direct chat retains its settings repository until disposal', () async {
+    final fixture = BotsFixture();
+    var retained = 0, released = 0;
+    final repository = BotsRepository(
+      scope: fixture.repository.scope,
+      instance: fixture.repository.instance,
+      read: fixture.read,
+      command: fixture.command,
+      ownership: fixture.ownership,
+      savedHistory: fixture.savedHistory,
+      retain: () => retained++,
+      release: () => released++,
+    );
+    final owner = BotsSession((_) async => [repository]);
+    final key = canonical('atlas');
+    expect((await owner.botForConversation(key))!.title, 'Atlas');
+    expect(
+      owner.repository(key.workspace.connectionIdentity),
+      same(repository),
+    );
+    expect(retained - released, 1);
+    owner.invalidateAppearances();
+    expect((await owner.botForConversation(key))!.title, 'Atlas');
+    expect(retained - released, 1);
+    await owner.refresh();
+    expect(retained - released, 1);
+    owner.dispose();
+    expect(released, retained);
+  });
 
   test(
     'profile appearance never borrows a same-named bot from another connection',
@@ -1529,7 +1563,7 @@ void main() {
       session.dispose();
       held.complete(null);
       expect(await reading, isNull);
-      expect(retains, 2);
+      expect(retains, 3);
       expect(releases, retains);
       expect(fixture.commands, isEmpty);
     },

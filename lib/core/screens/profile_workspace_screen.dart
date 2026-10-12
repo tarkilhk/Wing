@@ -7,6 +7,7 @@ import '../models/composer_reference.dart';
 import '../models/recent_conversation.dart';
 import '../models/bots.dart';
 import 'bots/bot_screen_view.dart';
+import 'bots/bot_settings_screen.dart';
 import '../services/recent_conversation_session.dart';
 import '../services/workspace_recents_session.dart';
 import '../widgets/chat_notice_activity_scope.dart';
@@ -968,11 +969,47 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     },
   );
 
+  Future<void> _openBotSettings(BotRecord bot) async {
+    if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+    final bots = _bots;
+    final server = bots.repository(bot.scope.connectionIdentity).server;
+    if (server == null) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BotSettingsScreen(
+          profile: server.profile(bot.profile.name),
+          bot: bot,
+          session: bots,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    bots.invalidateAppearances();
+    setState(() => _conversationBot = null);
+  }
+
   Widget _conversationPage(
     BuildContext context,
     ProfileChat chat,
     BotRecord? bot,
   ) {
+    final title = BotConversationTitle(
+      title: chat.title,
+      bot: bot,
+      mood:
+          chat.runtime.recovery == ChatRecovery.ready &&
+              chat.runtime.liveSessionConfirmed &&
+              !chat.runtime.needsInput &&
+              (chat.runtime.executionActive || chat.runtime.compacting)
+          ? chat.runtime.mainActivity == ChatMainActivity.thinking
+                ? BotAvatarMood.think
+                : BotAvatarMood.work
+          : BotAvatarMood.idle,
+    );
+    final canOpenBotSettings =
+        bot != null &&
+        _bots.repository(bot.scope.connectionIdentity).server != null;
     final parentSessionId = controller.parentSessionId(chat);
     final stackChatScope =
         MediaQuery.textScalerOf(context).scale(12) > 18 &&
@@ -1024,19 +1061,21 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             tooltip: 'Open navigation menu',
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
-          title: BotConversationTitle(
-            title: chat.title,
-            bot: bot,
-            mood:
-                chat.runtime.recovery == ChatRecovery.ready &&
-                    chat.runtime.liveSessionConfirmed &&
-                    !chat.runtime.needsInput &&
-                    (chat.runtime.executionActive || chat.runtime.compacting)
-                ? chat.runtime.mainActivity == ChatMainActivity.thinking
-                      ? BotAvatarMood.think
-                      : BotAvatarMood.work
-                : BotAvatarMood.idle,
-          ),
+          title: canOpenBotSettings
+              ? Tooltip(
+                  message: 'Bot settings',
+                  child: Semantics(
+                    button: true,
+                    child: InkWell(
+                      onTap: () => _openBotSettings(bot),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: title,
+                      ),
+                    ),
+                  ),
+                )
+              : title,
           contextHeight: stackChatScope ? 96 : 48,
           contextRow: LayoutBuilder(
             builder: (context, constraints) {

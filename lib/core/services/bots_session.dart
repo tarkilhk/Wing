@@ -261,6 +261,17 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     }
   }
 
+  void _retainRepositories(List<BotsRepository> sources) {
+    for (final source in sources) {
+      source.retain();
+    }
+    final previous = _repositories ?? <BotsRepository>[];
+    _repositories = List.unmodifiable(sources);
+    for (final source in previous) {
+      source.release();
+    }
+  }
+
   BotsRepository repository(String identity) {
     if (_closed) throw StateError('Bots screen closed');
     final repository = _repositories
@@ -454,6 +465,9 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     try {
       final sources = await (_appearanceSources ??= _sources(current));
       if (!admit()) return const {};
+      // Direct chat entry needs the same captured settings/editor repository
+      // as roster entry, without starting roster polling or group reads.
+      if (_repositories == null) _retainRepositories(sources);
       for (final source in sources) {
         final matching = keys
             .where(
@@ -560,14 +574,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
       {
         final sources = await _sources(current);
         if (!current()) return;
-        for (final source in sources) {
-          source.retain();
-        }
-        final previous = _repositories ?? <BotsRepository>[];
-        _repositories = List.unmodifiable(sources);
-        for (final source in previous) {
-          source.release();
-        }
+        _retainRepositories(sources);
         final identities = sources
             .map((source) => source.scope.connectionIdentity)
             .toSet();

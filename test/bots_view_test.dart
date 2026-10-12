@@ -22,6 +22,7 @@ import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/screens/bots/bots_content.dart';
 import 'package:wing/core/screens/bots/bot_profile_editor.dart';
 import 'package:wing/core/screens/bots/bot_settings_screen.dart';
+import 'package:wing/core/screens/administration/admin_connectors_page.dart';
 import 'package:wing/core/screens/bots/bots_create_screen.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/bot_group_draft_session.dart';
@@ -2531,7 +2532,25 @@ void main() {
               : 'Atlas with a very long bot display name';
           const avatarPng =
               'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAJUlEQVR4nGNwCj/ynxLMMGoApgH/byeBMbHiw9GAgY+FUQNIxwDOD2oPx3g6jQAAAABJRU5ErkJggg==';
-          final bots = BotsFixture();
+          final administration = AdministrationFixture('Home server');
+          administration.override = (method, path, query, body) async {
+            expect(method, 'GET');
+            expect(path, 'mcp/servers');
+            expect(query, {'profile': 'personal'});
+            return {
+              'servers': [
+                {
+                  'name': 'Bot documents',
+                  'transport': 'http',
+                  'auth': 'oauth',
+                  'enabled': true,
+                  'source': 'config',
+                  'plugin': null,
+                },
+              ],
+            };
+          };
+          final bots = BotsFixture(server: administration.server);
           bots.profiles
             ..clear()
             ..add(BotsFixture.profile('personal', botName));
@@ -2665,6 +2684,64 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(rosterReads, reads);
+          final chat = controller.current!.chat!;
+          expect(
+            tester.getSize(find.byTooltip('Bot settings')).height,
+            greaterThanOrEqualTo(48),
+          );
+          for (final target in [avatar, find.text(botName)]) {
+            await tester.tap(target);
+            await tester.pumpAndSettle();
+            final settings = tester.widget<BotSettingsScreen>(
+              find.byType(BotSettingsScreen),
+            );
+            expect(settings.bot.scope, scope);
+            expect(settings.profile.name, 'personal');
+            expect(settings.profile.server, same(administration.server));
+            expect(find.text('Edit name & appearance'), findsOneWidget);
+            expect(find.text('Role & instructions'), findsOneWidget);
+            await _capture(
+              tester,
+              frame,
+              'bot-chat-settings-${brightness.name}-$scale',
+            );
+            await tester.scrollUntilVisible(find.text('MCP connectors'), 200);
+            expect(find.text('MCP connectors'), findsOneWidget);
+            await _capture(
+              tester,
+              frame,
+              'bot-chat-settings-mcp-${brightness.name}-$scale',
+            );
+            await tester.tap(find.text('MCP connectors'));
+            await tester.pumpAndSettle();
+            expect(find.byType(AdminConnectorsPage), findsOneWidget);
+            await tester.scrollUntilVisible(
+              find.text('Bot documents'),
+              120,
+              scrollable: find
+                  .descendant(
+                    of: find.byType(AdminConnectorsPage),
+                    matching: find.byType(Scrollable),
+                  )
+                  .last,
+            );
+            expect(find.text('Bot documents'), findsOneWidget);
+            expect(controller.current!.chat, same(chat));
+            await _capture(
+              tester,
+              frame,
+              'bot-chat-mcp-${brightness.name}-$scale',
+            );
+            await tester.pageBack();
+            await tester.pumpAndSettle();
+            expect(find.byType(BotSettingsScreen), findsOneWidget);
+            await tester.pageBack();
+            await tester.pumpAndSettle();
+            expect(controller.current!.chat, same(chat));
+            expect(chat.composer.observation.text, 'Hello Atlas');
+            expect(avatar, findsOneWidget);
+            expect(find.text(botName), findsOneWidget);
+          }
           await controller.openSession(
             ProfileSessionKey(scope, 'canonical-tip'),
           );
@@ -2688,6 +2765,7 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.byType(BotAvatar), findsNothing);
           expect(find.text('Bot Chat'), findsOneWidget);
+          expect(find.byTooltip('Bot settings'), findsNothing);
           expect(find.text('Hermes'), findsNothing);
           expect(tester.takeException(), isNull);
           semantics.dispose();

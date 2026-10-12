@@ -2,7 +2,7 @@
 
 Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Pinned entries lead the list. Names and message previews sit on the left, with saved artwork on the right. The floating + creates a bot or group for the selected tab. Lists refresh automatically while visible.
 
-Tap a bot's avatar to edit its appearance. Tap its name or message preview to open its continuing **Bot Chat**. Back returns to the same tab and search. Bot Chats use the usual conversation screen, showing its saved avatar to the left of its display name when available.
+Tap a bot's avatar to edit its appearance. Tap its name or message preview to open its continuing **Bot Chat**. Back returns to the same tab and search. Bot Chats use the usual conversation screen, showing its saved avatar to the left of its display name when available. Tap that avatar or name in the chat header to open Bot settings. Back returns to your conversation with its draft intact.
 
 Explicitly selected classic shapes blink and move in the Bots roster and the
 open Bot Chat header, with stronger motion and dots while working. Pictures
@@ -29,7 +29,7 @@ Bot Chats stay hidden from the default Chats list. Enable **Show automated chats
 
 The row menu offers View screen, Pin to top/Unpin, Hide bot/Show bot and **Bot settings**. The roster menu offers Show hidden bots. Bot pins and appearance synchronize through Hermes; group pins are saved on this device.
 
-Bot settings contains appearance, configuration editors, Duplicate bot and profile management. The display name is separate from the underlying profile name. The default profile can change its display name but cannot be deleted or have its underlying identity renamed.
+Bot settings contains appearance, configuration editors, MCP connectors, Duplicate bot and profile management. MCP connectors opens the selected bot's connector inventory, authentication and access controls. The display name is separate from the underlying profile name. The default profile can change its display name but cannot be deleted or have its underlying identity renamed.
 
 Creating a bot uses the instance's launch credentials and model defaults, as explained before creation. Duplication excludes channel bindings to avoid taking over messaging channels. Settings always apply to the chosen instance/profile, without switching the currently selected chat.
 
