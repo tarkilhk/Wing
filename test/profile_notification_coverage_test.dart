@@ -413,7 +413,7 @@ void main() {
   );
 
   test(
-    'group worker sessions do not produce UUID chat notifications',
+    'group workers retain monitoring without UUID chat notifications',
     () async {
       host.saved['a']!.first.addAll({
         'source': 'bot_room',
@@ -422,18 +422,61 @@ void main() {
       host.active = [row('outside-runtime', 'outside', 'working')];
       host.changed();
       await waitForReads(host, 1);
-      expect(controller.notificationMonitoringChats, isEmpty);
+      expect(
+        controller.hasActiveChats,
+        isTrue,
+        reason: 'Working group workers must retain background monitoring',
+      );
+      expect(controller.notificationMonitoringChats.toList(), [
+        (title: 'Group discussions', state: 'working'),
+      ]);
       host.history = [
         {'id': 1, 'role': 'assistant', 'content': 'Group reply'},
       ];
       host.active = [row('outside-runtime', 'outside', 'idle', 2)];
       host.changed();
       await waitForReads(host, 2);
+      expect(controller.hasActiveChats, isFalse);
+      expect(controller.notificationMonitoringChats, isEmpty);
       expect(alerts, isEmpty);
       expect(inputNotices, isEmpty);
       expect(host.resumeCalls, isEmpty);
     },
   );
+
+  test('one group worker finishing does not release another worker', () async {
+    for (final saved in host.saved['a']!) {
+      saved.addAll({'source': 'bot_room', 'title': 'Group: private-room'});
+    }
+    host.active = [
+      row('outside-runtime', 'outside', 'working'),
+      row('loaded-runtime', 'loaded', 'working'),
+    ];
+    host.changed();
+    await waitForReads(host, 1);
+    expect(controller.hasActiveChats, isTrue);
+    expect(controller.notificationMonitoringChats.toList(), [
+      (title: 'Group discussions', state: 'working'),
+    ]);
+    host.active = [
+      row('outside-runtime', 'outside', 'idle'),
+      row('loaded-runtime', 'loaded', 'working'),
+    ];
+    host.changed();
+    await waitForReads(host, 2);
+    expect(controller.hasActiveChats, isTrue);
+    expect(controller.notificationMonitoringChats.toList(), [
+      (title: 'Group discussions', state: 'working'),
+    ]);
+    host.active = [row('loaded-runtime', 'loaded', 'idle')];
+    host.changed();
+    await waitForReads(host, 3);
+    expect(controller.hasActiveChats, isFalse);
+    expect(controller.notificationMonitoringChats, isEmpty);
+    expect(alerts, isEmpty);
+    expect(inputNotices, isEmpty);
+    expect(host.resumeCalls, isEmpty);
+  });
 
   for (final status in ['complete', 'error', 'interrupted']) {
     test('opened group worker stays silent on live $status', () async {
@@ -458,7 +501,10 @@ void main() {
           data: {},
         ),
       );
-      expect(controller.notificationMonitoringChats, isEmpty);
+      expect(controller.hasActiveChats, isTrue);
+      expect(controller.notificationMonitoringChats.toList(), [
+        (title: 'Group discussions', state: 'working'),
+      ]);
       gateway.onEvent!(
         StreamEvent(
           type: 'message.complete',

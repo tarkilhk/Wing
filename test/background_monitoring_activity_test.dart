@@ -1,13 +1,17 @@
 import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
+import 'package:wing/core/services/background_monitoring_service.dart';
 import 'package:wing/core/services/ws_client.dart';
 
 import 'profile_connection_identity_test.dart'
@@ -24,6 +28,7 @@ Future<void> until(bool Function() condition) async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late SharedPreferences preferences;
   late AppPreferences appPreferences;
   late ProfileWorkspaceRegistry registry;
@@ -70,6 +75,193 @@ void main() {
   tearDown(() {
     registry.dispose();
     appPreferences.dispose();
+  });
+
+  for (final profile in ['a', 'b']) {
+    test(
+      'human send in hidden Bot Chat starts monitoring in $profile',
+      () async {
+        final host = NotificationCoverageHost();
+        final botRegistry = ProfileWorkspaceRegistry(
+          identities: ProfileConnectionIdentity(
+            credentialStore: MemoryIdentityStore(),
+          ),
+          create: (connection, identity) => ProfileWorkspaceController(
+            access: ConnectionAccess(
+              connection: connection,
+              dashboardOAuth: null,
+            ),
+            connectionIdentity: identity,
+            preferences: preferences,
+            appPreferences: appPreferences,
+            gatewayFactory: host.gateway,
+            onAttention: (notice) async => delivered.add(notice),
+          ),
+        );
+        addTearDown(botRegistry.dispose);
+        final owner = await botRegistry.forConnection(identityTestConnection());
+        host.saved[profile] = [
+          {
+            'id': 'outside',
+            'title': 'Bot Chat',
+            'source': 'desktop',
+            'hidden': true,
+            'profile': profile,
+          },
+        ];
+        await owner.initialize();
+        final chat = (await owner.openSession(
+          ProfileSessionKey(
+            WorkspaceScope(
+              connectionId: owner.connection.id,
+              connectionIdentity: owner.connectionIdentity,
+              profileName: profile,
+            ),
+            'outside',
+          ),
+        ))!;
+        expect(botRegistry.hasActiveChats, isFalse);
+        final calls = <MethodCall>[];
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(BackgroundMonitoringService.channel, (
+              call,
+            ) async {
+              calls.add(call);
+              return call.method == 'start'
+                  ? {'running': true, 'batteryUnrestricted': true}
+                  : null;
+            });
+        final service = BackgroundMonitoringService(
+          preferences: appPreferences,
+          supported: true,
+          hasActiveChats: () => botRegistry.hasActiveChats,
+          summary: () => botRegistry.monitoringSummary,
+          notificationsEnabled: () async => true,
+        );
+        void changed() => unawaited(service.sync());
+        botRegistry.addListener(changed);
+        addTearDown(() async {
+          botRegistry.removeListener(changed);
+          service.dispose();
+          await service.sync();
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(
+                BackgroundMonitoringService.channel,
+                null,
+              );
+        });
+        chat.composer.editText('Please investigate this task');
+        await owner.send(chat);
+        await service.sync();
+        expect(service.state.value, BackgroundMonitoringState.active);
+        expect(calls.last.method, 'start');
+        expect(calls.last.arguments['text'], 'Bot Chat · working');
+        owner.current!.gateway.onEvent!(
+          StreamEvent(
+            type: 'message.complete',
+            sessionId: chat.runtime.runtimeId,
+            data: const {'text': 'Done'},
+          ),
+        );
+        await until(() => !botRegistry.hasActiveChats);
+        await service.sync();
+        expect(service.state.value, BackgroundMonitoringState.idle);
+        expect(calls.last.method, 'stop');
+      },
+    );
+  }
+
+  test('group work starts the service and releases it when idle', () async {
+    final host = NotificationCoverageHost();
+    host.saved['a']!.first.addAll({
+      'source': 'bot_room',
+      'title': 'Group: private-room-id',
+      'hidden': true,
+    });
+    final groupRegistry = ProfileWorkspaceRegistry(
+      identities: ProfileConnectionIdentity(
+        credentialStore: MemoryIdentityStore(),
+      ),
+      create: (connection, identity) => ProfileWorkspaceController(
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+        connectionIdentity: identity,
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+        onAttention: (notice) async => delivered.add(notice),
+      ),
+    );
+    addTearDown(groupRegistry.dispose);
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(BackgroundMonitoringService.channel, (
+          call,
+        ) async {
+          calls.add(call);
+          return call.method == 'start'
+              ? {'running': true, 'batteryUnrestricted': true}
+              : null;
+        });
+    final service = BackgroundMonitoringService(
+      preferences: appPreferences,
+      supported: true,
+      hasActiveChats: () => groupRegistry.hasActiveChats,
+      summary: () => groupRegistry.monitoringSummary,
+      notificationsEnabled: () async => true,
+    );
+    void changed() => unawaited(service.sync());
+    groupRegistry.addListener(changed);
+    addTearDown(() async {
+      groupRegistry.removeListener(changed);
+      service.dispose();
+      await service.sync();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(BackgroundMonitoringService.channel, null);
+    });
+    final owner = await groupRegistry.forConnection(identityTestConnection());
+    await owner.initialize();
+    await service.sync();
+    expect(service.state.value, BackgroundMonitoringState.idle);
+
+    var reads = host.activeReads;
+    host.active = [row('outside-runtime', 'outside', 'working')];
+    host.changed();
+    await waitForReads(host, ++reads);
+    await service.sync();
+    expect(service.state.value, BackgroundMonitoringState.active);
+    expect(calls.last.method, 'start');
+    expect(calls.last.arguments['text'], 'Group discussions · working');
+
+    host.activeFails = true;
+    host.changed();
+    await waitForReads(host, ++reads);
+    await service.sync();
+    expect(service.state.value, BackgroundMonitoringState.active);
+    expect(calls.last.arguments['text'], 'Group discussions · reconnecting');
+
+    host.activeFails = false;
+    host.active = [row('outside-runtime', 'outside', 'waiting')];
+    host.changed();
+    await waitForReads(host, ++reads);
+    await service.sync();
+    expect(service.state.value, BackgroundMonitoringState.idle);
+    expect(host.resumeCalls, isEmpty);
+
+    host.active = [row('outside-runtime', 'outside', 'working')];
+    host.changed();
+    await waitForReads(host, ++reads);
+    await service.sync();
+    expect(service.state.value, BackgroundMonitoringState.active);
+
+    host.historyFails = true;
+    host.active = [row('outside-runtime', 'outside', 'idle')];
+    host.changed();
+    await waitForReads(host, ++reads);
+    await service.sync();
+    expect(service.state.value, BackgroundMonitoringState.idle);
+    expect(calls.last.method, 'stop');
+    expect(delivered, isEmpty);
+    expect(groupRegistry.monitoringSummary['text'], isEmpty);
   });
 
   test(

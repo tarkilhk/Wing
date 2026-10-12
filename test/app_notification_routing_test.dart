@@ -11,6 +11,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -18,6 +19,7 @@ import 'package:wing/core/models/chat_notification_content.dart';
 import 'package:wing/core/models/notification_focus.dart';
 import 'package:wing/core/services/chat_notification_coordinator.dart';
 import 'package:wing/core/services/native_notification_sink.dart';
+import 'package:wing/core/services/background_monitoring_service.dart';
 import 'support/recording_turn_notification_sink.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
@@ -45,7 +47,10 @@ typedef NotificationHarness = ({
   ProfileWorkspaceRegistry registry,
 });
 
-Future<NotificationHarness> _harness({bool restoreCachedChat = false}) async {
+Future<NotificationHarness> _harness({
+  bool restoreCachedChat = false,
+  List<Map<String, dynamic>>? indexedSessions,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
   final appPreferences = AppPreferences(preferences);
@@ -63,7 +68,7 @@ Future<NotificationHarness> _harness({bool restoreCachedChat = false}) async {
   final connection = (await manager.loadConnectionsWithSecrets()).single;
   final identities = ProfileConnectionIdentity(credentialStore: secrets);
   final identity = await identities.resolve(connection);
-  final host = Host();
+  final host = Host()..indexedSessions = indexedSessions;
   if (restoreCachedChat) {
     await WorkspaceSnapshotStore(preferences, identity).write({
       'selected': 'a',
@@ -166,6 +171,85 @@ Future<void> _pumpNavigation(WidgetTester tester) async {
 const _nativeNotifications = MethodChannel(NativeNotificationSink.channelName);
 
 void main() {
+  testWidgets('Bot Chat navigation and human send start Android monitoring', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final harness = await _harness(
+      indexedSessions: [
+        {
+          'id': 'same',
+          'title': 'Bot Chat',
+          'source': 'desktop',
+          'hidden': true,
+          'profile': 'a',
+        },
+      ],
+    );
+    harness.host.running = false;
+    await harness.manager.prefs.setBool(
+      'microphone_permission_requested',
+      true,
+    );
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    const plugin = MethodChannel('dexterous.com/flutter/local_notifications');
+    AndroidFlutterLocalNotificationsPlugin.registerWith();
+    messenger.setMockMethodCallHandler(
+      plugin,
+      (call) async => switch (call.method) {
+        'initialize' => true,
+        'getNotificationAppLaunchDetails' => {'notificationLaunchedApp': false},
+        'areNotificationsEnabled' => true,
+        _ => null,
+      },
+    );
+    messenger.setMockMethodCallHandler(
+      _nativeNotifications,
+      (call) async => call.method == 'initialize' ? [] : null,
+    );
+    final monitoring = <MethodCall>[];
+    messenger.setMockMethodCallHandler(BackgroundMonitoringService.channel, (
+      call,
+    ) async {
+      monitoring.add(call);
+      return switch (call.method) {
+        'start' => {'running': true, 'batteryUnrestricted': true},
+        'batteryUnrestricted' => true,
+        _ => null,
+      };
+    });
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(plugin, null);
+      messenger.setMockMethodCallHandler(_nativeNotifications, null);
+      messenger.setMockMethodCallHandler(
+        BackgroundMonitoringService.channel,
+        null,
+      );
+    });
+    await _pumpApp(tester, harness);
+    final home = tester.state<HomeScreenState>(find.byType(HomeScreen));
+    await home.selectBotChat(
+      ProfileSessionKey(harness.controller.current!.scope, 'same'),
+      () => true,
+    );
+    await _pumpNavigation(tester);
+    final chat = harness.controller.current!.chat!;
+    expect(chat.title, 'Bot Chat');
+    expect(harness.registry.hasActiveChats, isFalse);
+    monitoring.clear();
+    chat.composer.editText('Please investigate this task');
+    await harness.controller.send(chat);
+    await _pumpNavigation(tester);
+    expect(harness.registry.hasActiveChats, isTrue);
+    expect(monitoring.where((call) => call.method == 'start'), isNotEmpty);
+    expect(monitoring.last.arguments['text'], 'Bot Chat · working');
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpNavigation(tester);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   for (final scenario in [
     (serverRecovers: true, opening: false, held: false),
     (serverRecovers: false, opening: false, held: false),

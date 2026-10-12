@@ -7859,13 +7859,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
             .toList();
         if (savedOwners.length == 1) {
           final owner = savedOwners.single;
-          if (owner.matches[sessionId]?['source'] == 'bot_room') continue;
+          final metadata = owner.matches[sessionId]!;
           final rawTitle = owner.matches[sessionId]?['title'];
           final title = rawTitle is String ? rawTitle.trim() : '';
           chat = _createChatRecord(
             key: ProfileSessionKey(owner.resource.scope, sessionId),
             runtimeId: runtimeId,
             title: title.isEmpty ? 'Hermes session' : title,
+            source: metadata['source'] is String
+                ? metadata['source'] as String
+                : '',
           );
         }
         if (chat == null) continue;
@@ -7907,6 +7910,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
         final before = previous[entry.key];
         final after = entry.value;
         if (before != null && before.chat._key != after.chat._key) continue;
+        // Private room workers retain the engine, but never become ordinary
+        // chat alerts, request subscriptions or transcript recovery reads.
+        if (after.chat.source == 'bot_room') {
+          if (after.activity == _NotificationActivity.idle) {
+            _notificationSnapshot?.remove(entry.key);
+            _backgroundChats.remove(entry.key);
+            _uncertainNotificationRuntimes.remove(entry.key);
+          }
+          continue;
+        }
         if (_hasLoadedNotificationChat(
           after.chat.runtime.runtimeId,
           after.chat._key.sessionId,
