@@ -1,3 +1,7 @@
+import 'package:wing/core/models/connection.dart';
+import 'package:wing/core/services/server_connection_status.dart';
+import 'package:wing/core/widgets/server_connection_label.dart';
+import 'package:wing/core/widgets/workspace_picker.dart';
 import 'package:wing/core/services/recent_conversation_snapshots.dart';
 import 'package:wing/core/widgets/bot_group_conversation.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
@@ -897,6 +901,11 @@ void main() {
             },
           };
         };
+        final connectionStatus = ServerConnectionStatus(group.instance)
+          ..accessAvailable()
+          ..liveChanged('discussion', true);
+        addTearDown(connectionStatus.dispose);
+        WorkspacePickerMode? pickedMode;
         final frame = GlobalKey();
         final reduced = ValueNotifier<bool>(false);
         addTearDown(reduced.dispose);
@@ -914,7 +923,12 @@ void main() {
                     textScaler: TextScaler.linear(scale),
                     disableAnimations: value,
                   ),
-                  child: child!,
+                  child: ServerConnectionScope(
+                    status: connectionStatus,
+                    icon: ConnectionIcon.cloud,
+                    onPickWorkspace: (_, {required mode}) => pickedMode = mode,
+                    child: child!,
+                  ),
                 ),
               ),
               home: BotGroupScreen(
@@ -951,6 +965,46 @@ void main() {
         expect(find.byTooltip('Stop group work'), findsOneWidget);
         expect(find.byType(ComposerIconButton), findsOneWidget);
         expect(find.text('R'), findsNothing);
+        final identity = find.byType(ServerConnectionLabel);
+        expect(identity, findsOneWidget);
+        expect(find.byIcon(Icons.cloud_outlined), findsOneWidget);
+        expect(find.text(group.instance), findsOneWidget);
+        expect(find.text('${group.instance} · 2 bots'), findsNothing);
+        final led = find.byKey(const ValueKey('server-connection-led'));
+        expect(led, findsOneWidget);
+        Color ledColor() =>
+            (tester.widget<Container>(led).decoration! as BoxDecoration).color!;
+        final context = tester.element(identity);
+        expect(ledColor(), WingTokens.of(context).success);
+        connectionStatus.accessFailed(const SocketException('Offline'));
+        connectionStatus.liveChanged('discussion', false);
+        await tester.pump();
+        expect(ledColor(), WingTokens.of(context).danger);
+        await tester.tap(
+          find.byKey(const ValueKey('connection-status-target')),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Disconnected'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey(('group-member', 'atlas'))),
+          findsNothing,
+        );
+        await tester.tap(find.byTooltip('Close connection details'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        connectionStatus.accessAvailable();
+        connectionStatus.liveChanged('discussion', true);
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('workspace-picker-target')));
+        await tester.pump();
+        expect(pickedMode, WorkspacePickerMode.connections);
+        final memberButton = find.byKey(const ValueKey('group-members-entry'));
+        expect(tester.getSize(memberButton), const Size(48, 48));
+        expect(
+          tester.widget<IconButton>(memberButton).tooltip,
+          'Show group members · 2 bots',
+        );
         await _render(tester, frame, 'working-${brightness.name}-$scale');
         final transcript = tester
             .widget<ListView>(find.byKey(const ValueKey('group-transcript')))
@@ -1000,7 +1054,7 @@ void main() {
         );
         final firstRect = tester.getRect(atlas);
         expect(firstRect.top, closeTo(anchorRect.bottom + 8, 1));
-        expect(firstRect.left, closeTo(anchorRect.left, 1));
+        expect(firstRect.right, closeTo(anchorRect.right, 1));
         expect(firstRect.width, lessThanOrEqualTo(280));
         if (scale == 1) expect(firstRect.height, lessThanOrEqualTo(36));
         expect(find.text('Group members'), findsNothing);

@@ -1,3 +1,6 @@
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/widgets/server_connection_label.dart';
+import 'package:wing/core/services/server_connection_status.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:wing/core/services/recent_conversation_snapshots.dart';
 import 'package:wing/core/services/bots_repository.dart';
@@ -459,6 +462,10 @@ void main() {
         final group = (await fixture.repository.groups(
           groupMessages: null,
         )).single;
+        final status = ServerConnectionStatus(group.instance)
+          ..accessAvailable()
+          ..liveChanged('discussion', true);
+        addTearDown(status.dispose);
         final entry = RecentConversationEntry.group(group);
         final frame = GlobalKey();
         tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
@@ -477,6 +484,8 @@ void main() {
               key: frame,
               child: ConversationPreview(
                 connectionLabel: 'Home server',
+                connectionIcon: ConnectionIcon.cloud,
+                connectionStatus: status,
                 card: RecentConversationCard(
                   entry: entry,
                   groupAppearance: BotGroupAppearance.forGroup(group, roster),
@@ -522,6 +531,16 @@ void main() {
         );
         expect(find.text('Message the group'), findsOneWidget);
         expect(find.byType(BotGroupConversation), findsOneWidget);
+        final identity = tester.widget<ServerConnectionLabel>(
+          find.byType(ServerConnectionLabel),
+        );
+        expect(identity.label, group.instance);
+        expect(identity.status, same(status));
+        expect(find.byIcon(Icons.cloud_outlined), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('server-connection-led')),
+          findsOneWidget,
+        );
         expect(find.byType(BotGroupComposer), findsOneWidget);
         expect(find.byType(BotGroupMessage), findsOneWidget);
         expect(find.byIcon(Icons.add), findsNothing);
@@ -3026,7 +3045,20 @@ void main() {
           addTearDown(controller.dispose);
           addTearDown(appPreferences.dispose);
           await controller.initialize();
-          final botFixture = BotsFixture();
+          final roomStatus = ServerConnectionStatus('Home server')
+            ..accessAvailable()
+            ..liveChanged('discussion', true);
+          addTearDown(roomStatus.dispose);
+          final roomConnection = controller.connection.copyWith(
+            icon: ConnectionIcon.cloud,
+          );
+          final roomServer = AdministrationRepository.forConnection(
+            ConnectionAccess(connection: roomConnection, dashboardOAuth: null),
+            'instance-1',
+            connectionStatus: roomStatus,
+          );
+          addTearDown(roomServer.close);
+          final botFixture = BotsFixture(server: roomServer);
           for (var seq = 1; seq <= 8; seq++) {
             botFixture.events.add({
               'room_id': 'room-1',
@@ -3062,6 +3094,7 @@ void main() {
               home: ProfileWorkspaceScreen(
                 controller: controller,
                 initialDestination: AppDestination.bots,
+                savedConnections: () => [roomConnection],
                 voiceDevice: voiceDevice,
                 createBotsSession: () =>
                     bots = BotsSession((_) async => [botFixture.repository]),
@@ -3079,6 +3112,19 @@ void main() {
           await tester.tap(find.text('Research team').first);
           await _finishFrames(tester);
           expect(find.byType(BotGroupScreen), findsOneWidget);
+          final groupIdentity = find.descendant(
+            of: find.byType(BotGroupScreen),
+            matching: find.byType(ServerConnectionLabel),
+          );
+          expect(
+            tester.widget<ServerConnectionLabel>(groupIdentity).status,
+            same(roomStatus),
+          );
+          expect(
+            ServerConnectionScope.scopeOf(tester.element(groupIdentity))!.icon,
+            ConnectionIcon.cloud,
+          );
+          expect(find.byIcon(Icons.cloud_outlined), findsOneWidget);
           final landingViewport = find.byKey(
             const ValueKey('group-transcript'),
           );

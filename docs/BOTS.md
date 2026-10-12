@@ -55,6 +55,10 @@ message formatting and composer in the chat and its Recents preview. Swipe
 sideways with two fingers to switch conversations, or pinch inward to browse
 Recents cards. Neither gesture requires opening Recents first.
 
+Beneath the title, the instance uses the same saved icon and status LED as the
+other screens. Tap the icon/LED for connection details or the instance name to
+switch instances. The people icon opens the group members.
+
 Tap the microphone in the group message box to dictate, using the voice-input
 choice from App settings. Stop finishes the recording; Cancel keeps your draft.
 Recognized text replaces the selected text or inserts at the cursor. Review it
@@ -135,8 +139,8 @@ Group cards and open discussions use the same saved member artwork. While a
 member image loads, its known identity stays available; unknown member positions
 stay empty. Completed avatar reads update the card without rereading messages.
 
-Tap the instance and bot count under the title for a compact member list
-anchored beneath that row, with saved names and avatars. Tap outside or use Back
+Tap the people icon under the title for a compact member list anchored beneath
+that button, with saved names and avatars. Tap outside or use Back
 to dismiss it. The conversation uses a group icon when no picture is saved.
 The ellipsis menu contains Edit group, working histories, Refresh and Stop.
 Refresh rereads messages, activity and approval state; it does not restart the bots. Wing also

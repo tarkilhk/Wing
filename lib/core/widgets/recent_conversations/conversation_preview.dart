@@ -34,7 +34,16 @@ class ConversationPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (card.entry.group != null) {
-      return IgnorePointer(child: _SavedGroupPage(card: card));
+      return IgnorePointer(
+        child: _SavedGroupPage(
+          card: card,
+          instanceHeader: ServerConnectionLabel(
+            label: card.entry.group!.instance,
+            icon: connectionIcon,
+            status: connectionStatus,
+          ),
+        ),
+      );
     }
     final preview = card.preview;
     final rows = preview?.reading.messages ?? const <Map<String, dynamic>>[];
@@ -262,8 +271,9 @@ class ConversationCardPlaceholder extends StatelessWidget {
 
 /// Owns only passive text/scroll controls; no room session or backend authority.
 class _SavedGroupPage extends StatefulWidget {
-  const _SavedGroupPage({required this.card});
+  const _SavedGroupPage({required this.card, required this.instanceHeader});
   final RecentConversationCard card;
+  final Widget instanceHeader;
   @override
   State<_SavedGroupPage> createState() => _SavedGroupPageState();
 }
@@ -285,6 +295,7 @@ class _SavedGroupPageState extends State<_SavedGroupPage> {
     final messages = preview?.messages ?? const <TranscriptMessage>[];
     return BotGroupConversation(
       group: group,
+      instanceHeader: widget.instanceHeader,
       appearances: widget.card.groupAppearance.byHandle.values,
       onBack: () {},
       actions: [

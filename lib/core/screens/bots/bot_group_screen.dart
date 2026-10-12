@@ -8,6 +8,7 @@ import '../../services/bot_group_session.dart';
 import '../../services/bot_group_history_session.dart';
 import 'bot_group_history_screen.dart';
 import '../../models/bots.dart';
+import '../../widgets/server_connection_label.dart';
 import '../../widgets/bot_avatar.dart';
 import '../../widgets/conversation_activity_status.dart';
 import '../../widgets/composer_icon_button.dart';
@@ -296,7 +297,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     RelativeRect position() {
       final rect = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
       return RelativeRect.fromRect(
-        Rect.fromLTWH(rect.left, rect.bottom + WingSpacing.xs, 0, 0),
+        Rect.fromLTWH(rect.left, rect.bottom + WingSpacing.xs, rect.width, 0),
         Offset.zero & overlay.size,
       );
     }
@@ -515,6 +516,10 @@ class _BotGroupScreenState extends State<BotGroupScreen>
         _session.pendingText != null || _session.sending || _voiceInput.active;
     return BotGroupConversation(
       group: _session.group,
+      instanceHeader: ServerConnectionLabel(
+        label: _session.group.instance,
+        status: ServerConnectionScope.of(context),
+      ),
       appearances: [
         for (final member in _session.group.members)
           ?_session.appearance(member.profile),

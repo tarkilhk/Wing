@@ -14,6 +14,7 @@ import 'workspace_connection_failure.dart';
 import 'hermes_voice.dart';
 import '../models/bot_display.dart';
 import 'recent_conversation_snapshots.dart';
+import 'server_connection_status.dart';
 
 typedef BotsRead =
     Future<Map<String, dynamic>> Function(
@@ -132,6 +133,8 @@ class BotsRepository {
   final WorkspaceScope scope;
   final String instance;
   final AdministrationRepository? server;
+  ServerConnectionStatus? get connectionStatus =>
+      server?.gateway(scope.profileName).connectionStatus;
   final Future<BotDisplayClient> Function(String ticket)? displayConnect;
   final BotsRead _read;
   final BotsCommand _command;

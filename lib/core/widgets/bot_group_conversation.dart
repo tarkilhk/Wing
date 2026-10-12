@@ -15,6 +15,7 @@ class BotGroupConversation extends StatelessWidget {
     super.key,
     required this.group,
     required this.appearances,
+    required this.instanceHeader,
     required this.transcript,
     required this.composer,
     required this.actions,
@@ -26,6 +27,7 @@ class BotGroupConversation extends StatelessWidget {
   });
   final BotGroup group;
   final Iterable<BotRecord> appearances;
+  final Widget instanceHeader;
   final Widget transcript, composer;
   final List<Widget> actions, beforeComposer;
   final GlobalKey? membersAnchor;
@@ -44,35 +46,20 @@ class BotGroupConversation extends StatelessWidget {
       ),
       actions: actions,
       contextRow: showMembers
-          ? Semantics(
-              button: true,
-              label: 'Show group members',
-              child: Material(
-                key: membersAnchor,
-                color: Colors.transparent,
-                child: InkWell(
-                  key: const ValueKey('group-members-entry'),
-                  onTap: onMembers,
-                  borderRadius: WingRadius.card,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${group.instance} · ${group.members.length} bots',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      Icon(
-                        Icons.expand_more,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ],
+          ? Row(
+              children: [
+                Expanded(child: instanceHeader),
+                SizedBox(
+                  key: membersAnchor,
+                  child: IconButton(
+                    key: const ValueKey('group-members-entry'),
+                    tooltip:
+                        'Show group members · ${group.members.length} bots',
+                    onPressed: onMembers,
+                    icon: const Icon(Icons.group_outlined, size: 18),
                   ),
                 ),
-              ),
+              ],
             )
           : null,
     ),

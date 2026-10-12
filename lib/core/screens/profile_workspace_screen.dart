@@ -416,58 +416,90 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _composerSelections.clear();
   }
 
-  Widget _recentPreview(RecentConversationCard card) => ConversationPreview(
-    card: card,
-    connectionLabel: controller.connection.label,
-    connectionIcon: controller.connection.icon,
-    connectionStatus: controller.connectionStatus,
-  );
+  SavedConnection? _groupConnection(BotGroup group) =>
+      group.scope.connectionIdentity == controller.connectionIdentity
+      ? controller.connection
+      : widget.savedConnections
+            ?.call()
+            .where((connection) => connection.id == group.scope.connectionId)
+            .firstOrNull;
+
+  ServerConnectionStatus? _groupConnectionStatus(BotGroup group) =>
+      _bots.repository(group.scope.connectionIdentity).connectionStatus;
+
+  Widget _recentPreview(RecentConversationCard card) {
+    final group = card.entry.group;
+    return ConversationPreview(
+      card: card,
+      connectionLabel: group?.instance ?? controller.connection.label,
+      connectionIcon: group == null
+          ? controller.connection.icon
+          : _groupConnection(group)?.icon,
+      connectionStatus: group == null
+          ? controller.connectionStatus
+          : _groupConnectionStatus(group),
+    );
+  }
 
   Future<void> _openRecentGroup(BotGroup group) {
     return Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (groupContext) => GroupConversationSwitcher(
-          groupKey: RecentConversationEntry.group(group).key,
-          createSession: () => controller.groupRecentConversationSession(
-            group: group,
-            recents: _recents,
-            onOpenGroup: _openRecentGroup,
-            activity: () => ChatNoticeActivityScope.of(groupContext),
-            onOpenChat: (_) => Navigator.of(groupContext).push<void>(
-              MaterialPageRoute(
-                builder: (chatContext) => RecentConversationRouteScope(
-                  recents: _recents,
-                  onLeave: () => Navigator.of(chatContext).pop(),
-                  child: ProfileWorkspaceScreen(
-                    controller: controller,
-                    enableNotifications: widget.enableNotifications,
-                    backgroundMonitoringState: widget.backgroundMonitoringState,
-                    openMonitoringBatterySettings:
-                        widget.openMonitoringBatterySettings,
-                    onConnections: widget.onConnections,
-                    configurationActions: widget.configurationActions,
-                    savedConnections: widget.savedConnections,
-                    onSelectConnection: widget.onSelectConnection,
-                    onPreferencesChanged: widget.onPreferencesChanged,
-                    onCapturePhoto: widget.onCapturePhoto,
-                    voiceDevice: widget.voiceDevice,
-                    createBotsSession: widget.createBotsSession,
-                    onOpenBotChat: widget.onOpenBotChat,
+        builder: (groupContext) {
+          final status = _groupConnectionStatus(group);
+          final connection = _groupConnection(group);
+          final discussion = GroupConversationSwitcher(
+            groupKey: RecentConversationEntry.group(group).key,
+            createSession: () => controller.groupRecentConversationSession(
+              group: group,
+              recents: _recents,
+              onOpenGroup: _openRecentGroup,
+              activity: () => ChatNoticeActivityScope.of(groupContext),
+              onOpenChat: (_) => Navigator.of(groupContext).push<void>(
+                MaterialPageRoute(
+                  builder: (chatContext) => RecentConversationRouteScope(
+                    recents: _recents,
+                    onLeave: () => Navigator.of(chatContext).pop(),
+                    child: ProfileWorkspaceScreen(
+                      controller: controller,
+                      enableNotifications: widget.enableNotifications,
+                      backgroundMonitoringState:
+                          widget.backgroundMonitoringState,
+                      openMonitoringBatterySettings:
+                          widget.openMonitoringBatterySettings,
+                      onConnections: widget.onConnections,
+                      configurationActions: widget.configurationActions,
+                      savedConnections: widget.savedConnections,
+                      onSelectConnection: widget.onSelectConnection,
+                      onPreferencesChanged: widget.onPreferencesChanged,
+                      onCapturePhoto: widget.onCapturePhoto,
+                      voiceDevice: widget.voiceDevice,
+                      createBotsSession: widget.createBotsSession,
+                      onOpenBotChat: widget.onOpenBotChat,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          previewBuilder: _recentPreview,
-          child: BotGroupScreen(
-            voiceInputSettings: () =>
-                controller.appPreferences.current.voiceInputSettings,
-            voiceDevice: widget.voiceDevice,
-            stopVoicePlayback: _voiceOutput.stop,
-            createSession: () => _bots.openGroup(group),
-            onEdit: (group) => openGroupEditor(groupContext, _bots, group),
-          ),
-        ),
+            previewBuilder: _recentPreview,
+            child: BotGroupScreen(
+              voiceInputSettings: () =>
+                  controller.appPreferences.current.voiceInputSettings,
+              voiceDevice: widget.voiceDevice,
+              stopVoicePlayback: _voiceOutput.stop,
+              createSession: () => _bots.openGroup(group),
+              onEdit: (group) => openGroupEditor(groupContext, _bots, group),
+            ),
+          );
+          return status == null
+              ? discussion
+              : ServerConnectionScope(
+                  status: status,
+                  icon: connection?.icon,
+                  onPickWorkspace: (anchor, {required mode}) =>
+                      unawaited(_pickWorkspace(anchor, mode: mode)),
+                  child: discussion,
+                );
+        },
       ),
     );
   }
