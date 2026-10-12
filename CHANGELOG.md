@@ -4,6 +4,10 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Monitor shared group discussions across pauses between bot turns. Publish the
+  latest shared reply in one replaceable notification per group; tap it to open
+  the discussion. Keep unresolved input requests when newer replies arrive.
+
 - Return Android Back from Recents conversations to Chats, Bots or Groups instead of an earlier conversation.
 - Accept diagonal two-finger swipes for Recents switching, without an angle requirement or vertical movement limit.
 - Keep group messages in place when initial loading finishes during Recents switching.

@@ -155,9 +155,12 @@ bots typing, so Wing displays “Bots are working…”.
 Internal group workers stay out of the default Chats list and chat notifications,
 so they do not produce `Group: <UUID>` alerts, including after opening a worker
 from an earlier notification. Replies to bot-to-bot messages in Bot Chat are also
-silent; replies to your own messages still notify you. Read group replies and
-answer approvals in the discussion. Wing does not currently send a separate
-group notification.
+silent; replies to your own messages still notify you. Monitoring follows the
+shared discussion across pauses between bot turns. New shared replies update one
+notification per group; the latest reply replaces the previous one. Tap it to
+open the discussion. Reaching the reply clears it. Answer group approvals in the
+discussion. Unresolved requests in ordinary chats stay pending when newer replies
+arrive.
 On Android 12 and later, the group transcript supports system scroll capture;
 the composer and keyboard are outside the capture area, and capture restores
 your reading position.

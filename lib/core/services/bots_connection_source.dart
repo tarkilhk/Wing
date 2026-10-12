@@ -8,30 +8,58 @@ import 'profile_workspace_registry.dart';
 BotsSession savedBotsSession(
   ConnectionManager manager,
   ProfileWorkspaceRegistry registry,
-) => BotsSession((canUse) async {
-  final connections = await manager.loadConnectionsWithSecrets();
-  final sources = <BotsRepository>[];
-  for (final connection in connections) {
-    if (!canUse()) return const [];
-    final controller = await registry.forSavedConnection(
-      manager,
-      connection.id,
-      canUse: canUse,
-    );
-    if (!canUse()) return const [];
-    sources.add(
-      BotsRepository.forServer(
-        controller.healthSession().server,
-        isCurrent: () {
-          try {
-            manager.accessFor(controller.connection);
-            return true;
-          } catch (_) {
-            return false;
-          }
-        },
-      ),
-    );
-  }
-  return sources;
-});
+) => BotsSession(
+  (canUse) async {
+    final connections = await manager.loadConnectionsWithSecrets();
+    final sources = <BotsRepository>[];
+    for (final connection in connections) {
+      if (!canUse()) return const [];
+      final controller = await registry.forSavedConnection(
+        manager,
+        connection.id,
+        canUse: canUse,
+      );
+      if (!canUse()) return const [];
+      sources.add(
+        BotsRepository.forServer(
+          controller.healthSession().server,
+          isCurrent: () {
+            try {
+              manager.accessFor(controller.connection);
+              return true;
+            } catch (_) {
+              return false;
+            }
+          },
+        ),
+      );
+      await controller.activateGroupNotifications();
+    }
+    return sources;
+  },
+  onGroupRead: (group, sequence) async {
+    final owner = registry.controllers
+        .where(
+          (owner) => owner.connectionIdentity == group.scope.connectionIdentity,
+        )
+        .firstOrNull;
+    await owner?.acknowledgeGroupAnswer(group, sequence);
+  },
+  beforeGroupSend: (group) async {
+    final owner = registry.controllers
+        .where(
+          (owner) => owner.connectionIdentity == group.scope.connectionIdentity,
+        )
+        .firstOrNull;
+    if (owner == null) throw StateError('Group connection is unavailable');
+    await owner.beginGroupSend(group);
+  },
+  afterGroupSend: (group, dispatched) async {
+    final owner = registry.controllers
+        .where(
+          (owner) => owner.connectionIdentity == group.scope.connectionIdentity,
+        )
+        .firstOrNull;
+    await owner?.finishGroupSend(group, dispatched);
+  },
+);

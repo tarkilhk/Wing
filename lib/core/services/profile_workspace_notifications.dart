@@ -18,17 +18,9 @@ class ProfileInputNotification {
 extension ProfileNotificationState on ProfileWorkspaceController {
   Iterable<({String title, String state})>
   get notificationMonitoringChats sync* {
-    String? groupState;
+    yield* _groupNotifications.monitoringGroups;
     for (final chat in notificationChats) {
       if (chat.source == 'bot_room') {
-        if (!chat.runtime.needsInput &&
-                (chat.runtime.blocksTurnAdmission ||
-                    chat.runtime.commandRunning) ||
-            chat.composer.observation.draining ||
-            chat._subagents.any((task) => !task.isTerminal)) {
-          final state = chat.runtime.reconnecting ? 'reconnecting' : 'working';
-          if (groupState != 'working') groupState = state;
-        }
         continue;
       }
       final String? state;
@@ -58,13 +50,10 @@ extension ProfileNotificationState on ProfileWorkspaceController {
           : 'working';
       final chat = _notificationSnapshot![entry.key]!.chat;
       if (chat.source == 'bot_room') {
-        if (groupState != 'working') groupState = state;
+        continue;
       } else {
         yield (title: chat._title, state: state);
       }
-    }
-    if (groupState != null) {
-      yield (title: 'Group discussions', state: groupState);
     }
   }
 

@@ -6305,6 +6305,15 @@
       "source": "internal/docs/TESTING.md; test/bot_group_draft_session_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-test/group_notification_session_test.dart",
+      "kind": "host-test",
+      "path": "test/group_notification_session_test.dart",
+      "selector": "main",
+      "purpose": "Shared group monitoring, latest-answer notification replay and read-receipt regressions",
+      "source": "internal/docs/TESTING.md; internal/docs/BACKGROUND_NOTIFICATIONS.md",
+      "status": "supported"
     }
   ],
   "files": [
@@ -7799,6 +7808,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/models/group_notification.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
       "path": "lib/core/models/health_alert.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -8845,6 +8859,11 @@
     },
     {
       "path": "lib/core/services/gateway_endpoint.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/services/group_notification_session.dart",
       "area": "lib",
       "provenance": "tracked"
     },
@@ -11120,6 +11139,11 @@
     },
     {
       "path": "test/gateway_sensitive_prompt_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/group_notification_session_test.dart",
       "area": "test",
       "provenance": "tracked"
     },

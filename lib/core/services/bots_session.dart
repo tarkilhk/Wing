@@ -23,9 +23,15 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   BotsSession(
     this._sources, {
     Future<BotsPreferences> Function()? loadPreferences,
+    this.onGroupRead,
+    this.beforeGroupSend,
+    this.afterGroupSend,
   }) : _loadPreferences = loadPreferences ?? BotsPreferences.load;
   final groupReads = BotGroupReadState();
   final BotsSources _sources;
+  final Future<void> Function(BotGroup, int)? onGroupRead;
+  final Future<void> Function(BotGroup)? beforeGroupSend;
+  final Future<void> Function(BotGroup, bool)? afterGroupSend;
   final Future<BotsPreferences> Function() _loadPreferences;
   BotsPreferences? _preferences;
   Set<String> _groupPins = const {};
@@ -298,6 +304,9 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
       groupMessages: _groupMessages,
       appearances: this,
       reads: groupReads,
+      onRead: onGroupRead,
+      beforeSend: beforeGroupSend,
+      afterSend: afterGroupSend,
     );
   }
 

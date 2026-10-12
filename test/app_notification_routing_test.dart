@@ -5,6 +5,11 @@ import 'package:wing/core/screens/health_alert_settings_screen.dart';
 import 'package:wing/core/widgets/health_alerts/health_alerts_scope.dart';
 import 'support/host_resources_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/models/group_notification.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/screens/bots/bot_group_screen.dart';
+import 'support/bots_fixture.dart';
+import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
@@ -50,6 +55,7 @@ typedef NotificationHarness = ({
 Future<NotificationHarness> _harness({
   bool restoreCachedChat = false,
   List<Map<String, dynamic>>? indexedSessions,
+  ProfileGateway Function(Host, WorkspaceScope)? makeGateway,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
@@ -93,7 +99,8 @@ Future<NotificationHarness> _harness({
       connectionIdentity: resolvedIdentity,
       preferences: preferences,
       appPreferences: appPreferences,
-      gatewayFactory: host.gateway,
+      gatewayFactory: (scope) =>
+          makeGateway?.call(host, scope) ?? host.gateway(scope),
     ),
   );
   addTearDown(registry.dispose);
@@ -171,6 +178,102 @@ Future<void> _pumpNavigation(WidgetTester tester) async {
 const _nativeNotifications = MethodChannel(NativeNotificationSink.channelName);
 
 void main() {
+  testWidgets(
+    'group notification opens the shared discussion without resuming a worker',
+    (tester) async {
+      final fixture = BotsFixture();
+      for (final row in fixture.profiles) {
+        row['canonical_session'] = null;
+      }
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': 1791818730.0,
+        'actor': {
+          'kind': 'member',
+          'id': 'atlas',
+          'profile': 'atlas',
+          'display_name': 'Atlas',
+        },
+        'payload': {'text': 'Shared group answer'},
+      });
+      final harness = await _harness(
+        makeGateway: (host, scope) {
+          final base = host.gateway(scope);
+          return ProfileGateway(
+            scope: scope,
+            discover: host.discover,
+            get: base.read,
+            rpc: (method, params) =>
+                method.startsWith('groups.') || method == 'profiles.list'
+                ? fixture.read(scope.profileName, method, params)
+                : base.call(method, params),
+          );
+        },
+      );
+      harness.host.profiles.addAll(['default', 'atlas', 'mira', 'forge']);
+      final resources = HostResourcesFixture(identity: harness.identity);
+      addTearDown(resources.server.close);
+      final server = AdministrationRepository(
+        connectionId: harness.connection.id,
+        connectionIdentity: harness.identity,
+        connectionLabel: harness.connection.label,
+        request: resources.server.request,
+        settingsWrite: resources.server.settingsWrite,
+        ownedMutation: resources.server.ownedMutation,
+        gateway: (profile) {
+          final scope = WorkspaceScope(
+            connectionId: harness.connection.id,
+            connectionIdentity: harness.identity,
+            profileName: profile,
+          );
+          final base = harness.host.gateway(scope);
+          return ProfileGateway(
+            scope: scope,
+            discover: harness.host.discover,
+            get: base.read,
+            rpc: (method, params) =>
+                method.startsWith('groups.') || method == 'profiles.list'
+                ? fixture.read(profile, method, params)
+                : base.call(method, params),
+          );
+        },
+      );
+      addTearDown(server.close);
+      harness.controller.healthSession(repository: server);
+      final app = await _pumpApp(tester, harness);
+      final opening = app.currentState!.openProfileNotification(
+        jsonEncode({
+          ...GroupNotificationTarget(
+            WorkspaceScope(
+              connectionId: harness.connection.id,
+              connectionIdentity: harness.identity,
+              profileName: 'default',
+            ),
+            'room-1',
+          ).toJson(),
+          'focus': const NotificationFocus('answer', '1').toJson(),
+        }),
+      );
+      await _pumpNavigation(tester);
+      await opening;
+      await _pumpNavigation(tester);
+      await tester.settleMarkdown();
+      expect(find.byType(BotGroupScreen), findsOneWidget);
+      expect(
+        find.text('Shared group answer', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        harness.host.calls.where((call) => call.$2 == 'session.resume'),
+        isEmpty,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpNavigation(tester);
+    },
+  );
   testWidgets('Bot Chat navigation and human send start Android monitoring', (
     tester,
   ) async {

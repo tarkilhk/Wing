@@ -31,6 +31,9 @@ class BotGroupSession extends ChangeNotifier {
     required this.appearances,
     required this.reads,
     required this.groupMessages,
+    this.onRead,
+    this.beforeSend,
+    this.afterSend,
   }) : _group = group {
     repository.retain();
     _appearance = appearances.appearanceForGroup(group);
@@ -62,6 +65,9 @@ class BotGroupSession extends ChangeNotifier {
   }
 
   final BotGroupReadState reads;
+  final Future<void> Function(BotGroup, int)? onRead;
+  final Future<void> Function(BotGroup)? beforeSend;
+  final Future<void> Function(BotGroup, bool)? afterSend;
   final RecentGroupMessages? groupMessages;
   Future<void> acknowledgeVisibleMessages(int sequence) async {
     if (_closed ||
@@ -72,6 +78,7 @@ class BotGroupSession extends ChangeNotifier {
     }
     try {
       await reads.acknowledge(group, sequence);
+      await onRead?.call(group, sequence);
     } catch (_) {
       /* Keep unread until the device receipt can be saved. */
     }
@@ -344,6 +351,7 @@ class BotGroupSession extends ChangeNotifier {
     notifyListeners();
     var dispatched = false;
     try {
+      await beforeSend?.call(group);
       if (isNew) {
         final references = retainComposerReferences(attempt.$2, _references);
         if (references.isNotEmpty) {
@@ -397,6 +405,7 @@ class BotGroupSession extends ChangeNotifier {
       }
       return false;
     } finally {
+      await afterSend?.call(group, dispatched);
       repository.release();
       if (!_closed) {
         _sending = false;

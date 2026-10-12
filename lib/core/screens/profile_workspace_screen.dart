@@ -1,3 +1,4 @@
+import '../models/group_notification.dart';
 import 'bots/bot_group_screen.dart';
 import '../widgets/recent_conversations/group_conversation_switcher.dart';
 import '../widgets/recent_conversations/conversation_route_scope.dart';
@@ -504,6 +505,29 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 );
         },
       ),
+    );
+  }
+
+  String? _notificationGroup;
+  Future<void> showNotificationGroup(
+    GroupNotificationTarget target,
+    bool Function() canUse,
+  ) async {
+    if (!mounted || !canUse()) return;
+    if (target.scope.connectionIdentity != controller.connectionIdentity ||
+        target.scope.connectionId != controller.connection.id) {
+      throw StateError('Group belongs to another connection');
+    }
+    if (_notificationGroup == target.key) return;
+    await _bots.refresh();
+    if (!mounted || !canUse()) return;
+    final group = _bots.groupForKey(target.key);
+    if (group == null) throw StateError('The shared group is unavailable');
+    _notificationGroup = target.key;
+    unawaited(
+      _openRecentGroup(group).whenComplete(() {
+        if (_notificationGroup == target.key) _notificationGroup = null;
+      }),
     );
   }
 

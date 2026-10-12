@@ -29,6 +29,13 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
   Set<String>? _configuredIdentities;
   int _configurationGeneration = 0;
   Timer? _retirement;
+  bool _foreground = true;
+  void setForeground(bool value) {
+    _foreground = value;
+    for (final controller in _controllers.values) {
+      controller.setGroupNotificationsForeground(value);
+    }
+  }
 
   Map<String, String> get monitoringSummary {
     final chats = _controllers.values.expand(
@@ -146,6 +153,7 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     if (_closed) throw StateError('Workspace registry is closed');
     final controller = _controllers.putIfAbsent(identity, () {
       final owner = _create(connection, identity);
+      owner.setGroupNotificationsForeground(_foreground);
       owner.addListener(_activityChanged);
       owner.retentionChanges.addListener(_activityChanged);
       return owner;

@@ -38,9 +38,14 @@ internal object NotificationInteractionSchema {
         val payload = value.getString("payload")
         if (payload.isEmpty()) return value.getString("choice").isEmpty()
         val target = JSONObject(payload)
-        if (!listOf("connection", "connection_identity", "profile", "session").all { string(target, it, 4096, true) }) return false
+        if (!listOf("connection", "connection_identity").all { string(target, it, 4096, true) }) return false
+        if (target.has("room")) {
+            if (!string(target, "room", 4096, true) || target.has("session") || target.has("profile") ||
+                value.getString("choice").isNotEmpty() || value.getBoolean("review")) return false
+        } else if (!listOf("profile", "session").all { string(target, it, 4096, true) }) return false
         val focus = target.optJSONObject("focus")
         if (focus != null) {
+            if (target.has("room") && focus.opt("kind") != "answer") return false
             if (focus.opt("kind") !in setOf("answer", "side", "background", "approval", "question", "secure", "status") ||
                 !string(focus, "id", 4096, true)) return false
             if (focus.has("message_id") && focus.opt("message_id") !is Int && focus.opt("message_id") !is Long) return false

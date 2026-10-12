@@ -13,6 +13,19 @@ class BotGroupReadState extends ChangeNotifier {
   final _read = <String, int>{};
   bool _closed = false;
   static const _key = 'bots_group_read_sequences';
+
+  /// Notification delivery borrows the same durable viewport receipt.
+  static int savedSequence(SharedPreferences preferences, String groupKey) {
+    final saved = preferences.getString(_key);
+    if (saved == null) return 0;
+    final value = (jsonDecode(saved) as Map<String, dynamic>)[groupKey];
+    if (value == null) return 0;
+    if (value is! int || value < 0) {
+      throw const FormatException('Invalid group read receipt');
+    }
+    return value;
+  }
+
   int sequence(BotGroup group) => _read[group.key] ?? 0;
   bool unread(BotGroup group) => group.lastAnswerSequence > sequence(group);
   Future<void> load() {

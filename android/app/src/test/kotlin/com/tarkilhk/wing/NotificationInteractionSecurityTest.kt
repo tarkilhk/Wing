@@ -6,6 +6,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NotificationInteractionSecurityTest {
+    @Test fun groupRepliesKeepRoomIdentityWithoutGainingDecisionAuthority() {
+        val target = JSONObject().put("connection", "host").put("connection_identity", "owner")
+            .put("room", "room-one").put("focus", JSONObject().put("kind", "answer").put("id", "17"))
+        val value = action("", false).put("payload", target.toString())
+        assertNotNull(NotificationInteractionSchema.parse(value.toString()))
+        for (choice in listOf("once", "session", "always", "deny")) {
+            assertNull(NotificationInteractionSchema.parse(JSONObject(value.toString()).put("choice", choice).toString()))
+        }
+        assertNull(NotificationInteractionSchema.parse(JSONObject(value.toString()).put("review", true).toString()))
+        target.put("session", "private-worker")
+        assertNull(NotificationInteractionSchema.parse(value.put("payload", target.toString()).toString()))
+        target.remove("session")
+        target.getJSONObject("focus").put("kind", "approval")
+        assertNull(NotificationInteractionSchema.parse(value.put("payload", target.toString()).toString()))
+    }
     private fun action(choice: String = "once", review: Boolean = false): JSONObject {
         val target = JSONObject().put("connection", "host").put("connection_identity", "credential-owner")
             .put("profile", "default").put("session", "chat-one")

@@ -77,6 +77,45 @@ void main() {
     appPreferences.dispose();
   });
 
+  test('shared discussion retains monitoring across idle bot turns', () async {
+    final host = NotificationCoverageHost();
+    host.groups = [
+      {'room_id': 'discussion', 'name': 'Shared discussion'},
+    ];
+    host.groupStates['discussion'] = {
+      'room': {
+        'room_id': 'discussion',
+        'name': 'Shared discussion',
+        'latest_seq': 0,
+      },
+      'driver_status': {
+        'working': true,
+        'blocked': false,
+        'pending_actions': [],
+      },
+    };
+    final owner = ProfileWorkspaceController(
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
+      connectionIdentity: 'discussion-monitoring',
+      preferences: preferences,
+      appPreferences: appPreferences,
+      gatewayFactory: host.gateway,
+      onAttention: (_) async {},
+    );
+    addTearDown(owner.dispose);
+    await owner.initialize();
+    expect(host.active, isEmpty);
+    expect(
+      owner.hasActiveChats,
+      isTrue,
+      reason: 'The shared room is working even when every bot session is idle',
+    );
+    expect(owner.notificationMonitoringChats.single.title, 'Shared discussion');
+  });
+
   for (final profile in ['a', 'b']) {
     test(
       'human send in hidden Bot Chat starts monitoring in $profile',
@@ -173,6 +212,21 @@ void main() {
 
   test('group work starts the service and releases it when idle', () async {
     final host = NotificationCoverageHost();
+    host.groups = [
+      {'room_id': 'discussion', 'name': 'Shared discussion'},
+    ];
+    void groupState(bool working) {
+      host.groupStates['discussion'] = {
+        'room': {
+          'room_id': 'discussion',
+          'name': 'Shared discussion',
+          'latest_seq': 0,
+        },
+        'driver_status': {'working': working, 'blocked': false},
+      };
+    }
+
+    groupState(false);
     host.saved['a']!.first.addAll({
       'source': 'bot_room',
       'title': 'Group: private-room-id',
@@ -224,39 +278,48 @@ void main() {
     expect(service.state.value, BackgroundMonitoringState.idle);
 
     var reads = host.activeReads;
-    host.active = [row('outside-runtime', 'outside', 'working')];
+    groupState(true);
+    host.active = [row('outside-runtime', 'outside', 'idle')];
     host.changed();
     await waitForReads(host, ++reads);
+    await owner.refreshGroupNotifications();
     await service.sync();
     expect(service.state.value, BackgroundMonitoringState.active);
     expect(calls.last.method, 'start');
-    expect(calls.last.arguments['text'], 'Group discussions · working');
+    expect(calls.last.arguments['text'], 'Shared discussion · working');
 
-    host.activeFails = true;
+    host.groupFails = true;
     host.changed();
     await waitForReads(host, ++reads);
+    await owner.refreshGroupNotifications();
     await service.sync();
     expect(service.state.value, BackgroundMonitoringState.active);
-    expect(calls.last.arguments['text'], 'Group discussions · reconnecting');
+    expect(calls.last.arguments['text'], 'Shared discussion · reconnecting');
 
-    host.activeFails = false;
-    host.active = [row('outside-runtime', 'outside', 'waiting')];
+    host.groupFails = false;
+    groupState(false);
+    host.active = [row('outside-runtime', 'outside', 'working')];
     host.changed();
     await waitForReads(host, ++reads);
+    await owner.refreshGroupNotifications();
     await service.sync();
     expect(service.state.value, BackgroundMonitoringState.idle);
     expect(host.resumeCalls, isEmpty);
 
-    host.active = [row('outside-runtime', 'outside', 'working')];
+    groupState(true);
+    host.active = [row('outside-runtime', 'outside', 'idle')];
     host.changed();
     await waitForReads(host, ++reads);
+    await owner.refreshGroupNotifications();
     await service.sync();
     expect(service.state.value, BackgroundMonitoringState.active);
 
+    groupState(false);
     host.historyFails = true;
     host.active = [row('outside-runtime', 'outside', 'idle')];
     host.changed();
     await waitForReads(host, ++reads);
+    await owner.refreshGroupNotifications();
     await service.sync();
     expect(service.state.value, BackgroundMonitoringState.idle);
     expect(calls.last.method, 'stop');

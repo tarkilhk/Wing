@@ -17,6 +17,14 @@ final class NotificationChatRoute {
   void closed() => _routeClosed();
 }
 
+final class NotificationGroupRoute {
+  NotificationGroupRoute._(this.controller, this.target, this._current);
+  final ProfileWorkspaceController controller;
+  final GroupNotificationTarget target;
+  final bool Function() _current;
+  bool get current => _current();
+}
+
 /// A captured review, not a reusable authorization. Closing its dialog retires
 /// unsent decisions; the existing controller remains the physical ACK owner.
 final class NotificationApprovalReviewIntent {
@@ -71,6 +79,7 @@ final class _NotificationApplication {
     required this.ready,
     required this.monitoring,
     required this.showChat,
+    required this.showGroup,
     required this.reviewApproval,
     required this.deferShare,
     required this.showOpenError,
@@ -84,6 +93,7 @@ final class _NotificationApplication {
   final Future<void> ready;
   final BackgroundMonitoringService monitoring;
   final Future<void> Function(NotificationChatRoute) showChat;
+  final Future<void> Function(NotificationGroupRoute) showGroup;
   final Future<void> Function(NotificationApprovalReviewIntent) reviewApproval;
   final void Function() deferShare;
   final void Function() showOpenError;
@@ -109,6 +119,27 @@ final class _NotificationApplication {
 
   Future<void> openPayload(String payload) async {
     if (closed || payload.isEmpty) return;
+    try {
+      final value = jsonDecode(payload) as Map<String, dynamic>;
+      if (value.containsKey('room')) {
+        final target = GroupNotificationTarget.fromJson(value);
+        final generation = ++_openGeneration;
+        _openingController?.cancelNotificationOpen();
+        _pendingKey = null;
+        _pendingOpen = null;
+        deferShare();
+        await _openGroup(target, generation);
+        return;
+      }
+    } catch (_) {
+      _openGeneration++;
+      _openingController?.cancelNotificationOpen();
+      _pendingKey = null;
+      _pendingFocus = null;
+      _pendingOpen = null;
+      showOpenError();
+      return;
+    }
     final ProfileSessionKey key;
     final NotificationFocus? focus;
     try {
@@ -189,6 +220,31 @@ final class _NotificationApplication {
     }
   }
 
+  Future<void> _openGroup(
+    GroupNotificationTarget target,
+    int generation,
+  ) async {
+    try {
+      await ready;
+      final connection = (await manager.loadConnectionsWithSecrets())
+          .where((value) => value.id == target.scope.connectionId)
+          .firstOrNull;
+      if (!_current(generation)) return;
+      if (connection == null)
+        throw StateError('The original connection is unavailable');
+      final owner = await registry.forConnection(connection);
+      if (!_current(generation)) return;
+      if (owner.connectionIdentity != target.scope.connectionIdentity) {
+        throw StateError('The original connection settings have changed');
+      }
+      await showGroup(
+        NotificationGroupRoute._(owner, target, () => _current(generation)),
+      );
+    } catch (_) {
+      if (_current(generation)) showOpenError();
+    }
+  }
+
   Future<void> _restore() async {
     await ready;
     if (closed) return;
@@ -202,6 +258,12 @@ final class _NotificationApplication {
     await notices.restore(
       owns: (chat) {
         try {
+          final value = jsonDecode(chat) as Map<String, dynamic>;
+          if (value.containsKey('room')) {
+            final target = GroupNotificationTarget.fromJson(value);
+            return identities[target.scope.connectionId] ==
+                target.scope.connectionIdentity;
+          }
           final key = ProfileSessionKey.fromJson(
             jsonDecode(chat) as Map<String, dynamic>,
           );
@@ -384,6 +446,7 @@ final class _NotificationApplication {
     _polling = true;
     try {
       final keys = notices.chatsWithNotices
+          .where((value) => !(jsonDecode(value) as Map).containsKey('room'))
           .map(
             (value) => ProfileSessionKey.fromJson(
               jsonDecode(value) as Map<String, dynamic>,

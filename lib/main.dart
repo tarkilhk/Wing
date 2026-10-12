@@ -261,6 +261,46 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     navigator.push(route);
   }
 
+  Future<void> _showNotificationGroup(NotificationGroupRoute request) async {
+    if (!mounted || !request.current) return;
+    final controller = request.controller;
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) {
+      throw StateError('Notification navigation is unavailable');
+    }
+    var existing = _notificationRoutes[controller];
+    if (existing == null || !existing.route.isActive) {
+      final screenKey = GlobalKey<ProfileWorkspaceScreenState>();
+      final route = MaterialPageRoute<void>(
+        builder: (_) => _workspaceScreen(
+          controller,
+          key: screenKey,
+          destination: AppDestination.bots,
+        ),
+      );
+      existing = (route: route, screenKey: screenKey);
+      _notificationRoutes[controller] = existing;
+      unawaited(
+        route.popped.then((_) {
+          if (identical(_notificationRoutes[controller]?.route, route)) {
+            _notificationRoutes.remove(controller);
+          }
+        }),
+      );
+      navigator.push(route);
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (!mounted || !request.current) return;
+    final screen = existing.screenKey.currentState;
+    if (screen == null) {
+      throw StateError('Group notification route is unavailable');
+    }
+    await screen.showNotificationGroup(
+      request.target,
+      () => mounted && request.current,
+    );
+  }
+
   Future<void> _reviewNotificationApproval(
     NotificationApprovalReviewIntent review,
   ) async {
@@ -344,6 +384,8 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
             notificationResultFor: _chatNotices.focusFor,
             notificationInputsFor: _chatNotices.pendingInputsFor,
             onNotificationRead: _chatNotices.readTarget,
+            onGroupAnswer: _chatNotices.receiveGroupAnswer,
+            onGroupAnswerRead: _chatNotices.readGroupAnswer,
           ),
         );
     _healthAlertSettings = HealthAlertSettingsSession(
@@ -366,6 +408,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       ready: _notificationsReady,
       monitoring: _backgroundMonitoring,
       showChat: _showNotificationChat,
+      showGroup: _showNotificationGroup,
       reviewApproval: _reviewNotificationApproval,
       deferShare: _deferPendingShareForNotification,
       showOpenError: _showNotificationOpenError,
@@ -398,6 +441,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _profileControllers.setForeground(state == AppLifecycleState.resumed);
     logConnectionDiagnostic('app.lifecycle', details: {'state': state.name});
     if (state == AppLifecycleState.resumed) {
       // Admit recovery before alerts inspect failures retained during suspension.

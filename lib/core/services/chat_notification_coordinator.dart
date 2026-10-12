@@ -1,4 +1,5 @@
 import '../models/recent_conversation.dart';
+import '../models/group_notification.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -66,6 +67,7 @@ class ChatNotificationCoordinator {
     if (_activityClosed) return;
     final ProfileSessionKey key;
     try {
+      if ((jsonDecode(chat) as Map).containsKey('room')) return;
       key = ProfileSessionKey.fromJson(
         Map<String, dynamic>.from(jsonDecode(chat) as Map),
       );
@@ -189,6 +191,7 @@ class ChatNotificationCoordinator {
     required Future<void> ready,
     required BackgroundMonitoringService monitoring,
     required Future<void> Function(NotificationChatRoute) showChat,
+    required Future<void> Function(NotificationGroupRoute) showGroup,
     required Future<void> Function(NotificationApprovalReviewIntent)
     reviewApproval,
     required void Function() deferShare,
@@ -207,6 +210,7 @@ class ChatNotificationCoordinator {
       ready: ready,
       monitoring: monitoring,
       showChat: showChat,
+      showGroup: showGroup,
       reviewApproval: reviewApproval,
       deferShare: deferShare,
       showOpenError: showOpenError,
@@ -231,6 +235,28 @@ class ChatNotificationCoordinator {
       _activeApplication.receive(value);
   Future<void> receiveInputs(ProfileInputNotification value) =>
       _activeApplication.receiveInputs(value);
+  Future<void> receiveGroupAnswer(GroupAnswerNotification value) => result(
+    chat: jsonEncode(value.target.toJson()),
+    title: value.title,
+    scope: '${value.instance} / Group',
+    focus: NotificationFocus('answer', '${value.sequence}'),
+    content: ChatNotificationContent.reply(value.text),
+  );
+  Future<void> readGroupAnswer(GroupNotificationTarget target, int sequence) =>
+      _serialize(() async {
+        final chat = jsonEncode(target.toJson());
+        final focus = resultFor(chat);
+        final answerSequence = focus == null ? null : int.tryParse(focus.id);
+        if (focus?.kind == 'answer' &&
+            answerSequence != null &&
+            answerSequence <= sequence) {
+          final state = _chats[chat]!;
+          state.result = null;
+          await _render(chat, state, alert: false);
+          await _write();
+        }
+      });
+
   Future<void> requestStartupPermission() =>
       _activeApplication.requestStartupPermission();
   Future<void> enableNotifications() => _activeApplication.enable();

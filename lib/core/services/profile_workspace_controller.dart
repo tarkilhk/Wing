@@ -6,6 +6,8 @@ import '../models/recent_conversation.dart';
 import '../models/transcript_message.dart';
 import 'recent_conversation_session.dart';
 import 'bots_session.dart';
+import 'group_notification_session.dart';
+import '../models/group_notification.dart';
 import 'workspace_recents_cache.dart';
 import 'recent_conversation_snapshots.dart';
 import '../models/bots.dart';
@@ -182,6 +184,8 @@ class ProfileChat {
   Set<String> get unconfirmedSubagentIds =>
       Set.unmodifiable(_unconfirmedSubagentIds);
   bool get subagentsLoading => _subagentsLoading;
+  bool get subagentsAvailable =>
+      _subagentsRevision > 0 || _subagents.isNotEmpty;
   String? get subagentsError => _subagentsError;
   List<GatewayProcessActivity> get processes => List.unmodifiable(_processes);
   bool get processesLoading => _processesLoading;
@@ -571,6 +575,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   final _uncertainNotificationRuntimes = <String>{};
   int _pendingNotifications = 0;
   int _pendingCompletions = 0;
+  int _pendingPrivateCompletions = 0;
   int _pendingWorkspaceOperations = 0;
   bool _retentionScheduled = false;
   static const settledChatLimit = 20;
@@ -710,10 +715,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
   /// Retain live work until its final state and notification have been saved.
   /// Failed snapshot reads do not prove previously active chats have finished.
   bool get hasActiveChats =>
+      _groupNotifications.hasActiveGroups ||
       _pendingNotifications > 0 ||
-      _pendingCompletions > 0 ||
+      _pendingCompletions > _pendingPrivateCompletions ||
       _resources.values.any(
         (resource) => resource._chats.values.any((chat) {
+          if (chat.source == 'bot_room') return false;
           final waiting =
               chat.runtime.needsInput ||
               chat.runtime.reconnecting &&
@@ -729,8 +736,47 @@ class ProfileWorkspaceController extends ChangeNotifier {
       ) ||
       _backgroundChats.entries.any(
         (entry) =>
+            _notificationSnapshot?[entry.key]?.chat.source != 'bot_room' &&
             !_hasLoadedNotificationChat(entry.key, entry.value.sessionId),
       );
+
+  late final GroupNotificationSession _groupNotifications;
+  late final bool _groupNotificationsEnabled;
+  Future<void> activateGroupNotifications() => _groupNotificationsEnabled
+      ? _groupNotifications.activate()
+      : Future.value();
+
+  /// Views and composition issue commands; the retained watcher stays private.
+  Future<void> refreshGroupNotifications() => _groupNotificationsEnabled
+      ? _groupNotifications.refresh()
+      : Future.value();
+  void setGroupNotificationsForeground(bool foreground) =>
+      _groupNotifications.setForeground(foreground);
+  void _requireGroupOwner(BotGroup group) {
+    if (group.scope.connectionId != connection.id ||
+        group.scope.connectionIdentity != connectionIdentity) {
+      throw StateError('Group belongs to another connection');
+    }
+  }
+
+  Future<void> beginGroupSend(BotGroup group) {
+    _requireGroupOwner(group);
+    if (!_groupNotificationsEnabled || _closed) return Future.value();
+    _groupNotifications.beginSend(group.id, group.name);
+    return _groupNotifications.activate();
+  }
+
+  Future<void> finishGroupSend(BotGroup group, bool dispatched) {
+    _requireGroupOwner(group);
+    if (!_groupNotificationsEnabled || _closed) return Future.value();
+    return _groupNotifications.endSend(group.id, dispatched: dispatched);
+  }
+
+  Future<void> acknowledgeGroupAnswer(BotGroup group, int sequence) {
+    _requireGroupOwner(group);
+    if (!_groupNotificationsEnabled || _closed) return Future.value();
+    return _groupNotifications.acknowledge(group.id, sequence);
+  }
 
   Future<void>? _notificationReconciliation;
   bool _notificationReconcileAgain = false;
@@ -772,6 +818,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     this.onNotificationInputs,
     this.onNotificationRead,
     this.notificationResultFor,
+    Future<void> Function(GroupAnswerNotification)? onGroupAnswer,
+    Future<void> Function(GroupNotificationTarget, int)? onGroupAnswerRead,
     List<NotificationInput> Function(ProfileSessionKey)? notificationInputsFor,
     // Keep the injected journal reader private behind the workspace boundary.
     // ignore: prefer_initializing_formals
@@ -788,6 +836,30 @@ class ProfileWorkspaceController extends ChangeNotifier {
         draftStore ??
         ComposerDraftStore(preferences, connectionIdentity: connectionIdentity);
     connectionStatus = ServerConnectionStatus(connection.label);
+    _groupNotificationsEnabled = onAttention != null || onGroupAnswer != null;
+    _groupNotifications = GroupNotificationSession(
+      scope: WorkspaceScope(
+        connectionId: connection.id,
+        connectionIdentity: connectionIdentity,
+        profileName: 'default',
+      ),
+      instance: connection.label,
+      preferences: preferences,
+      read: (method, params) async {
+        final gateway = _resource('default').gateway;
+        await gateway.connect();
+        return gateway.call(method, params);
+      },
+      publish: (answer) async {
+        if (onGroupAnswer == null) {
+          throw StateError('Group notification delivery is unavailable');
+        }
+        await onGroupAnswer(answer);
+      },
+      clearRead: (target, sequence) async =>
+          onGroupAnswerRead?.call(target, sequence),
+    );
+    _groupNotifications.addListener(_changed);
     connectionStatus.retry = resumeConnection;
     connectionStatus.onInterruption = () {
       final resource = _current;
@@ -2041,6 +2113,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     await _restoreWaitingOutboxes();
     if (_closed) return;
     if (generation == _generation && onAttention != null && _current != null) {
+      await _groupNotifications.activate();
       await _scheduleNotificationReconciliation(_current!);
     }
   }
@@ -7184,6 +7257,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   void _event(ProfileWorkspaceData resource, StreamEvent event) {
     if (_closed) return;
     if (event.type == 'sessions.changed') {
+      if (onAttention != null) unawaited(_groupNotifications.refresh());
       _invalidateProjectMembership(resource);
       unawaited(_scheduleNotificationReconciliation(resource));
       return;
@@ -7407,10 +7481,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     Map<String, dynamic> completion,
   ) async {
     _pendingCompletions++;
+    final privateWorker = chat.source == 'bot_room';
+    if (privateWorker) _pendingPrivateCompletions++;
     try {
       await _settleTurn(resource, chat, completion);
     } finally {
       _pendingCompletions--;
+      if (privateWorker) _pendingPrivateCompletions--;
       _changed(browserChat: chat._key);
     }
   }
@@ -7872,6 +7949,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           );
         }
         if (chat == null) continue;
+        if (chat.source == 'bot_room') continue;
         final status = row['status'] as String;
         final sideTasks = row['side_tasks_running'] as int? ?? 0;
         final activity = status == 'waiting'
@@ -7910,16 +7988,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
         final before = previous[entry.key];
         final after = entry.value;
         if (before != null && before.chat._key != after.chat._key) continue;
-        // Private room workers retain the engine, but never become ordinary
-        // chat alerts, request subscriptions or transcript recovery reads.
-        if (after.chat.source == 'bot_room') {
-          if (after.activity == _NotificationActivity.idle) {
-            _notificationSnapshot?.remove(entry.key);
-            _backgroundChats.remove(entry.key);
-            _uncertainNotificationRuntimes.remove(entry.key);
-          }
-          continue;
-        }
         if (_hasLoadedNotificationChat(
           after.chat.runtime.runtimeId,
           after.chat._key.sessionId,
@@ -8533,6 +8601,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _groupNotifications.removeListener(_changed);
+    _groupNotifications.dispose();
     appPreferences.state.removeListener(_visibilityChanged);
     _profileSelection.removeListener(_selectionChanged);
     _closed = true;
