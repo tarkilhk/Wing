@@ -998,8 +998,12 @@ void main() {
         if (retired) {
           expect(controller.current!.chat!.key, target.chat);
           expect(visit.active, isFalse);
-        } else {
+        } else if (rejectRoute) {
           expect(controller.current!.chat, same(original));
+          expect(visit.selected, origin);
+          expect(visit.modeEnabled, isTrue);
+        } else {
+          expect(controller.current!.chat!.key, target.chat);
           expect(visit.selected, origin);
           expect(visit.modeEnabled, isTrue);
         }

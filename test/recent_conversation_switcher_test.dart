@@ -290,8 +290,9 @@ Future<void> _twoContacts(
   Offset a,
   Offset b,
   Offset endA,
-  Offset endB,
-) async {
+  Offset endB, {
+  bool returnToStart = false,
+}) async {
   final first = await tester.startGesture(a, pointer: 1);
   final second = await tester.startGesture(b, pointer: 2);
   await tester.pump();
@@ -300,12 +301,23 @@ Future<void> _twoContacts(
     await second.moveTo(Offset.lerp(b, endB, i / 8)!);
     await tester.pump(const Duration(milliseconds: 16));
   }
+  if (returnToStart) {
+    for (var i = 1; i <= 8; i++) {
+      await first.moveTo(Offset.lerp(endA, a, i / 8)!);
+      await second.moveTo(Offset.lerp(endB, b, i / 8)!);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+  }
   await first.up();
   await second.up();
   await _finishFrames(tester);
 }
 
-Future<void> _chatGesture(WidgetTester tester, {bool pinch = true}) async {
+Future<void> _chatGesture(
+  WidgetTester tester, {
+  bool pinch = true,
+  bool returnToStart = false,
+}) async {
   final group = find.byKey(const ValueKey('group-transcript'));
   final rect = tester.getRect(
     group.evaluate().isEmpty ? find.byType(ProfileTranscript) : group,
@@ -328,6 +340,7 @@ Future<void> _chatGesture(WidgetTester tester, {bool pinch = true}) async {
       Offset(rect.left + rect.width * fractions[1], y),
       Offset(rect.left + rect.width * (pinch ? .41 : .66), y),
       Offset(rect.left + rect.width * (pinch ? .59 : .88), y),
+      returnToStart: returnToStart,
     );
     return;
   }
@@ -450,6 +463,151 @@ void main() {
     expect(find.byType(BotAvatar), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
+
+  for (final fromGroup in [false, true]) {
+    for (final target in ['chat', 'bot', 'group']) {
+      for (final pinch in [false, true]) {
+        testWidgets(
+          'Recents Back returns to canonical $target menu from ${fromGroup ? 'group' : 'Recents'} after ${pinch ? 'pinch' : 'swipe'}',
+          (tester) async {
+            SharedPreferences.setMockInitialValues({});
+            final preferences = await SharedPreferences.getInstance();
+            final appPreferences = AppPreferences(preferences);
+            final fixture = _ScreenFixture();
+            final controller = ProfileWorkspaceController(
+              access: ConnectionAccess(
+                connection: SavedConnection(
+                  id: 'host',
+                  label: 'Home server',
+                  host: 'localhost',
+                  port: 1,
+                  apiKey: '',
+                ),
+                dashboardOAuth: null,
+              ),
+              connectionIdentity: 'instance-1',
+              preferences: preferences,
+              appPreferences: appPreferences,
+              gatewayFactory: fixture.gateway,
+            );
+            addTearDown(controller.dispose);
+            addTearDown(appPreferences.dispose);
+            await controller.initialize();
+            final botFixture = BotsFixture();
+            botFixture.profiles
+              ..clear()
+              ..add(BotsFixture.profile('personal', 'Atlas'));
+            botFixture.profiles.single['canonical_session']['id'] = 'chat-1';
+            botFixture.events.add({
+              'room_id': 'room-1',
+              'seq': 1,
+              'kind': 'message.member',
+              'created_at': fixture.now - 30,
+              'actor': {'kind': 'member', 'id': 'atlas'},
+              'payload': {'text': 'Recent group reply'},
+            });
+            final activity = ValueNotifier<ChatNoticeActivity?>(null);
+            addTearDown(activity.dispose);
+            tester.view.physicalSize = const Size(390, 800);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: wingTheme(Brightness.dark),
+                builder: (_, child) =>
+                    ChatNoticeActivityScope(activity: activity, child: child!),
+                home: ProfileWorkspaceScreen(
+                  controller: controller,
+                  initialDestination: fromGroup
+                      ? AppDestination.bots
+                      : AppDestination.activity,
+                  createBotsSession: () =>
+                      BotsSession((_) async => [botFixture.repository]),
+                ),
+              ),
+            );
+            await _finishFrames(tester);
+            if (fromGroup) {
+              await tester.tap(find.text('Groups').first);
+              await _finishFrames(tester);
+              await tester.tap(find.text('Research team').first);
+            } else {
+              final row = find.byKey(
+                const ValueKey('activity-personal-chat-0'),
+              );
+              await tester.ensureVisible(row);
+              await tester.tap(row);
+            }
+            await _finishFrames(tester);
+            await _chatGesture(tester, pinch: pinch);
+            // A first swipe may land on a different native route. Pinch there
+            // so selection uses that route's actual shared catalog.
+            if (!pinch) await _chatGesture(tester);
+            final switcher = tester.widget<RecentConversationSwitcher>(
+              find.byType(RecentConversationSwitcher),
+            );
+            final key = target == 'group'
+                ? switcher.session.entries
+                      .firstWhere((e) => e.group != null)
+                      .key
+                : RecentConversationKey.chat(
+                    ProfileSessionKey(
+                      WorkspaceScope(
+                        connectionId: 'host',
+                        connectionIdentity: 'instance-1',
+                        profileName: 'personal',
+                      ),
+                      target == 'bot' ? 'chat-1' : 'chat-2',
+                    ),
+                  );
+            final index = switcher.session.entries.indexWhere(
+              (e) => e.key == key,
+            );
+            expect(index, greaterThanOrEqualTo(0));
+            unawaited(
+              tester
+                  .state<RecentConversationSwitcherState>(
+                    find.byType(RecentConversationSwitcher),
+                  )
+                  .selectAdjacent(index - switcher.session.selectedIndex),
+            );
+            await _finishFrames(tester);
+            expect(find.text('Swipe to browse · tap to open'), findsNothing);
+            if (pinch) {
+              await _chatGesture(tester, returnToStart: true);
+              expect(find.text('Swipe to browse · tap to open'), findsNothing);
+            }
+            await tester.binding.handlePopRoute();
+            await _finishFrames(tester);
+            expect(
+              find.byType(ProfileTranscript),
+              findsNothing,
+              reason: 'Back must not reveal a previous chat.',
+            );
+            expect(
+              find.byType(BotGroupScreen, skipOffstage: false),
+              findsNothing,
+              reason: 'Back must unwind all borrowed conversation routes.',
+            );
+            expect(controller.current?.chat, isNull);
+            if (target == 'chat') {
+              expect(find.text('Chats'), findsOneWidget);
+            } else {
+              final search = tester.widget<TextField>(
+                find.byKey(const ValueKey('bots-search')),
+              );
+              expect(
+                search.decoration!.hintText,
+                target == 'group' ? 'Search groups' : 'Search bots',
+              );
+            }
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox());
+          },
+        );
+      }
+    }
+  }
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
@@ -3181,9 +3339,64 @@ void main() {
           await tester.pump();
           final readingPosition = list.controller!.offset;
           final commands = List.of(botFixture.commands);
-          var resumes = fixture.calls
+          final resumes = fixture.calls
               .where((call) => call.$2 == 'session.resume')
               .length;
+          await _chatGesture(tester);
+          expect(visit.modeEnabled, isTrue);
+          await _capture(
+            tester,
+            frame,
+            'group-recents-${brightness.name}-$scale',
+          );
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          await tester.showKeyboard(field);
+          tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+          await tester.pump();
+          final composerFocus = tester.widget<TextField>(field).focusNode!;
+          expect(composerFocus.hasFocus, isTrue);
+          await _chatGesture(tester);
+          expect(composerFocus.hasFocus, isFalse);
+          tester.view.viewInsets = FakeViewPadding.zero;
+          await _finishFrames(tester);
+          expect(visit.modeEnabled, isTrue);
+          expect(visit.selected, groupKey);
+          expect(botFixture.commands, commands);
+          expect(
+            fixture.calls.where((call) => call.$2 == 'session.resume'),
+            hasLength(resumes),
+          );
+          await _capture(
+            tester,
+            frame,
+            'group-recents-keyboard-${brightness.name}-$scale',
+          );
+          // A hidden discussion cannot clear a fresh reply's device read receipt.
+          final room = groupBots.observedGroups.single;
+          final receipt = groupBots.groupReads.sequence(room);
+          botFixture.events.add({
+            'room_id': 'room-1',
+            'seq': 9,
+            'kind': 'message.member',
+            'created_at': fixture.now,
+            'actor': {'kind': 'member', 'id': 'atlas'},
+            'payload': {'text': 'A reply received while viewing cards'},
+          });
+          await groupBots.refresh();
+          await _finishFrames(tester);
+          expect(groupBots.groupReads.sequence(room), receipt);
+          await switcherState.selectAdjacent(0);
+          await _finishFrames(tester);
+          expect(composerFocus.hasFocus, isTrue);
+          expect(find.byType(BotGroupScreen), findsOneWidget);
+          expect(list.controller!.offset, readingPosition);
+          expect(
+            tester.widget<TextField>(field).controller!.text,
+            'Keep this group draft',
+          );
+          FocusManager.instance.primaryFocus?.unfocus();
+          await tester.pump();
           await _chatGesture(tester, pinch: false);
           expect(visit.modeEnabled, isTrue);
           expect(find.byType(ProfileTranscript), findsOneWidget);
@@ -3237,102 +3450,20 @@ void main() {
           );
           await tester.binding.handlePopRoute();
           await _finishFrames(tester);
-          expect(find.byType(ProfileTranscript), findsOneWidget);
-          await tester.binding.handlePopRoute();
-          await _finishFrames(tester);
-          expect(find.byType(BotGroupScreen), findsOneWidget);
-          expect(list.controller!.offset, readingPosition);
-          expect(
-            tester.widget<TextField>(field).controller!.text,
-            'Keep this group draft',
-          );
-          resumes = fixture.calls
-              .where((call) => call.$2 == 'session.resume')
-              .length;
-          await _chatGesture(tester);
-          expect(visit.modeEnabled, isTrue);
-          await _capture(
-            tester,
-            frame,
-            'group-recents-${brightness.name}-$scale',
-          );
-          await tester.binding.handlePopRoute();
-          await _finishFrames(tester);
-          await tester.showKeyboard(field);
-          tester.view.viewInsets = const FakeViewPadding(bottom: 200);
-          await tester.pump();
-          final composerFocus = tester.widget<TextField>(field).focusNode!;
-          expect(composerFocus.hasFocus, isTrue);
-          await _chatGesture(tester);
-          expect(composerFocus.hasFocus, isFalse);
-          tester.view.viewInsets = FakeViewPadding.zero;
-          await _finishFrames(tester);
-          expect(visit.modeEnabled, isTrue);
-          expect(visit.selected, groupKey);
-          expect(botFixture.commands, commands);
-          expect(
-            fixture.calls.where((call) => call.$2 == 'session.resume'),
-            hasLength(resumes),
-          );
-          await _capture(
-            tester,
-            frame,
-            'group-recents-keyboard-${brightness.name}-$scale',
-          );
-          // A hidden discussion cannot clear a fresh reply's device read receipt.
-          final room = groupBots.observedGroups.single;
-          final receipt = groupBots.groupReads.sequence(room);
-          botFixture.events.add({
-            'room_id': 'room-1',
-            'seq': 9,
-            'kind': 'message.member',
-            'created_at': fixture.now,
-            'actor': {'kind': 'member', 'id': 'atlas'},
-            'payload': {'text': 'A reply received while viewing cards'},
-          });
-          await groupBots.refresh();
-          await _finishFrames(tester);
-          expect(groupBots.groupReads.sequence(room), receipt);
-          final normal = visit.entries.indexWhere(
-            (entry) => entry.key.chat?.workspace.profileName == 'personal',
-          );
-          expect(normal, greaterThanOrEqualTo(0));
-          final opened = switcherState.selectAdjacent(
-            normal - visit.selectedIndex,
-          );
-          await _finishFrames(tester);
-          expect(find.byType(ProfileTranscript), findsOneWidget);
-          expect(find.byType(BotGroupScreen), findsNothing);
-          await tester.binding.handlePopRoute();
-          await _finishFrames(tester);
-          await opened;
-          // The shared stack deliberately keeps its live discussion offstage.
+          expect(find.byType(ProfileTranscript), findsNothing);
           expect(
             find.byType(BotGroupScreen, skipOffstage: false),
-            findsOneWidget,
+            findsNothing,
           );
-          expect(visit.active, isTrue);
-          expect(visit.selected, groupKey);
           expect(controller.current?.chat, isNull);
-          expect(list.controller!.offset, readingPosition);
-          expect(
-            tester.widget<TextField>(field).controller!.text,
-            'Keep this group draft',
-          );
-          // Selecting the current group expands the mounted room without a route.
-          await switcherState.selectAdjacent(0);
-          await _finishFrames(tester);
-          expect(composerFocus.hasFocus, isTrue);
-          expect(find.byType(BotGroupScreen), findsOneWidget);
-          expect(list.controller!.offset, readingPosition);
-          await _chatGesture(tester);
-          await tester.binding.handlePopRoute();
-          await _finishFrames(tester);
-          expect(find.byType(BotGroupScreen), findsOneWidget);
-          expect(visit.modeEnabled, isTrue);
-          await tester.binding.handlePopRoute();
-          await _finishFrames(tester);
           expect(find.byKey(const ValueKey('bots-search')), findsOneWidget);
+          expect(
+            tester
+                .widget<TextField>(find.byKey(const ValueKey('bots-search')))
+                .decoration!
+                .hintText,
+            'Search groups',
+          );
           expect(visit.active, isFalse);
           expect(botFixture.commands, commands);
           expect(tester.takeException(), isNull);
@@ -3361,7 +3492,7 @@ void main() {
             ),
             dashboardOAuth: null,
           ),
-          connectionIdentity: 'entry-ui',
+          connectionIdentity: 'instance-1',
           preferences: preferences,
           appPreferences: appPreferences,
           gatewayFactory: fixture.gateway,
@@ -3443,7 +3574,7 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
-        'ordinary chat pinch activates Recents and preserves origin ${brightness.name} $scale',
+        'ordinary chat pinch activates Recents and preserves draft ${brightness.name} $scale',
         (tester) async {
           SharedPreferences.setMockInitialValues({});
           final preferences = await SharedPreferences.getInstance();
@@ -3552,26 +3683,6 @@ void main() {
             frame,
             'entry-workspace-${brightness.name}-$scale',
           );
-          final roomIndex = visit.entries.indexWhere(
-            (entry) => entry.group != null,
-          );
-          expect(roomIndex, greaterThanOrEqualTo(0));
-          final switcherState = tester.state<RecentConversationSwitcherState>(
-            find.byType(RecentConversationSwitcher),
-          );
-          final roomVisit = switcherState.selectAdjacent(
-            roomIndex - visit.selectedIndex,
-          );
-          await _finishFrames(tester);
-          expect(find.byType(BotGroupScreen), findsOneWidget);
-          expect(find.text('Research team'), findsOneWidget);
-          expect(controller.current!.chat, same(original));
-          await tester.binding.handlePopRoute();
-          await _finishFrames(tester);
-          await roomVisit;
-          expect(find.byType(BotGroupScreen), findsNothing);
-          expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
-          expect(controller.current!.chat, same(original));
           await tester.binding.handlePopRoute();
           await _finishFrames(tester);
           expect(visit.modeEnabled, isTrue);
@@ -3907,7 +4018,7 @@ void main() {
           expect(find.byTooltip('Open navigation menu'), findsOneWidget);
           await tester.binding.handlePopRoute();
           await _finishFrames(tester);
-          expect(find.text('Recents'), findsOneWidget);
+          expect(find.text('Chats'), findsOneWidget);
           expect(controller.current!.chat, isNull);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox.shrink());

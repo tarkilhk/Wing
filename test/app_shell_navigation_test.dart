@@ -203,7 +203,7 @@ void main() {
 
   for (final systemBack in [false, true]) {
     testWidgets(
-      'chat opened from activity returns there on ${systemBack ? 'system Back' : 'drawer Recents'}',
+      'chat opened from Recents returns to ${systemBack ? 'Chats on system Back' : 'Recents through the drawer'}',
       (tester) async {
         final chat = await controller.createChat(canDispatch: () => true);
         emitChatEvent(controller, chat, 'session.title', {
@@ -231,7 +231,14 @@ void main() {
           await tester.tap(find.byKey(const ValueKey('nav-activity')));
         }
         await tester.pumpAndSettle();
-        expect(find.byType(WorkspaceActivityContent), findsOneWidget);
+        expect(
+          find.byType(WorkspaceActivityContent),
+          systemBack ? findsNothing : findsOneWidget,
+        );
+        if (systemBack) {
+          expect(find.text('Chats'), findsOneWidget);
+          expect(controller.current!.chat, isNull);
+        }
         expect(find.byType(FilterChip), findsNothing);
       },
     );

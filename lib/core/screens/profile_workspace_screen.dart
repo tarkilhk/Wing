@@ -449,6 +449,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           final connection = _groupConnection(group);
           final discussion = GroupConversationSwitcher(
             groupKey: RecentConversationEntry.group(group).key,
+            onLeave: () => _leaveRecentConversation(
+              RecentConversationEntry.group(group).key,
+            ),
             createSession: () => controller.groupRecentConversationSession(
               group: group,
               recents: _recents,
@@ -458,7 +461,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 MaterialPageRoute(
                   builder: (chatContext) => RecentConversationRouteScope(
                     recents: _recents,
-                    onLeave: () => Navigator.of(chatContext).pop(),
+                    onLeave: _leaveRecentConversation,
                     child: ProfileWorkspaceScreen(
                       controller: controller,
                       enableNotifications: widget.enableNotifications,
@@ -534,7 +537,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _selectDestination(AppDestination.chats);
     setState(() {
       _recentVisit = visit;
-      _chatOrigin = AppDestination.activity;
       _recentRenderedChat = controller.current?.chat;
     });
   }
@@ -3102,15 +3104,42 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   void _leaveChat() {
     if (_recentSwitcher.currentState?.dismissStack() == true) return;
-    final route = RecentConversationRouteScope.maybeOf(context);
-    if (route != null) {
-      route.onLeave();
+    final key = controller.current?.chat?.key;
+    if (key != null &&
+        (_recentVisit?.modeEnabled == true ||
+            RecentConversationRouteScope.maybeOf(context) != null)) {
+      _leaveRecentConversation(RecentConversationKey.chat(key));
       return;
     }
     final origin = _chatOrigin;
     _disposeRecentVisit();
     controller.showList();
     if (origin != null) _selectDestination(origin);
+  }
+
+  void _leaveRecentConversation(RecentConversationKey key) {
+    final borrowed = RecentConversationRouteScope.maybeOf(context);
+    if (borrowed != null) {
+      _disposeRecentVisit();
+      borrowed.onLeave(key);
+      return;
+    }
+    final group = key.group != null;
+    final bot = key.chat != null && _bots.cachedAppearance(key.chat!) != null;
+    final workspaceRoute = ModalRoute.of(context);
+    _disposeRecentVisit();
+    controller.showList();
+    if (group || bot) {
+      _botsView = BotsViewState(
+        tab: group ? 1 : 0,
+        query: _botsView.query,
+        showHidden: _botsView.showHidden,
+      );
+    }
+    _selectDestination(
+      group || bot ? AppDestination.bots : AppDestination.chats,
+    );
+    Navigator.of(context).popUntil((route) => route == workspaceRoute);
   }
 
   void _selectDestination(AppDestination destination) {

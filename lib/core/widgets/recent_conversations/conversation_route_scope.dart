@@ -1,7 +1,8 @@
 import 'package:flutter/widgets.dart';
+import '../../models/recent_conversation.dart';
 import '../../services/workspace_recents_session.dart';
 
-/// A normal chat window borrowed by a group retains that native Back target.
+/// Borrowed chat windows return through their workspace's canonical menu owner.
 class RecentConversationRouteScope extends InheritedWidget {
   const RecentConversationRouteScope({
     super.key,
@@ -10,7 +11,7 @@ class RecentConversationRouteScope extends InheritedWidget {
     required super.child,
   });
   final WorkspaceRecentsSession recents;
-  final VoidCallback onLeave;
+  final ValueChanged<RecentConversationKey> onLeave;
   static RecentConversationRouteScope? maybeOf(BuildContext context) => context
       .dependOnInheritedWidgetOfExactType<RecentConversationRouteScope>();
   @override

@@ -10,11 +10,13 @@ class GroupConversationSwitcher extends StatefulWidget {
     super.key,
     required this.createSession,
     required this.groupKey,
+    required this.onLeave,
     required this.previewBuilder,
     required this.child,
   });
   final RecentConversationSession Function() createSession;
   final RecentConversationKey groupKey;
+  final VoidCallback onLeave;
   final Widget Function(RecentConversationCard) previewBuilder;
   final Widget child;
   @override
@@ -26,7 +28,7 @@ class _GroupConversationSwitcherState extends State<GroupConversationSwitcher>
     with WidgetsBindingObserver {
   late final _session = widget.createSession();
   final _switcher = GlobalKey<RecentConversationSwitcherState>();
-  bool _foreground = true, _obscured = false, _stack = false, _editing = false;
+  bool _foreground = true, _obscured = false, _editing = false;
   bool _recording = false;
   @override
   void initState() {
@@ -48,9 +50,12 @@ class _GroupConversationSwitcherState extends State<GroupConversationSwitcher>
   Widget build(BuildContext context) {
     final current = ModalRoute.isCurrentOf(context) != false;
     return PopScope(
-      canPop: !_stack,
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _switcher.currentState?.dismissStack();
+        if (!didPop && _switcher.currentState?.dismissStack() != true) {
+          _session.dispose();
+          widget.onLeave();
+        }
       },
       child: RecentConversationSwitcher(
         key: _switcher,
@@ -60,11 +65,8 @@ class _GroupConversationSwitcherState extends State<GroupConversationSwitcher>
         gesturesEnabled: _foreground && current && !_recording,
         nudgesEnabled: _foreground && current && !_editing && !_recording,
         onPresentationChanged: (obscured, stack) {
-          if (_obscured == obscured && _stack == stack) return;
-          setState(() {
-            _obscured = obscured;
-            _stack = stack;
-          });
+          if (_obscured == obscured) return;
+          setState(() => _obscured = obscured);
         },
         child: ConversationPresentationScope(
           visible: !_obscured && _foreground && current,

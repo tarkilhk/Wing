@@ -13,7 +13,6 @@ import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
-import 'package:wing/core/screens/workspace_overview_content.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -318,18 +317,13 @@ void main() {
             }
             await _native(
               tester,
-              '$prefix-recents-back',
+              '$prefix-chats-back',
               actions: [
                 {'type': 'back'},
               ],
             );
-            expect(find.byType(WorkspaceActivityContent), findsOneWidget);
-            expect(
-              tester
-                  .widget<FilterChip>(find.widgetWithText(FilterChip, 'All'))
-                  .selected,
-              isTrue,
-            );
+            expect(find.text('Chats'), findsOneWidget);
+            expect(controller.current!.chat, isNull);
           }
 
           if (codeOnly) {

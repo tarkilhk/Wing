@@ -381,7 +381,7 @@ final class _WorkspaceRecentConversationSource
     final previous = controller._current;
     final previousSession = previous?._selectedSession;
     final navigation = controller._navigationGeneration + 1;
-    var borrowedRoute = false;
+    var openingFailed = false;
     try {
       if (controller._resources[key.workspace]?.offlineSnapshot == true ||
           controller.recovering) {
@@ -394,19 +394,19 @@ final class _WorkspaceRecentConversationSource
         await Future.any([revealed.future, refresh]);
       }
       if (routeOrigin != null && isCurrent() && _selectedChat == target) {
-        borrowedRoute = true;
         await onOpenChat!(target);
       }
+    } catch (_) {
+      openingFailed = true;
+      rethrow;
     } finally {
       final failedSelection =
           controller._navigationGeneration == navigation &&
-          _selectedChat != RecentConversationKey.chat(key);
-      final restore = routeOrigin == null
-          ? failedSelection && previousSession != null
-          : borrowedRoute || failedSelection;
-      // A borrowed route and a failed resume return to their captured owner.
-      // Retired visits and removed chats cannot restore it; failed resumes
-      // also check their navigation generation.
+          (openingFailed || _selectedChat != RecentConversationKey.chat(key));
+      final restore =
+          failedSelection && (routeOrigin != null || previousSession != null);
+      // Only a failed selection restores its captured owner. Leaving a
+      // borrowed route is handled by the canonical workspace menu instead.
       if (restore &&
           isCurrent() &&
           (previous == null ||
