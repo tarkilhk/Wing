@@ -1,5 +1,6 @@
 import '../widgets/recent_conversations/conversation_gestures.dart';
 import '../models/chat_output.dart';
+import '../models/profile_session_key.dart';
 import '../services/server_connection_status.dart';
 import '../models/notification_focus.dart';
 import '../models/transcript_timeline.dart' as timeline_facts;
@@ -24,7 +25,8 @@ import '../widgets/transcript_latest_button.dart';
 /// a visible durable row anchors the viewport when streaming changes the tail.
 class ProfileTranscript extends StatefulWidget {
   final TranscriptReader reader;
-  final Object identity;
+  // Passive saved histories have no live chat identity or execution section.
+  final ProfileSessionKey? identity;
   final bool needsInput;
   final bool turnAdmissionBlocked;
   final Widget? openingContent;
@@ -430,6 +432,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   @override
   Widget build(BuildContext context) {
+    assert(
+      widget.identity != null ||
+          widget.currentActivity.isEmpty && widget.activityTabs.isEmpty,
+    );
     if (widget.focusedMessageId != null) return _nearbyMessages(context);
     final buildStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
@@ -447,7 +453,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       label: widget.liveToolCount > 0
           ? 'Activity · ${widget.liveToolCount} ${widget.liveToolCount == 1 ? 'tool' : 'tools'}'
           : 'Activity',
-      key: ValueKey(('activity', widget.identity)),
+      key: ValueKey(('activity', widget.identity!)),
       detailsBuilder: (_) => ProfileActivityTabs(
         tabs: [
           if (widget.currentActivity.isNotEmpty)

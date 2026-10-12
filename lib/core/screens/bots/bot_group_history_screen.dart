@@ -117,7 +117,7 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
                   : ProfileTranscript(
                       key: ValueKey(('worker-history', _session.member?.id)),
                       reader: reader,
-                      identity: (_session.group.id, _session.member?.id),
+                      identity: null,
                       needsInput: false,
                       turnAdmissionBlocked: false,
                       openingContent: null,

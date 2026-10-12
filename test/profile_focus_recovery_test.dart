@@ -43,6 +43,46 @@ void main() {
     appPreferences.dispose();
   });
 
+  for (final failed in [false, true]) {
+    test(
+      'activity refresh waits for ${failed ? 'failed' : 'successful'} recovery',
+      () async {
+        final connection = Completer<void>();
+        host.connectDelay = connection;
+        if (failed) host.connectError = StateError('Recovery failed');
+        final calls = host.connectCalls;
+        final activeReads = host.calls
+            .where((call) => call.$2 == 'session.active_list')
+            .length;
+        final recovery = controller.reconnect(chat.key.workspace);
+        var refreshed = false;
+        final refresh = controller.refreshActivity().then(
+          (_) => refreshed = true,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        expect(host.connectCalls, calls + 1);
+        expect(refreshed, isFalse);
+        expect(
+          host.calls.where((call) => call.$2 == 'session.active_list'),
+          hasLength(activeReads),
+        );
+
+        connection.complete();
+        await Future.wait([recovery, refresh]);
+        expect(host.connectCalls, calls + 1);
+        expect(controller.connectionStatus.liveAvailable('a'), !failed);
+        expect(
+          host.calls.where((call) => call.$2 == 'session.active_list'),
+          hasLength(activeReads + (failed ? 0 : 1)),
+        );
+        expect(controller.activityProfileErrors.isNotEmpty, failed);
+        expect(chat.composer.observation.text, 'Keep my draft');
+        expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      },
+    );
+  }
+
   Future<void> render(
     WidgetTester tester, {
     AppDestination destination = AppDestination.chats,

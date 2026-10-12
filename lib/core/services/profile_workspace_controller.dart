@@ -2308,7 +2308,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
     try {
       final profiles = await _resource('default').gateway.discover();
       final activeResource = _resource(profiles.serverPreferred.name);
-      await activeResource.gateway.connect();
+      // Recents can refresh as foreground recovery restores this same profile.
+      // Borrow the owned recovery before reading live activity.
+      final recovery = activeResource._reconnectFuture;
+      if (recovery != null) {
+        await recovery;
+        if (!connectionStatus.liveAvailable(activeResource.scope.profileName)) {
+          throw StateError('Live activity connection was not restored.');
+        }
+      } else {
+        await activeResource.gateway.connect();
+      }
+      if (_closed || generation != _activityGeneration) return;
       final response = await activeResource.gateway.call('session.active_list');
       if (response['sessions'] is! List) {
         throw const FormatException('Missing active sessions');

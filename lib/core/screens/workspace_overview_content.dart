@@ -32,9 +32,21 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
   void _attach() {
     _session = WorkspaceRecentsSession(widget.controller, widget.bots);
     _session.addListener(_changed);
-    // Route composition can still be building when the owner publishes loading.
+    _syncVisibility();
+  }
+
+  void _syncVisibility() {
+    final session = _session;
+    // Hiding cancels polling immediately and cannot publish a refresh.
+    if (!widget.visible) {
+      session.setVisible(false);
+      return;
+    }
+    // Both attachment and widget updates can run during route composition.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _session.setVisible(widget.visible);
+      if (mounted && identical(_session, session)) {
+        session.setVisible(widget.visible);
+      }
     });
   }
 
@@ -56,7 +68,7 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
       _session.dispose();
       _attach();
     } else {
-      _session.setVisible(widget.visible);
+      _syncVisibility();
     }
   }
 
