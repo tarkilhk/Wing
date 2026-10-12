@@ -87,6 +87,7 @@ final class RecentConversationSession extends ChangeNotifier {
   String? _catalogError;
   String? get catalogError => _catalogError;
   int _catalogGeneration = 0;
+  Future<void>? _catalogLoad;
   final RecentConversationSource _source;
   ValueListenable<ChatNoticeActivity?>? _activity;
   final ValueListenable<ChatNoticeActivity?> Function()? _activitySource;
@@ -117,10 +118,10 @@ final class RecentConversationSession extends ChangeNotifier {
   Timer? _cueTimer;
   ChatNoticeActivity? _pendingCue;
 
-  /// Each stack entry refreshes the shared catalog; mode activation is lazy.
-  /// Repeated intents coalesce while the catalog is being read or presented.
-  void activate() {
-    if (!active) return;
+  /// Activates switching lazily at a completed swipe or stack entry.
+  /// Repeated intents borrow the same catalog completion while a read is held.
+  Future<void> activate() {
+    if (!active) return Future.value();
     if (!_modeEnabled) {
       final activity = _activity = _activitySource!();
       activity.addListener(_activityChanged);
@@ -128,13 +129,14 @@ final class RecentConversationSession extends ChangeNotifier {
       _lastActivity = activity.value?.sequence ?? 0;
       _discardCue();
     }
-    if (!catalogLoading) unawaited(_loadCatalog(refresh: false));
+    if (!catalogLoading) _catalogLoad = _loadCatalog(refresh: false);
     _emit();
+    return _catalogLoad ?? Future.value();
   }
 
   void retryCatalog() {
     if (modeEnabled && !catalogLoading) {
-      unawaited(_loadCatalog(refresh: true));
+      _catalogLoad = _loadCatalog(refresh: true);
     }
   }
 

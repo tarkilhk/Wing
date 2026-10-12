@@ -95,6 +95,8 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       widget.session.active &&
       widget.session.entries.isNotEmpty &&
       !_selecting;
+  bool get _canSlide =>
+      !widget.session.modeEnabled || widget.session.entries.length > 1;
   bool get _canBrowse =>
       widget.session.modeEnabled && widget.session.entries.length > 1;
   List<int> get _cardOffsets =>
@@ -552,7 +554,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
 
   void _start(ConversationGestureSample sample) {
     if (!_canGesture ||
-        sample.kind == ConversationGestureKind.slide && !_canBrowse) {
+        sample.kind == ConversationGestureKind.slide && !_canSlide) {
       return;
     }
     _idleTimer?.cancel();
@@ -633,9 +635,29 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
         : _base;
     if (index == _base) {
       _returnToChat();
+    } else if (!widget.session.modeEnabled) {
+      unawaited(_activateSlide(index - _base));
     } else {
       unawaited(_select(index));
     }
+  }
+
+  Future<void> _activateSlide(int delta) async {
+    final generation = _captureGeneration;
+    _motion.stop();
+    final ready = widget.session.activate();
+    widget.session.setMembershipPaused(false);
+    if (widget.session.entries.length < 2) await ready;
+    if (!mounted ||
+        !widget.session.active ||
+        !_active ||
+        _stack ||
+        _gesture != null ||
+        generation != _captureGeneration) {
+      return;
+    }
+    widget.session.setMembershipPaused(false);
+    await _select(math.max(0, widget.session.selectedIndex) + delta);
   }
 
   void _cancel() {
@@ -1158,7 +1180,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                     event.position.dx > 24 &&
                     event.position.dx < MediaQuery.sizeOf(context).width - 24 &&
                     (_active || admitsConversationGesture(event));
-                recognizer.allowSlide = _canBrowse;
+                recognizer.allowSlide = _canSlide;
                 recognizer.onStart = _start;
                 recognizer.onUpdate = _update;
                 recognizer.onEnd = _end;

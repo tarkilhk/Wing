@@ -39,6 +39,11 @@ Valid edits save automatically after a short pause. Back finishes pending saves;
 
 ## Discussion groups
 
+Group discussions show their icon beside the title, using the same header,
+message formatting and composer in the chat and its Recents preview. Swipe
+sideways with two fingers to switch conversations, or pinch inward to browse
+Recents cards. Neither gesture requires opening Recents first.
+
 Tap the microphone in the group message box to dictate, using the voice-input
 choice from App settings. Stop finishes the recording; Cancel keeps your draft.
 Recognized text replaces the selected text or inserts at the cursor. Review it
