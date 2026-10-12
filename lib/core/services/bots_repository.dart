@@ -708,6 +708,7 @@ class BotsRepository {
         final base = _group(row);
         var preview = '';
         var working = false, blocked = false;
+        var activeMembers = const <String>[];
         BotGroupEvent? message, answer;
         final recentMessages = <BotGroupEvent>[];
         var complete = false;
@@ -728,6 +729,11 @@ class BotsRepository {
           final latest = room['latest_seq'];
           if (latest is! int || latest < 0) {
             throw const FormatException('Invalid latest sequence');
+          }
+          if (working) {
+            activeMembers = base.members
+                .map((member) => member.profile)
+                .toList();
           }
           // Scan backwards until both latest message and latest bot reply are
           // known. Non-message work events never establish recency or unread.
@@ -766,6 +772,7 @@ class BotsRepository {
             preview: preview,
             working: working,
             blocked: blocked,
+            activeMemberProfiles: activeMembers,
             lastMessageAt: message?.timestamp,
             lastMessageSequence: message?.sequence ?? 0,
             lastAnswerSequence: answer?.sequence ?? 0,

@@ -22,6 +22,8 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Bots and discussions
 
+- Show active discussion membership on bot cards and animate their saved shapes.
+
 - Prepare generated group pictures up to 8 MB before compressing the saved icon,
   fixing failures when a provider returns an image larger than 2 MB.
 

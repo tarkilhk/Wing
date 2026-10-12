@@ -32,6 +32,7 @@ class BotsSession extends ChangeNotifier {
   List<BotsRepository>? _repositories;
   final _bots = <String, List<BotRecord>>{};
   final _groups = <String, List<BotGroup>>{};
+  final _groupPresenceAvailable = <String>{};
   final _ready = <String>{};
   List<String> _errors = const [];
   String? _operationError;
@@ -166,7 +167,7 @@ class BotsSession extends ChangeNotifier {
   }
 
   BotsSnapshot get state => BotsSnapshot(
-    bots: _bots.values.expand((rows) => rows),
+    bots: _rosterWithGroupActivity(),
     groups: _groups.values
         .expand((rows) => rows)
         .map((room) => room.withPinned(_groupPins.contains(room.key))),
@@ -178,6 +179,23 @@ class BotsSession extends ChangeNotifier {
       (r) => BotInstance(r.scope.connectionIdentity, r.instance),
     ),
   );
+
+  Iterable<BotRecord> _rosterWithGroupActivity() sync* {
+    for (final bot in _bots.values.expand((rows) => rows)) {
+      final groupActive =
+          _groupPresenceAvailable.contains(bot.scope.connectionIdentity) &&
+          (_groups[bot.scope.connectionIdentity] ?? const <BotGroup>[]).any(
+            (group) =>
+                group.scope.connectionId == bot.scope.connectionId &&
+                group.activeMemberProfiles.contains(bot.profile.name),
+          );
+      yield groupActive &&
+              (bot.presence == BotPresence.idle ||
+                  bot.presence == BotPresence.unknown)
+          ? bot.withPresence(BotPresence.groupWorking)
+          : bot;
+    }
+  }
 
   BotsRepository repository(String identity) {
     if (_closed) throw StateError('Bots screen closed');
@@ -491,6 +509,9 @@ class BotsSession extends ChangeNotifier {
             .toSet();
         _bots.removeWhere((identity, _) => !identities.contains(identity));
         _groups.removeWhere((identity, _) => !identities.contains(identity));
+        _groupPresenceAvailable.removeWhere(
+          (identity) => !identities.contains(identity),
+        );
         _ready.removeWhere((identity) => !identities.contains(identity));
       }
       final sources = _repositories!;
@@ -569,6 +590,7 @@ class BotsSession extends ChangeNotifier {
                 else
                   room,
             ]);
+            _groupPresenceAvailable.add(identity);
             if (rooms.any((room) => !room.observationComplete)) {
               errors.add('${source.instance}: some groups could not refresh.');
             }
@@ -581,6 +603,7 @@ class BotsSession extends ChangeNotifier {
             if (!current()) return;
             _ready.remove(identity);
             errors.add('${source.instance}: groups are unavailable.');
+            _groupPresenceAvailable.remove(identity);
           }
           if (current()) notifyListeners();
         }
@@ -588,6 +611,9 @@ class BotsSession extends ChangeNotifier {
 
       await Future.wait([readGroups(), readBots()]);
     } catch (_) {
+      if (current()) {
+        _groupPresenceAvailable.clear();
+      }
       errors.add('Saved instances could not be loaded.');
     } finally {
       if (current()) {

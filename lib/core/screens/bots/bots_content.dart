@@ -383,10 +383,11 @@ class _BotsContentState extends State<BotsContent> {
       Column(children: rows);
   Widget status(String label) {
     final t = WingTokens.of(context);
-    final active = label == 'Running' || label == 'Needs input';
+    final running = label == 'Running' || label == 'Group running';
+    final active = running || label == 'Needs input';
     final c = label == 'Needs input'
         ? t.warning
-        : label == 'Running'
+        : running
         ? t.running
         : t.muted;
     return Row(
@@ -394,7 +395,7 @@ class _BotsContentState extends State<BotsContent> {
       children: [
         if (active) ...[
           Icon(
-            label == 'Running' ? Icons.autorenew : Icons.chat_bubble_outline,
+            running ? Icons.autorenew : Icons.chat_bubble_outline,
             size: 14,
             color: c,
           ),
@@ -448,6 +449,8 @@ class _BotsContentState extends State<BotsContent> {
     final key = GlobalKey();
     final label = bot.presence == BotPresence.working
         ? 'Running'
+        : bot.presence == BotPresence.groupWorking
+        ? 'Group running'
         : bot.presence == BotPresence.needsInput
         ? 'Needs input'
         : bot.presence == BotPresence.unknown
@@ -521,7 +524,9 @@ class _BotsContentState extends State<BotsContent> {
                   bot: bot,
                   name: bot.profile.name,
                   size: 48,
-                  mood: bot.presence == BotPresence.working
+                  mood:
+                      bot.presence == BotPresence.working ||
+                          bot.presence == BotPresence.groupWorking
                       ? BotAvatarMood.work
                       : bot.presence == BotPresence.needsInput
                       ? BotAvatarMood.think

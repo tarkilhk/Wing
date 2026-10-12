@@ -17,6 +17,12 @@ recent Hermes heartbeats. Worker activity drives the same shape animation and
 expires after 150 seconds without a heartbeat. **Needs input** takes precedence
 when a live chat is waiting for you.
 
+Members of a running discussion show **Group running** and use the active
+shape animation. This identifies participation in an active room; Hermes does
+not report which member is currently writing. Individual Running and Needs
+input states keep their priority. A completed or unavailable room clears the
+group indication.
+
 Bot Chats stay hidden from the default Chats list. Enable **Show automated chats** in Chats to reveal them, or open them directly through Bots. Displayed Bot Chats show a small version of the bot's avatar before their name. Other conversations retain their saved titles.
 
 ## Profile options

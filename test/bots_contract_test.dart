@@ -76,6 +76,205 @@ void main() {
   });
 
   test(
+    'group activity reaches only members and preserves individual input priority',
+    () async {
+      final fixture = BotsFixture();
+      fixture.readHook = (_, method, _) async => method == 'groups.state'
+          ? {
+              'room': {...fixture.room, 'latest_seq': 0},
+              'driver_status': {
+                'working': true,
+                'blocked': false,
+                'counts': {'running': 1},
+                'pending_actions': [],
+              },
+            }
+          : null;
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      await owner.refresh();
+      expect(owner.state.bots.map((bot) => bot.presence), [
+        BotPresence.groupWorking,
+        BotPresence.needsInput,
+        BotPresence.working,
+      ]);
+      expect(owner.state.bots.first.chat!.sessionId, 'atlas-chat');
+      expect(
+        owner.state.bots.first.preview,
+        contains('three useful approaches'),
+      );
+      expect(owner.state.groups.single.activeMemberProfiles, {'atlas', 'mira'});
+      expect(
+        () => owner.state.groups.single.activeMemberProfiles.add('forge'),
+        throwsUnsupportedError,
+      );
+      expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test(
+    'unavailable group reads clear roster activity and recovery restores it',
+    () async {
+      final fixture = BotsFixture();
+      var failure = '';
+      fixture.readHook = (_, method, _) async {
+        if (method == failure) {
+          throw StateError('Unavailable');
+        }
+        if (method == 'session.active_list') return {'sessions': []};
+        if (method == 'groups.state') {
+          return {
+            'room': {...fixture.room, 'latest_seq': 1},
+            'driver_status': {
+              'working': true,
+              'blocked': false,
+              'counts': {'running': 1},
+              'pending_actions': [],
+            },
+          };
+        }
+        return null;
+      };
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      for (final failed in [
+        '',
+        'groups.state',
+        '',
+        'groups.list',
+        '',
+        'groups.log',
+      ]) {
+        failure = failed;
+        await owner.refresh();
+        expect(
+          owner.state.bots.first.presence,
+          failed == 'groups.state' || failed == 'groups.list'
+              ? BotPresence.idle
+              : BotPresence.groupWorking,
+        );
+      }
+      expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test('unavailable source discovery revokes group activity', () async {
+    final fixture = BotsFixture();
+    fixture.readHook = (_, method, _) async => switch (method) {
+      'session.active_list' => {'sessions': []},
+      'groups.state' => {
+        'room': {...fixture.room, 'latest_seq': 0},
+        'driver_status': {
+          'working': true,
+          'blocked': false,
+          'counts': {'running': 1},
+          'pending_actions': [],
+        },
+      },
+      _ => null,
+    };
+    var unavailable = false;
+    final owner = BotsSession((_) async {
+      if (unavailable) throw StateError('Source unavailable');
+      return [fixture.repository];
+    });
+    addTearDown(owner.dispose);
+    await owner.refresh();
+    expect(owner.state.bots.first.presence, BotPresence.groupWorking);
+    unavailable = true;
+    await owner.refresh();
+    expect(owner.state.bots.first.presence, BotPresence.idle);
+    unavailable = false;
+    await owner.refresh();
+    expect(owner.state.bots.first.presence, BotPresence.groupWorking);
+  });
+
+  test(
+    'group observations update member rows before a held bot refresh',
+    () async {
+      final fixture = BotsFixture();
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      await owner.refresh();
+      final held = Completer<Map<String, dynamic>?>();
+      final published = Completer<void>();
+      fixture.readHook = (_, method, params) async => switch (method) {
+        'profiles.list' when params['include_sessions'] == true => held.future,
+        'groups.state' => {
+          'room': {...fixture.room, 'latest_seq': 0},
+          'driver_status': {
+            'working': true,
+            'blocked': false,
+            'counts': {'running': 1},
+            'pending_actions': [],
+          },
+        },
+        _ => null,
+      };
+      owner.addListener(() {
+        if (!published.isCompleted &&
+            owner.state.groups.single.activeMemberProfiles.isNotEmpty) {
+          published.complete();
+        }
+      });
+      final refresh = owner.refresh();
+      await published.future;
+      expect(owner.state.bots.first.presence, BotPresence.groupWorking);
+      expect(owner.state.loading, true);
+      held.complete(null);
+      await refresh;
+      expect(owner.state.bots.first.presence, BotPresence.groupWorking);
+      expect(owner.state.loading, false);
+    },
+  );
+
+  test('active group membership never crosses captured instances', () async {
+    final active = BotsFixture(), other = BotsFixture();
+    active.readHook = (_, method, _) async => switch (method) {
+      'session.active_list' => {'sessions': []},
+      'groups.state' => {
+        'room': {...active.room, 'latest_seq': 0},
+        'driver_status': {
+          'working': true,
+          'blocked': false,
+          'counts': {'running': 1},
+          'pending_actions': [],
+        },
+      },
+      _ => null,
+    };
+    other.readHook = (_, method, _) async =>
+        method == 'session.active_list' ? {'sessions': []} : null;
+    final repository = BotsRepository(
+      scope: WorkspaceScope(
+        connectionId: 'other-host',
+        connectionIdentity: 'other-instance',
+        profileName: 'default',
+      ),
+      instance: 'Other server',
+      read: other.read,
+      command: other.command,
+      ownership: other.ownership,
+      savedHistory: other.savedHistory,
+    );
+    final owner = BotsSession((_) async => [active.repository, repository]);
+    addTearDown(owner.dispose);
+    await owner.refresh();
+    expect(
+      owner.state.bots
+          .where((bot) => bot.scope.connectionIdentity == 'instance-1')
+          .map((bot) => bot.presence),
+      [BotPresence.groupWorking, BotPresence.groupWorking, BotPresence.idle],
+    );
+    expect(
+      owner.state.bots
+          .where((bot) => bot.scope.connectionIdentity == 'other-instance')
+          .map((bot) => bot.presence),
+      everyElement(BotPresence.idle),
+    );
+  });
+
+  test(
     'standalone group previews read stock logs without a shared store',
     () async {
       final fixture = BotsFixture();

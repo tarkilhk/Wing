@@ -89,6 +89,106 @@ void main() {
     }
   });
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'active group reaches member bot rows ${brightness.name} $scale',
+        (tester) async {
+          final fixture = BotsFixture();
+          for (final row in fixture.profiles) {
+            row['ui_meta']['hermes-bots']['imageKind'] = 'shape';
+          }
+          var working = true;
+          fixture.readHook = (_, method, _) async => switch (method) {
+            'session.active_list' => {'sessions': []},
+            'groups.state' => {
+              'room': {...fixture.room, 'latest_seq': 0},
+              'driver_status': {
+                'working': working,
+                'blocked': false,
+                'counts': working ? {'running': 1} : {'completed': 1},
+                'pending_actions': [],
+              },
+            },
+            _ => null,
+          };
+          final session = BotsSession((_) async => [fixture.repository]);
+          addTearDown(session.dispose);
+          await session.refresh();
+          expect(session.state.groups.single.working, true);
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final frame = GlobalKey();
+          var view = const BotsViewState();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              debugShowCheckedModeBanner: false,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: StatefulBuilder(
+                builder: (context, setState) => BotsContent(
+                  instanceHeader: const Text('Claw'),
+                  session: session,
+                  viewState: view,
+                  onViewChanged: (next) => setState(() => view = next),
+                  onOpenMenu: () {},
+                  onOpenChat: (_) async {},
+                  onOpenGroup: (_) async {},
+                ),
+              ),
+            ),
+          );
+          await tester.pump();
+          final atlas = find.byWidgetPredicate(
+            (w) => w is LiveBotAvatar && w.bot.profile.name == 'atlas',
+          );
+          expect(
+            find.text('Group running'),
+            scale == 1 ? findsNWidgets(2) : findsWidgets,
+          );
+          expect(tester.widget<LiveBotAvatar>(atlas).mood, BotAvatarMood.work);
+          Future<Uint8List> pixels() async => (await tester.runAsync(() async {
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.descendant(
+                of: atlas,
+                matching: find.byType(RepaintBoundary),
+              ),
+            );
+            final image = await boundary.toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.rawRgba,
+            );
+            image.dispose();
+            return Uint8List.fromList(bytes!.buffer.asUint8List());
+          }))!;
+          await tester.pump(const Duration(milliseconds: 150));
+          final before = await pixels();
+          await tester.pump(const Duration(milliseconds: 700));
+          expect(await pixels(), isNot(orderedEquals(before)));
+          await _pixels(
+            tester,
+            frame,
+            filename: 'active-group-bots-${brightness.name}-$scale',
+          );
+          working = false;
+          await session.refresh();
+          await tester.pump();
+          expect(find.text('Group running'), findsNothing);
+          expect(tester.widget<LiveBotAvatar>(atlas).mood, BotAvatarMood.idle);
+          expect(fixture.commands, isEmpty);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
   test(
     'eligibility requires an explicit saved classic shape, even with an asset',
     () async {

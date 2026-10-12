@@ -4,7 +4,7 @@ import 'hermes_profile.dart';
 import 'profile_session_key.dart';
 import 'profile_colors.dart';
 
-enum BotPresence { idle, working, needsInput, unknown }
+enum BotPresence { idle, working, groupWorking, needsInput, unknown }
 
 const botShapes = [
   'circle',
@@ -65,6 +65,26 @@ class BotRecord {
   final BotPresence presence;
   final Uint8List? avatar;
   String get id => '${scope.connectionIdentity}/${profile.name}';
+
+  BotRecord withPresence(BotPresence value) => BotRecord(
+    scope: scope,
+    instance: instance,
+    profile: profile,
+    title: title,
+    shape: shape,
+    color: color,
+    pinned: pinned,
+    hidden: hidden,
+    hasAvatar: hasAvatar,
+    revision: revision,
+    metadata: metadata,
+    chat: chat,
+    resolvedChat: resolvedChat,
+    workerLastActive: workerLastActive,
+    preview: preview,
+    presence: value,
+    avatar: avatar,
+  );
 
   /// Adopt a confirmed asset write independently of metadata acknowledgements.
   BotRecord withAvatar(Uint8List? image) => BotRecord(
@@ -139,6 +159,7 @@ class BotGroup {
     this.preview = '',
     this.working = false,
     this.blocked = false,
+    Iterable<String> activeMemberProfiles = const [],
     this.lastMessageAt,
     this.lastMessageSequence = 0,
     this.lastAnswerSequence = 0,
@@ -147,11 +168,16 @@ class BotGroup {
     this.iconRevision,
     Uint8List? picture,
   }) : members = List.unmodifiable(members),
+       activeMemberProfiles = Set.unmodifiable(activeMemberProfiles),
        picture = picture?.asUnmodifiableView();
   final WorkspaceScope scope;
   final String instance, id, name, preview;
   final List<BotGroupMember> members;
   final bool working, blocked;
+
+  /// Members of a room observed working in this read, not individual writers.
+  /// Retained room details never carry this positive activity into a failed read.
+  final Set<String> activeMemberProfiles;
 
   /// False means runtime/message reads failed; absent fields are unknown.
   final bool observationComplete;
@@ -179,6 +205,7 @@ class BotGroup {
     preview: preview,
     working: working,
     blocked: blocked,
+    activeMemberProfiles: activeMemberProfiles,
     lastMessageAt: lastMessageAt,
     lastMessageSequence: lastMessageSequence,
     lastAnswerSequence: lastAnswerSequence,
@@ -197,6 +224,7 @@ class BotGroup {
     preview: preview,
     working: working,
     blocked: blocked,
+    activeMemberProfiles: activeMemberProfiles,
     lastMessageAt: lastMessageAt,
     lastMessageSequence: lastMessageSequence,
     lastAnswerSequence: lastAnswerSequence,
@@ -219,6 +247,7 @@ class BotGroup {
     preview: preview,
     working: working,
     blocked: blocked,
+    activeMemberProfiles: activeMemberProfiles,
     lastMessageAt: lastMessageAt,
     lastMessageSequence: lastMessageSequence,
     lastAnswerSequence: lastAnswerSequence,
@@ -245,6 +274,7 @@ class BotGroup {
       preview: previous.preview,
       working: previous.working,
       blocked: previous.blocked,
+      activeMemberProfiles: activeMemberProfiles,
       lastMessageAt: previous.lastMessageAt,
       lastMessageSequence: previous.lastMessageSequence,
       lastAnswerSequence: previous.lastAnswerSequence,
