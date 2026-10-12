@@ -227,10 +227,39 @@ void main() {
               expect(avatars, findsNWidgets(count));
               final bounds = tester.getRect(icon);
               final faces = avatars.evaluate().toList();
-              final first = tester.getRect(find.byWidget(faces[0].widget));
-              final second = tester.getRect(find.byWidget(faces[1].widget));
-              expect(first.overlaps(second), true);
-              expect(second.left, greaterThan(first.left));
+              final rectangles = [
+                for (final face in faces)
+                  tester.getRect(find.byWidget(face.widget)),
+              ];
+              for (final rect in rectangles) {
+                expect(
+                  rectangles.where(
+                    (other) => other != rect && rect.overlaps(other),
+                  ),
+                  isNotEmpty,
+                );
+              }
+              final centers = rectangles.map((rect) => rect.center).toList();
+              if (count == 3) {
+                final byY = [...centers]..sort((a, b) => a.dy.compareTo(b.dy));
+                expect(byY[0].dy, lessThan(byY[1].dy));
+                expect(byY[1].dy, closeTo(byY[2].dy, .01));
+                expect(byY[0].dx, closeTo((byY[1].dx + byY[2].dx) / 2, .01));
+              } else if (count == 4) {
+                final xs = centers.map((point) => point.dx.round()).toSet();
+                final ys = centers.map((point) => point.dy.round()).toSet();
+                expect(xs.length, 2);
+                expect(ys.length, 2);
+              } else if (count >= 5) {
+                final center =
+                    centers.reduce((a, b) => a + b) / count.toDouble();
+                final distances = centers
+                    .map((point) => (point - center).distance)
+                    .toList();
+                for (final distance in distances) {
+                  expect(distance, closeTo(distances.first, .01));
+                }
+              }
               for (final avatar in faces) {
                 final rect = tester.getRect(find.byWidget(avatar.widget));
                 expect(bounds.contains(rect.topLeft), true);
