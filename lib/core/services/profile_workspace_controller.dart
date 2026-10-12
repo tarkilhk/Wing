@@ -3695,7 +3695,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final retained = retainedResource?._chats[key.sessionId];
     if (onRetainedReading != null &&
         _initialized &&
-        retainedResource?._loaded == true &&
         retainedResource?._offlineSnapshot == false &&
         !retainedResource!.blocksSession(key.sessionId) &&
         retained != null &&
@@ -3703,6 +3702,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         retained.reading.historySessionId != null) {
       _cancelOlderLoads();
       if (_current != retainedResource || switching) {
+        // Browser-list loading is independent of retained conversation reading.
         // Retained profile facts can be selected without rereading discovery,
         // chat lists and projects. Supersede any older profile navigation.
         ++_generation;

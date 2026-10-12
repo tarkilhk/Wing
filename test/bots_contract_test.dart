@@ -1773,6 +1773,52 @@ void main() {
       expect(await session.send('@everyone'), isTrue);
     },
   );
+  for (final complete in [false, true]) {
+    test(
+      'live group borrows Recents messages before its first runtime read complete=$complete',
+      () async {
+        final fixture = BotsFixture();
+        fixture.events.add({
+          'room_id': 'room-1',
+          'seq': 1,
+          'kind': 'message.member',
+          'actor': {'kind': 'member', 'id': 'atlas', 'profile': 'atlas'},
+          'created_at': 1791756000.0,
+          'payload': {'text': 'Cached latest reply'},
+        });
+        final cache = RecentGroupMessages();
+        addTearDown(cache.dispose);
+        final group = (await fixture.repository.groups(
+          groupMessages: cache,
+        )).single;
+        final tail = cache.borrow(group, limit: 10)!;
+        cache.record(group, tail, complete: complete);
+        expect(
+          cache.borrow(group, limit: 1)!.single.text,
+          'Cached latest reply',
+        );
+        final session = BotGroupSession(
+          fixture.repository,
+          group,
+          reads: BotGroupReadState(),
+          groupMessages: cache,
+          appearances: FixedGroupAppearances(const []),
+        );
+        addTearDown(session.dispose);
+        expect(session.events.single.text, 'Cached latest reply');
+        expect(session.runtime, isNull);
+        final cursors = <int>[];
+        fixture.readHook = (_, method, params) async {
+          if (method == 'groups.log') cursors.add(params['since_seq'] as int);
+          return null;
+        };
+        await session.refresh();
+        expect(cursors, [0]);
+        expect(session.events.single.text, 'Cached latest reply');
+      },
+    );
+  }
+
   test(
     'group capture retires held reads and resumes the exact log cursor',
     () async {

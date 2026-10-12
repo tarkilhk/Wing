@@ -272,11 +272,9 @@ class _SavedGroupPageState extends State<_SavedGroupPage> {
   late final _draft = TextEditingController(
     text: widget.card.preview?.draft ?? '',
   );
-  final _scroll = ScrollController();
   @override
   void dispose() {
     _draft.dispose();
-    _scroll.dispose();
     super.dispose();
   }
 
@@ -285,11 +283,6 @@ class _SavedGroupPageState extends State<_SavedGroupPage> {
     final group = widget.card.entry.group!;
     final preview = widget.card.preview?.group;
     final messages = preview?.messages ?? const <TranscriptMessage>[];
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scroll.hasClients) {
-        _scroll.jumpTo(_scroll.position.maxScrollExtent);
-      }
-    });
     return BotGroupConversation(
       group: group,
       appearances: widget.card.groupAppearance.byHandle.values,
@@ -302,7 +295,7 @@ class _SavedGroupPageState extends State<_SavedGroupPage> {
         ),
       ],
       transcript: ListView.builder(
-        controller: _scroll,
+        reverse: true,
         scrollCacheExtent: const ScrollCacheExtent.pixels(0),
         physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
@@ -316,11 +309,13 @@ class _SavedGroupPageState extends State<_SavedGroupPage> {
               )
             : BotGroupMessage(
                 group: group,
-                message: messages[index],
-                appearance: widget
-                    .card
-                    .groupAppearance
-                    .byHandle[messages[index].senderHandle],
+                message: messages[messages.length - 1 - index],
+                appearance:
+                    widget
+                        .card
+                        .groupAppearance
+                        .byHandle[messages[messages.length - 1 - index]
+                        .senderHandle],
                 loadImages: false,
               ),
       ),

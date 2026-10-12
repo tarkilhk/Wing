@@ -106,8 +106,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   bool get _canGesture =>
       widget.gesturesEnabled &&
       widget.session.active &&
-      widget.session.entries.isNotEmpty &&
-      !_selecting;
+      widget.session.entries.isNotEmpty;
   bool get _canSlide =>
       !widget.session.modeEnabled || widget.session.entries.length > 1;
   bool get _canBrowse =>
@@ -606,6 +605,11 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     if (!_canGesture ||
         sample.kind == ConversationGestureKind.slide && !_canSlide) {
       return;
+    }
+    if (_selecting) {
+      widget.session.cancelOpening();
+      _completeSelection();
+      _selecting = false;
     }
     _pausePreparation();
     _idleTimer?.cancel();

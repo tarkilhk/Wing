@@ -114,8 +114,9 @@ Your bubbles show User and an icon-only Copy aligned in the header. Bot replies
 show the sender's saved avatar and name, formatted text, links, code and
 timestamps, with Copy in the same header. Type `@` in the composer to choose a
 member; the picker inserts at the cursor. The conversation opens
-at its latest messages; scrolling up keeps your place as replies arrive. The down
-arrow returns to the latest messages with the same motion as normal chats.
+at its latest messages and renders older messages as you scroll up. Your reading
+window stays in place as replies arrive; reaching the bottom or using the down
+arrow shows those replies. The arrow uses the same motion as normal chats.
 
 Pinch inward on the discussion to open the same cards as normal chat Recents.
 The group remains mounted with its draft and reading position. Tap its card or
@@ -124,8 +125,9 @@ Opening another conversation uses its normal chat window; Back restores the
 group's cards. Cards do not mark group messages as read.
 
 Recents and the card browser share a cached list and screenshots. Reopening uses
-the saved view while background reads refresh it. If a group or profile refresh
-fails, its known conversations stay available with an error; a confirmed removal
+the saved view while background reads refresh it. You can swipe to another
+conversation while one is opening. If a group or profile refresh fails,
+its known conversations stay available with an error; a confirmed removal
 deletes the entry.
 
 Group cards and open discussions use the same saved member artwork. While a

@@ -44,6 +44,13 @@ class _ScrollCaptureViewportState extends State<ScrollCaptureViewport> {
       _lastBounds != null &&
       data.entries.every((entry) => _lastBounds![entry.key] == entry.value);
 
+  // Android capture addresses the physical distance from the transcript top.
+  // Flutter's reversed list instead measures pixels from its bottom.
+  bool get _reversed =>
+      widget.controller.position.axisDirection == AxisDirection.up;
+  double _captureOffset(double pixels) =>
+      _reversed ? widget.controller.position.maxScrollExtent - pixels : pixels;
+
   Map<String, Object>? _metrics() {
     if (!mounted ||
         !widget.controller.hasClients ||
@@ -61,7 +68,7 @@ class _ScrollCaptureViewportState extends State<ScrollCaptureViewport> {
       'top': origin.dy,
       'right': origin.dx + size.width,
       'bottom': origin.dy + size.height,
-      'offset': scroll.pixels * ratio,
+      'offset': _captureOffset(scroll.pixels) * ratio,
       'min': scroll.minScrollExtent * ratio,
       'max': scroll.maxScrollExtent * ratio,
       'ratio': ratio,
@@ -103,10 +110,9 @@ class _ScrollCaptureViewportState extends State<ScrollCaptureViewport> {
         final ratio = MediaQuery.devicePixelRatioOf(context);
         final position = widget.controller.position;
         widget.controller.jumpTo(
-          (offset / ratio).clamp(
-            position.minScrollExtent,
-            position.maxScrollExtent,
-          ),
+          _captureOffset(
+            offset / ratio,
+          ).clamp(position.minScrollExtent, position.maxScrollExtent),
         );
         // Wait for rasterizable geometry, including lazy layout/Markdown growth.
         await WidgetsBinding.instance.endOfFrame;

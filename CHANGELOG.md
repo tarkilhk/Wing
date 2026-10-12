@@ -4,6 +4,10 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Reveal cached Recents chats without waiting for a profile browser load, allow
+  swipes during opening, and render group discussions from the bottom without
+  stepping through older messages. Reuse cached group messages on entry.
+
 - Use saved group member artwork in Recents cards, update it when avatars arrive,
   and share the same appearance preparation and screenshot revisions with chats.
 

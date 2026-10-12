@@ -35,6 +35,21 @@ class BotGroupSession extends ChangeNotifier {
     repository.retain();
     _appearance = appearances.appearanceForGroup(group);
     appearances.addListener(_appearanceChanged);
+    // Discovery already obtained this exact room's bounded message tail.
+    // It is passive reading, never runtime/action authority or a log cursor.
+    final cache = groupMessages;
+    if (cache != null) {
+      // Sparse logs can cover fewer than ten messages without covering history.
+      // Borrow the largest covered tail; completeness never grants authority.
+      for (var limit = RecentGroupMessages.messageLimit; limit > 0; limit--) {
+        final tail = cache.borrow(group, limit: limit);
+        if (tail == null) continue;
+        for (final event in tail) {
+          _events[event.sequence] = event;
+        }
+        break;
+      }
+    }
   }
   final BotGroupAppearanceSource appearances;
   late BotGroupAppearance _appearance;

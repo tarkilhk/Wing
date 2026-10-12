@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/bot_group_conversation.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
 import 'package:wing/core/services/bot_group_read_state.dart';
@@ -92,6 +93,48 @@ Future<void> _render(WidgetTester tester, GlobalKey key, String name) async {
 }
 
 void main() {
+  testWidgets('live group prepares only the bottom on its first loaded frame', (
+    tester,
+  ) async {
+    final fixture = BotsFixture();
+    fixture.events.addAll([
+      for (var i = 1; i <= 100; i++)
+        _event(i, 'message.member', 'atlas', 'Message $i\n' * 20),
+    ]);
+    final group = (await fixture.repository.groups(groupMessages: null)).single;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BotGroupScreen(
+          stopVoicePlayback: () async {},
+          voiceInputSettings: () => null,
+          createSession: () => BotGroupSession(
+            fixture.repository,
+            group,
+            reads: BotGroupReadState(),
+            groupMessages: null,
+            appearances: FixedGroupAppearances(const []),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final messages = tester
+        .widgetList<BotGroupMessage>(find.byType(BotGroupMessage))
+        .toList();
+    expect(
+      messages.any((message) => message.message.id == 'room-1:100'),
+      isTrue,
+    );
+    expect(
+      messages.every(
+        (message) =>
+            int.parse(message.message.id.toString().split(':').last) > 90,
+      ),
+      isTrue,
+    );
+    expect(messages.length, lessThan(10));
+  });
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
@@ -656,9 +699,10 @@ void main() {
           await session.refresh();
           await tester.pumpAndSettle();
           await _settleGroupMarkdown(tester);
-          transcript.jumpTo(0);
+          transcript.jumpTo(transcript.position.maxScrollExtent);
           await tester.pumpAndSettle();
-          final before = transcript.offset;
+          final anchor = find.byKey(const ValueKey(('group-message', 1)));
+          final before = tester.getRect(anchor);
           fixture.events.add(
             _event(
               5,
@@ -669,7 +713,8 @@ void main() {
           );
           await session.refresh();
           await tester.pumpAndSettle();
-          expect(transcript.offset, before);
+          await _settleGroupMarkdown(tester);
+          expect(tester.getRect(anchor).top, closeTo(before.top, 1));
           expect(find.byTooltip('Jump to latest messages'), findsOneWidget);
           await _render(tester, frame, 'reading-${brightness.name}-$scale');
           await tester.tap(find.byTooltip('Jump to latest messages'));
@@ -681,6 +726,11 @@ void main() {
             lessThan(transcript.position.maxScrollExtent),
           );
           await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey(('group-message', 5))),
+            findsOneWidget,
+          );
+          expect(transcript.offset, closeTo(0, .01));
           await _render(tester, frame, 'draft-${brightness.name}-$scale');
           fixture.sendLost = true;
           await tester.tap(send);
@@ -823,7 +873,7 @@ void main() {
         final transcript = tester
             .widget<ListView>(find.byKey(const ValueKey('group-transcript')))
             .controller!;
-        transcript.jumpTo(0);
+        transcript.jumpTo(transcript.position.maxScrollExtent);
         await tester.pump();
         final readingOffset = transcript.offset;
         approval = true;

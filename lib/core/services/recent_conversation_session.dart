@@ -251,6 +251,16 @@ final class RecentConversationSession extends ChangeNotifier {
     return result.toList();
   }
 
+  /// Retire an opening when a new navigation gesture takes over its cover.
+  /// Transport may finish, but it no longer owns selection or error publication.
+  void cancelOpening() {
+    if (_opening == null) return;
+    ++_selectionGeneration;
+    _opening = null;
+    _error = null;
+    _emit();
+  }
+
   Future<bool> select(RecentConversationKey key) async {
     if (!active || !entries.any((entry) => entry.key == key)) return false;
     if (!_source.admits(key)) {

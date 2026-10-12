@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import '../../widgets/bot_group_conversation.dart';
 import '../../widgets/recent_conversations/conversation_gestures.dart';
 import '../../widgets/recent_conversations/conversation_route_scope.dart';
@@ -63,6 +64,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           null;
 
   final _scroll = ScrollController();
+  int _displayedSequence = 0;
   final _rowHeights = <int, double>{};
   bool _following = true, _capturing = false, _foreground = true;
   bool _inspectingDetails = false;
@@ -163,7 +165,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           _inspectingDetails ||
           !_following ||
           !_scroll.hasClients ||
-          _scroll.position.extentAfter >= 80) {
+          _scroll.position.extentBefore >= 80) {
         return;
       }
       final sequence = _session.events
@@ -178,10 +180,18 @@ class _BotGroupScreenState extends State<BotGroupScreen>
 
   void _scrollChanged() {
     if (!_capturing && !_jumpingToLatest && _scroll.hasClients) {
-      final following = _scroll.position.extentAfter < 80;
+      final following = _scroll.position.extentBefore < 80;
       if (following != _following && mounted) {
-        setState(() => _following = following);
-        if (following) _acknowledgeLatest();
+        setState(() {
+          _following = following;
+          if (following) {
+            _displayedSequence = _session.events.lastOrNull?.sequence ?? 0;
+          }
+        });
+        if (following) {
+          _followLatest();
+          _acknowledgeLatest();
+        }
       }
     }
   }
@@ -198,7 +208,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           !_capturing &&
           !_jumpingToLatest &&
           _scroll.hasClients) {
-        _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        _scroll.jumpTo(0);
         _acknowledgeLatest();
       }
     });
@@ -243,11 +253,15 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     _voiceInput.addListener(_voiceChanged);
     _scroll.addListener(_scrollChanged);
     _focus.addListener(_composerFocusChanged);
+    _displayedSequence = _session.events.lastOrNull?.sequence ?? 0;
     _session.setVisible(true);
   }
 
   void _changed() {
     if (!mounted) return;
+    if (_following) {
+      _displayedSequence = _session.events.lastOrNull?.sequence ?? 0;
+    }
     setState(() {});
     _followLatest();
     _acknowledgeLatest();
@@ -256,15 +270,12 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   Future<void> _latest() async {
     setState(() {
       _following = true;
+      _displayedSequence = _session.events.lastOrNull?.sequence ?? 0;
       _jumpingToLatest = true;
     });
     try {
       if (_scroll.hasClients) {
-        await scrollToTranscriptLatest(
-          context,
-          _scroll,
-          offset: _scroll.position.maxScrollExtent,
-        );
+        await scrollToTranscriptLatest(context, _scroll, offset: 0);
       }
     } finally {
       _jumpingToLatest = false;
@@ -488,7 +499,13 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   Widget build(BuildContext context) {
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final enlargedText = MediaQuery.textScalerOf(context).scale(16) >= 24;
-    final messages = _session.events.where((event) => event.isMessage).toList();
+    // Keep the visible reading window fixed while arrivals extend its bottom.
+    // Reaching the bottom or choosing Latest admits the new rows together.
+    final messages = _session.events
+        .where(
+          (event) => event.isMessage && event.sequence <= _displayedSequence,
+        )
+        .toList();
     final canStop =
         !_session.acting &&
         (_session.runtime?.working == true ||
@@ -571,13 +588,17 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                     child: ListView.builder(
                       key: const ValueKey('group-transcript'),
                       controller: _scroll,
+                      reverse: true,
+                      scrollCacheExtent: ScrollCacheExtent.pixels(
+                        (constraints.maxHeight / 2).clamp(0.0, 250.0),
+                      ),
                       padding: const EdgeInsets.all(16),
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       itemCount: messages.length + 1,
                       itemBuilder: (context, index) {
-                        if (index < messages.length) {
-                          final event = messages[index];
+                        if (index > 0) {
+                          final event = messages[messages.length - index];
                           return TranscriptScrollAnchor(
                             key: ValueKey(('group-row', event.sequence)),
                             initialHeight: _rowHeights[event.sequence] ?? 0,

@@ -23,6 +23,8 @@ import 'support/profile_browser_fixture.dart';
 import 'support/bots_fixture.dart';
 
 class _RecentsFixture extends ProfileBrowserFixture {
+  Completer<void>? heldResume;
+  Completer<void>? resumeStarted;
   bool unread = false;
   bool failDiscovery = false;
   @override
@@ -35,7 +37,13 @@ class _RecentsFixture extends ProfileBrowserFixture {
         return delegate.discover();
       },
       get: delegate.read,
-      rpc: delegate.call,
+      rpc: (method, params) async {
+        if (method == 'session.resume' && heldResume != null) {
+          if (resumeStarted?.isCompleted == false) resumeStarted!.complete();
+          await heldResume!.future;
+        }
+        return delegate.call(method, params);
+      },
       ownedPatch: (path, body, canDispatch, onDispatched) async {
         if (!canDispatch()) throw StateError('Read superseded');
         expect(path, 'sessions/shared-id');
@@ -360,6 +368,56 @@ void main() {
         fixture.calls.where((call) => call.$2 == 'session.resume'),
         hasLength(resumes),
       );
+    },
+  );
+
+  test(
+    'Recents reveals cached reading without a loaded profile browser',
+    () async {
+      final scope = WorkspaceScope(
+        connectionId: controller.connection.id,
+        connectionIdentity: controller.connectionIdentity,
+        profileName: 'work',
+      );
+      final key = ProfileSessionKey(scope, 'shared-id');
+      await controller.openSession(key);
+      final cached = controller.current!.chat!;
+      expect(controller.current!.loaded, isFalse);
+      await controller.openSession(
+        ProfileSessionKey(
+          WorkspaceScope(
+            connectionId: controller.connection.id,
+            connectionIdentity: controller.connectionIdentity,
+            profileName: 'personal',
+          ),
+          'shared-id',
+        ),
+      );
+      final activity = ValueNotifier<ChatNoticeActivity?>(null);
+      addTearDown(activity.dispose);
+      final visit = controller.recentConversationSession(
+        recents: emptyRecents(),
+        entries: [RecentConversationEntry.chat(key: key, title: 'Work')],
+        onOpenGroup: (_) async {},
+        activity: activity,
+      );
+      addTearDown(visit.dispose);
+      final held = fixture.heldResume = Completer<void>();
+      fixture.resumeStarted = Completer<void>();
+      var revealed = false;
+      final open = visit
+          .select(RecentConversationKey.chat(key))
+          .then((value) => revealed = value);
+      await fixture.resumeStarted!.future;
+      await Future<void>.delayed(Duration.zero);
+      try {
+        expect(revealed, isTrue);
+        expect(controller.current!.chat, same(cached));
+        expect(cached.reading.messages.single['content'], 'Saved reply');
+      } finally {
+        held.complete();
+        await open;
+      }
     },
   );
 

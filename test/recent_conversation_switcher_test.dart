@@ -374,6 +374,56 @@ void main() {
     }
   });
 
+  testWidgets('passive group prepares only the bottom on its first frame', (
+    tester,
+  ) async {
+    final fixture = BotsFixture();
+    final group = (await fixture.repository.groups(groupMessages: null)).single;
+    final entry = RecentConversationEntry.group(group);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ConversationPreview(
+          connectionLabel: 'Host',
+          card: RecentConversationCard(
+            entry: entry,
+            preview: RecentConversationPreview(
+              entry: entry,
+              reading: TranscriptReadingSnapshot(
+                messages: const [],
+                historySessionId: null,
+              ),
+              draft: '',
+              scopeLabel: 'Group',
+              group: GroupConversationPreview(
+                messages: [
+                  for (var i = 0; i < 100; i++)
+                    TranscriptMessage.discussion(
+                      timestamp: DateTime(2026, 10, 12),
+                      id: 'room:$i',
+                      text: 'Message $i\n' * 20,
+                      sender: 'Atlas',
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final messages = tester
+        .widgetList<BotGroupMessage>(find.byType(BotGroupMessage))
+        .toList();
+    expect(messages.any((message) => message.message.id == 'room:99'), isTrue);
+    expect(
+      messages.every(
+        (message) =>
+            int.parse(message.message.id.toString().split(':').last) > 90,
+      ),
+      isTrue,
+    );
+    expect(messages.length, lessThan(10));
+  });
+
   testWidgets('shared group identity never invents unresolved member avatars', (
     tester,
   ) async {
@@ -1679,6 +1729,55 @@ void main() {
         );
       }
     }
+
+    testWidgets('swipe supersedes a held conversation opening', (tester) async {
+      await mount(tester);
+      final held = source.waitingOpen = Completer<void>();
+      final first = switcher.currentState!.selectAdjacent(1);
+      await _finishFrames(tester);
+      source.waitingOpen = null;
+      await _twoContacts(
+        tester,
+        const Offset(220, 400),
+        const Offset(300, 400),
+        const Offset(50, 400),
+        const Offset(130, 400),
+      );
+      expect(source.opens, [source.entries[1].key, source.entries[2].key]);
+      expect(source.selected, source.entries[2].key);
+      held.complete();
+      await _finishFrames(tester);
+      await first;
+      expect(source.selected, source.entries[2].key);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'swipe returns from a held opening and ignores its late failure',
+      (tester) async {
+        await mount(tester);
+        final held = source.waitingOpen = Completer<void>();
+        final opening = switcher.currentState!.selectAdjacent(1);
+        await _finishFrames(tester);
+        await _twoContacts(
+          tester,
+          const Offset(100, 400),
+          const Offset(180, 400),
+          const Offset(270, 400),
+          const Offset(350, 400),
+        );
+        await opening;
+        expect(source.selected, source.entries[0].key);
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        held.completeError(StateError('Retired opening failed'));
+        await _finishFrames(tester);
+        expect(source.opens, [source.entries[1].key]);
+        expect(source.selected, source.entries[0].key);
+        expect(session.error, isNull);
+        expect(session.active, isTrue);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('card opens during expansion and waits for a painted chat', (
       tester,
