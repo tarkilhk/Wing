@@ -68,7 +68,8 @@ name blank to use the selected bots' names, or enter a name of up to 64 characte
 Choose a Hermes instance when several are ready.
 
 The default room icon overlaps the selected bots’ avatars inside a square frame
-with a random color from Hermes/Wing’s usual palette. The frame color stays fixed
+with a random color from Hermes/Wing’s usual palette. Three members form a
+triangle, four a square, five a pentagon and six a hexagon. The frame color stays fixed
 while you edit and is saved on Hermes. Renaming the room keeps its member avatars.
 
 Upload a room picture, generate one from a description, or remove it. Generation

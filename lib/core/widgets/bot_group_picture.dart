@@ -69,32 +69,32 @@ class BotGroupPicture extends StatelessWidget {
       );
     }
     final members = avatars.take(6).toList();
-    final columns = members.length == 4 ? 2 : math.min(members.length, 3);
-    final rows = (members.length / columns).ceil();
-    const horizontalStep = .76;
-    const verticalStep = .86;
+    final points = _memberPositions(members.length);
+    final minX = points.map((point) => point.dx).reduce(math.min);
+    final minY = points.map((point) => point.dy).reduce(math.min);
+    final width = points.map((point) => point.dx).reduce(math.max) - minX + 1;
+    final height = points.map((point) => point.dy).reduce(math.max) - minY + 1;
+    final layers = points.indexed.toList()
+      ..sort((a, b) => a.$2.dy.compareTo(b.$2.dy));
     return LayoutBuilder(
       builder: (_, constraints) {
         final avatarSize =
             .9 *
             math.min(
-              constraints.maxWidth / (1 + (columns - 1) * horizontalStep),
-              constraints.maxHeight / (1 + (rows - 1) * verticalStep),
+              constraints.maxWidth / width,
+              constraints.maxHeight / height,
             );
-        final height = avatarSize * (1 + (rows - 1) * verticalStep);
+        final origin = Offset(
+          (constraints.maxWidth - width * avatarSize) / 2 - minX * avatarSize,
+          (constraints.maxHeight - height * avatarSize) / 2 - minY * avatarSize,
+        );
         return Stack(
-          children: members.indexed.map((entry) {
-            final (index, bot) = entry;
-            final row = index ~/ columns;
-            final rowCount = math.min(columns, members.length - row * columns);
-            final width = avatarSize * (1 + (rowCount - 1) * horizontalStep);
+          children: layers.map((entry) {
+            final (index, point) = entry;
+            final bot = members[index];
             return Positioned(
-              left:
-                  (constraints.maxWidth - width) / 2 +
-                  (index % columns) * avatarSize * horizontalStep,
-              top:
-                  (constraints.maxHeight - height) / 2 +
-                  row * avatarSize * verticalStep,
+              left: origin.dx + point.dx * avatarSize,
+              top: origin.dy + point.dy * avatarSize,
               child: bot == null
                   ? Icon(
                       Icons.smart_toy_outlined,
@@ -113,5 +113,19 @@ class BotGroupPicture extends StatelessWidget {
         );
       },
     );
+  }
+
+  List<Offset> _memberPositions(int count) {
+    if (count == 1) return const [Offset.zero];
+    if (count == 2) return const [Offset(-.38, 0), Offset(.38, 0)];
+    final radius = .78 / (2 * math.sin(math.pi / count));
+    final start = count == 4 ? -math.pi * .75 : -math.pi * .5;
+    return [
+      for (var index = 0; index < count; index++)
+        Offset(
+          math.cos(start + index * 2 * math.pi / count) * radius,
+          math.sin(start + index * 2 * math.pi / count) * radius,
+        ),
+    ];
   }
 }

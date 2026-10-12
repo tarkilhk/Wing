@@ -11,6 +11,8 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Bots and discussions
 
+- Arrange overlapping group avatars as a triangle, square, pentagon or hexagon according to member count.
+
 - Dictate group messages with the same microphone, recording controls and
   Local/Hermes voice-input settings as normal chats.
 - Default group icons show member bot avatars inside a square frame with a random Hermes palette color.
