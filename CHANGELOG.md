@@ -16,6 +16,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Bots and discussions
 
+- Prepare generated group pictures up to 8 MB before compressing the saved icon,
+  fixing failures when a provider returns an image larger than 2 MB.
+
 - Arrange overlapping group avatars as a triangle, square, pentagon or hexagon according to member count.
 
 - Dictate group messages with the same microphone, recording controls and

@@ -332,7 +332,9 @@ final class AttachmentImageWorker {
 /// Pure isolate entry point for a room icon; callers never import image codecs.
 Uint8List encodeRoomThumbnail((Uint8List, int) input) {
   final (bytes, maxBytes) = input;
-  if (bytes.length > 2000000) throw StateError('Picture exceeds 2 MB');
+  if (bytes.length > maxRoomPictureInputBytes) {
+    throw StateError('Room picture exceeds 8 MB');
+  }
   final inspection = inspectAttachmentImage(bytes);
   final source = attachmentImageCodecSource(bytes, inspection);
   final decoded = switch (inspection.format) {

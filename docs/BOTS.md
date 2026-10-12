@@ -78,8 +78,9 @@ triangle, four a square, five a pentagon and six a hexagon. The frame color stay
 while you edit and is saved on Hermes. Renaming the room keeps its member avatars.
 
 Upload a room picture, generate one from a description, or remove it. Generation
-uses the chosen instance's default profile image provider. Uploads accept PNG,
-JPEG and WebP up to 2 MB. Wing crops a 256 px square thumbnail and compresses it
+uses the chosen instance's default profile image provider and accepts generated
+originals up to 8 MB. Uploads accept PNG, JPEG and WebP up to 2 MB. Wing crops a
+256 px square thumbnail and compresses it
 to at most 45 KB for upload. Creating the group saves its picture on the chosen
 Hermes backend; another Wing device connected to that backend can load it.
 Removing a picture restores the member-avatar collage. Icons appear in the group list and

@@ -10,6 +10,7 @@ import 'package:image/image.dart' as image;
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/bots_repository.dart';
+import 'package:wing/core/services/attachment_image_worker.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -125,7 +126,7 @@ void main() {
         {
           'prompt': 'Team emblem',
           'aspect_ratio': 'square',
-          'max_bytes': 2000000,
+          'max_bytes': 8000000,
         },
         {
           'prompt': 'Bot emblem',
@@ -133,6 +134,68 @@ void main() {
           'max_bytes': 2000000,
         },
       ]);
+    },
+  );
+
+  test(
+    'production group generation admits larger originals and bounds the icon',
+    () async {
+      final original = image.encodePng(
+        image.Image(width: 1024, height: 768, numChannels: 3),
+        level: 0,
+      );
+      expect(original.length, greaterThan(2000000));
+      final repository = _imageRepository((method, params) async {
+        expect(method, 'image.generate');
+        expect(params.containsKey('profile'), false);
+        return {
+          'available': true,
+          'success': true,
+          'image': '/generated/room.png',
+          if (original.length <= (params['max_bytes'] as int))
+            'image_data': 'data:image/png;base64,${base64Encode(original)}',
+        };
+      });
+      final bytes = await repository.generateGroupPicture(
+        'Room emblem',
+        () => true,
+        () {},
+      );
+      expect(bytes, original);
+      final thumbnail = encodeRoomThumbnail((
+        bytes,
+        BotsRepository.groupPictureMaxBytes,
+      ));
+      expect(thumbnail.length, lessThanOrEqualTo(45000));
+      final decoded = image.decodeImage(thumbnail)!;
+      expect((decoded.width, decoded.height), (256, 256));
+    },
+  );
+
+  test(
+    'generated group originals above 8 MB are rejected before decoding',
+    () async {
+      final repository = _imageRepository(
+        (_, _) async => {
+          'available': true,
+          'success': true,
+          'image_data': base64Encode(Uint8List(8000001)),
+        },
+      );
+      await expectLater(
+        repository.generateGroupPicture('Room emblem', () => true, () {}),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        events().singleWhere(
+          (event) => event['event'] == 'bots.image_generation_failed',
+        )['stage'],
+        'decode',
+      );
+      expect(
+        () => encodeRoomThumbnail((Uint8List(8000001), 45000)),
+        throwsA(isA<StateError>()),
+      );
     },
   );
 

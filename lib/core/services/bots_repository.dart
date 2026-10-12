@@ -291,7 +291,9 @@ class BotsRepository {
           'name': bot.profile.name,
           'asset': 'avatar',
         });
-        if (result['found'] == true) avatar = _image(result['data']);
+        if (result['found'] == true) {
+          avatar = _image(result['data'], maxBytes: 2000000);
+        }
       } catch (_) {
         /* Keep the deterministic face when the asset cannot load. */
       }
@@ -396,6 +398,7 @@ class BotsRepository {
       prompt,
       'bot_avatar',
       'Image generation did not complete',
+      2000000,
       canDispatch,
       onDispatched,
     );
@@ -410,6 +413,7 @@ class BotsRepository {
     prompt,
     'group_picture',
     'Room picture generation did not complete',
+    maxRoomPictureInputBytes,
     canDispatch,
     onDispatched,
   );
@@ -419,6 +423,7 @@ class BotsRepository {
     String prompt,
     String operation,
     String failureMessage,
+    int maxBytes,
     bool Function() canDispatch,
     void Function() onDispatched,
   ) async {
@@ -429,7 +434,7 @@ class BotsRepository {
       result = await _command(
         profile,
         'image.generate',
-        {'prompt': prompt, 'aspect_ratio': 'square', 'max_bytes': 2000000},
+        {'prompt': prompt, 'aspect_ratio': 'square', 'max_bytes': maxBytes},
         canDispatch,
         onDispatched,
       );
@@ -445,7 +450,7 @@ class BotsRepository {
         stage = 'decode';
         failure = 'invalid_image_data';
       }
-      return _image(data);
+      return _image(data, maxBytes: maxBytes);
     } catch (error, stack) {
       logConnectionDiagnostic(
         'bots.image_generation_failed',
@@ -747,7 +752,7 @@ class BotsRepository {
               return room;
             }
             return room.withIcon(
-              picture: data == null ? null : _image(data),
+              picture: data == null ? null : _image(data, maxBytes: 2000000),
               color: ProfileColorChoice.values[slot + 1],
               revision: revision,
             );
@@ -1266,17 +1271,18 @@ class BotsRepository {
     null || String() || bool() || num() => value,
     _ => throw const FormatException('Invalid bot metadata'),
   };
-  static Uint8List _image(Object? value) {
+  static Uint8List _image(Object? value, {required int maxBytes}) {
     final text = _requiredText(value);
-    if (text.length > 2800000) {
-      throw const FormatException('Avatar exceeds 2 MB');
+    // Bound the base64 allocation, including a short data-URL media header.
+    if (text.length > ((maxBytes + 2) ~/ 3) * 4 + 128) {
+      throw const FormatException('Image exceeds its input limit');
     }
     final data = text.startsWith('data:')
         ? text.substring(text.indexOf(',') + 1)
         : text;
     final bytes = base64Decode(data);
-    if (bytes.length > 2000000) {
-      throw const FormatException('Avatar exceeds 2 MB');
+    if (bytes.length > maxBytes) {
+      throw const FormatException('Image exceeds its input limit');
     }
     inspectAttachmentImage(bytes);
     return bytes;

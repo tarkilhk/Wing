@@ -5,6 +5,9 @@ import '../models/attachment_draft.dart';
 
 /// Client processing ceilings, separate from the stock 25 MiB image upload cap.
 const maxAttachmentImageInputBytes = 64 * 1024 * 1024;
+// Generated room originals use stock Hermes' 8 MB transfer budget before the
+// worker crops them to the much smaller saved metadata icon.
+const maxRoomPictureInputBytes = 8000000;
 const maxAttachmentImageOutputBytes = 25 * 1024 * 1024;
 const maxAttachmentImagePixels = 16 * 1024 * 1024;
 const maxAttachmentImageSide = 16384;

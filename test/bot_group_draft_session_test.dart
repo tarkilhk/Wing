@@ -598,8 +598,56 @@ void main() {
       expect(fixture.commands.single.$3, {
         'prompt': 'Mint wing emblem',
         'aspect_ratio': 'square',
-        'max_bytes': 2000000,
+        'max_bytes': 8000000,
       });
+    },
+  );
+
+  test(
+    'successive generated group pictures above 2 MB are transferred and cropped',
+    () async {
+      final (fixture, session) = await roster();
+      final large = image.encodePng(
+        image.Image(width: 1024, height: 768, numChannels: 3)
+          ..clear(image.ColorRgb8(38, 128, 119)),
+        level: 0,
+      );
+      expect(large.length, greaterThan(2000000));
+      final responses = [_photo(), _photo(), large, large];
+      var attempt = 0;
+      fixture.commandHook = (_, method, params) async {
+        if (method != 'image.generate') return null;
+        final bytes = responses[attempt++];
+        // Stock Hermes saves the original, then omits image_data above the cap.
+        return {
+          'available': true,
+          'success': true,
+          'image': '/generated/room.png',
+          if (bytes.length <= (params['max_bytes'] as int))
+            'image_data': base64Encode(bytes),
+        };
+      };
+      final draft = BotGroupDraftSession(session);
+      addTearDown(draft.dispose);
+      for (final bot in draft.bots.take(2)) {
+        draft.select(bot, true);
+      }
+      for (var i = 0; i < responses.length; i++) {
+        await draft.generatePicture('Team emblem', canUse: () => true);
+        expect(draft.error, isNull, reason: 'Generation ${i + 1}');
+        expect(draft.pictureBusy, false);
+        expect(
+          draft.picture!.length,
+          lessThanOrEqualTo(BotsRepository.groupPictureMaxBytes),
+        );
+        final decoded = image.decodeImage(draft.picture!);
+        expect((decoded!.width, decoded.height), (256, 256));
+      }
+      expect(attempt, 4);
+      expect(
+        fixture.commands.every((call) => call.$2 == 'image.generate'),
+        true,
+      );
     },
   );
 
