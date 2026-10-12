@@ -26,6 +26,7 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/widgets/bot_avatar.dart';
 import 'package:wing/core/widgets/bot_group_identity.dart';
+import 'package:wing/core/widgets/bot_group_conversation.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/recent_conversation_session.dart';
 import 'package:wing/core/services/bots_session.dart';
@@ -84,10 +85,13 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   int previewReads = 0, historyReads = 0;
   final previewOrder = <RecentConversationKey>[];
   Completer<RecentConversationCatalog>? catalogRead;
+  List<RecentConversationEntry>? catalogEntries;
   int catalogReads = 0;
   @override
-  RecentConversationCatalog get catalog =>
-      RecentConversationCatalog(entries: entries, error: null);
+  RecentConversationCatalog get catalog => RecentConversationCatalog(
+    entries: catalogEntries ?? entries,
+    error: null,
+  );
   @override
   Future<RecentConversationCatalog> loadRecents({required bool refresh}) {
     catalogReads++;
@@ -394,7 +398,8 @@ void main() {
                       messages: [
                         TranscriptMessage.discussion(
                           id: 'room-1:1',
-                          text: 'The research is ready. We can continue here.',
+                          text:
+                              '@bot_atlas The research is ready. We can continue here.',
                           sender: 'Atlas',
                           senderHandle: 'bot_atlas',
                           timestamp: DateTime(2026, 10, 12),
@@ -428,10 +433,23 @@ void main() {
           lessThanOrEqualTo(tester.view.physicalSize.width - 40),
         );
         expect(find.text('Message the group'), findsOneWidget);
+        expect(find.byType(BotGroupConversation), findsOneWidget);
+        expect(find.byType(BotGroupComposer), findsOneWidget);
+        expect(find.byType(BotGroupMessage), findsOneWidget);
+        expect(find.byIcon(Icons.add), findsNothing);
+        final prose = [
+          ...tester
+              .widgetList<RichText>(find.byType(RichText))
+              .map((text) => text.text.toPlainText()),
+          ...tester
+              .widgetList<SelectableText>(find.byType(SelectableText))
+              .map((text) => text.data ?? text.textSpan?.toPlainText() ?? ''),
+        ].join(' ');
         expect(
-          find.text('The research is ready. We can continue here.'),
-          findsOneWidget,
+          prose,
+          contains('@Atlas The research is ready. We can continue here.'),
         );
+        expect(prose, isNot(contains('@bot_atlas')));
         expect(fixture.commands, isEmpty);
         expect(tester.takeException(), isNull);
         await _capture(
@@ -1586,7 +1604,7 @@ void main() {
     );
 
     testWidgets(
-      'entry pinch activates once; swipe and canceled pinch stay dormant',
+      'two-finger swipe opens an adjacent chat before the first pinch',
       (tester) async {
         enterDormant();
         await mount(tester, dormant: true);
@@ -1597,39 +1615,18 @@ void main() {
           const Offset(50, 400),
           const Offset(130, 400),
         );
-        expect(session.modeEnabled, isFalse);
-        expect(source.catalogReads, 0);
-        expect(source.opens, isEmpty);
-        final first = await tester.startGesture(
-          const Offset(75, 400),
-          pointer: 1,
-        );
-        final second = await tester.startGesture(
-          const Offset(285, 400),
-          pointer: 2,
-        );
-        await first.moveTo(const Offset(145, 400));
-        await second.moveTo(const Offset(215, 400));
-        await tester.pump(const Duration(milliseconds: 16));
-        await first.cancel();
-        await second.cancel();
-        await _finishFrames(tester);
-        expect(session.modeEnabled, isFalse);
-        expect(source.catalogReads, 0);
-        await _twoContacts(
-          tester,
-          const Offset(75, 400),
-          const Offset(285, 400),
-          const Offset(145, 400),
-          const Offset(215, 400),
-        );
-        expect(session.modeEnabled, isTrue);
-        expect(source.catalogReads, 1);
-        expect(session.entries, hasLength(3));
-        expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
-        switcher.currentState!.dismissStack();
-        await _finishFrames(tester);
-        expect(session.modeEnabled, isTrue);
+        expect(source.opens, [source.entries[1].key]);
+        expect(find.text('Swipe to browse · tap to open'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'first swipe uses ready neighbors while the catalog refresh is held',
+      (tester) async {
+        enterDormant();
+        source.catalogRead = Completer<RecentConversationCatalog>();
+        await mount(tester, dormant: true);
         await _twoContacts(
           tester,
           const Offset(220, 400),
@@ -1638,9 +1635,84 @@ void main() {
           const Offset(130, 400),
         );
         expect(source.opens, [source.entries[1].key]);
+        source.catalogRead!.complete(source.catalog);
+        await _finishFrames(tester);
+        expect(source.opens, hasLength(1));
         expect(tester.takeException(), isNull);
       },
     );
+
+    testWidgets(
+      'first swipe ignores a catalog completed after route disposal',
+      (tester) async {
+        enterDormant();
+        source.catalogEntries = [source.entries.first];
+        source.catalogRead = Completer<RecentConversationCatalog>();
+        await mount(tester, dormant: true);
+        await _twoContacts(
+          tester,
+          const Offset(220, 400),
+          const Offset(300, 400),
+          const Offset(50, 400),
+          const Offset(130, 400),
+        );
+        expect(source.catalogReads, 1);
+        expect(source.opens, isEmpty);
+        await tester.pumpWidget(const SizedBox());
+        source.catalogRead!.complete(source.catalog);
+        await _finishFrames(tester);
+        expect(source.opens, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('entry pinch activates once; canceled pinch stays dormant', (
+      tester,
+    ) async {
+      enterDormant();
+      await mount(tester, dormant: true);
+      expect(session.modeEnabled, isFalse);
+      expect(source.catalogReads, 0);
+      final first = await tester.startGesture(
+        const Offset(75, 400),
+        pointer: 1,
+      );
+      final second = await tester.startGesture(
+        const Offset(285, 400),
+        pointer: 2,
+      );
+      await first.moveTo(const Offset(145, 400));
+      await second.moveTo(const Offset(215, 400));
+      await tester.pump(const Duration(milliseconds: 16));
+      await first.cancel();
+      await second.cancel();
+      await _finishFrames(tester);
+      expect(session.modeEnabled, isFalse);
+      expect(source.catalogReads, 0);
+      await _twoContacts(
+        tester,
+        const Offset(75, 400),
+        const Offset(285, 400),
+        const Offset(145, 400),
+        const Offset(215, 400),
+      );
+      expect(session.modeEnabled, isTrue);
+      expect(source.catalogReads, 1);
+      expect(session.entries, hasLength(3));
+      expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+      switcher.currentState!.dismissStack();
+      await _finishFrames(tester);
+      expect(session.modeEnabled, isTrue);
+      await _twoContacts(
+        tester,
+        const Offset(220, 400),
+        const Offset(300, 400),
+        const Offset(50, 400),
+        const Offset(130, 400),
+      );
+      expect(source.opens, [source.entries[1].key]);
+      expect(tester.takeException(), isNull);
+    });
 
     for (final brightness in Brightness.values) {
       for (final scale in [1.0, 2.0]) {
@@ -2499,6 +2571,7 @@ void main() {
               )
               .session;
           final groupKey = visit.selected;
+          final groupBots = bots;
           expect(groupKey?.group, bots.observedGroups.single.key);
           expect(groupKey?.chat, isNull);
           expect(visit.modeEnabled, isFalse);
@@ -2529,11 +2602,24 @@ void main() {
           await tester.pump();
           final readingPosition = list.controller!.offset;
           final commands = List.of(botFixture.commands);
-          final resumes = fixture.calls
+          var resumes = fixture.calls
               .where((call) => call.$2 == 'session.resume')
               .length;
           await _chatGesture(tester, pinch: false);
-          expect(visit.modeEnabled, isFalse);
+          expect(visit.modeEnabled, isTrue);
+          expect(find.byType(ProfileTranscript), findsOneWidget);
+          expect(find.byType(BotGroupScreen), findsNothing);
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          expect(find.byType(BotGroupScreen), findsOneWidget);
+          expect(list.controller!.offset, readingPosition);
+          expect(
+            tester.widget<TextField>(field).controller!.text,
+            'Keep this group draft',
+          );
+          resumes = fixture.calls
+              .where((call) => call.$2 == 'session.resume')
+              .length;
           await _chatGesture(tester);
           expect(visit.modeEnabled, isTrue);
           await _capture(
@@ -2565,8 +2651,8 @@ void main() {
             'group-recents-keyboard-${brightness.name}-$scale',
           );
           // A hidden discussion cannot clear a fresh reply's device read receipt.
-          final room = bots.observedGroups.single;
-          final receipt = bots.groupReads.sequence(room);
+          final room = groupBots.observedGroups.single;
+          final receipt = groupBots.groupReads.sequence(room);
           botFixture.events.add({
             'room_id': 'room-1',
             'seq': 9,
@@ -2575,9 +2661,9 @@ void main() {
             'actor': {'kind': 'member', 'id': 'atlas'},
             'payload': {'text': 'A reply received while viewing cards'},
           });
-          await bots.refresh();
+          await groupBots.refresh();
           await _finishFrames(tester);
-          expect(bots.groupReads.sequence(room), receipt);
+          expect(groupBots.groupReads.sequence(room), receipt);
           final normal = visit.entries.indexWhere(
             (entry) => entry.key.chat?.workspace.profileName == 'personal',
           );

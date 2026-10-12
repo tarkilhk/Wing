@@ -1,4 +1,4 @@
-import '../../widgets/bot_mention_scope.dart';
+import '../../widgets/bot_group_conversation.dart';
 import '../../widgets/recent_conversations/conversation_gestures.dart';
 import '../../widgets/recent_conversations/conversation_route_scope.dart';
 import 'dart:async';
@@ -7,7 +7,6 @@ import '../../services/bot_group_session.dart';
 import '../../services/bot_group_history_session.dart';
 import 'bot_group_history_screen.dart';
 import '../../models/bots.dart';
-import '../../widgets/bot_group_picture.dart';
 import '../../widgets/bot_avatar.dart';
 import '../../widgets/conversation_activity_status.dart';
 import '../../widgets/composer_icon_button.dart';
@@ -15,13 +14,11 @@ import '../../models/composer_reference.dart';
 import '../../widgets/mention_suggestions.dart';
 import '../../widgets/slash_command_suggestions.dart';
 import '../../models/transcript_message.dart';
-import '../../widgets/profile_message.dart';
 import '../../widgets/transcript_latest_button.dart';
 import '../../widgets/scroll_capture_viewport.dart';
 import '../../utils/expansion_scroll_controller.dart';
 import '../../theme/wing_theme.dart';
 import '../../widgets/studio_error.dart';
-import '../../widgets/wing_app_bar.dart';
 import '../../controllers/voice_input_controller.dart';
 import '../../models/voice_processing_settings.dart';
 import '../../services/android_voice.dart';
@@ -221,23 +218,19 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     final name =
         member?.name ??
         (event.actorName.isNotEmpty ? event.actorName : event.actor);
-    return BotMentionScope(
-      names: {
-        for (final member in _session.group.members) member.handle: member.name,
-      },
-      child: ProfileMessage(
-        key: ValueKey(('group-message', event.sequence)),
-        message: TranscriptMessage.discussion(
-          id: '${_session.group.id}:${event.sequence}',
-          text: event.text,
-          timestamp: event.timestamp,
-          sender: user ? null : name,
-          senderHandle: member?.handle,
-        ),
-        senderAppearance: user || member == null
-            ? null
-            : _session.appearance(member.profile),
+    return BotGroupMessage(
+      key: ValueKey(('group-message', event.sequence)),
+      group: _session.group,
+      message: TranscriptMessage.discussion(
+        id: '${_session.group.id}:${event.sequence}',
+        text: event.text,
+        timestamp: event.timestamp,
+        sender: user ? null : name,
+        senderHandle: member?.handle,
       ),
+      appearance: user || member == null
+          ? null
+          : _session.appearance(member.profile),
     );
   }
 
@@ -493,7 +486,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final enlargedText = MediaQuery.textScalerOf(context).scale(16) >= 24;
     final messages = _session.events.where((event) => event.isMessage).toList();
@@ -508,375 +500,264 @@ class _BotGroupScreenState extends State<BotGroupScreen>
         _composer.text.trim().isEmpty;
     final locked =
         _session.pendingText != null || _session.sending || _voiceInput.active;
-    return Scaffold(
-      appBar: WingAppBar(
-        context: context,
-        title: Text(
-          _session.group.name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          PopupMenuButton<String>(
-            tooltip: 'Group options',
-            icon: const Icon(Icons.more_horiz),
-            onSelected: (action) async {
-              switch (action) {
-                case 'histories':
-                  await _openWorkingHistories();
-                case 'refresh':
-                  await _session.refresh();
-                case 'stop':
-                  await _session.stop();
-                case 'edit':
-                  _focus.unfocus();
-                  _inspectingDetails = true;
-                  _syncVisibility();
-                  try {
-                    final updated = await widget.onEdit!(_session.group);
-                    if (mounted && updated != null) {
-                      _session.updateDetails(updated);
-                    }
-                  } finally {
-                    _inspectingDetails = false;
-                    if (mounted) {
-                      _syncVisibility();
-                    }
+    return BotGroupConversation(
+      group: _session.group,
+      appearances: [
+        for (final member in _session.group.members)
+          ?_session.appearance(member.profile),
+      ],
+      onBack: () => Navigator.of(context).maybePop(),
+      membersAnchor: _membersAnchor,
+      onMembers: _showMembers,
+      showMembers: !_showReferences && (!keyboardOpen || !enlargedText),
+      actions: [
+        PopupMenuButton<String>(
+          tooltip: 'Group options',
+          icon: const Icon(Icons.more_horiz),
+          onSelected: (action) async {
+            switch (action) {
+              case 'histories':
+                await _openWorkingHistories();
+              case 'refresh':
+                await _session.refresh();
+              case 'stop':
+                await _session.stop();
+              case 'edit':
+                _focus.unfocus();
+                _inspectingDetails = true;
+                _syncVisibility();
+                try {
+                  final updated = await widget.onEdit!(_session.group);
+                  if (mounted && updated != null) {
+                    _session.updateDetails(updated);
                   }
-              }
-            },
-            itemBuilder: (_) => [
-              if (widget.onEdit != null)
-                const PopupMenuItem(value: 'edit', child: Text('Edit group')),
+                } finally {
+                  _inspectingDetails = false;
+                  if (mounted) {
+                    _syncVisibility();
+                  }
+                }
+            }
+          },
+          itemBuilder: (_) => [
+            if (widget.onEdit != null)
+              const PopupMenuItem(value: 'edit', child: Text('Edit group')),
+            const PopupMenuItem(
+              value: 'histories',
+              child: Text('Bot working histories'),
+            ),
+            PopupMenuItem(
+              value: 'refresh',
+              enabled: !_session.loading,
+              child: const Text('Refresh group'),
+            ),
+            if (canStop)
               const PopupMenuItem(
-                value: 'histories',
-                child: Text('Bot working histories'),
+                value: 'stop',
+                child: Text('Stop group work'),
               ),
-              PopupMenuItem(
-                value: 'refresh',
-                enabled: !_session.loading,
-                child: const Text('Refresh group'),
+          ],
+        ),
+      ],
+      transcript: Stack(
+        children: [
+          Positioned.fill(
+            child: ScrollCaptureViewport(
+              controller: _scroll,
+              onCaptureChanged: _captureChanged,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return ConversationGestureBoundary(
+                    child: ListView.builder(
+                      key: const ValueKey('group-transcript'),
+                      controller: _scroll,
+                      padding: const EdgeInsets.all(16),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      itemCount: messages.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index < messages.length) {
+                          final event = messages[index];
+                          return TranscriptScrollAnchor(
+                            key: ValueKey(('group-row', event.sequence)),
+                            initialHeight: _rowHeights[event.sequence] ?? 0,
+                            onHeightChanged: (_, height) {
+                              if (_rowHeights[event.sequence] == height) {
+                                return;
+                              }
+                              _rowHeights[event.sequence] = height;
+                              _followLatest();
+                            },
+                            child: _message(event),
+                          );
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_session.error != null)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                child: StudioError(_session.error!),
+                              ),
+                            if (!_session.loading && messages.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 24),
+                                child: Text(
+                                  'Start a discussion. Mention a bot to focus the reply, or ask the whole group.',
+                                ),
+                              ),
+                            if (_session.runtime case final runtime?) ...[
+                              if (runtime.blocked && runtime.actions.isEmpty)
+                                const Text(
+                                  'Group work is interrupted. Refresh to check its recovery options.',
+                                ),
+                              for (final action in runtime.actions)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        action.kind == 'retry'
+                                            ? 'Interrupted work'
+                                            : '${_session.group.members.where((m) => m.id == action.member).firstOrNull?.name ?? 'A bot'} needs approval',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleSmall,
+                                      ),
+                                      if (action.description.isNotEmpty)
+                                        Text(action.description),
+                                      if (action.command.isNotEmpty)
+                                        SelectableText(action.command),
+                                      Wrap(
+                                        children: [
+                                          if (action.kind == 'retry')
+                                            IconButton(
+                                              tooltip: 'Review retry',
+                                              onPressed: _session.acting
+                                                  ? null
+                                                  : () => _retry(action),
+                                              icon: const Icon(Icons.refresh),
+                                            ),
+                                          for (final choice in action.choices)
+                                            IconButton(
+                                              tooltip: choice == 'once'
+                                                  ? 'Allow once'
+                                                  : 'Deny',
+                                              onPressed: _session.acting
+                                                  ? null
+                                                  : () => _session.resolve(
+                                                      action,
+                                                      choice: choice,
+                                                    ),
+                                              icon: Icon(
+                                                choice == 'once'
+                                                    ? Icons.check
+                                                    : Icons.close,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                  );
+                },
               ),
-              if (canStop)
-                const PopupMenuItem(
-                  value: 'stop',
-                  child: Text('Stop group work'),
-                ),
-            ],
+            ),
           ),
+          if (!_following)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 8,
+              child: Center(
+                child: TranscriptLatestButton(
+                  label: 'Jump to latest messages',
+                  icon: Icons.arrow_downward,
+                  onPressed: _latest,
+                ),
+              ),
+            ),
         ],
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            if (!_showReferences && (!keyboardOpen || !enlargedText))
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Semantics(
-                  button: true,
-                  label: 'Show group members',
-                  child: Material(
-                    key: _membersAnchor,
-                    color: Colors.transparent,
-                    child: InkWell(
-                      key: const ValueKey('group-members-entry'),
-                      onTap: _showMembers,
-                      borderRadius: WingRadius.card,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
-                        child: Row(
-                          children: [
-                            BotGroupPicture(
-                              avatars: [
-                                for (final member in _session.group.members)
-                                  _session.appearance(member.profile),
-                              ],
-                              color: _session.group.iconColor,
-                              image: _session.group.picture,
-                              size: 32,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '${_session.group.instance} · ${_session.group.members.length} bots',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ),
-                            Icon(
-                              Icons.expand_more,
-                              size: 18,
-                              color: colors.onSurfaceVariant,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            Expanded(
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: ScrollCaptureViewport(
-                      controller: _scroll,
-                      onCaptureChanged: _captureChanged,
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return ConversationGestureBoundary(
-                            child: ListView.builder(
-                              key: const ValueKey('group-transcript'),
-                              controller: _scroll,
-                              padding: const EdgeInsets.all(16),
-                              keyboardDismissBehavior:
-                                  ScrollViewKeyboardDismissBehavior.onDrag,
-                              itemCount: messages.length + 1,
-                              itemBuilder: (context, index) {
-                                if (index < messages.length) {
-                                  final event = messages[index];
-                                  return TranscriptScrollAnchor(
-                                    key: ValueKey((
-                                      'group-row',
-                                      event.sequence,
-                                    )),
-                                    initialHeight:
-                                        _rowHeights[event.sequence] ?? 0,
-                                    onHeightChanged: (_, height) {
-                                      if (_rowHeights[event.sequence] ==
-                                          height) {
-                                        return;
-                                      }
-                                      _rowHeights[event.sequence] = height;
-                                      _followLatest();
-                                    },
-                                    child: _message(event),
-                                  );
-                                }
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (_session.error != null)
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
-                                        ),
-                                        child: StudioError(_session.error!),
-                                      ),
-                                    if (!_session.loading && messages.isEmpty)
-                                      const Padding(
-                                        padding: EdgeInsets.symmetric(
-                                          vertical: 24,
-                                        ),
-                                        child: Text(
-                                          'Start a discussion. Mention a bot to focus the reply, or ask the whole group.',
-                                        ),
-                                      ),
-                                    if (_session.runtime
-                                        case final runtime?) ...[
-                                      if (runtime.blocked &&
-                                          runtime.actions.isEmpty)
-                                        const Text(
-                                          'Group work is interrupted. Refresh to check its recovery options.',
-                                        ),
-                                      for (final action in runtime.actions)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 16,
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                action.kind == 'retry'
-                                                    ? 'Interrupted work'
-                                                    : '${_session.group.members.where((m) => m.id == action.member).firstOrNull?.name ?? 'A bot'} needs approval',
-                                                style: Theme.of(
-                                                  context,
-                                                ).textTheme.titleSmall,
-                                              ),
-                                              if (action.description.isNotEmpty)
-                                                Text(action.description),
-                                              if (action.command.isNotEmpty)
-                                                SelectableText(action.command),
-                                              Wrap(
-                                                children: [
-                                                  if (action.kind == 'retry')
-                                                    IconButton(
-                                                      tooltip: 'Review retry',
-                                                      onPressed: _session.acting
-                                                          ? null
-                                                          : () =>
-                                                                _retry(action),
-                                                      icon: const Icon(
-                                                        Icons.refresh,
-                                                      ),
-                                                    ),
-                                                  for (final choice
-                                                      in action.choices)
-                                                    IconButton(
-                                                      tooltip: choice == 'once'
-                                                          ? 'Allow once'
-                                                          : 'Deny',
-                                                      onPressed: _session.acting
-                                                          ? null
-                                                          : () => _session
-                                                                .resolve(
-                                                                  action,
-                                                                  choice:
-                                                                      choice,
-                                                                ),
-                                                      icon: Icon(
-                                                        choice == 'once'
-                                                            ? Icons.check
-                                                            : Icons.close,
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  ],
-                                );
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  if (!_following)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 8,
-                      child: Center(
-                        child: TranscriptLatestButton(
-                          label: 'Jump to latest messages',
-                          icon: Icons.arrow_downward,
-                          onPressed: _latest,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+      beforeComposer: [
+        if (_showReferences)
+          Flexible(
+            flex: 3,
+            child: MentionSuggestions(
+              composer: _composer,
+              composerFocus: _focus,
+              load: (query, directory, canRead) async =>
+                  _session.completeMentions(query),
+              select: (text, reference) async {
+                _session.editMentions(text, selected: reference);
+                _composer.observeReferences(_session.composerReferences);
+                _changed();
+              },
             ),
-            if (_showReferences)
-              Flexible(
-                flex: 3,
-                child: MentionSuggestions(
-                  composer: _composer,
-                  composerFocus: _focus,
-                  load: (query, directory, canRead) async =>
-                      _session.completeMentions(query),
-                  select: (text, reference) async {
-                    _session.editMentions(text, selected: reference);
-                    _composer.observeReferences(_session.composerReferences);
-                    _changed();
-                  },
-                ),
-              ),
-            _activityStatus(context),
-            VoiceInputActivity(context: context, controller: _voiceInput),
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _composer,
-              builder: (context, _, _) => Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-                child: DecoratedBox(
-                  key: const ValueKey('group-composer'),
-                  decoration: BoxDecoration(
-                    color: colors.surfaceContainerLow,
-                    borderRadius: WingRadius.card,
-                    border: Border.all(color: colors.outlineVariant),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            key: const ValueKey('group-message-composer'),
-                            controller: _composer,
-                            focusNode: _focus,
-                            readOnly: locked,
-                            minLines: 1,
-                            maxLines: _showReferences
-                                ? 1
-                                : (_voiceInput.active || keyboardOpen) &&
-                                      enlargedText
-                                ? 2
-                                : 5,
-                            keyboardType: TextInputType.multiline,
-                            textInputAction: TextInputAction.newline,
-                            textCapitalization: TextCapitalization.sentences,
-                            decoration: InputDecoration(
-                              isDense: true,
-                              hintMaxLines: 1,
-                              suffixIcon: VoiceInputButton(
-                                enabled: _voiceInput.canDictate(
-                                  _session.canDictate,
-                                ),
-                                onPressed: () => unawaited(
-                                  _dictate().catchError((Object failure) {
-                                    if (mounted && _visible) {
-                                      showStudioError(
-                                        this.context,
-                                        voiceFailureMessage(failure),
-                                      );
-                                    }
-                                  }),
-                                ),
-                              ),
-                              hintText: _composer.text.isEmpty
-                                  ? 'Message the group'
-                                  : null,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              filled: false,
-                              contentPadding: EdgeInsets.all(12),
-                            ),
-                          ),
-                        ),
-                        ComposerIconButton(
-                          focused: false,
-                          label: stopping
-                              ? 'Stop group work'
-                              : _session.pendingText == null
-                              ? 'Send group message'
-                              : 'Retry same message',
-                          onPressed: _voiceInput.active
-                              ? null
-                              : stopping
-                              ? _session.stop
-                              : _session.sending ||
-                                    (_session.pendingText == null &&
-                                        _composer.text.trim().isEmpty)
-                              ? null
-                              : _send,
-                          icon: ComposerActionGlyph(
-                            icon: stopping
-                                ? Icons.stop
-                                : _session.pendingText == null
-                                ? Icons.arrow_upward
-                                : Icons.refresh,
-                            identity: stopping
-                                ? 'stop'
-                                : _session.pendingText == null
-                                ? 'send'
-                                : 'retry',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+          ),
+        _activityStatus(context),
+        VoiceInputActivity(context: context, controller: _voiceInput),
+      ],
+      composer: ValueListenableBuilder<TextEditingValue>(
+        valueListenable: _composer,
+        builder: (context, _, _) => BotGroupComposer(
+          controller: _composer,
+          focusNode: _focus,
+          readOnly: locked,
+          maxLines: _showReferences
+              ? 1
+              : (_voiceInput.active || keyboardOpen) && enlargedText
+              ? 2
+              : 5,
+          microphone: VoiceInputButton(
+            enabled: _voiceInput.canDictate(_session.canDictate),
+            onPressed: () => unawaited(
+              _dictate().catchError((Object failure) {
+                if (mounted && _visible) {
+                  showStudioError(this.context, voiceFailureMessage(failure));
+                }
+              }),
             ),
-          ],
+          ),
+          action: ComposerIconButton(
+            focused: false,
+            label: stopping
+                ? 'Stop group work'
+                : _session.pendingText == null
+                ? 'Send group message'
+                : 'Retry same message',
+            onPressed: _voiceInput.active
+                ? null
+                : stopping
+                ? _session.stop
+                : _session.sending ||
+                      (_session.pendingText == null &&
+                          _composer.text.trim().isEmpty)
+                ? null
+                : _send,
+            icon: ComposerActionGlyph(
+              icon: stopping
+                  ? Icons.stop
+                  : _session.pendingText == null
+                  ? Icons.arrow_upward
+                  : Icons.refresh,
+              identity: stopping
+                  ? 'stop'
+                  : _session.pendingText == null
+                  ? 'send'
+                  : 'retry',
+            ),
+          ),
         ),
       ),
     );

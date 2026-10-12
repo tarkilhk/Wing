@@ -1826,6 +1826,11 @@
       "feature": "bots",
       "library": "lib/core/widgets/bot_display_viewport.dart"
     },
+    "lib/core/widgets/bot_group_conversation.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/widgets/bot_group_conversation.dart"
+    },
     "lib/core/widgets/bot_group_identity.dart": {
       "role": "view",
       "feature": "bots",

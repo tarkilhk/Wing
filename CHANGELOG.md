@@ -4,6 +4,11 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Group discussions now share their live and Recents rendering, with the icon
+  beside the title and consistent mention/composer styling. Two-finger swipes
+  switch conversations directly, without requiring a first pinch.
+
+
 - Load groups independently of bot status and avatars, and prepare neighboring
   swipe-card screenshots while the rest of Recents continues loading.
 

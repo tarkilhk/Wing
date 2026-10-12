@@ -9404,6 +9404,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/widgets/bot_group_conversation.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/bot_group_identity.dart",
       "area": "lib",
       "provenance": "intentional-untracked"

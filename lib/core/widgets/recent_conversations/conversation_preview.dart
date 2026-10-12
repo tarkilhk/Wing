@@ -3,7 +3,9 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../models/recent_conversation.dart';
 import '../bot_avatar.dart';
-import '../bot_group_identity.dart';
+import '../bot_group_conversation.dart';
+import '../composer_icon_button.dart';
+import '../voice_input_activity.dart';
 import '../../models/transcript_message.dart';
 import '../../models/connection.dart';
 import '../../services/server_connection_status.dart';
@@ -30,16 +32,17 @@ class ConversationPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (card.entry.group != null) {
+      return IgnorePointer(child: _SavedGroupPage(card: card));
+    }
     final preview = card.preview;
     final rows = preview?.reading.messages ?? const <Map<String, dynamic>>[];
-    final messages =
-        card.preview?.group?.messages.reversed.toList() ??
-        rows
-            .map(TranscriptMessage.fromRow)
-            .where((message) => message.kind == TranscriptMessageKind.dialogue)
-            .toList()
-            .reversed
-            .toList();
+    final messages = rows
+        .map(TranscriptMessage.fromRow)
+        .where((message) => message.kind == TranscriptMessageKind.dialogue)
+        .toList()
+        .reversed
+        .toList();
     final colors = Theme.of(context).colorScheme;
     final stackedScope =
         MediaQuery.textScalerOf(context).scale(12) > 18 &&
@@ -62,13 +65,6 @@ class ConversationPreview extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       style: scopeStyle,
     );
-    final groupIdentity = card.entry.group == null
-        ? null
-        : BotGroupIdentity(
-            group: card.entry.group!,
-            bots: preview?.group?.appearances.values ?? const [],
-            size: 32,
-          );
     return IgnorePointer(
       child: Scaffold(
         appBar: WingAppBar(
@@ -78,16 +74,11 @@ class ConversationPreview extends StatelessWidget {
             icon: Icon(Icons.menu),
             tooltip: 'Open navigation menu',
           ),
-          title: card.entry.group != null
-              ? WingConversationTitle(
-                  title: card.entry.title,
-                  avatar: groupIdentity,
-                )
-              : BotConversationTitle(
-                  title: preview?.entry.title ?? card.entry.title,
-                  bot: card.bot,
-                  mood: null,
-                ),
+          title: BotConversationTitle(
+            title: preview?.entry.title ?? card.entry.title,
+            bot: card.bot,
+            mood: null,
+          ),
           contextHeight: stackedScope ? 96 : 48,
           contextRow: stackedScope
               ? Column(
@@ -147,8 +138,6 @@ class ConversationPreview extends StatelessWidget {
                     child: ProfileMessage(
                       message: message,
                       loadImages: false,
-                      senderAppearance:
-                          preview?.group?.appearances[message.senderHandle],
                       showEditAction: message.role == 'user',
                       showRestoreAction: message.role == 'user',
                     ),
@@ -181,8 +170,6 @@ class ConversationPreview extends StatelessWidget {
                                 child: Text(
                                   preview?.draft.isNotEmpty == true
                                       ? preview!.draft
-                                      : card.entry.group != null
-                                      ? 'Message the group'
                                       : 'Message Hermes or type /',
                                   maxLines: 3,
                                   overflow: TextOverflow.ellipsis,
@@ -259,4 +246,84 @@ class ConversationCardPlaceholder extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Owns only passive text/scroll controls; no room session or backend authority.
+class _SavedGroupPage extends StatefulWidget {
+  const _SavedGroupPage({required this.card});
+  final RecentConversationCard card;
+  @override
+  State<_SavedGroupPage> createState() => _SavedGroupPageState();
+}
+
+class _SavedGroupPageState extends State<_SavedGroupPage> {
+  late final _draft = TextEditingController(
+    text: widget.card.preview?.draft ?? '',
+  );
+  final _scroll = ScrollController();
+  @override
+  void dispose() {
+    _draft.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final group = widget.card.entry.group!;
+    final preview = widget.card.preview?.group;
+    final messages = preview?.messages ?? const <TranscriptMessage>[];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scroll.hasClients) {
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      }
+    });
+    return BotGroupConversation(
+      group: group,
+      appearances: preview?.appearances.values ?? const [],
+      onBack: () {},
+      actions: [
+        IconButton(
+          onPressed: () {},
+          tooltip: 'Group options',
+          icon: const Icon(Icons.more_horiz),
+        ),
+      ],
+      transcript: ListView.builder(
+        controller: _scroll,
+        scrollCacheExtent: const ScrollCacheExtent.pixels(0),
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        itemCount: messages.isEmpty ? 1 : messages.length,
+        itemBuilder: (_, index) => messages.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  'Start a discussion. Mention a bot to focus the reply, or ask the whole group.',
+                ),
+              )
+            : BotGroupMessage(
+                group: group,
+                message: messages[index],
+                appearance: preview?.appearances[messages[index].senderHandle],
+                loadImages: false,
+              ),
+      ),
+      composer: BotGroupComposer(
+        controller: _draft,
+        readOnly: true,
+        maxLines: 5,
+        microphone: VoiceInputButton(enabled: true, onPressed: () {}),
+        action: ComposerIconButton(
+          focused: false,
+          label: 'Send group message',
+          onPressed: _draft.text.trim().isEmpty ? null : () async {},
+          icon: const ComposerActionGlyph(
+            icon: Icons.arrow_upward,
+            identity: 'send',
+          ),
+        ),
+      ),
+    );
+  }
 }
