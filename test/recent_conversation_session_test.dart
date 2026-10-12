@@ -151,6 +151,25 @@ void main() {
   );
 
   test(
+    'activation admits known neighbors before a held refresh emits anything',
+    () async {
+      enterChat();
+      source.catalogRead = Completer<RecentConversationCatalog>();
+      session.activate();
+      expect(session.catalogLoading, isTrue);
+      expect(
+        session.entries.map((entry) => entry.key),
+        source.currentEntries.map((entry) => entry.key),
+      );
+      expect(source.reads, isEmpty);
+      expect(source.opens, isEmpty);
+      source.catalogRead!.complete(source.catalog);
+      await Future<void>.delayed(Duration.zero);
+      expect(session.catalogLoading, isFalse);
+    },
+  );
+
+  test(
     'activation loads once and defers membership until motion settles',
     () async {
       enterChat();
@@ -186,6 +205,7 @@ void main() {
     'empty catalog retains current card and recovery restores canonical order',
     () async {
       enterChat();
+      source.currentEntries = [];
       source.catalogRead = Completer();
       session.activate();
       source.catalogRead!.complete(
@@ -232,6 +252,7 @@ void main() {
     'catalog deadline retains the current chat and fences late results',
     (tester) async {
       enterChat();
+      source.currentEntries = [];
       source.catalogRead = Completer();
       session.activate();
       await tester.pump(const Duration(seconds: 15));
@@ -244,6 +265,7 @@ void main() {
       await tester.pump();
       expect(session.entries, hasLength(1));
       source.catalogRead = null;
+      source.currentEntries = List.generate(8, _entry);
       session.retryCatalog();
       await tester.pump();
       expect(session.catalogError, isNull);
@@ -253,6 +275,7 @@ void main() {
 
   test('retirement fences a held catalog and its failure', () async {
     enterChat();
+    source.currentEntries = [];
     source.catalogRead = Completer();
     session.activate();
     source.selected = _entry(7).key;
@@ -263,6 +286,48 @@ void main() {
     expect(session.entries, hasLength(1));
     expect(session.catalogError, isNull);
   });
+
+  testWidgets(
+    'progressive neighbors defer during motion and survive a refresh timeout',
+    (tester) async {
+      enterChat();
+      source.currentEntries = [];
+      source.catalogRead = Completer<RecentConversationCatalog>();
+      session.activate();
+      session.setMembershipPaused(true);
+      source.currentEntries = [_entry(2), _entry(0)];
+      source.notifyListeners();
+      expect(session.entries, hasLength(1));
+      source.currentEntries = [_entry(1), _entry(0), _entry(2)];
+      source.notifyListeners();
+      session.setMembershipPaused(false);
+      final ready = session.entries;
+      expect(ready.map((entry) => entry.key), [
+        _entry(1).key,
+        _entry(0).key,
+        _entry(2).key,
+      ]);
+      expect(session.selected, _entry(0).key);
+      expect(session.catalogLoading, isTrue);
+      await tester.pump(const Duration(seconds: 15));
+      expect(session.catalogLoading, isFalse);
+      expect(session.catalogError, isNotNull);
+      expect(
+        session.entries.map((entry) => entry.key),
+        ready.map((entry) => entry.key),
+      );
+      source.catalogRead!.complete(
+        RecentConversationCatalog(entries: [_entry(7)], error: null),
+      );
+      await tester.pump();
+      expect(
+        session.entries.map((entry) => entry.key),
+        ready.map((entry) => entry.key),
+      );
+      expect(source.reads, isEmpty);
+      expect(source.opens, isEmpty);
+    },
+  );
 
   test(
     'canonical updates settle by identity and every entry point refreshes',

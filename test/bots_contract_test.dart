@@ -294,6 +294,78 @@ void main() {
     },
   );
   test(
+    'group publication crosses instances without waiting for bots',
+    () async {
+      final first = BotsFixture(), second = BotsFixture();
+      second.room['name'] = 'Second team';
+      final scope = WorkspaceScope(
+        connectionId: 'other-host',
+        connectionIdentity: 'instance-2',
+        profileName: 'default',
+      );
+      final other = BotsRepository(
+        scope: scope,
+        instance: 'Other server',
+        read: second.read,
+        command: second.command,
+        ownership: second.ownership,
+        savedHistory: second.savedHistory,
+      );
+      final started = Completer<void>(), release = Completer<void>();
+      first.readHook = (_, method, _) async {
+        if (method == 'session.active_list') {
+          started.complete();
+          await release.future;
+        }
+        return null;
+      };
+      final owner = BotsSession((_) async => [first.repository, other]);
+      addTearDown(owner.dispose);
+      final refresh = owner.refresh();
+      try {
+        await started.future;
+        await Future<void>.delayed(Duration.zero);
+        expect(owner.observedGroups.map((g) => g.name), [
+          'Research team',
+          'Second team',
+        ]);
+        expect(owner.groupForKey(owner.observedGroups.last.key)!.scope, scope);
+        expect(owner.state.loading, isTrue);
+      } finally {
+        release.complete();
+        await refresh;
+      }
+      expect(owner.state.loading, isFalse);
+      expect(owner.state.bots, hasLength(6));
+      expect(owner.state.errors, isEmpty);
+      expect([...first.commands, ...second.commands], isEmpty);
+    },
+  );
+
+  test('retired group discovery cannot continue or publish', () async {
+    final fixture = BotsFixture();
+    final started = Completer<void>(), release = Completer<void>();
+    var listed = false;
+    fixture.readHook = (_, method, _) async {
+      if (method == 'groups.capabilities') {
+        started.complete();
+        await release.future;
+      }
+      if (method == 'groups.list') listed = true;
+      return null;
+    };
+    final owner = BotsSession((_) async => [fixture.repository]);
+    final refresh = owner.refresh();
+    await started.future;
+    owner.dispose();
+    release.complete();
+    await refresh;
+    expect(listed, isFalse);
+    expect(owner.observedGroups, isEmpty);
+    expect(fixture.commands, isEmpty);
+  });
+
+  test(
     'delivered sender appearance uses its exact handle and instance',
     () async {
       final fixture = BotsFixture();

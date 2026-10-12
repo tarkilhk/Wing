@@ -146,7 +146,9 @@ final class RecentConversationSession extends ChangeNotifier {
     final generation = ++_catalogGeneration;
     _catalogReading = true;
     _catalogError = null;
-    _emit();
+    // Start with known entries and admit subsequent ready observations while
+    // the full refresh continues. Motion still defers membership adoption.
+    _sourceChanged();
     if (!active || generation != _catalogGeneration) return;
     RecentConversationCatalog catalog;
     try {
@@ -422,8 +424,7 @@ final class RecentConversationSession extends ChangeNotifier {
     }
     if (modeEnabled &&
         !selecting &&
-        !_catalogReading &&
-        _catalogError == null) {
+        (_catalogReading || _catalogError == null)) {
       final catalog = _source.catalog;
       final canonical = _orderedEntries(catalog);
       final matches =

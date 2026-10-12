@@ -4,6 +4,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Load groups independently of bot status and avatars, and prepare neighboring
+  swipe-card screenshots while the rest of Recents continues loading.
+
 - Match Bots and Recents with the approved compact card family: prominent Bots names, right-hand artwork, freshness-ordered Recents without message previews or filters, and group discussions with persistent unread cues.
 
 ### Bots and discussions

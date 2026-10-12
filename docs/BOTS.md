@@ -24,9 +24,14 @@ Creating a bot uses the instance's launch credentials and model defaults, as exp
 
 Recents cards show each canonical bot chat's saved name on the left and avatar
 on the right before you open it. Group discussions appear in the same last-message
-order, with their room artwork or member avatars. Unread replies show a green
-New answer dot; reading the latest visible discussion messages clears that cue. Appearance is prepared while the cards are still and shared with the
+order, with their room artwork or member avatars. Groups appear as soon as their
+details load, while bot status and avatars continue loading independently.
+Unread replies show a green New answer dot; reading the latest visible discussion
+messages clears that cue. Appearance is prepared while the cards are still and shared with the
 chat header; opening a card is not required to identify its bot.
+The swipe view prepares the current card and its neighbors first, then extends
+outward. Ready screenshots appear individually while the remaining chats and
+bot details continue loading.
 
 Appearance supports a display name, eight shapes, twelve profile hues, automatic color, image upload/removal and generation through that profile's configured image provider. PNG, JPEG and WebP uploads must fit the 2,000,000-byte avatar limit.
 

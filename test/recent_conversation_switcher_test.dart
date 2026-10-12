@@ -726,6 +726,63 @@ void main() {
     );
 
     testWidgets(
+      'ready neighbors publish screenshots while catalog refresh is pending',
+      (tester) async {
+        enterDormant();
+        source.catalogRead = Completer<RecentConversationCatalog>();
+        await mount(tester, dormant: true);
+        switcher.currentState!.openStack();
+        await tester.pump();
+        source.notifyListeners();
+        await _finishFrames(tester);
+        expect(session.catalogLoading, isTrue);
+        for (final entry in source.entries.skip(1)) {
+          expect(
+            find.byKey(ValueKey((entry.key, 'snapshot'))),
+            findsOneWidget,
+            reason: 'A ready neighbor must not wait for the whole catalog',
+          );
+        }
+        expect(source.opens, isEmpty);
+        source.catalogRead!.complete(source.catalog);
+        await _finishFrames(tester);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'ready neighbor screenshot appears before a held neighboring history',
+      (tester) async {
+        enterDormant();
+        source.catalogRead = Completer<RecentConversationCatalog>();
+        final pending = Completer<RecentConversationPreview>();
+        source.waitingPreviews[source.entries[2].key] = pending;
+        await mount(tester, dormant: true);
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        expect(session.catalogLoading, isTrue);
+        expect(
+          find.byKey(ValueKey((source.entries[1].key, 'snapshot'))),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey((source.entries[2].key, 'snapshot'))),
+          findsNothing,
+        );
+        pending.complete(source._readyPreview(source.entries[2]));
+        await _finishFrames(tester);
+        expect(
+          find.byKey(ValueKey((source.entries[2].key, 'snapshot'))),
+          findsOneWidget,
+        );
+        expect(source.opens, isEmpty);
+        source.catalogRead!.complete(source.catalog);
+        await _finishFrames(tester);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       'ten-card batch publishes outward and reuses captures on reopening',
       (tester) async {
         session.dispose();
@@ -1188,6 +1245,7 @@ void main() {
     testWidgets(
       'catalog retry preserves the focused identity after circular browsing',
       (tester) async {
+        final recovered = source.entries.removeLast();
         enterDormant();
         source.catalogRead = Completer();
         await mount(tester, dormant: true, accessible: true);
@@ -1212,6 +1270,7 @@ void main() {
         source.catalogRead = Completer();
         await tester.tap(find.byTooltip('Retry recent chats'));
         await tester.pump();
+        source.entries.add(recovered);
         source.catalogRead!.complete(
           RecentConversationCatalog(entries: source.entries, error: null),
         );
@@ -1568,6 +1627,7 @@ void main() {
         testWidgets(
           'single-card entry, loading and retry ${brightness.name} $scale',
           (tester) async {
+            source.entries.removeRange(1, source.entries.length);
             enterDormant();
             source.catalogRead = Completer();
             final frame = GlobalKey();

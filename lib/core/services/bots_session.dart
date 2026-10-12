@@ -454,65 +454,87 @@ class BotsSession extends ChangeNotifier {
         _groups.removeWhere((identity, _) => !identities.contains(identity));
         _ready.removeWhere((identity) => !identities.contains(identity));
       }
-      for (final source in _repositories!) {
-        if (!current()) return;
-        final identity = source.scope.connectionIdentity;
-        try {
-          final roster = await source.bots();
-          final presence = await source.presence(roster);
-          final enriched = <BotRecord>[];
-          // Bound physical reads, including image allocation, to four bots.
-          for (var start = 0; start < roster.length; start += 4) {
+      final sources = _repositories!;
+      // Room discovery never waits for unrelated bot ownership/avatar reads.
+      // Each lane remains sequential across instances; bot assets still have
+      // the existing four-read bound. Publish each completed observation.
+      Future<void> readBots() async {
+        for (final source in sources) {
+          if (!current()) return;
+          final identity = source.scope.connectionIdentity;
+          try {
+            final roster = await source.bots();
             if (!current()) return;
-            enriched.addAll(
-              await Future.wait(
-                roster
-                    .skip(start)
-                    .take(4)
-                    .map(
-                      (bot) => source.enrich(bot, presence: presence[bot.id]!),
-                    ),
-              ),
-            );
-          }
-          if (!current()) return;
-          _bots[identity] = List.unmodifiable(enriched);
-          _appearanceRosters[source.scope] = Future.value(_bots[identity]!);
-          final scopes = enriched.map((bot) => bot.scope).toSet();
-          for (final scope in _appearanceCache.keys.toList()) {
-            if (scope.connectionId != source.scope.connectionId ||
-                scope.connectionIdentity != source.scope.connectionIdentity) {
-              continue;
+            final presence = await source.presence(roster);
+            final enriched = <BotRecord>[];
+            // Bound physical reads, including image allocation, to four bots.
+            for (var start = 0; start < roster.length; start += 4) {
+              if (!current()) return;
+              enriched.addAll(
+                await Future.wait(
+                  roster
+                      .skip(start)
+                      .take(4)
+                      .map(
+                        (bot) =>
+                            source.enrich(bot, presence: presence[bot.id]!),
+                      ),
+                ),
+              );
             }
-            if (!scopes.contains(scope)) {
-              _appearanceCache.remove(scope);
-              _avatarRead.remove(scope);
-              _appearanceKeys.removeWhere((_, value) => value == scope);
+            if (!current()) return;
+            _bots[identity] = List.unmodifiable(enriched);
+            _appearanceRosters[source.scope] = Future.value(_bots[identity]!);
+            final scopes = enriched.map((bot) => bot.scope).toSet();
+            for (final scope in _appearanceCache.keys.toList()) {
+              if (scope.connectionId != source.scope.connectionId ||
+                  scope.connectionIdentity != source.scope.connectionIdentity) {
+                continue;
+              }
+              if (!scopes.contains(scope)) {
+                _appearanceCache.remove(scope);
+                _avatarRead.remove(scope);
+                _appearanceKeys.removeWhere((_, value) => value == scope);
+              }
             }
-          }
-          for (final bot in enriched) {
-            if (_appearanceCache.containsKey(bot.scope)) {
-              _cacheAppearance(bot, assetRead: true);
+            for (final bot in enriched) {
+              if (_appearanceCache.containsKey(bot.scope)) {
+                _cacheAppearance(bot, assetRead: true);
+              }
             }
+          } catch (_) {
+            if (!current()) return;
+            errors.add('${source.instance}: bots could not refresh.');
           }
-        } catch (_) {
-          errors.add('${source.instance}: bots could not refresh.');
-        }
-        try {
-          final ready = await source.groupsReady();
-          final rooms = await source.groups();
-          if (!current()) return;
-          _groups[identity] = rooms;
-          if (ready) {
-            _ready.add(identity);
-          } else {
-            _ready.remove(identity);
-          }
-        } catch (_) {
-          _ready.remove(identity);
-          errors.add('${source.instance}: groups are unavailable.');
+          if (current()) notifyListeners();
         }
       }
+
+      Future<void> readGroups() async {
+        for (final source in sources) {
+          if (!current()) return;
+          final identity = source.scope.connectionIdentity;
+          try {
+            final ready = await source.groupsReady();
+            if (!current()) return;
+            final rooms = await source.groups();
+            if (!current()) return;
+            _groups[identity] = rooms;
+            if (ready) {
+              _ready.add(identity);
+            } else {
+              _ready.remove(identity);
+            }
+          } catch (_) {
+            if (!current()) return;
+            _ready.remove(identity);
+            errors.add('${source.instance}: groups are unavailable.');
+          }
+          if (current()) notifyListeners();
+        }
+      }
+
+      await Future.wait([readGroups(), readBots()]);
     } catch (_) {
       errors.add('Saved instances could not be loaded.');
     } finally {

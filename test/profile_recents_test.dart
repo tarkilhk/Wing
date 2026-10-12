@@ -435,6 +435,105 @@ void main() {
     },
   );
 
+  for (final heldMethod in ['session.active_list', 'profiles.get_asset']) {
+    test(
+      'cold Recents publishes groups while $heldMethod is pending',
+      () async {
+        final botFixture = BotsFixture();
+        if (heldMethod == 'profiles.get_asset') {
+          botFixture.profiles.first['has_avatar'] = true;
+        }
+        botFixture.events.add({
+          'room_id': 'room-1',
+          'seq': 1,
+          'kind': 'message.member',
+          'created_at': DateTime.now().millisecondsSinceEpoch / 1000,
+          'actor': {'kind': 'member', 'id': 'atlas'},
+          'payload': {'text': 'Recent group answer'},
+        });
+        final started = Completer<void>(), release = Completer<void>();
+        botFixture.readHook = (_, method, _) async {
+          if (method == heldMethod) {
+            if (!started.isCompleted) started.complete();
+            await release.future;
+            if (method == 'profiles.get_asset') return {'found': false};
+          }
+          return null;
+        };
+        final bots = BotsSession((_) async => [botFixture.repository]);
+        final recents = WorkspaceRecentsSession(controller, bots);
+        var published = false;
+        recents.addListener(() {
+          if (recents.items().any((item) => item.group != null)) {
+            published = true;
+          }
+        });
+        addTearDown(() async {
+          release.complete();
+          await Future<void>.delayed(Duration.zero);
+          recents.dispose();
+          bots.dispose();
+        });
+        recents.setVisible(true);
+        await started.future;
+        await Future<void>.delayed(Duration.zero);
+        expect(recents.items().where((item) => item.chat != null), isNotEmpty);
+        expect(
+          recents.items().map((item) => item.group?.name),
+          contains('Research team'),
+          reason: 'Group discovery must not wait for unrelated bot reads',
+        );
+        expect(published, isTrue);
+        expect(bots.state.loading, isTrue);
+        expect(botFixture.commands, isEmpty);
+      },
+    );
+  }
+
+  test(
+    'pinch publishes ready neighbors while bot refresh is pending',
+    () async {
+      await controller.openSession(
+        ProfileSessionKey(controller.current!.scope, 'recent-5'),
+      );
+      final botFixture = BotsFixture();
+      final started = Completer<void>(), release = Completer<void>();
+      botFixture.readHook = (_, method, _) async {
+        if (method == 'session.active_list') {
+          started.complete();
+          await release.future;
+        }
+        return null;
+      };
+      final bots = BotsSession((_) async => [botFixture.repository]);
+      final activity = ValueNotifier<ChatNoticeActivity?>(null);
+      final visit = controller.chatRecentConversationSession(
+        onOpenGroup: (_) async {},
+        bots: bots,
+        chat: controller.current!.chat!,
+        activity: () => activity,
+      );
+      addTearDown(() async {
+        release.complete();
+        await Future<void>.delayed(Duration.zero);
+        visit.dispose();
+        activity.dispose();
+        bots.dispose();
+      });
+      visit.activate();
+      await started.future;
+      await controller.refreshRecents();
+      expect(visit.catalogLoading, isTrue);
+      expect(
+        visit.entries.length,
+        greaterThan(1),
+        reason:
+            'Ready chats must reach screenshot preparation before bot status',
+      );
+      expect(botFixture.commands, isEmpty);
+    },
+  );
+
   test('simultaneous Recents consumers share the physical refresh', () async {
     final delay = Completer<void>();
     fixture.pageDelays[('personal', 0)] = delay;
