@@ -35,6 +35,7 @@ object MonitoringRuntime {
         ).apply {
             setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "batteryUnrestricted" -> result.success(batteryUnrestricted(app))
                     "start" -> {
                         val values = call.arguments as? Map<*, *>
                         val next = mapOf("title" to (values?.get("title") as? String ?: "Watching chats"),
@@ -113,10 +114,12 @@ object MonitoringRuntime {
 
     private fun status(context: Context): Map<String, Boolean> = mapOf(
         "running" to running,
-        "batteryUnrestricted" to
-            context.getSystemService(PowerManager::class.java)
-                .isIgnoringBatteryOptimizations(context.packageName),
+        "batteryUnrestricted" to batteryUnrestricted(context),
     )
+
+    private fun batteryUnrestricted(context: Context): Boolean =
+        context.getSystemService(PowerManager::class.java)
+            .isIgnoringBatteryOptimizations(context.packageName)
 
     private fun releaseIfUnused() {
         // Allow an in-flight method result or replacement activity to complete.

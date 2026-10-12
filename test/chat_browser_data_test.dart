@@ -29,6 +29,7 @@ class ReaderFixture extends ProfilePagingFixture {
   bool failWorkIndex = false;
   bool failWorkSearch = false;
   bool permanentSearchFailure = false;
+  Completer<void>? workSearchGate;
   final attempts = <(String, String, String?)>[];
   final omittedRows = <(String, String)>{};
   final rowUpdates = <(String, String), Map<String, dynamic>>{};
@@ -63,6 +64,11 @@ class ReaderFixture extends ProfilePagingFixture {
       get: (path, query) async {
         attempts.add((scope.profileName, path, query['q']));
         if (scope.profileName == 'work') {
+          if (path == 'sessions/search') {
+            final gate = workSearchGate;
+            workSearchGate = null;
+            await gate?.future;
+          }
           if (failWorkIndex && path == 'sessions') {
             throw TimeoutException('Index offline');
           }
@@ -137,6 +143,76 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  test(
+    'suspended search resumes without retaining a late blocked failure',
+    () async {
+      await data.refresh(archivedOnly: false);
+      final held = Completer<void>();
+      fixture.workSearchGate = held;
+      final pending = data.search('chat 1');
+      await Future<void>.delayed(Duration.zero);
+      final healthy = data.state.profiles['personal']!.searchMatches;
+      expect(healthy, isNotEmpty);
+      data.setReadActive(false);
+      fixture.attempts.clear();
+      await data.recover();
+      expect(fixture.attempts, isEmpty);
+      data.setReadActive(true);
+      await data.recover();
+      await Future<void>.delayed(Duration.zero);
+      expect(data.state.searching, isFalse);
+      expect(data.state.profiles['work']!.searchMatches, isNotEmpty);
+      expect(data.state.profiles['personal']!.searchMatches, healthy);
+      expect(fixture.attempts.every((read) => read.$1 == 'work'), isTrue);
+      held.completeError(TimeoutException('Retired blocked search'));
+      await pending;
+      expect(data.state.searchError, isNull);
+      expect(data.needsRecovery, isFalse);
+    },
+  );
+
+  test(
+    'suspended refreshes coalesce into the requested archive read on return',
+    () async {
+      await data.refresh(archivedOnly: false);
+      final entries = data.entries;
+      data.setReadActive(false);
+      fixture.attempts.clear();
+      await data.refresh(archivedOnly: false);
+      await data.refresh(archivedOnly: true);
+      expect(fixture.attempts, isEmpty);
+      expect(data.entries, entries);
+      data.setReadActive(true);
+      await data.refresh(archivedOnly: true);
+      expect(data.state.archived, isTrue);
+      expect(data.state.loading, isFalse);
+      expect(data.readFailure, isNull);
+      expect(data.entries, isEmpty);
+      expect(fixture.attempts.where((read) => read.$2 == 'sessions').length, 2);
+    },
+  );
+
+  test(
+    'a failed foreground recovery still exposes an actionable error',
+    () async {
+      fixture.failWorkIndex = true;
+      await data.refresh(archivedOnly: false);
+      expect(data.readFailure, isNotNull);
+      data.setReadActive(false);
+      data.setReadActive(true);
+      expect(data.readFailure, isNull);
+      expect(data.state.loading, isTrue);
+      // Calling refresh joins the already admitted foreground read.
+      await data.refresh(archivedOnly: false);
+      expect(data.readFailure, isNotNull);
+      expect(data.state.profiles['work']!.error, isNotNull);
+      expect(
+        data.entries.where((entry) => entry.profile == 'personal'),
+        isNotEmpty,
+      );
+    },
+  );
   test(
     'retired canonical read closes its reader without sending an RPC',
     () async {

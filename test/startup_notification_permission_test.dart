@@ -11,6 +11,7 @@ import 'package:wing/main.dart';
 import 'package:wing/core/services/native_notification_sink.dart';
 import 'package:wing/core/services/android_voice.dart';
 import 'package:wing/core/services/microphone_permission.dart';
+import 'package:wing/core/services/background_monitoring_service.dart';
 
 import 'profile_connection_identity_test.dart' show MemoryIdentityStore;
 
@@ -26,6 +27,7 @@ void main() {
   late bool enabled;
   late bool granted;
   late bool failRequest;
+  late bool batteryUnrestricted;
 
   setUp(() async {
     AndroidFlutterLocalNotificationsPlugin.registerWith();
@@ -38,6 +40,16 @@ void main() {
     enabled = false;
     granted = true;
     failRequest = false;
+    batteryUnrestricted = true;
+    messenger.setMockMethodCallHandler(BackgroundMonitoringService.channel, (
+      call,
+    ) async {
+      if (call.method == 'batteryUnrestricted' ||
+          call.method == 'openBatterySettings') {
+        calls.add(call.method);
+      }
+      return call.method == 'batteryUnrestricted' ? batteryUnrestricted : null;
+    });
     messenger.setMockMethodCallHandler(_nativeNotifications, (call) async {
       if (call.method == 'show') calls.add('show');
       return call.method == 'initialize' ? [] : null;
@@ -71,6 +83,10 @@ void main() {
     messenger.setMockMethodCallHandler(_nativeNotifications, null);
     messenger.setMockMethodCallHandler(AndroidVoice.channel, null);
     messenger.setMockMethodCallHandler(channel, null);
+    messenger.setMockMethodCallHandler(
+      BackgroundMonitoringService.channel,
+      null,
+    );
   });
 
   Future<void> launch(WidgetTester tester) async {
@@ -86,6 +102,54 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+    'startup requests missing battery exemption without active chats',
+    (tester) async {
+      batteryUnrestricted = false;
+      granted = false;
+      await launch(tester);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(
+        calls.where((call) => call == 'openBatterySettings'),
+        hasLength(1),
+      );
+      expect(
+        calls.indexOf('batteryUnrestricted'),
+        greaterThan(calls.indexOf('microphone')),
+      );
+      expect(
+        calls.indexOf('openBatterySettings'),
+        greaterThan(calls.indexOf('batteryUnrestricted')),
+      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(
+        calls.where((call) => call == 'openBatterySettings'),
+        hasLength(1),
+      );
+      await close(tester);
+      await launch(tester);
+      expect(
+        calls.where((call) => call == 'openBatterySettings'),
+        hasLength(2),
+      );
+      await close(tester);
+      batteryUnrestricted = true;
+      await launch(tester);
+      expect(
+        calls.where((call) => call == 'batteryUnrestricted'),
+        hasLength(3),
+      );
+      expect(
+        calls.where((call) => call == 'openBatterySettings'),
+        hasLength(2),
+      );
+      expect(tester.takeException(), isNull);
+      await close(tester);
+    },
+  );
 
   testWidgets(
     'microphone follows notifications and is not requested again on restart',

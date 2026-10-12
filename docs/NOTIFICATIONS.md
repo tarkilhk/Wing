@@ -4,7 +4,9 @@ Wing can alert you when a connected chat finishes or needs an answer. It uses An
 
 ## Turn on alerts
 
-Open **App settings → Notifications** and allow Android notifications. Choose the reply and attention alerts you want. **Test notification** checks that Android can display an alert on your phone. For screen-off delivery, allow background battery use if Wing asks.
+Open **App settings → Notifications** and allow Android notifications. Choose the reply and attention alerts you want. **Test notification** checks that Android can display an alert on your phone. If **Allow background activity** appears while Wing is watching work, tap it and approve Android's battery exemption request for background delivery.
+
+At startup, Wing checks its battery exemption and asks Android to approve background activity if it is missing. Approve the system request to allow background delivery. Once granted, the startup prompt stops. If you decline, Wing remains usable in the foreground and asks again on the next startup.
 
 Tap an alert to open its chat. When the full command is visible, **Once** and **Session** send your decision directly; **Deny** rejects without another confirmation. **Always…** opens a review of permanent permission. A truncated command offers **Review…** and **Deny**. Android requires unlocking before an approval action. You can hide message previews in Wing's notification settings.
 

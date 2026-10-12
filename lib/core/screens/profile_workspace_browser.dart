@@ -61,6 +61,7 @@ class ProfileWorkspaceBrowser extends StatefulWidget {
 }
 
 class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
+    with WidgetsBindingObserver
     implements BrowserWorkspaceObservation {
   @override
   BrowserWorkspaceState get workspace => _data.workspace;
@@ -93,9 +94,20 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
   void initState() {
     super.initState();
     _data = widget.createData()..addListener(_dataChanged);
+    final binding = WidgetsBinding.instance;
+    _data.setReadActive(
+      binding.lifecycleState == null ||
+          binding.lifecycleState == AppLifecycleState.resumed,
+    );
+    binding.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _data.start();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _data.setReadActive(state == AppLifecycleState.resumed);
   }
 
   void _dataChanged() {
@@ -104,6 +116,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _debounce?.cancel();
     _search.dispose();
 

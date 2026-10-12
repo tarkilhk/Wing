@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'app_preferences.dart';
+import 'connection_diagnostics.dart';
 
 enum BackgroundMonitoringState {
   unsupported,
@@ -29,6 +30,7 @@ class BackgroundMonitoringService {
   final state = ValueNotifier(BackgroundMonitoringState.idle);
   Future<void> _tail = Future.value();
   bool _disposed = false;
+  bool _startupBatteryHandled = false;
 
   BackgroundMonitoringService({
     required this.preferences,
@@ -42,6 +44,38 @@ class BackgroundMonitoringService {
 
   Future<void> sync() {
     _tail = _tail.then((_) => _sync());
+    return _tail;
+  }
+
+  /// Ask once per app startup when the OS exemption is absent, even with no
+  /// active chats. A backgrounded or disposed app cannot open the system prompt.
+  Future<void> requestStartupBatteryExemption({
+    required bool Function() canRequest,
+  }) {
+    _tail = _tail.then((_) async {
+      if (_disposed || !supported || _startupBatteryHandled || !canRequest()) {
+        return;
+      }
+      try {
+        final unrestricted = await channel.invokeMethod<bool>(
+          'batteryUnrestricted',
+        );
+        if (_disposed || !canRequest()) return;
+        if (unrestricted == null) {
+          throw const FormatException('Missing battery exemption status');
+        }
+        // Set before opening Android's dialog: its resume must not ask again.
+        _startupBatteryHandled = true;
+        if (!unrestricted) await openBatterySettings();
+      } catch (error, stack) {
+        _startupBatteryHandled = true;
+        logConnectionDiagnostic(
+          'battery.startup_request_failed',
+          error: error,
+          stackTrace: stack,
+        );
+      }
+    });
     return _tail;
   }
 

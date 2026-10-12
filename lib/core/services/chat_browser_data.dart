@@ -997,8 +997,10 @@ final class ChatBrowserData extends ChangeNotifier {
   bool hasCompleteSnapshot(String profile) =>
       _completeSnapshots.contains(profile);
   final _retryableProfiles = <String>{};
+  final _pendingProfiles = <String>{};
   final _searchFailures = <String>{};
   final _retryableSearch = <String>{};
+  final _pendingSearch = <String>{};
   String _query = '';
   final _searchRows = <String, _BrowserPage>{};
   final _baselineRows = <String, Map<String, Map<String, dynamic>>>{};
@@ -1009,10 +1011,49 @@ final class ChatBrowserData extends ChangeNotifier {
   String? _searchError;
   int _generation = 0, _searchGeneration = 0;
   bool _disposed = false;
+  bool _readActive = true;
+  bool? _deferredRefreshArchived;
   bool _archived = false;
   Future<void>? _refreshing;
   bool? _refreshingArchived;
   SessionVisibility? _refreshingVisibility;
+
+  /// The view forwards lifecycle admission; this owner retires read generations
+  /// and remembers unfinished profiles. Shared conversation sockets stay owned
+  /// by the workspace, and late background failures cannot become list errors.
+  void setReadActive(bool active) {
+    if (_disposed || _readActive == active) return;
+    _readActive = active;
+    if (!active) {
+      _retryableProfiles.addAll(_pendingProfiles);
+      _retryableSearch.addAll(_pendingSearch);
+      _pendingProfiles.clear();
+      _pendingSearch.clear();
+      _generation++;
+      _searchGeneration++;
+      _visitRefreshGeneration++;
+      _refreshing = null;
+      _loading = false;
+      _searching = false;
+      _changed();
+      return;
+    }
+    // A fresh visible attempt replaces a temporary failure with progress.
+    // Permanent failures remain actionable until an explicit refresh.
+    _errors.removeWhere((profile, _) => _retryableProfiles.contains(profile));
+    _searchFailures.removeAll(_retryableSearch);
+    _searchError = _searchFailures.isEmpty
+        ? null
+        : 'Some message searches failed. Loaded titles still match.';
+    final deferred = _deferredRefreshArchived;
+    _deferredRefreshArchived = null;
+    if (deferred != null) {
+      unawaited(refresh(archivedOnly: deferred));
+    } else {
+      unawaited(recover());
+    }
+    _changed();
+  }
 
   void _changed() {
     if (!_disposed) {
@@ -1026,6 +1067,7 @@ final class ChatBrowserData extends ChangeNotifier {
       !_searching && _retryableSearch.isNotEmpty;
 
   Future<void> recover() async {
+    if (_disposed || !_readActive) return;
     await Future.wait([
       if (!_loading && _retryableProfiles.isNotEmpty)
         _startRefresh(archivedOnly: _archived, failedOnly: true),
@@ -1039,6 +1081,7 @@ final class ChatBrowserData extends ChangeNotifier {
     final visit = ++_visitRefreshGeneration;
     await _startRefresh(archivedOnly: archivedOnly, failedOnly: false);
     if (_disposed ||
+        !_readActive ||
         visit != _visitRefreshGeneration ||
         _archived != archivedOnly) {
       return;
@@ -1052,6 +1095,10 @@ final class ChatBrowserData extends ChangeNotifier {
   }) {
     final active = _refreshing;
     if (_disposed) return Future.value();
+    if (!_readActive) {
+      _deferredRefreshArchived = archivedOnly;
+      return Future.value();
+    }
     if (active != null &&
         _refreshingArchived == archivedOnly &&
         _refreshingVisibility == _controller.sessionVisibility) {
@@ -1102,6 +1149,7 @@ final class ChatBrowserData extends ChangeNotifier {
     final visibility = _controller.sessionVisibility;
     if (!failedOnly) {
       _searchGeneration++;
+      _pendingSearch.clear();
       _searching = false;
       _searchFailures.clear();
       _retryableSearch.clear();
@@ -1119,6 +1167,9 @@ final class ChatBrowserData extends ChangeNotifier {
     final profiles = (_controller.discovery?.profiles ?? [])
         .where((p) => !failedOnly || _retryableProfiles.contains(p.name))
         .toList();
+    _pendingProfiles
+      ..clear()
+      ..addAll(profiles.map((profile) => profile.name));
     if (!failedOnly) {
       _complete.clear();
       _errors.clear();
@@ -1128,6 +1179,7 @@ final class ChatBrowserData extends ChangeNotifier {
     var cursor = 0;
     bool valid() =>
         !_disposed &&
+        _readActive &&
         generation == _generation &&
         _controller.sessionVisibility == visibility;
     Future<void> worker() async {
@@ -1244,7 +1296,10 @@ final class ChatBrowserData extends ChangeNotifier {
             }
           }
         }
-        if (active()) _changed();
+        if (active()) {
+          _pendingProfiles.remove(profile);
+          _changed();
+        }
       }
     }
 
@@ -1307,6 +1362,16 @@ final class ChatBrowserData extends ChangeNotifier {
       _searchLimited = false;
     }
     if (query.isEmpty) {
+      _pendingSearch.clear();
+      _retryableSearch.clear();
+      _searching = false;
+      _changed();
+      return;
+    }
+    if (!_readActive) {
+      _retryableSearch.addAll(
+        (_controller.discovery?.profiles ?? []).map((profile) => profile.name),
+      );
       _searching = false;
       _changed();
       return;
@@ -1316,8 +1381,12 @@ final class ChatBrowserData extends ChangeNotifier {
     final profiles = (_controller.discovery?.profiles ?? [])
         .where((p) => !failedOnly || _retryableSearch.contains(p.name))
         .toList();
+    _pendingSearch
+      ..clear()
+      ..addAll(profiles.map((profile) => profile.name));
     var cursor = 0;
-    bool valid() => !_disposed && generation == _searchGeneration;
+    bool valid() =>
+        !_disposed && _readActive && generation == _searchGeneration;
     Future<void> worker() async {
       while (valid() && cursor < profiles.length) {
         final profile = profiles[cursor++].name;
@@ -1369,6 +1438,7 @@ final class ChatBrowserData extends ChangeNotifier {
             }
           }
         }
+        if (active()) _pendingSearch.remove(profile);
       }
     }
 

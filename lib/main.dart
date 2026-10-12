@@ -161,6 +161,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
   late final ChatNotificationCoordinator _chatNotices;
   late final Future<void> _notificationsReady;
   late final BackgroundMonitoringService _backgroundMonitoring;
+  bool _startupPermissionsComplete = false;
   late final HealthAlertSettingsSession _healthAlertSettings;
   late final HealthAlertsCoordinator _healthAlerts;
   String? _deferredShareId;
@@ -320,6 +321,9 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
         await _chatNotices.requestStartupPermission();
         if (!mounted) return;
         await requestStartupMicrophonePermission(widget.connManager.prefs);
+        if (!mounted) return;
+        _startupPermissionsComplete = true;
+        await _requestStartupBatteryExemption();
         if (mounted) await _chatNotices.syncMonitoring();
       }),
     );
@@ -382,6 +386,16 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     unawaited(_appPreferences.reload().catchError((Object _) {}));
   }
 
+  Future<void> _requestStartupBatteryExemption() =>
+      _backgroundMonitoring.requestStartupBatteryExemption(
+        canRequest: () =>
+            mounted &&
+            _startupPermissionsComplete &&
+            (WidgetsBinding.instance.lifecycleState == null ||
+                WidgetsBinding.instance.lifecycleState ==
+                    AppLifecycleState.resumed),
+      );
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     logConnectionDiagnostic('app.lifecycle', details: {'state': state.name});
@@ -392,6 +406,9 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     _healthAlerts.setForeground(state == AppLifecycleState.resumed);
     if (state == AppLifecycleState.resumed) {
       unawaited(_chatNotices.applicationResumed());
+      if (_startupPermissionsComplete) {
+        unawaited(_requestStartupBatteryExemption());
+      }
     }
   }
 

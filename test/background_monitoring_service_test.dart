@@ -16,7 +16,9 @@ void main() {
   late bool allowed;
   late bool unrestricted;
   late bool running;
+  late bool serviceDisposed;
   Completer<void>? startGate;
+  Completer<void>? batteryGate;
   Object? failure;
 
   setUp(() async {
@@ -25,13 +27,19 @@ void main() {
     appPreferences = AppPreferences(preferences);
     calls = [];
     activeChats = allowed = unrestricted = running = true;
+    serviceDisposed = false;
     startGate = null;
+    batteryGate = null;
     failure = null;
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
       BackgroundMonitoringService.channel,
       (call) async {
         calls.add(call.method);
         if (failure != null) throw failure!;
+        if (call.method == 'batteryUnrestricted') {
+          await batteryGate?.future;
+          return unrestricted;
+        }
         if (call.method == 'start') {
           await startGate?.future;
           return {'running': running, 'batteryUnrestricted': unrestricted};
@@ -47,8 +55,84 @@ void main() {
     );
   });
 
-  tearDown(() {
+  test(
+    'startup requests a missing exemption once independently of monitoring',
+    () async {
+      unrestricted = false;
+      activeChats = allowed = false;
+      await appPreferences.setCompletedNotifications(false);
+      await appPreferences.setAttentionNotifications(false);
+      await Future.wait([
+        for (var attempt = 0; attempt < 3; attempt++)
+          service.requestStartupBatteryExemption(canRequest: () => true),
+      ]);
+      expect(calls, ['batteryUnrestricted', 'openBatterySettings']);
+      expect(service.state.value, BackgroundMonitoringState.idle);
+    },
+  );
+
+  test('startup leaves an existing exemption alone', () async {
+    await service.requestStartupBatteryExemption(canRequest: () => true);
+    expect(calls, ['batteryUnrestricted']);
+  });
+
+  test(
+    'startup defers its prompt if the app backgrounds during the status read',
+    () async {
+      unrestricted = false;
+      var visible = true;
+      batteryGate = Completer<void>();
+      final pending = service.requestStartupBatteryExemption(
+        canRequest: () => visible,
+      );
+      await Future<void>.delayed(Duration.zero);
+      visible = false;
+      batteryGate!.complete();
+      await pending;
+      expect(calls, ['batteryUnrestricted']);
+      await service.requestStartupBatteryExemption(canRequest: () => visible);
+      expect(calls, ['batteryUnrestricted']);
+      visible = true;
+      await service.requestStartupBatteryExemption(canRequest: () => visible);
+      expect(calls, [
+        'batteryUnrestricted',
+        'batteryUnrestricted',
+        'openBatterySettings',
+      ]);
+    },
+  );
+
+  test(
+    'startup status failure leaves startup usable and never claims exemption',
+    () async {
+      failure = PlatformException(code: 'unavailable');
+      await service.requestStartupBatteryExemption(canRequest: () => true);
+      failure = null;
+      await service.requestStartupBatteryExemption(canRequest: () => true);
+      expect(calls, ['batteryUnrestricted']);
+      expect(service.state.value, BackgroundMonitoringState.idle);
+      unrestricted = false;
+      await service.sync();
+      expect(service.state.value, BackgroundMonitoringState.batteryRestricted);
+    },
+  );
+
+  test('startup never opens a permission dialog after disposal', () async {
+    unrestricted = false;
+    batteryGate = Completer<void>();
+    final pending = service.requestStartupBatteryExemption(
+      canRequest: () => true,
+    );
+    await Future<void>.delayed(Duration.zero);
     service.dispose();
+    serviceDisposed = true;
+    batteryGate!.complete();
+    await pending;
+    expect(calls, isNot(contains('openBatterySettings')));
+  });
+
+  tearDown(() {
+    if (!serviceDisposed) service.dispose();
     appPreferences.dispose();
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
       BackgroundMonitoringService.channel,

@@ -81,6 +81,86 @@ void main() {
     );
   }
 
+  for (final failAfterResume in [false, true]) {
+    testWidgets('background chat read is retired when its failure arrives '
+        '${failAfterResume ? 'after' : 'before'} resume', (tester) async {
+      final held = Completer<void>();
+      fixture.heldListRead = held;
+      addTearDown(() {
+        if (!held.isCompleted) held.complete();
+        if (tester.binding.lifecycleState == AppLifecycleState.paused) {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.hidden,
+          );
+        }
+        if (tester.binding.lifecycleState == AppLifecycleState.hidden) {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+        }
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+      });
+      await show(tester);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      await tester.pump();
+      expect(fixture.heldListEntered, isTrue);
+      expect(
+        find.byKey(const ValueKey('chat-personal-newest')),
+        findsOneWidget,
+      );
+      final readsBeforePause = fixture.workListReads;
+      fixture.backgroundBlocked = true;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      if (!failAfterResume) {
+        held.completeError(const SocketException('Background access blocked'));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pump();
+        expect(fixture.workListReads, readsBeforePause);
+      }
+      fixture.backgroundBlocked = false;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump();
+      expect(find.textContaining('Could not finish loading'), findsNothing);
+      expect(fixture.workListReads, greaterThan(readsBeforePause));
+      if (failAfterResume) {
+        held.completeError(const SocketException('Retired background failure'));
+      }
+      // Workspace recovery also persists its snapshot outside fake async.
+      for (var attempt = 0; attempt < 80; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+        if (!controller.recovering &&
+            find
+                .byKey(const ValueKey('chat-work-newest'))
+                .evaluate()
+                .isNotEmpty) {
+          break;
+        }
+      }
+      expect(find.textContaining('Could not finish loading'), findsNothing);
+      expect(find.byKey(const ValueKey('chat-work-newest')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('chat-personal-newest')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
   testWidgets('New chat replaces the browser while profile reads are held', (
     tester,
   ) async {
@@ -510,6 +590,10 @@ void main() {
 }
 
 class _ProjectFilterFixture extends ProfileBrowserFixture {
+  Completer<void>? heldListRead;
+  bool heldListEntered = false;
+  bool backgroundBlocked = false;
+  int workListReads = 0;
   @override
   List<Map<String, dynamic>> projects(String profile) => [
     for (final project in super.projects(profile))
@@ -533,7 +617,21 @@ class _ProjectFilterFixture extends ProfileBrowserFixture {
     return ProfileGateway(
       scope: scope,
       discover: base.discover,
-      get: base.read,
+      get: (path, query) async {
+        if (scope.profileName == 'work' && path == 'sessions') {
+          workListReads++;
+          final held = heldListRead;
+          heldListRead = null;
+          if (held != null) {
+            heldListEntered = true;
+            await held.future;
+          }
+          if (backgroundBlocked) {
+            throw const SocketException('Background access blocked');
+          }
+        }
+        return base.read(path, query);
+      },
       rpc: base.call,
       connect: () async {
         if (connectUnavailable) {
