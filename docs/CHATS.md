@@ -28,7 +28,7 @@ While Hermes is working, the composer can **Steer**, **Queue** or **Stop**. The 
 
 ## Revisit the result
 
-Inside a chat, pinch inward to open the same conversations shown in **Recents**,
+Inside a chat or bot group, pinch inward to open the same conversations shown in **Recents**,
 including bot groups. Cards follow message freshness: left is newer, right is
 older, with the oldest and newest linked in a circle. Once enabled, a two-finger
 horizontal swipe switches to the adjacent conversation. Icon-only controls also

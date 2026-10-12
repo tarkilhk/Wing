@@ -9759,6 +9759,16 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/widgets/recent_conversations/conversation_route_scope.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/recent_conversations/group_conversation_switcher.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/recent_conversations/recent_conversation_switcher.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -9860,6 +9870,11 @@
     },
     {
       "path": "lib/core/widgets/user_message_attachment.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/voice_input_activity.dart",
       "area": "lib",
       "provenance": "tracked"
     },

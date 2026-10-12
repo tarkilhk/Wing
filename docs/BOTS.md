@@ -39,6 +39,12 @@ Valid edits save automatically after a short pause. Back finishes pending saves;
 
 ## Discussion groups
 
+Tap the microphone in the group message box to dictate, using the voice-input
+choice from App settings. Stop finishes the recording; Cancel keeps your draft.
+Recognized text replaces the selected text or inserts at the cursor. Review it
+before sending. Finish or cancel recording before pinching into Recents.
+Leaving the discussion or backgrounding Wing cancels recording.
+
 Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Type `@` anywhere in your message to choose a frozen room member or `@everyone`. Search by the bot's name or Hermes handle; selecting Pace inserts `@Pace`, while Wing retains its canonical Hermes identity. Members show their saved bot avatars when available; Everyone uses a group icon. Tap a group’s icon in the Groups roster to open its editor directly; tap its name or message area to open the discussion. Open **Edit group** from a group’s roster actions or the discussion’s options menu, including discussions opened from Recents, to change its name, icon color or picture. Upload, generate or remove the picture, then use the checkmark to save to Hermes. Membership and the Hermes instance are fixed when created. Rooms also offer stop and disband.
 
 In an ordinary chat, `@` anywhere in your message offers agents from the same Hermes server with their
@@ -61,16 +67,16 @@ add; removing a picked bot returns it to the list. Leave the
 name blank to use the selected bots' names, or enter a name of up to 64 characters.
 Choose a Hermes instance when several are ready.
 
-The default room icon uses the first letter of its name and a random color from
-Hermes/Wing's usual color palette. The color stays fixed while you edit and is
-saved on Hermes.
+The default room icon overlaps the selected bots’ avatars inside a square frame
+with a random color from Hermes/Wing’s usual palette. The frame color stays fixed
+while you edit and is saved on Hermes. Renaming the room keeps its member avatars.
 
 Upload a room picture, generate one from a description, or remove it. Generation
 uses the chosen instance's default profile image provider. Uploads accept PNG,
 JPEG and WebP up to 2 MB. Wing crops a 256 px square thumbnail and compresses it
 to at most 45 KB for upload. Creating the group saves its picture on the chosen
 Hermes backend; another Wing device connected to that backend can load it.
-Removing a picture restores the letter icon. Icons appear in the group list and
+Removing a picture restores the member-avatar collage. Icons appear in the group list and
 conversation header. Desktop uses a
 separate room format and does not currently display Wing's hosted-room pictures.
 
@@ -86,6 +92,12 @@ timestamps, with Copy in the same header. Type `@` in the composer to choose a
 member; the picker inserts at the cursor. The conversation opens
 at its latest messages; scrolling up keeps your place as replies arrive. The down
 arrow returns to the latest messages with the same motion as normal chats.
+
+Pinch inward on the discussion to open the same cards as normal chat Recents.
+The group remains mounted with its draft and reading position. Tap its card or
+use Back to return; Back again returns to the screen that opened the group.
+Opening another conversation uses its normal chat window; Back restores the
+group's cards. Cards do not mark group messages as read.
 
 Tap the instance and bot count under the title for a compact member list
 anchored beneath that row, with saved names and avatars. Tap outside or use Back

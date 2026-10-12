@@ -732,11 +732,11 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     if (_selecting || !widget.session.active) return Future.value();
     final entry = widget.session.entryAt(index);
     final key = entry.key;
-    if (entry.group != null) return _selectGroup(key);
     if (key == widget.session.selected) {
       _returnToChat(cardIndex: index);
       return Future.value();
     }
+    if (widget.session.opensRoute(key)) return _selectRoute(key);
     final fromStack = _stack;
     _captureLive();
     _endBatch();
@@ -767,7 +767,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     return completion.future;
   }
 
-  Future<void> _selectGroup(RecentConversationKey key) async {
+  Future<void> _selectRoute(RecentConversationKey key) async {
     final fromStack = _stack;
     _endBatch();
     ++_captureGeneration;

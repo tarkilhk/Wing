@@ -1,4 +1,6 @@
 import 'bots/bot_group_screen.dart';
+import '../widgets/recent_conversations/group_conversation_switcher.dart';
+import '../widgets/recent_conversations/conversation_route_scope.dart';
 import 'bots/bots_create_screen.dart';
 import '../models/composer_reference.dart';
 import '../models/recent_conversation.dart';
@@ -97,6 +99,7 @@ import 'app_settings_content.dart';
 import 'analytics_content.dart';
 import 'workspace_overview_content.dart';
 import '../controllers/voice_input_controller.dart';
+import '../widgets/voice_input_activity.dart';
 import '../models/voice_processing_settings.dart';
 import '../controllers/voice_output_controller.dart';
 import '../services/android_voice.dart';
@@ -341,45 +344,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Widget _voiceActivity() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      if (_voiceInput.active)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Semantics(
-                liveRegion: true,
-                child: Text(switch (_voiceInput.phase) {
-                  VoiceInputPhase.starting => 'Opening microphone…',
-                  VoiceInputPhase.recording =>
-                    'Recording · ${_voiceInput.seconds}s / 120s',
-                  VoiceInputPhase.transcribing => 'Transcribing…',
-                  VoiceInputPhase.idle => '',
-                }),
-              ),
-              if (_voiceInput.partial.isNotEmpty)
-                Text(
-                  _voiceInput.partial,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              Wrap(
-                spacing: 8,
-                children: [
-                  if (_voiceInput.phase == VoiceInputPhase.recording)
-                    TextButton(
-                      onPressed: _voiceInput.stop,
-                      child: const Text('Stop recording'),
-                    ),
-                  TextButton(
-                    onPressed: _voiceInput.cancel,
-                    child: const Text('Cancel recording'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+      VoiceInputActivity(context: context, controller: _voiceInput),
       if (_voiceOutput.owner != null)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -397,10 +362,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             ],
           ),
         ),
-      if (_voiceInput.error != null || _voiceOutput.error != null)
+      if (_voiceOutput.error != null)
         Padding(
           padding: const EdgeInsets.all(12),
-          child: StudioError(_voiceInput.error ?? _voiceOutput.error!),
+          child: StudioError(_voiceOutput.error!),
         ),
     ],
   );
@@ -433,15 +398,64 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _composerSelections.clear();
   }
 
-  Future<void> _openRecentGroup(BotGroup group) =>
-      Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => BotGroupScreen(
+  Widget _recentPreview(RecentConversationCard card) => ConversationPreview(
+    card: card,
+    connectionLabel: controller.connection.label,
+    connectionIcon: controller.connection.icon,
+    connectionStatus: controller.connectionStatus,
+  );
+
+  Future<void> _openRecentGroup(BotGroup group) {
+    late RecentConversationSession visit;
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (groupContext) => GroupConversationSwitcher(
+          groupKey: RecentConversationEntry.group(group).key,
+          createSession: () =>
+              visit = controller.groupRecentConversationSession(
+                group: group,
+                bots: _bots,
+                onOpenGroup: _openRecentGroup,
+                activity: () => ChatNoticeActivityScope.of(groupContext),
+                onOpenChat: (_) => Navigator.of(groupContext).push<void>(
+                  MaterialPageRoute(
+                    builder: (chatContext) => RecentConversationRouteScope(
+                      entries: visit.entries,
+                      onLeave: () => Navigator.of(chatContext).pop(),
+                      child: ProfileWorkspaceScreen(
+                        controller: controller,
+                        enableNotifications: widget.enableNotifications,
+                        backgroundMonitoringState:
+                            widget.backgroundMonitoringState,
+                        openMonitoringBatterySettings:
+                            widget.openMonitoringBatterySettings,
+                        onConnections: widget.onConnections,
+                        configurationActions: widget.configurationActions,
+                        savedConnections: widget.savedConnections,
+                        onSelectConnection: widget.onSelectConnection,
+                        onPreferencesChanged: widget.onPreferencesChanged,
+                        onCapturePhoto: widget.onCapturePhoto,
+                        voiceDevice: widget.voiceDevice,
+                        createBotsSession: widget.createBotsSession,
+                        onOpenBotChat: widget.onOpenBotChat,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          previewBuilder: _recentPreview,
+          child: BotGroupScreen(
+            voiceInputSettings: () =>
+                controller.appPreferences.current.voiceInputSettings,
+            voiceDevice: widget.voiceDevice,
+            stopVoicePlayback: _voiceOutput.stop,
             createSession: () => _bots.openGroup(group),
-            onEdit: (group) => openGroupEditor(context, _bots, group),
+            onEdit: (group) => openGroupEditor(groupContext, _bots, group),
           ),
         ),
-      );
+      ),
+    );
+  }
 
   Future<void> _openRecentConversation(
     ProfileRecentChat item,
@@ -481,12 +495,20 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Widget _withRecentSwitcher(ProfileChat chat, Widget child) {
     if (_recentVisit?.active != true) {
       _recentVisit?.dispose();
-      _recentVisit = controller.chatRecentConversationSession(
-        bots: _bots,
-        chat: chat,
-        onOpenGroup: _openRecentGroup,
-        activity: () => ChatNoticeActivityScope.of(context),
-      );
+      final route = RecentConversationRouteScope.maybeOf(context);
+      _recentVisit = route == null
+          ? controller.chatRecentConversationSession(
+              bots: _bots,
+              chat: chat,
+              onOpenGroup: _openRecentGroup,
+              activity: () => ChatNoticeActivityScope.of(context),
+            )
+          : controller.recentConversationSession(
+              bots: _bots,
+              entries: route.entries,
+              onOpenGroup: _openRecentGroup,
+              activity: ChatNoticeActivityScope.of(context),
+            );
       _recentRenderedChat = chat;
     }
     final visit = _recentVisit!;
@@ -497,12 +519,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         key: _recentSwitcher,
         session: visit,
         chatKey: RecentConversationKey.chat(chat.key),
-        previewBuilder: (card) => ConversationPreview(
-          card: card,
-          connectionLabel: controller.connection.label,
-          connectionIcon: controller.connection.icon,
-          connectionStatus: controller.connectionStatus,
-        ),
+        previewBuilder: _recentPreview,
         gesturesEnabled:
             _hasWorkspaceFocus &&
             !_voiceInput.active &&
@@ -2703,12 +2720,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         );
   }
 
-  Widget _dictationButton(ProfileChat chat) => IconButton(
-    tooltip: 'Dictate message',
-    icon: const Icon(Icons.mic_none),
-    onPressed: _voiceInput.canDictate(controller.canDictate(chat))
-        ? () => _run(() => _requestDictation(chat))
-        : null,
+  Widget _dictationButton(ProfileChat chat) => VoiceInputButton(
+    enabled: _voiceInput.canDictate(controller.canDictate(chat)),
+    onPressed: () => _run(() => _requestDictation(chat)),
   );
 
   Widget _composerActionButton(ProfileChat chat) {
@@ -3040,6 +3054,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   void _leaveChat() {
     if (_recentSwitcher.currentState?.dismissStack() == true) return;
+    final route = RecentConversationRouteScope.maybeOf(context);
+    if (route != null) {
+      route.onLeave();
+      return;
+    }
     final origin = _chatOrigin;
     _disposeRecentVisit();
     controller.showList();
@@ -3171,6 +3190,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 onViewChanged: (view) => setState(() => _botsView = view),
                 onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
                 onOpenChat: _openBotChat,
+                onOpenGroup: _openRecentGroup,
               ),
               AppDestination.analytics => HermesAnalyticsContent(
                 key: ValueKey(controller.connectionIdentity),

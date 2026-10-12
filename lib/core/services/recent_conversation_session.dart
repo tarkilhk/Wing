@@ -11,6 +11,7 @@ abstract interface class RecentConversationSource implements Listenable {
   bool get current;
   RecentConversationKey? get selected;
   bool admits(RecentConversationKey key);
+  bool opensRoute(RecentConversationKey key);
   Object previewRevision(RecentConversationKey key);
   BotRecord? appearanceFor(RecentConversationKey key);
   Future<void> prepareAppearances(
@@ -100,6 +101,7 @@ final class RecentConversationSession extends ChangeNotifier {
   RecentConversationKey? get selected => _selected;
   RecentConversationKey? _opening;
   bool get selecting => _opening != null;
+  bool opensRoute(RecentConversationKey key) => _source.opensRoute(key);
   String? _error;
   String? get error => _error;
   bool _closed = false;
@@ -255,7 +257,7 @@ final class RecentConversationSession extends ChangeNotifier {
     try {
       await _source.open(key, current);
       if (!current()) return false;
-      if (key.group != null) return true;
+      if (_source.opensRoute(key)) return true;
       if (_source.selected != key) return false;
       _selected = key;
       return true;

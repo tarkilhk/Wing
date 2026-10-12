@@ -1,3 +1,4 @@
+import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
 import 'package:wing/core/services/bot_group_read_state.dart';
 import 'dart:io';
@@ -19,6 +20,10 @@ import 'package:wing/core/widgets/conversation_activity_status.dart';
 import 'package:wing/core/widgets/activity_shimmer.dart';
 import 'package:wing/core/widgets/composer_icon_button.dart';
 import 'helpers/pump_markdown_widget.dart';
+import 'package:wing/core/widgets/voice_input_activity.dart';
+import 'package:wing/core/widgets/recent_conversations/conversation_route_scope.dart';
+import 'support/voice_fixture.dart';
+import 'support/administration_fixture.dart';
 
 const _capture = bool.fromEnvironment('CAPTURE_BOT_GROUPS');
 
@@ -86,6 +91,272 @@ Future<void> _render(WidgetTester tester, GlobalKey key, String name) async {
 }
 
 void main() {
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group dictation shares chat controls ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          final group = (await fixture.repository.groups()).single;
+          final device = VoiceDeviceFixture();
+          addTearDown(device.stream.close);
+          final frame = GlobalKey();
+          var playbackStops = 0;
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: frame,
+                child: BotGroupScreen(
+                  voiceInputSettings: () =>
+                      const LocalVoiceInputSettings(language: 'fr-FR'),
+                  stopVoicePlayback: () async {
+                    playbackStops++;
+                  },
+                  voiceDevice: device,
+                  createSession: () => BotGroupSession(
+                    fixture.repository,
+                    group,
+                    appearances: const [],
+                    reads: BotGroupReadState(),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await _settleGroupMarkdown(tester);
+          final input = find.byKey(const ValueKey('group-message-composer'));
+          await tester.enterText(input, 'Plan: replace later');
+          final editing = tester.widget<TextField>(input).controller!;
+          editing.selection = const TextSelection(
+            baseOffset: 6,
+            extentOffset: 13,
+          );
+          await tester.pump();
+          await _render(tester, frame, 'voice-idle-${brightness.name}-$scale');
+          expect(find.byType(VoiceInputButton), findsOneWidget);
+          await tester.tap(find.byTooltip('Dictate message'));
+          await tester.pump();
+          expect(device.language, 'fr-FR');
+          expect(device.local, isTrue);
+          expect(playbackStops, 1);
+          expect(tester.widget<TextField>(input).readOnly, isTrue);
+          expect(find.byType(VoiceInputActivity), findsOneWidget);
+          expect(find.byTooltip('Stop recording'), findsOneWidget);
+          expect(find.byTooltip('Cancel recording'), findsOneWidget);
+          expect(find.text('Cancel recording'), findsNothing);
+          final send = tester.widget<ComposerIconButton>(
+            find.byType(ComposerIconButton),
+          );
+          expect(send.onPressed, isNull);
+          device.stream.add({
+            'id': device.recording,
+            'text': 'spoken',
+            'final': false,
+          });
+          await tester.pump();
+          await _render(
+            tester,
+            frame,
+            'voice-recording-${brightness.name}-$scale',
+          );
+          final oldText = editing.text;
+          await tester.tap(find.byTooltip('Cancel recording'));
+          await tester.pump();
+          expect(editing.text, oldText);
+          expect(
+            editing.selection,
+            const TextSelection(baseOffset: 6, extentOffset: 13),
+          );
+          await tester.tap(find.byTooltip('Dictate message'));
+          await tester.pump();
+          device.stream.add({
+            'id': device.recording,
+            'text': 'spoken',
+            'final': true,
+          });
+          await tester.pump();
+          expect(editing.text, 'Plan: spoken later');
+          expect(editing.selection.extentOffset, 12);
+          expect(fixture.commands, isEmpty);
+          final speechError = List.filled(
+            3,
+            'Speech processing failed. Check your connection and profile speech settings, then retry.',
+          ).join(' ');
+          device.startError = StateError(speechError);
+          tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+          await tester.pump();
+          await tester.tap(find.byTooltip('Dictate message'));
+          await tester.pump();
+          expect(find.text(speechError), findsOneWidget);
+          expect(editing.text, 'Plan: spoken later');
+          expect(
+            tester.getRect(find.byTooltip('Dictate message')).bottom,
+            lessThanOrEqualTo(844 - 280),
+          );
+          await _render(tester, frame, 'voice-error-${brightness.name}-$scale');
+          final errorScroll = find.descendant(
+            of: find.byType(VoiceInputActivity),
+            matching: find.byType(Scrollable),
+          );
+          final errorPosition = tester
+              .state<ScrollableState>(errorScroll)
+              .position;
+          expect(errorPosition.maxScrollExtent, greaterThan(0));
+          await tester.drag(
+            find.descendant(
+              of: find.byType(VoiceInputActivity),
+              matching: find.byType(SingleChildScrollView),
+            ),
+            const Offset(0, -60),
+          );
+          await tester.pump();
+          expect(errorPosition.pixels, greaterThan(0));
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
+  testWidgets('group dictation cancels when Recents obscures the discussion', (
+    tester,
+  ) async {
+    final fixture = BotsFixture();
+    final group = (await fixture.repository.groups()).single;
+    final device = VoiceDeviceFixture();
+    addTearDown(device.stream.close);
+    final visible = ValueNotifier(true);
+    addTearDown(visible.dispose);
+    final screen = BotGroupScreen(
+      voiceInputSettings: () => const LocalVoiceInputSettings(language: ''),
+      stopVoicePlayback: () async {},
+      voiceDevice: device,
+      createSession: () => BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: const [],
+        reads: BotGroupReadState(),
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder(
+          valueListenable: visible,
+          builder: (_, value, child) => ConversationPresentationScope(
+            visible: value,
+            onInputActivityChanged: (_) {},
+            child: child!,
+          ),
+          child: screen,
+        ),
+      ),
+    );
+    await _settleGroupMarkdown(tester);
+    final input = find.byKey(const ValueKey('group-message-composer'));
+    await tester.enterText(input, 'Keep this draft');
+    await tester.tap(find.byTooltip('Dictate message'));
+    await tester.pump();
+    final id = device.recording;
+    visible.value = false;
+    await tester.pump();
+    expect(device.cancelled, contains(id));
+    device.stream.add({'id': id, 'text': 'late speech', 'final': true});
+    await tester.pump();
+    expect(tester.widget<TextField>(input).controller!.text, 'Keep this draft');
+    visible.value = true;
+    await tester.pump();
+    expect(find.byTooltip('Cancel recording'), findsNothing);
+    await tester.tap(find.byTooltip('Dictate message'));
+    await tester.pump();
+    final backgroundId = device.recording;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    expect(device.cancelled, contains(backgroundId));
+    device.stream.add({
+      'id': backgroundId,
+      'text': 'background speech',
+      'final': true,
+    });
+    await tester.pump();
+    expect(tester.widget<TextField>(input).controller!.text, 'Keep this draft');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'group dictation uses Hermes and preserves drafts after microphone failure',
+    (tester) async {
+      final server = AdministrationFixture();
+      final fixture = BotsFixture(server: server.server);
+      final group = (await fixture.repository.groups()).single;
+      final device = VoiceDeviceFixture()
+        ..startError = StateError('Microphone unavailable');
+      addTearDown(device.stream.close);
+      final transcript = Completer<Map<String, dynamic>>();
+      server.mutationOverride =
+          (method, path, query, body, canDispatch, onDispatched) async {
+            expect(canDispatch(), isTrue);
+            onDispatched();
+            server.requests.add((method, path, query, body));
+            return transcript.future;
+          };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BotGroupScreen(
+            voiceInputSettings: () => const HermesVoiceInputSettings(),
+            stopVoicePlayback: () async {},
+            voiceDevice: device,
+            createSession: () => BotGroupSession(
+              fixture.repository,
+              group,
+              appearances: const [],
+              reads: BotGroupReadState(),
+            ),
+          ),
+        ),
+      );
+      await _settleGroupMarkdown(tester);
+      final input = find.byKey(const ValueKey('group-message-composer'));
+      await tester.enterText(input, 'Draft');
+      await tester.tap(find.byTooltip('Dictate message'));
+      await tester.pump();
+      expect(find.text('Microphone unavailable'), findsOneWidget);
+      expect(tester.widget<TextField>(input).controller!.text, 'Draft');
+      device.startError = null;
+      await tester.tap(find.byTooltip('Dictate message'));
+      await tester.pump();
+      expect(device.local, isFalse);
+      await tester.tap(find.byTooltip('Stop recording'));
+      await tester.pump();
+      expect(find.text('Transcribing…'), findsOneWidget);
+      expect(server.requests.single.$3, {'profile': 'default'});
+      expect(server.requests.single.$4, {
+        'data_url': 'data:audio/mp4;base64,AQID',
+        'mime_type': 'audio/mp4',
+      });
+      transcript.complete({'ok': true, 'transcript': 'spoken'});
+      await tester.pump();
+      expect(tester.widget<TextField>(input).controller!.text, 'Draft spoken');
+      expect(fixture.commands, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   testWidgets('covered group editor stays paused across app resume', (
     tester,
   ) async {
@@ -102,6 +373,8 @@ void main() {
       MaterialApp(
         navigatorKey: navigator,
         home: BotGroupScreen(
+          stopVoicePlayback: () async {},
+          voiceInputSettings: () => const LocalVoiceInputSettings(language: ''),
           createSession: () => BotGroupSession(
             fixture.repository,
             group,
@@ -175,6 +448,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: BotGroupScreen(
+          stopVoicePlayback: () async {},
+          voiceInputSettings: () => const LocalVoiceInputSettings(language: ''),
           createSession: () => BotGroupSession(
             fixture.repository,
             group,
@@ -301,6 +576,9 @@ void main() {
               home: RepaintBoundary(
                 key: frame,
                 child: BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () =>
+                      const LocalVoiceInputSettings(language: ''),
                   createSession: () => session = BotGroupSession(
                     fixture.repository,
                     group,
@@ -489,6 +767,9 @@ void main() {
                 ),
               ),
               home: BotGroupScreen(
+                stopVoicePlayback: () async {},
+                voiceInputSettings: () =>
+                    const LocalVoiceInputSettings(language: ''),
                 createSession: () => session = BotGroupSession(
                   fixture.repository,
                   group,

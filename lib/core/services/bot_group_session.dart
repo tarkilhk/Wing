@@ -5,6 +5,16 @@ import '../models/bots.dart';
 import 'bots_repository.dart';
 import 'bot_group_read_state.dart';
 import '../models/composer_reference.dart';
+import '../models/recent_conversation.dart';
+import 'hermes_voice.dart';
+
+/// Exact group visit and text revision captured before microphone admission.
+final class BotGroupVoiceDraft {
+  const BotGroupVoiceDraft._(this._owner, this._revision, this.text);
+  final Object _owner;
+  final int _revision;
+  final String text;
+}
 
 /// The stock gateway drives group discussion, including while Wing is away.
 /// This owner replays its log and retains one immutable idempotent send attempt.
@@ -144,7 +154,45 @@ class BotGroupSession extends ChangeNotifier {
   }
 
   void editMentions(String text, {ComposerReference? selected}) {
+    if (text != _draft) {
+      _draft = text;
+      _draftRevision++;
+    }
     _references = retainComposerReferences(text, [..._references, ?selected]);
+  }
+
+  String _draft = '';
+  int _draftRevision = 0;
+  RecentConversationKey get voiceTarget =>
+      RecentConversationKey.group(group.key);
+  bool get canDictate =>
+      !_closed && _visible && !_capturing && !_sending && _pending == null;
+
+  bool admitsDictation(RecentConversationKey target) =>
+      canDictate && target == voiceTarget;
+
+  BotGroupVoiceDraft captureVoiceDraft() {
+    if (!canDictate) {
+      throw StateError('This group is unavailable for dictation.');
+    }
+    return BotGroupVoiceDraft._(this, _draftRevision, _draft);
+  }
+
+  Future<void> applyVoiceDraft(BotGroupVoiceDraft capture, String text) {
+    if (!canDictate ||
+        !identical(capture._owner, this) ||
+        capture._revision != _draftRevision) {
+      throw StateError('The group draft changed. Please dictate again.');
+    }
+    editMentions(text);
+    return Future.value();
+  }
+
+  RemoteVoice voiceForGroup(RecentConversationKey target) {
+    if (!admitsDictation(target)) {
+      throw StateError('This group is unavailable for dictation.');
+    }
+    return repository.voiceForGroup(group);
   }
 
   final _events = <int, BotGroupEvent>{};

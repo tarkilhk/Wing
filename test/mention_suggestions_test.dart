@@ -1,3 +1,4 @@
+import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -595,6 +596,9 @@ void main() {
               home: RepaintBoundary(
                 key: _captureKey,
                 child: BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () =>
+                      const LocalVoiceInputSettings(language: ''),
                   createSession: () => owner.openGroup(group),
                 ),
               ),

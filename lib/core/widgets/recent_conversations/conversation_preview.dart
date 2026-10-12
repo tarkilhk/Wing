@@ -79,10 +79,9 @@ class ConversationPreview extends StatelessWidget {
             tooltip: 'Open navigation menu',
           ),
           title: card.entry.group != null
-              ? Text(
-                  card.entry.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              ? WingConversationTitle(
+                  title: card.entry.title,
+                  avatar: groupIdentity,
                 )
               : BotConversationTitle(
                   title: preview?.entry.title ?? card.entry.title,
@@ -99,12 +98,7 @@ class ConversationPreview extends StatelessWidget {
                       height: 48,
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: Row(
-                          children: [
-                            Expanded(child: project),
-                            ?groupIdentity,
-                          ],
-                        ),
+                        child: project,
                       ),
                     ),
                   ],
@@ -123,7 +117,6 @@ class ConversationPreview extends StatelessWidget {
                         child: Text('·', style: scopeStyle),
                       ),
                       Expanded(child: project),
-                      ?groupIdentity,
                     ],
                   ),
                 ),

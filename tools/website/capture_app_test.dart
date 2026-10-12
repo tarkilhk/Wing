@@ -506,6 +506,7 @@ void main() {
             onViewChanged: (next) => setState(() => view = next),
             onOpenMenu: () {},
             onOpenChat: (_) async {},
+            onOpenGroup: (_) async {},
           ),
         ),
       ),

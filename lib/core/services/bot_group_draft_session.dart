@@ -67,6 +67,8 @@ class BotGroupDraftSession extends ChangeNotifier {
       .toList();
   List<BotRecord> get selected =>
       bots.where((bot) => _members.contains(bot.id)).toList();
+  List<BotRecord?> get iconMembers =>
+      existing == null ? selected : existing!.members.map(appearance).toList();
   List<BotRecord> get matches {
     final query = _query.trim().toLowerCase();
     return bots

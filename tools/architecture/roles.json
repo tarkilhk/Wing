@@ -2181,6 +2181,16 @@
       "feature": "conversation",
       "library": "lib/core/widgets/recent_conversations/conversation_preview.dart"
     },
+    "lib/core/widgets/recent_conversations/conversation_route_scope.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/recent_conversations/conversation_route_scope.dart"
+    },
+    "lib/core/widgets/recent_conversations/group_conversation_switcher.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/recent_conversations/group_conversation_switcher.dart"
+    },
     "lib/core/widgets/recent_conversations/recent_conversation_switcher.dart": {
       "role": "view",
       "feature": "conversation",
@@ -2285,6 +2295,11 @@
       "role": "view",
       "feature": "outputs-and-viewers",
       "library": "lib/core/widgets/user_message_attachment.dart"
+    },
+    "lib/core/widgets/voice_input_activity.dart": {
+      "role": "view",
+      "feature": "voice",
+      "library": "lib/core/widgets/voice_input_activity.dart"
     },
     "lib/core/widgets/voice_preferences_card.dart": {
       "role": "view",

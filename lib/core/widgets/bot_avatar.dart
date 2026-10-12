@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../theme/profile_colors.dart';
 import '../models/bots.dart';
+import 'wing_app_bar.dart';
 
 enum BotAvatarMood { idle, work, think }
 
@@ -451,35 +452,25 @@ class BotConversationTitle extends StatelessWidget {
   /// Null selects the stable passive rendition used for Recents capture.
   final BotAvatarMood? mood;
   @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      if (bot case final appearance?) ...[
-        ExcludeSemantics(
-          child: mood == null
-              ? BotAvatar(
-                  name: appearance.title,
-                  shape: appearance.shape,
-                  color: appearance.color,
-                  image: appearance.avatar,
-                  size: 32,
-                )
-              : LiveBotAvatar(
-                  bot: appearance,
-                  name: appearance.title,
-                  mood: mood!,
-                  size: 32,
-                ),
-        ),
-        const SizedBox(width: 8),
-      ],
-      Flexible(
-        child: Text(
-          bot?.title ?? title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    ],
+  Widget build(BuildContext context) => WingConversationTitle(
+    title: bot?.title ?? title,
+    avatar: switch (bot) {
+      final appearance? =>
+        mood == null
+            ? BotAvatar(
+                name: appearance.title,
+                shape: appearance.shape,
+                color: appearance.color,
+                image: appearance.avatar,
+                size: 32,
+              )
+            : LiveBotAvatar(
+                bot: appearance,
+                name: appearance.title,
+                mood: mood!,
+                size: 32,
+              ),
+      null => null,
+    },
   );
 }

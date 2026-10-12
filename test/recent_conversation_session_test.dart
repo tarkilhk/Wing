@@ -33,6 +33,8 @@ class _Source extends ChangeNotifier implements RecentConversationSource {
   @override
   bool current = true;
   @override
+  bool opensRoute(RecentConversationKey key) => key.group != null;
+  @override
   RecentConversationKey? selected;
   final opens = <RecentConversationKey>[];
   final reads = <RecentConversationKey, Completer<RecentConversationPreview>>{};

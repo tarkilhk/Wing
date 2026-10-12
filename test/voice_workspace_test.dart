@@ -161,7 +161,7 @@ void main() {
         'final': false,
       });
       await tester.pump();
-      await tester.tap(find.text('Cancel recording'));
+      await tester.tap(find.byTooltip('Cancel recording'));
       await tester.pumpAndSettle();
       expect(chat.composer.observation.text, 'Existing draft new words');
     },
@@ -199,7 +199,7 @@ void main() {
     expect(device.playing, isNull);
     expect(device.recording, isNotNull);
     device.playbackDelay!.complete();
-    await tester.tap(find.text('Cancel recording'));
+    await tester.tap(find.byTooltip('Cancel recording'));
     await tester.pumpAndSettle();
   });
   testWidgets('backgrounding cancels capture without changing draft', (
@@ -234,7 +234,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
       expect(tester.takeException(), isNull);
       await screenshot(tester, 'composer-${brightness.name}-200');
-      await tester.tap(find.text('Cancel recording'));
+      await tester.tap(find.byTooltip('Cancel recording'));
       await tester.pumpAndSettle();
     });
   }
