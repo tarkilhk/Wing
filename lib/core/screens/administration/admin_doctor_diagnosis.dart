@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/doctor_diagnostic.dart';
@@ -100,8 +101,8 @@ class AdminDoctorDiagnosis extends StatelessWidget {
                             icon: openingFinding == index
                                 ? const SizedBox.square(
                                     dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                                    child: StudioLoading(
+                                      label: 'Running diagnostics',
                                     ),
                                   )
                                 : const Icon(WingIcons.newChat, size: 18),

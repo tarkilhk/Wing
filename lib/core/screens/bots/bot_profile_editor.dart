@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../models/bots.dart';
 import '../../services/bot_profile_edit_session.dart';
@@ -92,22 +93,44 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            '${_session.bot.instance} · ${_session.bot.profile.name}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          if (_session.busy || _session.saving) const LinearProgressIndicator(),
-          if (_session.error != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  StudioError(_session.error!),
-                  if (!_session.conflicted && _session.dirty)
+      body: StudioLoadingRegion(
+        available: !_session.busy,
+        busy: _session.busy || _session.saving,
+        label: 'Saving bot appearance',
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              '${_session.bot.instance} · ${_session.bot.profile.name}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+
+            if (_session.error != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    StudioError(_session.error!),
+                    if (!_session.conflicted && _session.dirty)
+                      IconButton(
+                        tooltip: 'Retry saving appearance',
+                        onPressed: _session.busy || _session.saving
+                            ? null
+                            : _session.flush,
+                        icon: const Icon(Icons.replay),
+                      ),
+                  ],
+                ),
+              ),
+            if (_session.needsReview && _session.error == null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text('Review your edits before retrying.'),
+                    ),
                     IconButton(
                       tooltip: 'Retry saving appearance',
                       onPressed: _session.busy || _session.saving
@@ -115,178 +138,162 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
                           : _session.flush,
                       icon: const Icon(Icons.replay),
                     ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          if (_session.needsReview && _session.error == null)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text('Review your edits before retrying.'),
-                  ),
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: BotAvatar(
+                  name: _session.bot.profile.name,
+                  shape: _session.shape,
+                  color: _session.color,
+                  image: _session.image,
+                  size: 88,
+                ),
+              ),
+            ),
+            TextField(
+              controller: _title,
+              enabled: !_session.busy,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Bot name',
+                errorText: _session.title.trim().isEmpty
+                    ? 'Give your bot a name.'
+                    : null,
+              ),
+              onChanged: (text) => _session.change(title: text),
+            ),
+            const SizedBox(height: 24),
+            Text('Shape', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final shape in botShapes)
                   IconButton(
-                    tooltip: 'Retry saving appearance',
-                    onPressed: _session.busy || _session.saving
+                    tooltip: shape,
+                    isSelected: _session.shape == shape,
+                    style: IconButton.styleFrom(
+                      backgroundColor: _session.shape == shape
+                          ? Theme.of(context).colorScheme.primaryContainer
+                          : null,
+                    ),
+                    onPressed: _session.busy
                         ? null
-                        : _session.flush,
-                    icon: const Icon(Icons.replay),
+                        : () => _session.change(shape: shape),
+                    icon: BotAvatar(
+                      name: _session.bot.profile.name,
+                      shape: shape,
+                      color: _session.color,
+                      size: 32,
+                    ),
                   ),
-                ],
-              ),
+              ],
             ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Center(
-              child: BotAvatar(
-                name: _session.bot.profile.name,
-                shape: _session.shape,
-                color: _session.color,
-                image: _session.image,
-                size: 88,
-              ),
-            ),
-          ),
-          TextField(
-            controller: _title,
-            enabled: !_session.busy,
-            textCapitalization: TextCapitalization.words,
-            decoration: InputDecoration(
-              labelText: 'Bot name',
-              errorText: _session.title.trim().isEmpty
-                  ? 'Give your bot a name.'
-                  : null,
-            ),
-            onChanged: (text) => _session.change(title: text),
-          ),
-          const SizedBox(height: 24),
-          Text('Shape', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final shape in botShapes)
-                IconButton(
-                  tooltip: shape,
-                  isSelected: _session.shape == shape,
-                  style: IconButton.styleFrom(
-                    backgroundColor: _session.shape == shape
-                        ? Theme.of(context).colorScheme.primaryContainer
-                        : null,
-                  ),
-                  onPressed: _session.busy
-                      ? null
-                      : () => _session.change(shape: shape),
-                  icon: BotAvatar(
-                    name: _session.bot.profile.name,
-                    shape: shape,
-                    color: _session.color,
-                    size: 32,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Text('Color', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 4,
-            children: [
-              for (var i = 0; i < desktopProfileSwatches.length; i++)
-                IconButton(
-                  tooltip: 'Color ${i + 1}',
-                  isSelected:
-                      BotAvatar.resolveColor(
-                        _session.color,
-                        _session.bot.profile.name,
-                      ) ==
-                      desktopProfileSwatches[i],
-                  onPressed: _session.busy
-                      ? null
-                      : () => _session.change(
-                          color:
-                              '#${desktopProfileSwatches[i].toARGB32().toRadixString(16).substring(2)}',
+            const SizedBox(height: 20),
+            Text('Color', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 4,
+              children: [
+                for (var i = 0; i < desktopProfileSwatches.length; i++)
+                  IconButton(
+                    tooltip: 'Color ${i + 1}',
+                    isSelected:
+                        BotAvatar.resolveColor(
+                          _session.color,
+                          _session.bot.profile.name,
+                        ) ==
+                        desktopProfileSwatches[i],
+                    onPressed: _session.busy
+                        ? null
+                        : () => _session.change(
+                            color:
+                                '#${desktopProfileSwatches[i].toARGB32().toRadixString(16).substring(2)}',
+                          ),
+                    icon: Icon(
+                      Icons.circle,
+                      color: desktopProfileSwatches[i],
+                      size: 28,
+                    ),
+                    selectedIcon: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(
+                          Icons.circle,
+                          color: desktopProfileSwatches[i],
+                          size: 28,
                         ),
-                  icon: Icon(
-                    Icons.circle,
-                    color: desktopProfileSwatches[i],
-                    size: 28,
+                        Icon(
+                          Icons.check,
+                          size: 18,
+                          color:
+                              desktopProfileSwatches[i].computeLuminance() > .4
+                              ? Colors.black
+                              : Colors.white,
+                        ),
+                      ],
+                    ),
                   ),
-                  selectedIcon: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Icon(
-                        Icons.circle,
-                        color: desktopProfileSwatches[i],
-                        size: 28,
-                      ),
-                      Icon(
-                        Icons.check,
-                        size: 18,
-                        color: desktopProfileSwatches[i].computeLuminance() > .4
-                            ? Colors.black
-                            : Colors.white,
-                      ),
-                    ],
+                IconButton(
+                  tooltip: 'Match profile color',
+                  onPressed: _session.busy
+                      ? null
+                      : () => _session.change(color: ''),
+                  icon: const Icon(Icons.restart_alt),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Image',
+                    style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
-              IconButton(
-                tooltip: 'Match profile color',
-                onPressed: _session.busy
-                    ? null
-                    : () => _session.change(color: ''),
-                icon: const Icon(Icons.restart_alt),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Image',
-                  style: Theme.of(context).textTheme.titleSmall,
+                IconButton(
+                  tooltip: 'Upload avatar',
+                  onPressed: _session.busy || _session.saving
+                      ? null
+                      : _session.pickImage,
+                  icon: const Icon(Icons.upload_outlined),
                 ),
-              ),
-              IconButton(
-                tooltip: 'Upload avatar',
-                onPressed: _session.busy || _session.saving
-                    ? null
-                    : _session.pickImage,
-                icon: const Icon(Icons.upload_outlined),
-              ),
-              IconButton(
-                tooltip: 'Remove avatar',
-                onPressed: _session.busy ? null : _session.removeImage,
-                icon: const Icon(Icons.image_not_supported_outlined),
-              ),
-            ],
-          ),
-          TextField(
-            controller: _prompt,
-            enabled: !_session.busy,
-            minLines: 2,
-            maxLines: 4,
-            decoration: InputDecoration(
-              labelText: 'Describe an avatar',
-              hintText: 'A friendly midnight-blue owl',
-              suffixIcon: IconButton(
-                tooltip: 'Generate avatar',
-                onPressed: _session.busy || _session.saving
-                    ? null
-                    : () => _session.generate(_prompt.text),
-                icon: const Icon(Icons.auto_awesome_outlined),
+                IconButton(
+                  tooltip: 'Remove avatar',
+                  onPressed: _session.busy ? null : _session.removeImage,
+                  icon: const Icon(Icons.image_not_supported_outlined),
+                ),
+              ],
+            ),
+            TextField(
+              controller: _prompt,
+              enabled: !_session.busy,
+              minLines: 2,
+              maxLines: 4,
+              decoration: InputDecoration(
+                labelText: 'Describe an avatar',
+                hintText: 'A friendly midnight-blue owl',
+                suffixIcon: IconButton(
+                  tooltip: 'Generate avatar',
+                  onPressed: _session.busy || _session.saving
+                      ? null
+                      : () => _session.generate(_prompt.text),
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Generation uses this profile’s image provider. Upload PNG, JPEG or WebP, up to 2 MB.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              'Generation uses this profile’s image provider. Upload PNG, JPEG or WebP, up to 2 MB.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
       ),
     ),
   );

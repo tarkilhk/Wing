@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/read_recovery.dart';
 import '../../models/profile_tool_setup.dart';
 import '../../services/profile_tool_setup_session.dart';
@@ -82,139 +83,155 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
         builder: (context, _) {
           final state = _session.state;
           final data = state.readiness;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (state.busy &&
-                  !state.saving &&
-                  state.phase != ToolSetupPhase.confirming)
-                const LinearProgressIndicator(),
-              if (data == null && state.error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: AdminNotice.error(
-                    state.error!,
-                    retry: state.busy ? null : _session.refresh,
+          return StudioLoadingRegion(
+            available: data != null,
+            busy:
+                state.busy &&
+                !state.saving &&
+                state.phase != ToolSetupPhase.confirming,
+            label: 'Loading tool settings',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (data == null && state.error != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: AdminNotice.error(
+                      state.error!,
+                      retry: state.busy ? null : _session.refresh,
+                    ),
                   ),
-                ),
-              if (data != null)
-                Expanded(
-                  key: const ValueKey('content'),
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (state.saving) const LinearProgressIndicator(),
-                      if (state.notice case final notice?) AdminNotice(notice),
-                      if (state.error case final error?)
-                        AdminNotice.error(error),
-                      TextButton(
-                        onPressed: state.busy ? null : _session.refresh,
-                        child: const Text('Refresh readiness'),
-                      ),
-                      if (data.providers.isEmpty)
-                        const AdminNotice(
-                          'No guided provider setup is reported for this toolset.',
-                        ),
-                      for (final row in data.providers)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: AdminGroup(
-                            key: Key('tool-provider-${row.name}'),
-                            selected: row.selected,
-                            children: [
-                              Semantics(
-                                selected: row.selected,
-                                child: ListTile(
-                                  selected: row.selected,
-                                  title: Text(row.name),
-                                  subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      if (row.selectedLabel case final label?)
-                                        Text(
-                                          label,
-                                          style: TextStyle(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.primary,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      Text(row.status),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                child: Wrap(
-                                  spacing: 8,
-                                  children: [
-                                    if (row.capabilities.isNotEmpty)
-                                      for (final capability in row.capabilities)
-                                        TextButton(
-                                          onPressed: state.canChooseProvider
-                                              ? () => _session.selectProvider(
-                                                  row.name,
-                                                  capability: capability,
-                                                )
-                                              : null,
-                                          child: Text(
-                                            'Use for ${capability.name}',
-                                          ),
-                                        )
-                                    else if (data.offersProviderSelection)
-                                      TextButton(
-                                        onPressed: state.canChooseProvider
-                                            ? () => _session.selectProvider(
-                                                row.name,
-                                                capability: null,
-                                              )
-                                            : null,
-                                        child: const Text('Use provider'),
-                                      ),
-                                    if (data.hasModelCatalog)
-                                      TextButton(
-                                        onPressed: state.canOpenModels
-                                            ? () => _models(row.name)
-                                            : null,
-                                        child: const Text('Models'),
-                                      ),
-                                    if (row.setupKey case final key?)
-                                      TextButton(
-                                        onPressed: state.canRunSetup
-                                            ? () => _setup(key)
-                                            : null,
-                                        child: const Text('Setup requirements'),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              for (final field in row.credentials)
-                                ListTile(
-                                  title: Text(field.prompt),
-                                  subtitle: Text(
-                                    field.isSet
-                                        ? 'Available to this profile'
-                                        : 'Not available',
-                                  ),
-                                  trailing: const Icon(Icons.key_outlined),
-                                  onTap: state.canReviewCredentials
-                                      ? () => _session.reviewCredentials(
-                                          () => _onCredential(context, field),
-                                        )
-                                      : null,
-                                ),
-                            ],
+                if (data != null)
+                  Expanded(
+                    key: const ValueKey('content'),
+                    child: StudioLoadingRegion(
+                      available: true,
+                      busy: state.saving,
+                      label: 'Saving tool settings',
+                      child: ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          if (state.notice case final notice?)
+                            AdminNotice(notice),
+                          if (state.error case final error?)
+                            AdminNotice.error(error),
+                          TextButton(
+                            onPressed: state.busy ? null : _session.refresh,
+                            child: const Text('Refresh readiness'),
                           ),
-                        ),
-                    ],
+                          if (data.providers.isEmpty)
+                            const AdminNotice(
+                              'No guided provider setup is reported for this toolset.',
+                            ),
+                          for (final row in data.providers)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: AdminGroup(
+                                key: Key('tool-provider-${row.name}'),
+                                selected: row.selected,
+                                children: [
+                                  Semantics(
+                                    selected: row.selected,
+                                    child: ListTile(
+                                      selected: row.selected,
+                                      title: Text(row.name),
+                                      subtitle: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          if (row.selectedLabel
+                                              case final label?)
+                                            Text(
+                                              label,
+                                              style: TextStyle(
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.primary,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          Text(row.status),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
+                                    child: Wrap(
+                                      spacing: 8,
+                                      children: [
+                                        if (row.capabilities.isNotEmpty)
+                                          for (final capability
+                                              in row.capabilities)
+                                            TextButton(
+                                              onPressed: state.canChooseProvider
+                                                  ? () =>
+                                                        _session.selectProvider(
+                                                          row.name,
+                                                          capability:
+                                                              capability,
+                                                        )
+                                                  : null,
+                                              child: Text(
+                                                'Use for ${capability.name}',
+                                              ),
+                                            )
+                                        else if (data.offersProviderSelection)
+                                          TextButton(
+                                            onPressed: state.canChooseProvider
+                                                ? () => _session.selectProvider(
+                                                    row.name,
+                                                    capability: null,
+                                                  )
+                                                : null,
+                                            child: const Text('Use provider'),
+                                          ),
+                                        if (data.hasModelCatalog)
+                                          TextButton(
+                                            onPressed: state.canOpenModels
+                                                ? () => _models(row.name)
+                                                : null,
+                                            child: const Text('Models'),
+                                          ),
+                                        if (row.setupKey case final key?)
+                                          TextButton(
+                                            onPressed: state.canRunSetup
+                                                ? () => _setup(key)
+                                                : null,
+                                            child: const Text(
+                                              'Setup requirements',
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  for (final field in row.credentials)
+                                    ListTile(
+                                      title: Text(field.prompt),
+                                      subtitle: Text(
+                                        field.isSet
+                                            ? 'Available to this profile'
+                                            : 'Not available',
+                                      ),
+                                      trailing: const Icon(Icons.key_outlined),
+                                      onTap: state.canReviewCredentials
+                                          ? () => _session.reviewCredentials(
+                                              () =>
+                                                  _onCredential(context, field),
+                                            )
+                                          : null,
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           );
         },
       ),
@@ -262,72 +279,71 @@ class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
         builder: (context, _) {
           final state = _session.state;
           final models = state.models;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (state.busy)
-                LinearProgressIndicator(
-                  semanticsLabel: state.saving
-                      ? 'Saving model'
-                      : 'Loading models',
-                ),
-              if (state.error case final error?)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: AdminNotice.error(
-                    error,
-                    retry: state.busy
-                        ? null
-                        : () => _session.loadModels(_editor),
-                  ),
-                ),
-              if (state.notice case final notice?)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: AdminNotice(notice),
-                ),
-              if (models != null && !models.hasModels)
-                const Expanded(
-                  child: Center(
-                    child: AdminNotice(
-                      'This tool provider does not expose a model catalog here.',
+          return StudioLoadingRegion(
+            available: models != null && !state.saving,
+            busy: state.busy,
+            label: state.saving ? 'Saving model' : 'Loading models',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (state.error case final error?)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: AdminNotice.error(
+                      error,
+                      retry: state.busy
+                          ? null
+                          : () => _session.loadModels(_editor),
                     ),
                   ),
-                )
-              else if (models != null)
-                Expanded(
-                  key: const ValueKey('content'),
-                  child: ModelChooser(
-                    choices: models.choices,
-                    selected: state.modelSelection,
-                    onSelected: (selection) {
-                      if (selection.choice case final choice?) {
-                        _session.stageModel(_editor, choice);
-                      }
-                    },
-                    onRefresh: () => _session.refreshModelChoices(_editor),
-                    scopeLabel: 'Models for ${_editor.provider}',
-                    keyPrefix: 'tool-model',
-                    groupByProvider: false,
-                    promoteSelected: true,
-                    selectedStatus: state.modelSelectionStatus,
-                    enabled: state.canStageModel,
+                if (state.notice case final notice?)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: AdminNotice(notice),
                   ),
-                ),
-              if (models?.hasModels == true)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton(
-                      onPressed: state.canSaveModel
-                          ? () => _session.saveModel(_editor)
-                          : null,
-                      child: const Text('Use model'),
+                if (models != null && !models.hasModels)
+                  const Expanded(
+                    child: Center(
+                      child: AdminNotice(
+                        'This tool provider does not expose a model catalog here.',
+                      ),
+                    ),
+                  )
+                else if (models != null)
+                  Expanded(
+                    key: const ValueKey('content'),
+                    child: ModelChooser(
+                      choices: models.choices,
+                      selected: state.modelSelection,
+                      onSelected: (selection) {
+                        if (selection.choice case final choice?) {
+                          _session.stageModel(_editor, choice);
+                        }
+                      },
+                      onRefresh: () => _session.refreshModelChoices(_editor),
+                      scopeLabel: 'Models for ${_editor.provider}',
+                      keyPrefix: 'tool-model',
+                      groupByProvider: false,
+                      promoteSelected: true,
+                      selectedStatus: state.modelSelectionStatus,
+                      enabled: state.canStageModel,
                     ),
                   ),
-                ),
-            ],
+                if (models?.hasModels == true)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton(
+                        onPressed: state.canSaveModel
+                            ? () => _session.saveModel(_editor)
+                            : null,
+                        child: const Text('Use model'),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           );
         },
       ),

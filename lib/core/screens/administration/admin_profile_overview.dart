@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -167,7 +168,9 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
     listenable: session,
     builder: (context, _) {
       final summary = session.summary;
-      return RefreshIndicator(
+      return StudioRefresh(
+        available: true,
+        label: 'Refreshing profile',
         onRefresh: session.refresh,
         child: ListView(
           controller: _scrollController,

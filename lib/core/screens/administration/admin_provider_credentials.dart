@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -102,25 +103,29 @@ class ProviderInventoryBody extends StatelessWidget {
     builder: (context, _) => ReadRecovery(
       shouldRetry: () => session.canRecover,
       retry: session.refresh,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (session.loading) const LinearProgressIndicator(),
-          if (session.error != null)
-            Flexible(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: AdminNotice.error(
-                    '${session.observation == null ? '' : 'Last checked ${TimeOfDay.fromDateTime(session.observation!.checkedAt).format(context)}. '}${session.error}',
-                    retry: session.loading ? null : session.refresh,
+      child: StudioLoadingRegion(
+        available: session.observation != null,
+        busy: session.loading,
+        label: 'Loading credentials',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (session.error != null)
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: AdminNotice.error(
+                      '${session.observation == null ? '' : 'Last checked ${TimeOfDay.fromDateTime(session.observation!.checkedAt).format(context)}. '}${session.error}',
+                      retry: session.loading ? null : session.refresh,
+                    ),
                   ),
                 ),
               ),
-            ),
-          if (session.observation case final data?)
-            Expanded(key: const ValueKey('content'), child: builder(data)),
-        ],
+            if (session.observation case final data?)
+              Expanded(key: const ValueKey('content'), child: builder(data)),
+          ],
+        ),
       ),
     ),
   );

@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' show SemanticsAction;
@@ -371,11 +372,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ),
     );
     final before = tester.getTopLeft(find.text('Subagents'));
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(StudioLoading), findsOneWidget);
     update(() => loading = false);
     await tester.pumpAndSettle();
     expect(tester.getTopLeft(find.text('Subagents')), before);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(StudioLoading), findsNothing);
     await tester.tap(find.text('Subagents'));
     await tester.pumpAndSettle();
     expect(find.text('Agent details'), findsOneWidget);

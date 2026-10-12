@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'package:wing/core/services/profile_connectors_session.dart';
 import 'dart:io';
@@ -103,7 +104,7 @@ void main() {
       await tester.tap(find.text('Test'));
       await tester.pump();
       expect(find.text('Testing connection…'), findsNothing);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(StudioLoading), findsOneWidget);
       expect(find.bySemanticsLabel('Testing connection'), findsOneWidget);
       gate.complete({'ok': true, 'tools': []});
       await tester.pumpAndSettle();

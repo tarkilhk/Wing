@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/model_choice.dart';
 import 'studio_action_label.dart';
 import 'studio_error.dart';
@@ -240,7 +241,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                 ),
               Expanded(
                 child: _loading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const StudioLoading.page(label: 'Loading models')
                     : _error != null && _choices.isEmpty
                     ? Center(
                         child: TextButton(

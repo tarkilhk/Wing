@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -149,59 +150,57 @@ class _RecoveryEntry extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: tokens.border)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Semantics(
-            label: entry.identification,
-            child: Tooltip(
-              message: entry.identification,
-              excludeFromSemantics: true,
-              child: Text(
-                entry.title,
-                style: Theme.of(context).textTheme.titleSmall,
+      child: StudioLoadingRegion(
+        available: !entry.busy,
+        busy: entry.busy,
+        label: 'Recovering conversation',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              label: entry.identification,
+              child: Tooltip(
+                message: entry.identification,
+                excludeFromSemantics: true,
+                child: Text(
+                  entry.title,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: WingSpacing.xs),
-          Text(
-            entry.profile,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: tokens.muted),
-          ),
-          const SizedBox(height: WingSpacing.sm),
-          Semantics(liveRegion: true, child: Text(entry.detail)),
-          if (entry.busy)
-            Padding(
-              padding: const EdgeInsets.only(top: WingSpacing.sm),
-              child: LinearProgressIndicator(
-                minHeight: 2,
-                value: MediaQuery.disableAnimationsOf(context) ? 1 : null,
+            const SizedBox(height: WingSpacing.xs),
+            Text(
+              entry.profile,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: tokens.muted),
+            ),
+            const SizedBox(height: WingSpacing.sm),
+            Semantics(liveRegion: true, child: Text(entry.detail)),
+
+            if (entry.error case final error?)
+              Padding(
+                padding: const EdgeInsets.only(top: WingSpacing.sm),
+                child: StudioError(error),
               ),
-            ),
-          if (entry.error case final error?)
-            Padding(
-              padding: const EdgeInsets.only(top: WingSpacing.sm),
-              child: StudioError(error),
-            ),
-          if (entry.actions.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: WingSpacing.xs),
-              child: Wrap(
-                spacing: WingSpacing.sm,
-                runSpacing: WingSpacing.xs,
-                alignment: WrapAlignment.end,
-                children: [
-                  for (final action in entry.actions)
-                    TextButton(
-                      onPressed: action.invoke,
-                      child: Text(action.label),
-                    ),
-                ],
+            if (entry.actions.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: WingSpacing.xs),
+                child: Wrap(
+                  spacing: WingSpacing.sm,
+                  runSpacing: WingSpacing.xs,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    for (final action in entry.actions)
+                      TextButton(
+                        onPressed: action.invoke,
+                        child: Text(action.label),
+                      ),
+                  ],
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

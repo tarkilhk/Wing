@@ -57,143 +57,146 @@ class NotificationCoverageHost {
     activeName: 'a',
   );
 
-  ProfileGateway gateway(
-    WorkspaceScope scope,
-  ) => gateways[scope.profileName] = ProfileGateway(
-    scope: scope,
-    discover: discover,
-    get: (path, query) async {
-      if (path == 'sessions/search') {
-        if (failedMetadataProfiles.contains(scope.profileName)) {
-          throw StateError('profile unavailable');
-        }
-        return {
-          'results': (saved[scope.profileName] ?? const [])
-              .where((row) => row['id'] == query['q'])
-              .map(
-                (row) => {
-                  'session_id': row['id'],
-                  'title': row['title'],
-                  'profile': row['profile'],
-                },
-              )
-              .toList(),
-        };
-      }
-      if (RegExp(r'^sessions/[^/]+$').hasMatch(path)) {
-        if (failedMetadataProfiles.contains(scope.profileName)) {
-          throw StateError('profile unavailable');
-        }
-        final id = Uri.decodeComponent(path.split('/')[1]);
-        final rows =
-            (saved[scope.profileName] ?? const <Map<String, dynamic>>[])
-                .where((row) => row['id'] == id)
-                .toList();
-        if (rows.isEmpty) throw DashboardSessionNotFound(path);
-        return rows.single;
-      }
-      if (path == 'sessions') {
-        final rows = saved[scope.profileName] ?? const [];
-        return {
-          'sessions': rows,
-          'offset': int.parse(query['offset']!),
-          'limit': int.parse(query['limit']!),
-          'total': rows.length,
-        };
-      }
-      if (path == 'logs') return {'entries': <Map<String, dynamic>>[]};
-      await historyDelay?.future;
-      if (historyFails) throw StateError('history unavailable');
-      return {
-        'session_id': path.split('/')[1],
-        'messages': history,
-        'pagination': {
-          'offset': 0,
-          'limit': 50,
-          'returned': history.length,
-          'order': 'latest',
-        },
-      };
-    },
-    rpc: (method, params) async {
-      if (method.startsWith('groups.') && groupFails)
-        throw StateError('group unavailable');
-      if (method == 'groups.list') return {'rooms': groups, 'next_offset': null};
-      if (method == 'groups.state') return groupStates[params['room_id']]!;
-      if (method == 'groups.log') {
-        final events = groupLogs[params['room_id']] ?? [];
-        final latest = groupStates[params['room_id']]!['room']['latest_seq'];
-        return {
-          'events': events
-              .where((e) => e['seq'] > params['since_seq'])
-              .toList(),
-          'cursor': latest,
-          'latest_seq': latest,
-          'has_more': false,
-          'authority': {'gateway_id': 'fixture', 'epoch': 1},
-        };
-      }
-      if (method == 'session.active_list') {
-        activeReads++;
-        if (activeFails) throw StateError('offline');
-        return {'sessions': active};
-      }
-      if (method == 'projects.tree') return {'projects': []};
-      if (method == 'approval.pending') {
-        approvalReads.add(Map.of(params));
-        return {'approvals': pendingApprovals};
-      }
-      if (method == 'session.create' || method == 'session.resume') {
-        int? resumeCall;
-        if (method == 'session.resume') {
-          resumeCalls.add(Map.of(params));
-          resumeCall = resumeCalls.length;
-          await (resumeDelays[resumeCall] ?? resumeDelay)?.future;
-          if (resumeFails) throw StateError('resume unavailable');
-        }
-        final sessionId = method == 'session.create'
-            ? 'loaded'
-            : params['session_id'] as String;
-        if (method == 'session.resume' && liveUnpersistedResume) {
-          // Stock _resume_live_unpersisted has no running/open_requests.
+  ProfileGateway gateway(WorkspaceScope scope) =>
+      gateways[scope.profileName] = ProfileGateway(
+        scope: scope,
+        discover: discover,
+        get: (path, query) async {
+          if (path == 'sessions/search') {
+            if (failedMetadataProfiles.contains(scope.profileName)) {
+              throw StateError('profile unavailable');
+            }
+            return {
+              'results': (saved[scope.profileName] ?? const [])
+                  .where((row) => row['id'] == query['q'])
+                  .map(
+                    (row) => {
+                      'session_id': row['id'],
+                      'title': row['title'],
+                      'profile': row['profile'],
+                    },
+                  )
+                  .toList(),
+            };
+          }
+          if (RegExp(r'^sessions/[^/]+$').hasMatch(path)) {
+            if (failedMetadataProfiles.contains(scope.profileName)) {
+              throw StateError('profile unavailable');
+            }
+            final id = Uri.decodeComponent(path.split('/')[1]);
+            final rows =
+                (saved[scope.profileName] ?? const <Map<String, dynamic>>[])
+                    .where((row) => row['id'] == id)
+                    .toList();
+            if (rows.isEmpty) throw DashboardSessionNotFound(path);
+            return rows.single;
+          }
+          if (path == 'sessions') {
+            final rows = saved[scope.profileName] ?? const [];
+            return {
+              'sessions': rows,
+              'offset': int.parse(query['offset']!),
+              'limit': int.parse(query['limit']!),
+              'total': rows.length,
+            };
+          }
+          if (path == 'logs') return {'entries': <Map<String, dynamic>>[]};
+          await historyDelay?.future;
+          if (historyFails) throw StateError('history unavailable');
           return {
-            'session_id': '$sessionId-runtime',
-            'stored_session_id': sessionId,
-            'message_count': 0,
-            'messages': <Map<String, dynamic>>[],
-            'info': {'profile_name': scope.profileName, 'lazy': true},
+            'session_id': path.split('/')[1],
+            'messages': history,
+            'pagination': {
+              'offset': 0,
+              'limit': 50,
+              'returned': history.length,
+              'order': 'latest',
+            },
           };
-        }
-        return {
-          'session_id': '$sessionId-runtime',
-          if (method == 'session.create') 'stored_session_id': sessionId,
-          if (method == 'session.resume') 'session_key': sessionId,
-          'running':
-              method == 'session.resume' &&
-              workingProfiles.contains(scope.profileName),
-          'open_requests': [
-            if (method == 'session.resume' &&
-                waitingProfiles.contains(scope.profileName))
-              {
-                'id': 'question-${scope.profileName}',
-                'method': 'clarify',
-                'params': {
-                  'session_id': '$sessionId-runtime',
-                  if (questions == null)
-                    'question': 'Continue?'
-                  else
-                    'questions': questions,
-                },
-              },
-          ],
-          'info': {'profile_name': scope.profileName},
-          if (method == 'session.resume') ...resumeOverrides,
-          ...?resumeSnapshots[resumeCall],
-        };
-      }
-      return {};
-    },
-  );
+        },
+        rpc: (method, params) async {
+          if (method.startsWith('groups.') && groupFails) {
+            throw StateError('group unavailable');
+          }
+          if (method == 'groups.list') {
+            return {'rooms': groups, 'next_offset': null};
+          }
+          if (method == 'groups.state') return groupStates[params['room_id']]!;
+          if (method == 'groups.log') {
+            final events = groupLogs[params['room_id']] ?? [];
+            final latest =
+                groupStates[params['room_id']]!['room']['latest_seq'];
+            return {
+              'events': events
+                  .where((e) => e['seq'] > params['since_seq'])
+                  .toList(),
+              'cursor': latest,
+              'latest_seq': latest,
+              'has_more': false,
+              'authority': {'gateway_id': 'fixture', 'epoch': 1},
+            };
+          }
+          if (method == 'session.active_list') {
+            activeReads++;
+            if (activeFails) throw StateError('offline');
+            return {'sessions': active};
+          }
+          if (method == 'projects.tree') return {'projects': []};
+          if (method == 'approval.pending') {
+            approvalReads.add(Map.of(params));
+            return {'approvals': pendingApprovals};
+          }
+          if (method == 'session.create' || method == 'session.resume') {
+            int? resumeCall;
+            if (method == 'session.resume') {
+              resumeCalls.add(Map.of(params));
+              resumeCall = resumeCalls.length;
+              await (resumeDelays[resumeCall] ?? resumeDelay)?.future;
+              if (resumeFails) throw StateError('resume unavailable');
+            }
+            final sessionId = method == 'session.create'
+                ? 'loaded'
+                : params['session_id'] as String;
+            if (method == 'session.resume' && liveUnpersistedResume) {
+              // Stock _resume_live_unpersisted has no running/open_requests.
+              return {
+                'session_id': '$sessionId-runtime',
+                'stored_session_id': sessionId,
+                'message_count': 0,
+                'messages': <Map<String, dynamic>>[],
+                'info': {'profile_name': scope.profileName, 'lazy': true},
+              };
+            }
+            return {
+              'session_id': '$sessionId-runtime',
+              if (method == 'session.create') 'stored_session_id': sessionId,
+              if (method == 'session.resume') 'session_key': sessionId,
+              'running':
+                  method == 'session.resume' &&
+                  workingProfiles.contains(scope.profileName),
+              'open_requests': [
+                if (method == 'session.resume' &&
+                    waitingProfiles.contains(scope.profileName))
+                  {
+                    'id': 'question-${scope.profileName}',
+                    'method': 'clarify',
+                    'params': {
+                      'session_id': '$sessionId-runtime',
+                      if (questions == null)
+                        'question': 'Continue?'
+                      else
+                        'questions': questions,
+                    },
+                  },
+              ],
+              'info': {'profile_name': scope.profileName},
+              if (method == 'session.resume') ...resumeOverrides,
+              ...?resumeSnapshots[resumeCall],
+            };
+          }
+          return {};
+        },
+      );
 
   void changed() => gateways['a']!.onEvent!(
     StreamEvent(type: 'sessions.changed', data: const {}),

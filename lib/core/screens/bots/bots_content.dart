@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/studio_loading.dart';
 import '../../models/bots.dart';
 import '../../models/profile_session_key.dart';
 import '../../widgets/bot_group_identity.dart';
@@ -292,67 +293,69 @@ class _BotsContentState extends State<BotsContent> {
                     Tab(text: 'Groups'),
                   ],
                 ),
-                if (state.loading || state.busy)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: LinearProgressIndicator(
-                      semanticsLabel: 'Loading bots and groups',
-                    ),
-                  ),
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-                    children: [
-                      TextField(
-                        key: const ValueKey('bots-search'),
-                        controller: _search,
-                        onChanged: (text) => _change(query: text),
-                        decoration: InputDecoration(
-                          hintText: view.tab == 0
-                              ? 'Search bots'
-                              : 'Search groups',
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: view.query.isEmpty
-                              ? null
-                              : IconButton(
-                                  tooltip: 'Clear search',
-                                  onPressed: () {
-                                    _search.clear();
-                                    _change(query: '');
-                                  },
-                                  icon: const Icon(Icons.close),
-                                ),
-                        ),
-                      ),
-                      for (final error in state.errors)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: StudioError(error),
-                        ),
-                      const SizedBox(height: 16),
-                      if ((view.tab == 0 ? bots.isEmpty : groups.isEmpty) &&
-                          !state.loading)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 40),
-                          child: Text(
-                            query.isNotEmpty
-                                ? 'No matches. Try another search.'
-                                : view.tab == 0
-                                ? 'Your saved profiles appear here as bots.'
-                                : 'No groups yet. Create a group to bring bots into one discussion.',
+                  child: StudioLoadingRegion(
+                    busy: state.loading || state.busy,
+                    available:
+                        !state.busy &&
+                        (view.tab == 0
+                            ? state.botsAvailable
+                            : state.groupsAvailable),
+                    label: 'Loading bots and groups',
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+                      children: [
+                        TextField(
+                          key: const ValueKey('bots-search'),
+                          controller: _search,
+                          onChanged: (text) => _change(query: text),
+                          decoration: InputDecoration(
+                            hintText: view.tab == 0
+                                ? 'Search bots'
+                                : 'Search groups',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: view.query.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Clear search',
+                                    onPressed: () {
+                                      _search.clear();
+                                      _change(query: '');
+                                    },
+                                    icon: const Icon(Icons.close),
+                                  ),
                           ),
                         ),
-                      if (view.tab == 0 && bots.isNotEmpty)
-                        _roster(context, [
-                          for (final bot in bots)
-                            _botRow(context, bot, state.busy),
-                        ]),
-                      if (view.tab == 1 && groups.isNotEmpty)
-                        _roster(context, [
-                          for (final group in groups)
-                            _groupRow(context, group, state.busy),
-                        ]),
-                    ],
+                        for (final error in state.errors)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: StudioError(error),
+                          ),
+                        const SizedBox(height: 16),
+                        if ((view.tab == 0 ? bots.isEmpty : groups.isEmpty) &&
+                            !state.loading)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Text(
+                              query.isNotEmpty
+                                  ? 'No matches. Try another search.'
+                                  : view.tab == 0
+                                  ? 'Your saved profiles appear here as bots.'
+                                  : 'No groups yet. Create a group to bring bots into one discussion.',
+                            ),
+                          ),
+                        if (view.tab == 0 && bots.isNotEmpty)
+                          _roster(context, [
+                            for (final bot in bots)
+                              _botRow(context, bot, state.busy),
+                          ]),
+                        if (view.tab == 1 && groups.isNotEmpty)
+                          _roster(context, [
+                            for (final group in groups)
+                              _groupRow(context, group, state.busy),
+                          ]),
+                      ],
+                    ),
                   ),
                 ),
               ],

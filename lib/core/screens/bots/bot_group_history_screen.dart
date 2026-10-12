@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/bot_group_history_session.dart';
@@ -105,8 +106,8 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: reader.historyLoading
-                            ? const CircularProgressIndicator(
-                                semanticsLabel: 'Loading working history',
+                            ? const StudioLoading(
+                                label: 'Loading working history',
                               )
                             : Text(
                                 'No working history is available for ${_session.member?.name ?? 'this bot'}.',

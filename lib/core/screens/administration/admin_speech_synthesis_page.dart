@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../controllers/profile_voice_controller.dart';
@@ -199,105 +200,111 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
           icon: const Icon(Icons.refresh),
         ),
       ],
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (state.showProgress) const LinearProgressIndicator(),
-          if (state.error != null)
-            AdminNotice.error(state.error!, retry: _refresh),
-          if (state.readiness?.providers.isNotEmpty == true) ...[
-            StudioSelect<String>(
-              label: 'Provider',
-              value: provider?.name,
-              options: [
-                for (final row in state.readiness!.providers)
-                  (value: row.name, label: row.name),
-              ],
-              onChanged: state.enabled ? _selectProvider : null,
-            ),
-            const SizedBox(height: 20),
-          ] else if (!state.busy && state.error == null)
-            const AdminNotice('No speech providers are available.'),
-          if (provider != null && !ready) ...[
-            AdminNotice(state.readinessNotice!),
-            ..._credentials(provider),
-            if (provider.setupKey != null)
-              TextButton(
-                onPressed: !state.enabled
-                    ? null
-                    : () => _setup(provider.setupKey!),
-                child: const Text('Setup requirements'),
+      child: StudioLoadingRegion(
+        available: state.readiness != null,
+        busy: state.showProgress,
+        label: 'Loading speech settings',
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (state.error != null)
+              AdminNotice.error(state.error!, retry: _refresh),
+            if (state.readiness?.providers.isNotEmpty == true) ...[
+              StudioSelect<String>(
+                label: 'Provider',
+                value: provider?.name,
+                options: [
+                  for (final row in state.readiness!.providers)
+                    (value: row.name, label: row.name),
+                ],
+                onChanged: state.enabled ? _selectProvider : null,
               ),
-          ],
-          if (ready && settings != null) ...[
-            LayoutBuilder(
-              builder: (context, constraints) {
-                if (MediaQuery.textScalerOf(context).scale(16) > 24) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+              const SizedBox(height: 20),
+            ] else if (!state.busy && state.error == null)
+              const AdminNotice('No speech providers are available.'),
+            if (provider != null && !ready) ...[
+              AdminNotice(state.readinessNotice!),
+              ..._credentials(provider),
+              if (provider.setupKey != null)
+                TextButton(
+                  onPressed: !state.enabled
+                      ? null
+                      : () => _setup(provider.setupKey!),
+                  child: const Text('Setup requirements'),
+                ),
+            ],
+            if (ready && settings != null) ...[
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (MediaQuery.textScalerOf(context).scale(16) > 24) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        voice,
+                        const SizedBox(height: 8),
+                        Align(alignment: Alignment.centerLeft, child: play),
+                      ],
+                    );
+                  }
+                  return Row(
                     children: [
-                      voice,
-                      const SizedBox(height: 8),
-                      Align(alignment: Alignment.centerLeft, child: play),
+                      Expanded(child: voice),
+                      const SizedBox(width: 8),
+                      play,
                     ],
                   );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: voice),
-                    const SizedBox(width: 8),
-                    play,
-                  ],
-                );
-              },
-            ),
-            if (state.saving)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text('Saving…'),
+                },
               ),
-            if (state.preparing)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text('Preparing audio…'),
-              ),
-            if (state.playbackError != null)
-              AdminNotice.error(state.playbackError!),
-            if (state.catalogueError != null)
-              AdminNotice.error(state.catalogueError!, retry: _refresh),
-          ],
-          if (provider != null) ...[
-            const SizedBox(height: 16),
-            ExpansionTile(
-              title: const Text('Advanced'),
-              tilePadding: EdgeInsets.zero,
-              children: [
-                if (ready && settings?.key != null)
-                  Focus(
-                    onFocusChange: (focused) {
-                      if (!focused && state.canEnterVoice) _customVoice();
-                    },
-                    child: TextField(
-                      controller: _custom,
-                      enabled: state.canEnterVoice,
-                      maxLength: 256,
-                      decoration: const InputDecoration(labelText: 'Voice ID'),
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _customVoice(),
+              if (state.saving)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('Saving…'),
+                ),
+              if (state.preparing)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('Preparing audio…'),
+                ),
+              if (state.playbackError != null)
+                AdminNotice.error(state.playbackError!),
+              if (state.catalogueError != null)
+                AdminNotice.error(state.catalogueError!, retry: _refresh),
+            ],
+            if (provider != null) ...[
+              const SizedBox(height: 16),
+              ExpansionTile(
+                title: const Text('Advanced'),
+                tilePadding: EdgeInsets.zero,
+                children: [
+                  if (ready && settings?.key != null)
+                    Focus(
+                      onFocusChange: (focused) {
+                        if (!focused && state.canEnterVoice) _customVoice();
+                      },
+                      child: TextField(
+                        controller: _custom,
+                        enabled: state.canEnterVoice,
+                        maxLength: 256,
+                        decoration: const InputDecoration(
+                          labelText: 'Voice ID',
+                        ),
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _customVoice(),
+                      ),
                     ),
-                  ),
-                if (ready) ..._credentials(provider),
-                if (ready && provider.setupKey != null)
-                  TextButton(
-                    onPressed: !state.enabled
-                        ? null
-                        : () => _setup(provider.setupKey!),
-                    child: const Text('Setup requirements'),
-                  ),
-              ],
-            ),
+                  if (ready) ..._credentials(provider),
+                  if (ready && provider.setupKey != null)
+                    TextButton(
+                      onPressed: !state.enabled
+                          ? null
+                          : () => _setup(provider.setupKey!),
+                      child: const Text('Setup requirements'),
+                    ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

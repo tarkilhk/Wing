@@ -11,6 +11,7 @@ class ProfilePluginsSession extends ChangeNotifier {
   final ProfileAdministration _profile;
   String get scopeLabel => _profile.label;
   ProfilePluginsState _state = ProfilePluginsState(
+    hasObservation: false,
     rows: const [],
     phase: ProfilePluginsPhase.idle,
     verified: false,
@@ -56,6 +57,7 @@ class ProfilePluginsSession extends ChangeNotifier {
       _publish(
         ProfilePluginsState(
           rows: previous.rows,
+          hasObservation: previous.hasObservation,
           phase: ProfilePluginsPhase.loading,
           verified: false,
           error: null,
@@ -75,6 +77,7 @@ class ProfilePluginsSession extends ChangeNotifier {
           rows: rows,
           phase: ProfilePluginsPhase.idle,
           verified: true,
+          hasObservation: true,
           error: null,
           retryable: false,
           acknowledgement: previous.acknowledgement,
@@ -88,6 +91,7 @@ class ProfilePluginsSession extends ChangeNotifier {
         ProfilePluginsState(
           rows: previous.rows,
           phase: ProfilePluginsPhase.idle,
+          hasObservation: previous.hasObservation,
           verified: false,
           error: _readError(error),
           retryable: isTemporaryWorkspaceFailure(error),
@@ -116,6 +120,7 @@ class ProfilePluginsSession extends ChangeNotifier {
         ProfilePluginsState(
           rows: rows,
           phase: ProfilePluginsPhase.saving,
+          hasObservation: previous.hasObservation,
           verified: false,
           error: null,
           retryable: false,
@@ -177,6 +182,7 @@ class ProfilePluginsSession extends ChangeNotifier {
           rows: rows,
           phase: ProfilePluginsPhase.idle,
           verified: true,
+          hasObservation: true,
           error: null,
           retryable: false,
           acknowledgement: acknowledgement ?? previous.acknowledgement,
@@ -198,6 +204,7 @@ class ProfilePluginsSession extends ChangeNotifier {
           rows: rows,
           phase: ProfilePluginsPhase.idle,
           verified: false,
+          hasObservation: previous.hasObservation,
           error: message,
           retryable: false,
           acknowledgement: acknowledgement ?? previous.acknowledgement,

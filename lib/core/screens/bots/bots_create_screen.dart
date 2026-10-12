@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../models/bots.dart';
 import '../../models/profile_colors.dart';
@@ -284,10 +285,7 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
         if (draft.pictureBusy)
           const SizedBox.square(
             dimension: 24,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              semanticsLabel: 'Preparing room picture',
-            ),
+            child: StudioLoading(label: 'Preparing room picture'),
           ),
       ],
     );
@@ -604,9 +602,8 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                       icon: draft.saving
                           ? SizedBox.square(
                               dimension: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                semanticsLabel: draft.editing
+                              child: StudioLoading(
+                                label: draft.editing
                                     ? 'Saving group'
                                     : 'Creating group',
                               ),
@@ -671,58 +668,62 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
               ),
             ],
           ),
-          body: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (_busy) const LinearProgressIndicator(),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: StudioError(_error!),
+          body: StudioLoadingRegion(
+            available: !_busy,
+            busy: _busy,
+            label: 'Creating bot',
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: StudioError(_error!),
+                  ),
+                if (_identity == null)
+                  const Text(
+                    'No instance is ready to create bots. Return to Bots and check your Hermes connection.',
+                  ),
+                if (widget.clone == null && _identity != null)
+                  StudioSelect<String>(
+                    value: _identity,
+                    label: 'Hermes instance',
+                    options: [
+                      for (final instance in _opening.instances)
+                        (value: instance.identity, label: instance.label),
+                    ],
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(() {
+                            _identity = value;
+                          }),
+                  ),
+                if (widget.clone != null)
+                  Text(
+                    'Copy ${widget.clone!.title} on ${widget.clone!.instance}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _name,
+                  enabled: !_busy,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Profile name',
+                    helperText:
+                        'Lowercase letters, numbers, hyphens and underscores',
+                    helperMaxLines: 4,
+                  ),
+                  textCapitalization: TextCapitalization.none,
                 ),
-              if (_identity == null)
-                const Text(
-                  'No instance is ready to create bots. Return to Bots and check your Hermes connection.',
-                ),
-              if (widget.clone == null && _identity != null)
-                StudioSelect<String>(
-                  value: _identity,
-                  label: 'Hermes instance',
-                  options: [
-                    for (final instance in _opening.instances)
-                      (value: instance.identity, label: instance.label),
-                  ],
-                  onChanged: _busy
-                      ? null
-                      : (value) => setState(() {
-                          _identity = value;
-                        }),
-                ),
-              if (widget.clone != null)
+                const SizedBox(height: 20),
                 Text(
-                  'Copy ${widget.clone!.title} on ${widget.clone!.instance}',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  widget.clone == null
+                      ? 'The new profile inherits this instance’s launch credentials and model defaults. You can change its name, avatar and settings after creation.'
+                      : 'Copies profile settings, credentials and skills. Channel bindings are excluded, so the copy will not take over existing messaging channels.',
                 ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _name,
-                enabled: !_busy,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: 'Profile name',
-                  helperText:
-                      'Lowercase letters, numbers, hyphens and underscores',
-                  helperMaxLines: 4,
-                ),
-                textCapitalization: TextCapitalization.none,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                widget.clone == null
-                    ? 'The new profile inherits this instance’s launch credentials and model defaults. You can change its name, avatar and settings after creation.'
-                    : 'Copies profile settings, credentials and skills. Channel bindings are excluded, so the copy will not take over existing messaging channels.',
-              ),
-            ],
+              ],
+            ),
           ),
         );
 }

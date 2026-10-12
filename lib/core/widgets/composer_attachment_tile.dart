@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 
@@ -107,7 +108,6 @@ class ComposerPendingAttachmentTile extends StatelessWidget {
         ? 'Adding ${preparation.count} photos…'
         : 'Adding ${preparation.count} attachments…';
     final theme = Theme.of(context);
-    final reducedMotion = MediaQuery.disableAnimationsOf(context);
     return Semantics(
       liveRegion: true,
       label: label,
@@ -132,15 +132,9 @@ class ComposerPendingAttachmentTile extends StatelessWidget {
                       children: [
                         SizedBox.square(
                           dimension: 24,
-                          child: reducedMotion
-                              ? Icon(
-                                  photos
-                                      ? Icons.photo_outlined
-                                      : Icons.attach_file,
-                                  color: theme.colorScheme.primary,
-                                  size: 24,
-                                )
-                              : const CircularProgressIndicator(strokeWidth: 2),
+                          child: const StudioLoading(
+                            label: 'Adding attachment',
+                          ),
                         ),
                         if (preparation.count > 1) ...[
                           const SizedBox(width: WingSpacing.sm),

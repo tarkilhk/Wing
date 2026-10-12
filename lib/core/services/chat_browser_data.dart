@@ -368,6 +368,12 @@ final class ChatBrowserData extends ChangeNotifier {
   }
 
   BrowserReadState get state => BrowserReadState(
+    available:
+        _projects.isNotEmpty ||
+        (_controller.discovery?.profiles.any(
+              (profile) => _controller.browserResource(profile.name).loaded,
+            ) ??
+            false),
     archived: _archived,
     loading: _loading,
     searching: _searching,

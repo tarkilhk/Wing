@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/wing_app_bar.dart';
 import 'package:flutter/material.dart';
 import '../../services/administration_repository.dart';
@@ -367,7 +368,7 @@ class _AdminTaskRouteState extends State<AdminTaskRoute> {
         title: widget.title,
         scope: widget.profile.label,
         child: controller.loading
-            ? const Center(child: CircularProgressIndicator())
+            ? StudioLoading.page(label: 'Loading task history')
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [

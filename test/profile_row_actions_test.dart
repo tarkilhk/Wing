@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/browser_actions.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'support/composer_fixture.dart';
@@ -1193,7 +1194,7 @@ void main() {
         MaterialApp(home: ChatStatusDot(chatListStatus({'unread': true}))),
       );
       expect(find.byTooltip('Unread'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(StudioLoading), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

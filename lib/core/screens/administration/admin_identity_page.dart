@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -189,8 +190,8 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
               onClose: _close,
               onSave: _state.canSave ? _save : null,
             ),
-      child: _state.loading
-          ? const Center(child: CircularProgressIndicator())
+      child: _state.loading && !_state.hasObservation
+          ? StudioLoading.page(label: 'Loading profile identity')
           : !_state.hasObservation
           ? Padding(
               padding: const EdgeInsets.all(16),

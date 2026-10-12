@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/core/widgets/recent_identity_card.dart';
@@ -278,17 +279,18 @@ void main() {
             .state<ScrollableState>(find.byType(Scrollable).first)
             .position
             .jumpTo(0);
+        await tester.pump();
         final pending = Completer<void>();
+        final cardPosition = tester.getTopLeft(
+          find.byType(RecentIdentityCard).first,
+        );
         fixture.pageDelays[('personal', 0)] = pending;
         final refresh = controller.refreshRecents();
         await tester.pump();
+        expect(find.byType(StudioLoading), findsNothing);
         expect(
-          tester.getTopLeft(find.byType(RecentIdentityCard).first).dy -
-              tester
-                  .getBottomLeft(find.byType(LinearProgressIndicator).first)
-                  .dy,
-          greaterThanOrEqualTo(8),
-          reason: 'The refresh animation needs space above the first chat.',
+          tester.getTopLeft(find.byType(RecentIdentityCard).first),
+          cardPosition,
         );
         await snapshot(tester, 'recents-loading-${brightness.name}-$scale');
         pending.complete();

@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../models/administration_logs.dart';
 import '../../services/administration_logs_session.dart';
@@ -104,51 +105,57 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_session.state.loading) const LinearProgressIndicator(),
-                  if (_session.state.error case final error?)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: AdminNotice.error(
-                        error,
-                        retry: _session.state.loading ? null : _session.refresh,
+              child: StudioLoadingRegion(
+                available: _session.state.snapshot != null,
+                busy: _session.state.loading,
+                label: 'Loading logs',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_session.state.error case final error?)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: AdminNotice.error(
+                          error,
+                          retry: _session.state.loading
+                              ? null
+                              : _session.refresh,
+                        ),
                       ),
-                    ),
-                  if (_session.state.snapshot case final snapshot?)
-                    KeyedSubtree(
-                      key: const ValueKey('content'),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            'Latest ${snapshot.lines.length} matching lines · Up to ${snapshot.query.limit}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 12),
-                          AdminGroup(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: SelectableText(
-                                    snapshot.lines.isEmpty
-                                        ? 'No matching log entries.'
-                                        : snapshot.lines.join('\n'),
-                                    style: WingTokens.of(
-                                      context,
-                                    ).typography.mono,
+                    if (_session.state.snapshot case final snapshot?)
+                      KeyedSubtree(
+                        key: const ValueKey('content'),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Latest ${snapshot.lines.length} matching lines · Up to ${snapshot.query.limit}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            const SizedBox(height: 12),
+                            AdminGroup(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: SelectableText(
+                                      snapshot.lines.isEmpty
+                                          ? 'No matching log entries.'
+                                          : snapshot.lines.join('\n'),
+                                      style: WingTokens.of(
+                                        context,
+                                      ).typography.mono,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],

@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../../models/profile_session_key.dart';
 import 'package:flutter/material.dart';
 
@@ -104,124 +105,127 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
             ),
           ],
         ),
-        child: RefreshIndicator(
+        child: StudioRefresh(
+          available: controller.tasks != null,
+          label: 'Loading tasks',
           onRefresh: controller.refresh,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            physics: const AlwaysScrollableScrollPhysics(),
-            children: [
-              if (controller.tasks?.isEmpty == true &&
-                  MediaQuery.textScalerOf(context).scale(16) <= 24) ...[
-                Text(
-                  'A little ahead of you.',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w500,
+          child: StudioLoadingRegion(
+            available: controller.tasks != null,
+            busy: controller.loading,
+            label: 'Loading tasks',
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                if (controller.tasks?.isEmpty == true &&
+                    MediaQuery.textScalerOf(context).scale(16) <= 24) ...[
+                  Text(
+                    'A little ahead of you.',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Give your agent a schedule. Come back to the results.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+                TextField(
+                  controller: search,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    hintText: 'Search tasks',
+                    prefixIcon: Icon(Icons.search),
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  'Give your agent a schedule. Come back to the results.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
-              TextField(
-                controller: search,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  hintText: 'Search tasks',
-                  prefixIcon: Icon(Icons.search),
-                ),
-              ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final value in TaskListFilter.values)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          showCheckmark: false,
-                          label: Text(value.label),
-                          selected: filter == value,
-                          onSelected: (_) => setState(() => filter = value),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (controller.loading)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 16),
-                  child: LinearProgressIndicator(),
-                ),
-              if (controller.error != null)
-                TaskMessage(
-                  '${controller.checkedAt == null ? '' : 'Last checked ${taskTime(context, controller.checkedAt)}. '} ${controller.error!}'
-                      .trim(),
-                  error: true,
-                ),
-              if (controller.notice != null) TaskMessage(controller.notice!),
-              TaskUncertainty(controller: controller, id: '__create__'),
-              if (controller.tasks != null && tasks.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
                     children: [
-                      Icon(
-                        Icons.event_repeat_outlined,
-                        size: 32,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        controller.tasks!.isEmpty
-                            ? 'Make room for what’s next.'
-                            : 'No matching tasks',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        controller.tasks!.isEmpty
-                            ? 'No scheduled tasks for this profile. Start with a morning briefing or a weekly review.'
-                            : 'Try another search or clear your filters.',
-                      ),
-                      if (controller.tasks!.isNotEmpty)
-                        TextButton(
-                          onPressed: () => setState(() {
-                            search.clear();
-                            filter = TaskListFilter.all;
-                          }),
-                          child: const Text('Clear filters'),
+                      for (final value in TaskListFilter.values)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            showCheckmark: false,
+                            label: Text(value.label),
+                            selected: filter == value,
+                            onSelected: (_) => setState(() => filter = value),
+                          ),
                         ),
                     ],
                   ),
                 ),
-              if (tasks.isNotEmpty)
-                TaskSurface(
-                  child: Column(
-                    children: [
-                      for (var index = 0; index < tasks.length; index++) ...[
-                        if (index > 0) const Divider(height: 1),
-                        _row(context, tasks[index]),
+                const SizedBox(height: 16),
+
+                if (controller.error != null)
+                  TaskMessage(
+                    '${controller.checkedAt == null ? '' : 'Last checked ${taskTime(context, controller.checkedAt)}. '} ${controller.error!}'
+                        .trim(),
+                    error: true,
+                  ),
+                if (controller.notice != null) TaskMessage(controller.notice!),
+                TaskUncertainty(controller: controller, id: '__create__'),
+                if (controller.tasks != null && tasks.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.event_repeat_outlined,
+                          size: 32,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          controller.tasks!.isEmpty
+                              ? 'Make room for what’s next.'
+                              : 'No matching tasks',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          controller.tasks!.isEmpty
+                              ? 'No scheduled tasks for this profile. Start with a morning briefing or a weekly review.'
+                              : 'Try another search or clear your filters.',
+                        ),
+                        if (controller.tasks!.isNotEmpty)
+                          TextButton(
+                            onPressed: () => setState(() {
+                              search.clear();
+                              filter = TaskListFilter.all;
+                            }),
+                            child: const Text('Clear filters'),
+                          ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              if (tasks.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Text(
-                    'Times shown in your phone’s timezone. Schedules run on Hermes.',
-                    style: Theme.of(context).textTheme.bodySmall,
+                if (tasks.isNotEmpty)
+                  TaskSurface(
+                    child: Column(
+                      children: [
+                        for (var index = 0; index < tasks.length; index++) ...[
+                          if (index > 0) const Divider(height: 1),
+                          _row(context, tasks[index]),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-            ],
+                if (tasks.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Text(
+                      'Times shown in your phone’s timezone. Schedules run on Hermes.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       );

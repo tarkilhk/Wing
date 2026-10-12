@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/studio_error.dart';
 import 'dart:async';
 
@@ -54,7 +55,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
         body: SafeArea(
           child: Center(
             child: observation.loading
-                ? const CircularProgressIndicator()
+                ? const StudioLoading.page(label: 'Loading PDF')
                 : observation.error != null
                 ? SingleChildScrollView(
                     padding: const EdgeInsets.all(16),

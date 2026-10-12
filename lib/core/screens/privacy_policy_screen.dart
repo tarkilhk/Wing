@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import '../widgets/studio_task_marker.dart';
 import '../widgets/studio_error.dart';
@@ -51,7 +52,7 @@ class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
           );
         }
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return StudioLoading.page(label: 'Loading privacy policy');
         }
         return Markdown(
           checkboxBuilder: (checked) => StudioTaskMarker(completed: checked),

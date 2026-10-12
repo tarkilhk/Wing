@@ -143,10 +143,12 @@ class ProfileCapabilitiesState {
   final bool loading;
   final ProfileCapabilitiesOperation operation;
   final bool verified;
+  final bool hasObservation;
   final String? error;
   final String? notice;
 
   ProfileCapabilitiesState({
+    required this.hasObservation,
     required this.kind,
     required Iterable<ProfileCapability> rows,
     required this.loading,

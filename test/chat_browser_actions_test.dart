@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/deleted_chat_recovery_notice.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -250,7 +251,7 @@ void main() {
         reason:
             'a confirmed action must not lock the list during background reads',
       );
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(StudioLoading), findsNothing);
       expect(gate.isCompleted, isFalse);
       final row = find.byKey(const ValueKey('chat-personal-newest'));
       // Pin moves this retained chat into the first group. Its old viewport
@@ -267,7 +268,7 @@ void main() {
       expect(gate.isCompleted, isFalse);
       expect(row.hitTestable(), findsOneWidget);
       expect(tester.widget<ListTile>(row).onTap, isNotNull);
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(StudioLoading), findsNothing);
       expect(host.updates, hasLength(1));
       gate.complete();
       await tester.pumpAndSettle();
@@ -297,7 +298,7 @@ void main() {
       await tester.tap(find.text('Pin'));
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('Updating chats…'), findsNothing);
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(StudioLoading), findsOneWidget);
       expect(find.bySemanticsLabel('Updating chats…'), findsOneWidget);
       expect(
         tester
@@ -371,8 +372,8 @@ void main() {
         isNotNull,
       );
       expect(find.text('Refreshing chats…'), findsNothing);
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
-      expect(find.bySemanticsLabel('Refreshing chats…'), findsOneWidget);
+      expect(find.byType(StudioLoading), findsNothing);
+      expect(find.bySemanticsLabel('Refreshing chats…'), findsNothing);
       if (action == 'Archive' || action == 'Delete') {
         expect(
           find.byKey(const ValueKey('chat-personal-newest')),
@@ -414,20 +415,22 @@ void main() {
             canDispatch: () => true,
           );
           await tester.pump(const Duration(milliseconds: 200));
-          final progress = find.byType(LinearProgressIndicator);
+          final progress = find.byType(StudioLoading);
           expect(find.text('Refreshing chats…'), findsNothing);
-          final bounds = tester.getRect(progress);
-          expect(
-            tester.widget<LinearProgressIndicator>(progress).value,
-            1,
-            reason: 'reduced motion uses a static indicator',
+          expect(progress, findsNothing);
+          final bounds = tester.getRect(
+            find.byKey(const ValueKey('chat-list-false')),
           );
           await tester.drag(
             find.byKey(const ValueKey('chat-list-false')),
             const Offset(0, -350),
           );
           await tester.pump();
-          expect(tester.getRect(progress), bounds);
+          expect(progress, findsNothing);
+          expect(
+            tester.getRect(find.byKey(const ValueKey('chat-list-false'))),
+            bounds,
+          );
           final scrollable = find.descendant(
             of: find.byKey(const ValueKey('chat-list-false')),
             matching: find.byType(Scrollable),

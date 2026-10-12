@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -118,7 +119,7 @@ class _AdminProviderDetailState extends State<AdminProviderDetail> {
             if (_notice != null)
               Semantics(liveRegion: true, child: AdminNotice(_notice!)),
             if (access == null && _isBusy)
-              const Center(child: CircularProgressIndicator()),
+              StudioLoading.page(label: 'Loading provider'),
             if (access != null) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

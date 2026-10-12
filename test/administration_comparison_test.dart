@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/profile_overview_session.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -32,7 +33,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.byType(StudioLoading), findsNothing);
     expect(find.text('Partial total'), findsOneWidget);
     expect(find.text('USD 0.00'), findsOneWidget);
     expect(tester.takeException(), isNull);

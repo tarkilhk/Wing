@@ -39,34 +39,9 @@ class _InstalledAppVersionCardState extends State<InstalledAppVersionCard> {
       future: _info,
       builder: (context, snapshot) {
         final info = snapshot.data;
-        if (snapshot.hasError ||
-            (snapshot.connectionState == ConnectionState.done &&
-                info == null)) {
-          return const Material(
-            type: MaterialType.transparency,
-            child: ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text('App version'),
-              subtitle: Text('Version information is unavailable.'),
-            ),
-          );
-        }
-        if (info == null) {
-          return const Material(
-            type: MaterialType.transparency,
-            child: ListTile(
-              leading: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  semanticsLabel: 'Loading version information',
-                ),
-              ),
-              title: Text('App version'),
-            ),
-          );
-        }
+        final unavailable =
+            snapshot.hasError ||
+            snapshot.connectionState == ConnectionState.done && info == null;
         return Material(
           type: MaterialType.transparency,
           child: Column(
@@ -75,9 +50,17 @@ class _InstalledAppVersionCardState extends State<InstalledAppVersionCard> {
               ListTile(
                 leading: const PlayfulPortrait(),
                 title: Text(
-                  info.appName.trim().isEmpty ? 'Android app' : info.appName,
+                  info == null || info.appName.trim().isEmpty
+                      ? 'Wing'
+                      : info.appName,
                 ),
-                subtitle: Text('Version ${info.version}'),
+                subtitle: Text(
+                  info != null
+                      ? 'Version ${info.version}'
+                      : unavailable
+                      ? 'Version information is unavailable.'
+                      : 'Version —',
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),

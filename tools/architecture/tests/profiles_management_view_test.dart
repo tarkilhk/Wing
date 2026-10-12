@@ -37,6 +37,9 @@ class ProfilesManagementIntent {}
     await put('lib/core/screens/administration/admin_widgets.dart', '''
 class AdminGroup { const AdminGroup(); }
 ''');
+    await put('lib/core/widgets/studio_loading.dart', '''
+class StudioLoadingRegion { const StudioLoadingRegion(); }
+''');
     await put('lib/core/services/administration_repository.dart', '''
 part 'repository_part.dart';
 class AdministrationRepository { AdministrationRepository(); void request() {} }
@@ -192,6 +195,11 @@ class AdminProfilesPage {
       view('void f() { final make = ProfilesManagementSession.new; make(); }'),
     );
     final valid = <String>[
+      view(
+        'void f() { const StudioLoadingRegion(); }',
+        imports:
+            '${sessionImport}import "../../widgets/studio_loading.dart";\n',
+      ),
       view(
         'void f(ProfilesManagementSession owner) { owner.beginCreate(); owner.reload(); }',
       ),

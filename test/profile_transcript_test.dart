@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/services/chat_runtime.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
@@ -424,7 +425,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await tester.pump();
     expect(find.byType(PlayfulPortrait), findsNothing);
     expect(find.text('Loading history…'), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(StudioLoading), findsOneWidget);
     expect(find.bySemanticsLabel('Loading history'), findsOneWidget);
 
     gate.complete();

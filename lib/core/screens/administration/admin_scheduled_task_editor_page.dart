@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/model_choice.dart';
 import 'package:flutter/material.dart';
 
@@ -367,59 +368,66 @@ class _AdminScheduledTaskEditorPageState
               'Results',
               description:
                   'Keep the result on your server or send it to a configured server destination.',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (targetError != null)
-                    TaskMessage(
-                      targetError!,
-                      error: true,
-                      action: TextButton(
-                        onPressed: loadTargets,
-                        child: const Text('Refresh destinations'),
+              child: StudioLoadingRegion(
+                available: true,
+                busy: session.loadingDestinations,
+                label: 'Loading destinations',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (targetError != null)
+                      TaskMessage(
+                        targetError!,
+                        error: true,
+                        action: TextButton(
+                          onPressed: loadTargets,
+                          child: const Text('Refresh destinations'),
+                        ),
                       ),
-                    ),
-                  if (session.loadingDestinations)
-                    const LinearProgressIndicator(),
-                  if (state.deliveryChoices.any((choice) => choice.discovered))
-                    TaskSurface(
-                      child: Column(
-                        children: [
-                          for (final destination in state.deliveryChoices.where(
-                            (choice) => choice.discovered,
-                          ))
-                            StudioSelectionTile(
-                              value: destination.selected,
-                              onChanged: destination.enabled
-                                  ? (selected) => session.setDestination(
-                                      destination.id,
-                                      selected,
-                                    )
-                                  : null,
-                              title: Text(destination.label),
-                              subtitle: Text(destination.description),
-                            ),
-                        ],
+
+                    if (state.deliveryChoices.any(
+                      (choice) => choice.discovered,
+                    ))
+                      TaskSurface(
+                        child: Column(
+                          children: [
+                            for (final destination
+                                in state.deliveryChoices.where(
+                                  (choice) => choice.discovered,
+                                ))
+                              StudioSelectionTile(
+                                value: destination.selected,
+                                onChanged: destination.enabled
+                                    ? (selected) => session.setDestination(
+                                        destination.id,
+                                        selected,
+                                      )
+                                    : null,
+                                title: Text(destination.label),
+                                subtitle: Text(destination.description),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                  for (final destination in state.deliveryChoices.where(
-                    (choice) => !choice.discovered,
-                  ))
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: StudioSelectionTile(
-                        value: destination.selected,
-                        onChanged: destination.enabled
-                            ? (selected) => session.setDestination(
-                                destination.id,
-                                selected,
-                              )
-                            : null,
-                        title: Text(destination.label),
-                        subtitle: Text(destination.description),
+                    for (final destination in state.deliveryChoices.where(
+                      (choice) => !choice.discovered,
+                    ))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: StudioSelectionTile(
+                          value: destination.selected,
+                          onChanged: destination.enabled
+                              ? (selected) => session.setDestination(
+                                  destination.id,
+                                  selected,
+                                )
+                              : null,
+                          title: Text(destination.label),
+                          subtitle: Text(destination.description),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
             if (template == null && !state.scriptOnly)

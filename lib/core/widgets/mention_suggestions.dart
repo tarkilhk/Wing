@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'studio_loading.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
@@ -400,36 +401,40 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 280),
             child: LayoutBuilder(
-              builder: (context, constraints) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _header(completion, compact: constraints.maxHeight < 180),
-                  SizedBox(
-                    height: 4,
-                    child: _loading ? const LinearProgressIndicator() : null,
-                  ),
-                  if (_error case final error?) _failure(error),
-                  if (_error == null &&
-                      (items.isNotEmpty || notices.isNotEmpty))
-                    Flexible(
-                      child: ListView.builder(
-                        controller: _scroll,
-                        scrollCacheExtent: const ScrollCacheExtent.pixels(280),
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.only(bottom: 4),
-                        itemCount: items.length + notices.length,
-                        itemBuilder: (context, index) => index < notices.length
-                            ? Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Text(notices[index]),
-                              )
-                            : _row(
-                                items[index - notices.length],
-                                index - notices.length,
-                              ),
+              builder: (context, constraints) => StudioLoadingRegion(
+                available: items.isNotEmpty || notices.isNotEmpty,
+                busy: _loading,
+                label: 'Loading mentions',
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _header(completion, compact: constraints.maxHeight < 180),
+                    if (_error case final error?) _failure(error),
+                    if (_error == null &&
+                        (items.isNotEmpty || notices.isNotEmpty))
+                      Flexible(
+                        child: ListView.builder(
+                          controller: _scroll,
+                          scrollCacheExtent: const ScrollCacheExtent.pixels(
+                            280,
+                          ),
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.only(bottom: 4),
+                          itemCount: items.length + notices.length,
+                          itemBuilder: (context, index) =>
+                              index < notices.length
+                              ? Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Text(notices[index]),
+                                )
+                              : _row(
+                                  items[index - notices.length],
+                                  index - notices.length,
+                                ),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

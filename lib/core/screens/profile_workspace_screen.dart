@@ -1,5 +1,6 @@
-import '../models/group_notification.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'bots/bot_group_screen.dart';
+import '../models/group_notification.dart';
 import '../widgets/recent_conversations/group_conversation_switcher.dart';
 import '../widgets/recent_conversations/conversation_route_scope.dart';
 import 'bots/bots_create_screen.dart';
@@ -1239,40 +1240,43 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             ),
           ],
         ),
-        body: Column(
-          children: [
-            if (controller.switching || chat.refreshingConversation)
-              const LinearProgressIndicator(),
-            WorkspaceConnectionStatus(
-              status: controller.connectionStatus,
-              showHint:
-                  chat.runtime.openingError == null &&
-                  (!chat.runtime.opening || chat.reading.messages.isNotEmpty),
-            ),
-            if (controller.error != null)
-              MaterialBanner(
-                content: StudioError(controller.error!),
-                actions: [
-                  TextButton(
-                    onPressed: () => _run(controller.retry),
-                    child: const Text('Retry'),
-                  ),
-                ],
+        body: StudioLoadingRegion(
+          busy: controller.switching || chat.refreshingConversation,
+          available: !chat.runtime.opening || chat.reading.messages.isNotEmpty,
+          label: 'Updating conversation',
+          child: Column(
+            children: [
+              WorkspaceConnectionStatus(
+                status: controller.connectionStatus,
+                showHint:
+                    chat.runtime.openingError == null &&
+                    (!chat.runtime.opening || chat.reading.messages.isNotEmpty),
               ),
-            if (chat.runtime.openingError != null &&
-                chat.reading.messages.isNotEmpty)
-              MaterialBanner(
-                forceActionsBelow: true,
-                content: StudioError(chat.runtime.openingError!),
-                actions: [
-                  TextButton(
-                    onPressed: () => _run(controller.resumeConnection),
-                    child: const Text('Retry connection'),
-                  ),
-                ],
-              ),
-            Expanded(child: _chat(chat, context, bot)),
-          ],
+              if (controller.error != null)
+                MaterialBanner(
+                  content: StudioError(controller.error!),
+                  actions: [
+                    TextButton(
+                      onPressed: () => _run(controller.retry),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              if (chat.runtime.openingError != null &&
+                  chat.reading.messages.isNotEmpty)
+                MaterialBanner(
+                  forceActionsBelow: true,
+                  content: StudioError(chat.runtime.openingError!),
+                  actions: [
+                    TextButton(
+                      onPressed: () => _run(controller.resumeConnection),
+                      child: const Text('Retry connection'),
+                    ),
+                  ],
+                ),
+              Expanded(child: _chat(chat, context, bot)),
+            ],
+          ),
         ),
       ),
     );
@@ -2188,550 +2192,576 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               },
               child: SingleChildScrollView(
                 reverse: true,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (chat.runtime.commandRunning)
-                      const LinearProgressIndicator(),
-                    ProfileActivityStatus(
-                      key: const ValueKey('profile-activity-status'),
-                      chat: chat,
-                    ),
-                    ProfileQueuedMessages(
-                      key: ValueKey(('queued-messages', chat.key)),
-                      work: chat.composer.observation,
-                      onOpenActions: _hasMessageActions(chat)
-                          ? () => _showBusyActions(chat, context)
-                          : null,
-                      onEdit: !chat.composer.actions().canEditQueue
-                          ? null
-                          : (prompt) => _beginQueuedEdit(chat, prompt),
-                      onDelete: !chat.composer.actions().canEditQueue
-                          ? null
-                          : (prompt) => _deleteQueuedPrompt(chat, prompt),
-                    ),
-                    SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-                        child: DecoratedBox(
-                          key: const ValueKey('conversation-composer'),
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerLow,
-                            borderRadius: WingRadius.card,
-                            border: Border.all(
+                child: StudioLoadingRegion(
+                  busy: chat.runtime.commandRunning,
+                  available: true,
+                  label: 'Updating conversation',
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ProfileActivityStatus(
+                        key: const ValueKey('profile-activity-status'),
+                        chat: chat,
+                      ),
+                      ProfileQueuedMessages(
+                        key: ValueKey(('queued-messages', chat.key)),
+                        work: chat.composer.observation,
+                        onOpenActions: _hasMessageActions(chat)
+                            ? () => _showBusyActions(chat, context)
+                            : null,
+                        onEdit: !chat.composer.actions().canEditQueue
+                            ? null
+                            : (prompt) => _beginQueuedEdit(chat, prompt),
+                        onDelete: !chat.composer.actions().canEditQueue
+                            ? null
+                            : (prompt) => _deleteQueuedPrompt(chat, prompt),
+                      ),
+                      SafeArea(
+                        top: false,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                          child: DecoratedBox(
+                            key: const ValueKey('conversation-composer'),
+                            decoration: BoxDecoration(
                               color: Theme.of(
                                 context,
-                              ).colorScheme.outlineVariant,
+                              ).colorScheme.surfaceContainerLow,
+                              borderRadius: WingRadius.card,
+                              border: Border.all(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.outlineVariant,
+                              ),
                             ),
-                          ),
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (chat
-                                            .composer
-                                            .observation
-                                            .editingEntry !=
-                                        null)
-                                      Row(
-                                        children: [
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Text(
-                                              'Editing queued message',
-                                              style: Theme.of(
-                                                context,
-                                              ).textTheme.labelMedium,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (chat
+                                              .composer
+                                              .observation
+                                              .editingEntry !=
+                                          null)
+                                        Row(
+                                          children: [
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Text(
+                                                'Editing queued message',
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.labelMedium,
+                                              ),
                                             ),
-                                          ),
-                                          ContextRing(
-                                            key: ValueKey((
-                                              'context-ring',
-                                              chat.key,
-                                            )),
-                                            occupancy: chat.context,
-                                            compressions:
-                                                chat.contextCompressions,
-                                            loading: chat.contextLoading,
-                                            error: chat.contextError,
-                                            onRefresh: () => unawaited(
-                                              controller.refreshContext(chat),
-                                            ),
-                                          ),
-                                          TextButton(
-                                            onPressed:
-                                                chat
-                                                        .composer
-                                                        .observation
-                                                        .saving ||
-                                                    chat
-                                                        .composer
-                                                        .observation
-                                                        .steering
-                                                ? null
-                                                : () => _run(
-                                                    () => controller
-                                                        .cancelQueuedPromptEdit(
-                                                          chat,
-                                                        ),
-                                                  ),
-                                            child: const Text('Cancel'),
-                                          ),
-                                        ],
-                                      ),
-                                    if (composerAttachments.isNotEmpty ||
-                                        attachmentPreparation != null)
-                                      ComposerAttachmentStrip(
-                                        key: ValueKey((
-                                          'composer-attachments',
-                                          chat.key,
-                                        )),
-                                        preparing:
-                                            attachmentPreparation != null,
-                                        children: [
-                                          for (final (index, file)
-                                              in composerAttachments.indexed)
-                                            ComposerAttachmentSlot(
+                                            ContextRing(
                                               key: ValueKey((
-                                                'composer-attachment-slot',
-                                                index,
+                                                'context-ring',
+                                                chat.key,
                                               )),
-                                              child: ComposerAttachmentTile(
-                                                key: ValueKey(file.id),
-                                                name: file.name,
-                                                kind: file.kind,
-                                                error: file.error,
-                                                previewImage: file.isImage
-                                                    ? AttachmentPreviewImage(
-                                                        chat.composer.preview(
-                                                          file.id,
-                                                        ),
-                                                      )
-                                                    : null,
-                                                onPreview: file.isImage
-                                                    ? () => _run(() async {
-                                                        final bytes = await chat
-                                                            .composer
-                                                            .preview(file.id)
-                                                            .readBytes();
-                                                        if (!context.mounted ||
-                                                            (controller.notificationChat ??
-                                                                    controller
-                                                                        .current
-                                                                        ?.chat) !=
-                                                                chat) {
-                                                          return;
-                                                        }
-                                                        await Navigator.of(
-                                                          context,
-                                                        ).push<void>(
-                                                          MaterialPageRoute(
-                                                            builder: (_) =>
-                                                                ChatImagePreview(
-                                                                  bytes: bytes,
-                                                                  title:
-                                                                      file.name,
-                                                                ),
+                                              occupancy: chat.context,
+                                              compressions:
+                                                  chat.contextCompressions,
+                                              loading: chat.contextLoading,
+                                              error: chat.contextError,
+                                              onRefresh: () => unawaited(
+                                                controller.refreshContext(chat),
+                                              ),
+                                            ),
+                                            TextButton(
+                                              onPressed:
+                                                  chat
+                                                          .composer
+                                                          .observation
+                                                          .saving ||
+                                                      chat
+                                                          .composer
+                                                          .observation
+                                                          .steering
+                                                  ? null
+                                                  : () => _run(
+                                                      () => controller
+                                                          .cancelQueuedPromptEdit(
+                                                            chat,
                                                           ),
-                                                        );
-                                                      })
-                                                    : null,
-                                                onRemove:
-                                                    !controller
-                                                        .canRemoveAttachment(
-                                                          chat,
-                                                          file.id,
+                                                    ),
+                                              child: const Text('Cancel'),
+                                            ),
+                                          ],
+                                        ),
+                                      if (composerAttachments.isNotEmpty ||
+                                          attachmentPreparation != null)
+                                        ComposerAttachmentStrip(
+                                          key: ValueKey((
+                                            'composer-attachments',
+                                            chat.key,
+                                          )),
+                                          preparing:
+                                              attachmentPreparation != null,
+                                          children: [
+                                            for (final (index, file)
+                                                in composerAttachments.indexed)
+                                              ComposerAttachmentSlot(
+                                                key: ValueKey((
+                                                  'composer-attachment-slot',
+                                                  index,
+                                                )),
+                                                child: ComposerAttachmentTile(
+                                                  key: ValueKey(file.id),
+                                                  name: file.name,
+                                                  kind: file.kind,
+                                                  error: file.error,
+                                                  previewImage: file.isImage
+                                                      ? AttachmentPreviewImage(
+                                                          chat.composer.preview(
+                                                            file.id,
+                                                          ),
                                                         )
-                                                    ? null
-                                                    : () => _run(
-                                                        () => controller
-                                                            .removeAttachment(
-                                                              chat,
-                                                              file.id,
+                                                      : null,
+                                                  onPreview: file.isImage
+                                                      ? () => _run(() async {
+                                                          final bytes =
+                                                              await chat
+                                                                  .composer
+                                                                  .preview(
+                                                                    file.id,
+                                                                  )
+                                                                  .readBytes();
+                                                          if (!context
+                                                                  .mounted ||
+                                                              (controller.notificationChat ??
+                                                                      controller
+                                                                          .current
+                                                                          ?.chat) !=
+                                                                  chat) {
+                                                            return;
+                                                          }
+                                                          await Navigator.of(
+                                                            context,
+                                                          ).push<void>(
+                                                            MaterialPageRoute(
+                                                              builder: (_) =>
+                                                                  ChatImagePreview(
+                                                                    bytes:
+                                                                        bytes,
+                                                                    title: file
+                                                                        .name,
+                                                                  ),
                                                             ),
-                                                      ),
-                                              ),
-                                            ),
-                                          if (attachmentPreparation != null)
-                                            ComposerAttachmentSlot(
-                                              key: ValueKey((
-                                                'composer-attachment-slot',
-                                                composerAttachments.length,
-                                              )),
-                                              child: ComposerPendingAttachmentTile(
-                                                key: const ValueKey(
-                                                  'composer-pending-attachment',
+                                                          );
+                                                        })
+                                                      : null,
+                                                  onRemove:
+                                                      !controller
+                                                          .canRemoveAttachment(
+                                                            chat,
+                                                            file.id,
+                                                          )
+                                                      ? null
+                                                      : () => _run(
+                                                          () => controller
+                                                              .removeAttachment(
+                                                                chat,
+                                                                file.id,
+                                                              ),
+                                                        ),
                                                 ),
-                                                preparation:
-                                                    attachmentPreparation,
                                               ),
-                                            ),
-                                        ],
-                                      ),
-                                    _voiceActivity(),
-                                    TextField(
-                                      key: const Key(
-                                        'profile-message-composer',
-                                      ),
-                                      controller: _composer,
-                                      focusNode: _composerFocus,
-                                      enabled:
-                                          !_voiceInput.active &&
-                                          chat.composer.actions().canEditText,
-                                      minLines: 1,
-                                      maxLines: 5,
-                                      keyboardType: TextInputType.multiline,
-                                      textInputAction: TextInputAction.newline,
-                                      contentInsertionConfiguration:
-                                          _canPasteImage(chat)
-                                          ? ContentInsertionConfiguration(
-                                              allowedMimeTypes:
-                                                  ImageClipboard.mimeTypes,
-                                              onContentInserted: (content) => _run(
-                                                () async {
-                                                  if (!_canPasteImage(chat)) {
-                                                    throw StateError(
-                                                      'Wait before adding another image.',
+                                            if (attachmentPreparation != null)
+                                              ComposerAttachmentSlot(
+                                                key: ValueKey((
+                                                  'composer-attachment-slot',
+                                                  composerAttachments.length,
+                                                )),
+                                                child: ComposerPendingAttachmentTile(
+                                                  key: const ValueKey(
+                                                    'composer-pending-attachment',
+                                                  ),
+                                                  preparation:
+                                                      attachmentPreparation,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      _voiceActivity(),
+                                      TextField(
+                                        key: const Key(
+                                          'profile-message-composer',
+                                        ),
+                                        controller: _composer,
+                                        focusNode: _composerFocus,
+                                        enabled:
+                                            !_voiceInput.active &&
+                                            chat.composer.actions().canEditText,
+                                        minLines: 1,
+                                        maxLines: 5,
+                                        keyboardType: TextInputType.multiline,
+                                        textInputAction:
+                                            TextInputAction.newline,
+                                        contentInsertionConfiguration:
+                                            _canPasteImage(chat)
+                                            ? ContentInsertionConfiguration(
+                                                allowedMimeTypes:
+                                                    ImageClipboard.mimeTypes,
+                                                onContentInserted: (content) =>
+                                                    _run(() async {
+                                                      if (!_canPasteImage(
+                                                        chat,
+                                                      )) {
+                                                        throw StateError(
+                                                          'Wait before adding another image.',
+                                                        );
+                                                      }
+                                                      await controller
+                                                          .addPastedImage(
+                                                            chat,
+                                                            () =>
+                                                                ImageClipboard.keyboardImage(
+                                                                  content,
+                                                                ),
+                                                          );
+                                                    }),
+                                              )
+                                            : null,
+                                        contextMenuBuilder: (context, editableText) {
+                                          if (!_canPasteImage(chat)) {
+                                            return AdaptiveTextSelectionToolbar.editableText(
+                                              editableTextState: editableText,
+                                            );
+                                          }
+                                          return ImagePasteMenu(
+                                            editableText: editableText,
+                                            onPasteImage: () => _run(() async {
+                                              if (!_canPasteImage(chat)) {
+                                                throw StateError(
+                                                  'Wait before adding another image.',
+                                                );
+                                              }
+                                              await controller.addPastedImage(
+                                                chat,
+                                                ImageClipboard.readImage,
+                                              );
+                                            }),
+                                          );
+                                        },
+                                        onChanged: (value) {
+                                          if (chat
+                                                  .composer
+                                                  .observation
+                                                  .editingEntry !=
+                                              null) {
+                                            _queuedEditErrors.remove(chat.key);
+                                            controller.updateQueuedPromptEdit(
+                                              chat,
+                                              value,
+                                            );
+                                            return;
+                                          }
+                                          unawaited(
+                                            controller
+                                                .updateDraft(chat, value)
+                                                .catchError((_) {
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      const SnackBar(
+                                                        content: StudioError(
+                                                          'This draft could not be saved on the device.',
+                                                        ),
+                                                      ),
                                                     );
                                                   }
-                                                  await controller.addPastedImage(
-                                                    chat,
-                                                    () =>
-                                                        ImageClipboard.keyboardImage(
-                                                          content,
-                                                        ),
-                                                  );
-                                                },
+                                                }),
+                                          );
+                                        },
+                                        decoration: InputDecoration(
+                                          suffixIcon:
+                                              chat
+                                                      .composer
+                                                      .observation
+                                                      .editingEntry ==
+                                                  null
+                                              ? _dictationButton(chat)
+                                              : null,
+                                          isDense: true,
+                                          hintMaxLines: 1,
+                                          hintText:
+                                              chat
+                                                      .composer
+                                                      .observation
+                                                      .editingEntry !=
+                                                  null
+                                              ? 'Edit queued message'
+                                              : chat.runtime.blocksTurnAdmission
+                                              ? 'Draft your next message'
+                                              : 'Message Hermes or type /',
+                                          border: InputBorder.none,
+                                          enabledBorder: InputBorder.none,
+                                          focusedBorder: InputBorder.none,
+                                          filled: false,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 12,
                                               ),
-                                            )
-                                          : null,
-                                      contextMenuBuilder: (context, editableText) {
-                                        if (!_canPasteImage(chat)) {
-                                          return AdaptiveTextSelectionToolbar.editableText(
-                                            editableTextState: editableText,
-                                          );
-                                        }
-                                        return ImagePasteMenu(
-                                          editableText: editableText,
-                                          onPasteImage: () => _run(() async {
-                                            if (!_canPasteImage(chat)) {
-                                              throw StateError(
-                                                'Wait before adding another image.',
-                                              );
-                                            }
-                                            await controller.addPastedImage(
-                                              chat,
-                                              ImageClipboard.readImage,
-                                            );
-                                          }),
-                                        );
-                                      },
-                                      onChanged: (value) {
-                                        if (chat
-                                                .composer
-                                                .observation
-                                                .editingEntry !=
-                                            null) {
-                                          _queuedEditErrors.remove(chat.key);
-                                          controller.updateQueuedPromptEdit(
-                                            chat,
-                                            value,
-                                          );
-                                          return;
-                                        }
-                                        unawaited(
-                                          controller
-                                              .updateDraft(chat, value)
-                                              .catchError((_) {
-                                                if (context.mounted) {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    const SnackBar(
-                                                      content: StudioError(
-                                                        'This draft could not be saved on the device.',
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                              }),
-                                        );
-                                      },
-                                      decoration: InputDecoration(
-                                        suffixIcon:
-                                            chat
-                                                    .composer
-                                                    .observation
-                                                    .editingEntry ==
-                                                null
-                                            ? _dictationButton(chat)
-                                            : null,
-                                        isDense: true,
-                                        hintMaxLines: 1,
-                                        hintText:
-                                            chat
-                                                    .composer
-                                                    .observation
-                                                    .editingEntry !=
-                                                null
-                                            ? 'Edit queued message'
-                                            : chat.runtime.blocksTurnAdmission
-                                            ? 'Draft your next message'
-                                            : 'Message Hermes or type /',
-                                        border: InputBorder.none,
-                                        enabledBorder: InputBorder.none,
-                                        focusedBorder: InputBorder.none,
-                                        filled: false,
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 12,
-                                            ),
+                                        ),
                                       ),
-                                    ),
-                                    if (chat
-                                            .composer
-                                            .observation
-                                            .editingEntry !=
-                                        null)
-                                      _queuedEditActions(chat)
-                                    else
-                                      Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.end,
-                                        children: [
-                                          IconButton(
-                                            tooltip: 'Attach file',
-                                            style: IconButton.styleFrom(
-                                              minimumSize: const Size(48, 48),
-                                            ),
-                                            icon: const Icon(Icons.add),
-                                            onPressed:
-                                                !controller.canAddAttachment(
-                                                      chat,
-                                                    ) ||
-                                                    _launchingCamera
-                                                ? null
-                                                : () => _run(() async {
-                                                    final target = chat.key;
-                                                    final choice = await showModalBottomSheet<_AttachmentChoice>(
-                                                      context: context,
-                                                      showDragHandle: true,
-                                                      builder: (context) => SafeArea(
-                                                        child: Column(
-                                                          mainAxisSize:
-                                                              MainAxisSize.min,
-                                                          children: [
-                                                            ListTile(
-                                                              leading: const Icon(
-                                                                Icons
-                                                                    .camera_alt_outlined,
+                                      if (chat
+                                              .composer
+                                              .observation
+                                              .editingEntry !=
+                                          null)
+                                        _queuedEditActions(chat)
+                                      else
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
+                                          children: [
+                                            IconButton(
+                                              tooltip: 'Attach file',
+                                              style: IconButton.styleFrom(
+                                                minimumSize: const Size(48, 48),
+                                              ),
+                                              icon: const Icon(Icons.add),
+                                              onPressed:
+                                                  !controller.canAddAttachment(
+                                                        chat,
+                                                      ) ||
+                                                      _launchingCamera
+                                                  ? null
+                                                  : () => _run(() async {
+                                                      final target = chat.key;
+                                                      final choice = await showModalBottomSheet<_AttachmentChoice>(
+                                                        context: context,
+                                                        showDragHandle: true,
+                                                        builder: (context) => SafeArea(
+                                                          child: Column(
+                                                            mainAxisSize:
+                                                                MainAxisSize
+                                                                    .min,
+                                                            children: [
+                                                              ListTile(
+                                                                leading: const Icon(
+                                                                  Icons
+                                                                      .camera_alt_outlined,
+                                                                ),
+                                                                title:
+                                                                    const Text(
+                                                                      'Camera',
+                                                                    ),
+                                                                enabled:
+                                                                    widget
+                                                                        .onCapturePhoto !=
+                                                                    null,
+                                                                onTap:
+                                                                    widget.onCapturePhoto ==
+                                                                        null
+                                                                    ? null
+                                                                    : () => Navigator.pop(
+                                                                        context,
+                                                                        _AttachmentChoice
+                                                                            .camera,
+                                                                      ),
                                                               ),
-                                                              title: const Text(
-                                                                'Camera',
-                                                              ),
-                                                              enabled:
-                                                                  widget
-                                                                      .onCapturePhoto !=
-                                                                  null,
-                                                              onTap:
-                                                                  widget.onCapturePhoto ==
-                                                                      null
-                                                                  ? null
-                                                                  : () => Navigator.pop(
+                                                              ListTile(
+                                                                leading: const Icon(
+                                                                  Icons
+                                                                      .photo_library_outlined,
+                                                                ),
+                                                                title:
+                                                                    const Text(
+                                                                      'Photos',
+                                                                    ),
+                                                                onTap: () =>
+                                                                    Navigator.pop(
                                                                       context,
                                                                       _AttachmentChoice
-                                                                          .camera,
+                                                                          .photos,
                                                                     ),
-                                                            ),
-                                                            ListTile(
-                                                              leading: const Icon(
-                                                                Icons
-                                                                    .photo_library_outlined,
                                                               ),
-                                                              title: const Text(
-                                                                'Photos',
+                                                              ListTile(
+                                                                leading: const Icon(
+                                                                  Icons
+                                                                      .insert_drive_file_outlined,
+                                                                ),
+                                                                title:
+                                                                    const Text(
+                                                                      'Files',
+                                                                    ),
+                                                                onTap: () =>
+                                                                    Navigator.pop(
+                                                                      context,
+                                                                      _AttachmentChoice
+                                                                          .files,
+                                                                    ),
                                                               ),
-                                                              onTap: () =>
-                                                                  Navigator.pop(
-                                                                    context,
-                                                                    _AttachmentChoice
-                                                                        .photos,
-                                                                  ),
-                                                            ),
-                                                            ListTile(
-                                                              leading: const Icon(
-                                                                Icons
-                                                                    .insert_drive_file_outlined,
-                                                              ),
-                                                              title: const Text(
-                                                                'Files',
-                                                              ),
-                                                              onTap: () =>
-                                                                  Navigator.pop(
-                                                                    context,
-                                                                    _AttachmentChoice
-                                                                        .files,
-                                                                  ),
-                                                            ),
-                                                          ],
+                                                            ],
+                                                          ),
                                                         ),
-                                                      ),
-                                                    );
-                                                    if (choice == null) {
-                                                      return;
-                                                    }
-                                                    if (choice ==
-                                                        _AttachmentChoice
-                                                            .camera) {
-                                                      if (_launchingCamera) {
+                                                      );
+                                                      if (choice == null) {
                                                         return;
                                                       }
-                                                      setState(
-                                                        () => _launchingCamera =
-                                                            true,
-                                                      );
-                                                      try {
-                                                        await widget
-                                                            .onCapturePhoto!(
-                                                          target,
-                                                        );
-                                                      } finally {
-                                                        if (mounted) {
-                                                          setState(
-                                                            () =>
-                                                                _launchingCamera =
-                                                                    false,
-                                                          );
+                                                      if (choice ==
+                                                          _AttachmentChoice
+                                                              .camera) {
+                                                        if (_launchingCamera) {
+                                                          return;
                                                         }
-                                                      }
-                                                      return;
-                                                    }
-                                                    final type =
-                                                        choice ==
-                                                            _AttachmentChoice
-                                                                .photos
-                                                        ? FileType.image
-                                                        : FileType.any;
-                                                    final files =
-                                                        await FilePicker.pickFiles(
-                                                          type: type,
+                                                        setState(
+                                                          () =>
+                                                              _launchingCamera =
+                                                                  true,
                                                         );
-                                                    if (files.isEmpty) return;
-                                                    if (files.any(
-                                                      (file) =>
-                                                          file.path == null,
-                                                    )) {
-                                                      throw const AttachmentDraftException(
-                                                        'A selected file could not be opened. Select the files again.',
-                                                      );
-                                                    }
-                                                    await controller
-                                                        .addAttachments(chat, [
-                                                          for (final file
-                                                              in files)
-                                                            (
-                                                              path: file.path!,
-                                                              name: file.name,
-                                                            ),
-                                                        ]);
-                                                  }),
-                                          ),
-                                          ContextRing(
-                                            key: ValueKey((
-                                              'context-ring',
-                                              chat.key,
-                                            )),
-                                            occupancy: chat.context,
-                                            compressions:
-                                                chat.contextCompressions,
-                                            loading: chat.contextLoading,
-                                            error: chat.contextError,
-                                            onRefresh: () => unawaited(
-                                              controller.refreshContext(chat),
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: Align(
-                                              alignment: Alignment.centerRight,
-                                              child: ChatIntelligenceButton(
-                                                key: ValueKey((
-                                                  'chat-intelligence',
-                                                  chat.key,
-                                                )),
-                                                model: chat.model ?? 'Model',
-                                                observation: controller
-                                                    .modelObservation(chat),
-                                                fastMode: chat.fastMode,
-                                                onReasoningChanged: (effort) =>
-                                                    _run(
-                                                      () =>
-                                                          _changeModelControls(
+                                                        try {
+                                                          await widget
+                                                              .onCapturePhoto!(
+                                                            target,
+                                                          );
+                                                        } finally {
+                                                          if (mounted) {
+                                                            setState(
+                                                              () =>
+                                                                  _launchingCamera =
+                                                                      false,
+                                                            );
+                                                          }
+                                                        }
+                                                        return;
+                                                      }
+                                                      final type =
+                                                          choice ==
+                                                              _AttachmentChoice
+                                                                  .photos
+                                                          ? FileType.image
+                                                          : FileType.any;
+                                                      final files =
+                                                          await FilePicker.pickFiles(
+                                                            type: type,
+                                                          );
+                                                      if (files.isEmpty) return;
+                                                      if (files.any(
+                                                        (file) =>
+                                                            file.path == null,
+                                                      )) {
+                                                        throw const AttachmentDraftException(
+                                                          'A selected file could not be opened. Select the files again.',
+                                                        );
+                                                      }
+                                                      await controller
+                                                          .addAttachments(
                                                             chat,
-                                                            reasoning: effort,
-                                                          ),
-                                                    ),
-                                                onFastChanged: (mode) => _run(
-                                                  () => _changeModelControls(
-                                                    chat,
-                                                    fast: mode,
-                                                  ),
-                                                ),
-                                                reasoningEffort:
-                                                    chat.reasoningEffort ??
-                                                    'default',
-                                                loading:
-                                                    _loadingIntelligence ==
-                                                        chat.key ||
-                                                    chat.changingIntelligence,
-                                                onPressed:
-                                                    chat.runtime.opening ||
-                                                        chat.runtime.offline ||
-                                                        controller.recovering ||
-                                                        chat
-                                                            .runtime
-                                                            .blocksTurnAdmission ||
-                                                        chat
-                                                            .runtime
-                                                            .changingAnswer ||
-                                                        chat
-                                                            .runtime
-                                                            .commandRunning ||
-                                                        controller.switching ||
-                                                        chat.changingIntelligence ||
-                                                        _loadingIntelligence !=
-                                                            null
-                                                    ? null
-                                                    : () => _run(
-                                                        () =>
-                                                            _chooseIntelligence(
-                                                              chat,
-                                                              context,
-                                                            ),
-                                                      ),
+                                                            [
+                                                              for (final file
+                                                                  in files)
+                                                                (
+                                                                  path: file
+                                                                      .path!,
+                                                                  name:
+                                                                      file.name,
+                                                                ),
+                                                            ],
+                                                          );
+                                                    }),
+                                            ),
+                                            ContextRing(
+                                              key: ValueKey((
+                                                'context-ring',
+                                                chat.key,
+                                              )),
+                                              occupancy: chat.context,
+                                              compressions:
+                                                  chat.contextCompressions,
+                                              loading: chat.contextLoading,
+                                              error: chat.contextError,
+                                              onRefresh: () => unawaited(
+                                                controller.refreshContext(chat),
                                               ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          _composerActionButton(chat),
-                                        ],
-                                      ),
-                                  ],
+                                            Expanded(
+                                              child: Align(
+                                                alignment:
+                                                    Alignment.centerRight,
+                                                child: ChatIntelligenceButton(
+                                                  key: ValueKey((
+                                                    'chat-intelligence',
+                                                    chat.key,
+                                                  )),
+                                                  model: chat.model ?? 'Model',
+                                                  observation: controller
+                                                      .modelObservation(chat),
+                                                  fastMode: chat.fastMode,
+                                                  onReasoningChanged:
+                                                      (effort) => _run(
+                                                        () =>
+                                                            _changeModelControls(
+                                                              chat,
+                                                              reasoning: effort,
+                                                            ),
+                                                      ),
+                                                  onFastChanged: (mode) => _run(
+                                                    () => _changeModelControls(
+                                                      chat,
+                                                      fast: mode,
+                                                    ),
+                                                  ),
+                                                  reasoningEffort:
+                                                      chat.reasoningEffort ??
+                                                      'default',
+                                                  loading:
+                                                      _loadingIntelligence ==
+                                                          chat.key ||
+                                                      chat.changingIntelligence,
+                                                  onPressed:
+                                                      chat.runtime.opening ||
+                                                          chat
+                                                              .runtime
+                                                              .offline ||
+                                                          controller
+                                                              .recovering ||
+                                                          chat
+                                                              .runtime
+                                                              .blocksTurnAdmission ||
+                                                          chat
+                                                              .runtime
+                                                              .changingAnswer ||
+                                                          chat
+                                                              .runtime
+                                                              .commandRunning ||
+                                                          controller
+                                                              .switching ||
+                                                          chat.changingIntelligence ||
+                                                          _loadingIntelligence !=
+                                                              null
+                                                      ? null
+                                                      : () => _run(
+                                                          () =>
+                                                              _chooseIntelligence(
+                                                                chat,
+                                                                context,
+                                                              ),
+                                                        ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            _composerActionButton(chat),
+                                          ],
+                                        ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -3304,121 +3334,125 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   }),
               ],
             ),
-      body: Column(
-        children: [
-          if (controller.switching &&
-              _destination != AppDestination.bots &&
-              _destination != AppDestination.settings &&
-              _destination != AppDestination.administration)
-            const LinearProgressIndicator(),
-          if (_destination == AppDestination.health ||
-              _destination == AppDestination.analytics)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: ServerConnectionLabel(
-                  label: controller.connection.label,
-                  icon: controller.connection.icon,
-                  pickerMode: _destination == AppDestination.analytics
-                      ? WorkspacePickerMode.profiles
-                      : null,
-                  suffix:
-                      _destination == AppDestination.health ||
-                          _destination == AppDestination.analytics
-                      ? controller.current?.scope.profileName
-                      : null,
-                  status: controller.connectionStatus,
+      body: StudioLoadingRegion(
+        available: true,
+        busy:
+            controller.switching &&
+            _destination != AppDestination.bots &&
+            _destination != AppDestination.settings &&
+            _destination != AppDestination.administration,
+        label: 'Updating conversation',
+        child: Column(
+          children: [
+            if (_destination == AppDestination.health ||
+                _destination == AppDestination.analytics)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ServerConnectionLabel(
+                    label: controller.connection.label,
+                    icon: controller.connection.icon,
+                    pickerMode: _destination == AppDestination.analytics
+                        ? WorkspacePickerMode.profiles
+                        : null,
+                    suffix:
+                        _destination == AppDestination.health ||
+                            _destination == AppDestination.analytics
+                        ? controller.current?.scope.profileName
+                        : null,
+                    status: controller.connectionStatus,
+                  ),
                 ),
               ),
-            ),
-          if (_destination != AppDestination.bots &&
-              _destination != AppDestination.settings &&
-              _destination != AppDestination.administration)
-            WorkspaceConnectionStatus(status: controller.connectionStatus),
-          if (controller.error != null &&
-              _destination != AppDestination.bots &&
-              _destination != AppDestination.settings &&
-              _destination != AppDestination.administration)
-            ListTile(
-              title: StudioError(controller.error!),
-              trailing: TextButton(
-                onPressed: () => _run(controller.retry),
-                child: const Text('Retry'),
+            if (_destination != AppDestination.bots &&
+                _destination != AppDestination.settings &&
+                _destination != AppDestination.administration)
+              WorkspaceConnectionStatus(status: controller.connectionStatus),
+            if (controller.error != null &&
+                _destination != AppDestination.bots &&
+                _destination != AppDestination.settings &&
+                _destination != AppDestination.administration)
+              ListTile(
+                title: StudioError(controller.error!),
+                trailing: TextButton(
+                  onPressed: () => _run(controller.retry),
+                  child: const Text('Retry'),
+                ),
               ),
-            ),
-          Expanded(
-            child: switch (_destination) {
-              AppDestination.bots => BotsContent(
-                session: _bots,
-                instanceHeader: _instanceHeader(),
-                viewState: _botsView,
-                onViewChanged: (view) => setState(() => _botsView = view),
-                onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                onOpenChat: _openBotChat,
-                onOpenGroup: _openRecentGroup,
-              ),
-              AppDestination.analytics => HermesAnalyticsContent(
-                key: ValueKey(controller.connectionIdentity),
-                controller: controller,
-              ),
-              AppDestination.settings => AppSettingsContent(
-                key: ValueKey(_settingsRevision),
-                preferences: controller.appPreferences,
-                createVoiceSession: () => VoicePreferencesSession(
+            Expanded(
+              child: switch (_destination) {
+                AppDestination.bots => BotsContent(
+                  session: _bots,
+                  instanceHeader: _instanceHeader(),
+                  viewState: _botsView,
+                  onViewChanged: (view) => setState(() => _botsView = view),
+                  onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                  onOpenChat: _openBotChat,
+                  onOpenGroup: _openRecentGroup,
+                ),
+                AppDestination.analytics => HermesAnalyticsContent(
+                  key: ValueKey(controller.connectionIdentity),
+                  controller: controller,
+                ),
+                AppDestination.settings => AppSettingsContent(
+                  key: ValueKey(_settingsRevision),
                   preferences: controller.appPreferences,
-                  device: AndroidVoice.instance,
-                  hermesProfileLabel: controller.current?.scope.profileName,
-                  openHermesSettings: _hermesSpeechSettingsLink(context),
+                  createVoiceSession: () => VoicePreferencesSession(
+                    preferences: controller.appPreferences,
+                    device: AndroidVoice.instance,
+                    hermesProfileLabel: controller.current?.scope.profileName,
+                    openHermesSettings: _hermesSpeechSettingsLink(context),
+                  ),
+                  enableNotifications: widget.enableNotifications,
+                  backgroundMonitoringState: widget.backgroundMonitoringState,
+                  openMonitoringBatterySettings:
+                      widget.openMonitoringBatterySettings,
+                  onChanged: () {
+                    setState(() {});
+                    widget.onPreferencesChanged?.call();
+                  },
                 ),
-                enableNotifications: widget.enableNotifications,
-                backgroundMonitoringState: widget.backgroundMonitoringState,
-                openMonitoringBatterySettings:
-                    widget.openMonitoringBatterySettings,
-                onChanged: () {
-                  setState(() {});
-                  widget.onPreferencesChanged?.call();
-                },
-              ),
-              AppDestination.activity => WorkspaceActivityContent(
-                recents: _recents,
-                visible: _appIsActive && _routeIsCurrent,
-                onOpenGroup: _openRecentGroup,
-                onOpen: (item, displayed) => unawaited(
-                  _run(() => _openRecentConversation(item, displayed)),
+                AppDestination.activity => WorkspaceActivityContent(
+                  recents: _recents,
+                  visible: _appIsActive && _routeIsCurrent,
+                  onOpenGroup: _openRecentGroup,
+                  onOpen: (item, displayed) => unawaited(
+                    _run(() => _openRecentConversation(item, displayed)),
+                  ),
                 ),
-              ),
-              AppDestination.health => HermesHealthContent(
-                onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                key: ValueKey(controller.connectionIdentity),
-                controller: controller,
-                onOpenSession: (key) async {
-                  await controller.openSession(
-                    key,
-                    propagateHistoryFailure: true,
-                  );
-                  if (mounted) _selectDestination(AppDestination.chats);
-                },
-                onConnections: () =>
-                    _selectDestination(AppDestination.connections),
-              ),
-              _ => HermesAdministrationContent(
-                onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                key: ValueKey(controller.connectionIdentity),
-                controller: controller,
-                onOpenSession: (key) async {
-                  await controller.openSession(
-                    key,
-                    propagateHistoryFailure: true,
-                  );
-                  if (mounted) _selectDestination(AppDestination.chats);
-                },
-                onConnections: () =>
-                    _selectDestination(AppDestination.connections),
-              ),
-            },
-          ),
-        ],
+                AppDestination.health => HermesHealthContent(
+                  onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                  key: ValueKey(controller.connectionIdentity),
+                  controller: controller,
+                  onOpenSession: (key) async {
+                    await controller.openSession(
+                      key,
+                      propagateHistoryFailure: true,
+                    );
+                    if (mounted) _selectDestination(AppDestination.chats);
+                  },
+                  onConnections: () =>
+                      _selectDestination(AppDestination.connections),
+                ),
+                _ => HermesAdministrationContent(
+                  onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                  key: ValueKey(controller.connectionIdentity),
+                  controller: controller,
+                  onOpenSession: (key) async {
+                    await controller.openSession(
+                      key,
+                      propagateHistoryFailure: true,
+                    );
+                    if (mounted) _selectDestination(AppDestination.chats);
+                  },
+                  onConnections: () =>
+                      _selectDestination(AppDestination.connections),
+                ),
+              },
+            ),
+          ],
+        ),
       ),
     ),
   );

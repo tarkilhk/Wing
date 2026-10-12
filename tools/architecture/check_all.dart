@@ -1,5 +1,6 @@
 import 'cli.dart';
 import 'rules/activity_density.dart' as density;
+import 'rules/loading_family.dart' as loading;
 import 'model.dart';
 import 'rules/business_rendering_types.dart' as rendering;
 import 'rules/business_view_dependencies.dart' as business;
@@ -16,6 +17,7 @@ import 'rules/recent_capture_release_safe.dart' as recent_capture;
 
 final allRules = <String, Rule>{
   density.id: density.check,
+  loading.id: loading.check,
   domain.id: domain.check,
   business.id: business.check,
   rendering.id: rendering.check,

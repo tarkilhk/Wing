@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'dart:convert';
 import 'dart:async';
@@ -604,7 +605,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsWidgets);
+      expect(find.byType(StudioLoading), findsWidgets);
       final tiles = find.byType(UserMessageAttachmentTile);
       final first = tester.getRect(tiles.at(0));
       final failed = tester.getRect(tiles.at(1));

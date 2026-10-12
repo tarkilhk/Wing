@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'activity/activity_detail_actions.dart';
 import '../models/chat_output.dart';
 import 'dart:async';
@@ -594,7 +595,7 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: StudioLoading(label: 'Opening result'),
                   )
                 : const Icon(Icons.visibility_outlined, size: 16),
           ),
@@ -607,7 +608,7 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: StudioLoading(label: 'Opening result'),
                   )
                 : const Icon(Icons.share_outlined, size: 16),
           ),

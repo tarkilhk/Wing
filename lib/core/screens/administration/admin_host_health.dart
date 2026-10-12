@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/host_resources.dart';
@@ -309,7 +310,7 @@ class _HostHeading extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Host', style: Theme.of(context).textTheme.titleMedium),
-                if (!state.refreshing)
+                if (!state.refreshing || state.stats.value != null)
                   Text(label, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
@@ -317,16 +318,10 @@ class _HostHeading extends StatelessWidget {
           IconButton(
             tooltip: 'Refresh host resources',
             onPressed: state.refreshing ? null : resources.refresh,
-            icon: state.refreshing
+            icon: state.refreshing && state.stats.value == null
                 ? SizedBox.square(
                     dimension: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      semanticsLabel: 'Reading host resources',
-                      value: MediaQuery.disableAnimationsOf(context)
-                          ? .5
-                          : null,
-                    ),
+                    child: StudioLoading(label: 'Reading host resources'),
                   )
                 : const Icon(Icons.refresh),
           ),
@@ -351,7 +346,7 @@ List<Widget> _notices(BuildContext context, HostResourcesState state) {
             : '$error Showing the last resource reading.',
       ),
     );
-  } else if (state.stats.value case final stats? when !state.refreshing) {
+  } else if (state.stats.value case final stats?) {
     if (stats.cpuPercent == null ||
         stats.memory == null ||
         stats.disk == null) {

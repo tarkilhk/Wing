@@ -1,4 +1,5 @@
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import '../../widgets/studio_loading.dart';
 import '../../widgets/bot_group_conversation.dart';
 import '../../widgets/recent_conversations/conversation_gestures.dart';
 import '../../widgets/recent_conversations/conversation_route_scope.dart';
@@ -406,6 +407,8 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       active: active,
       wrap: true,
       leading: ConversationStatusIndicator(
+        blocked: _session.sending,
+        label: 'Sending message',
         running: active,
         icon: icon,
         color: active
@@ -696,20 +699,8 @@ class _BotGroupScreenState extends State<BotGroupScreen>
               ),
             ),
           ),
-          if (_session.loading)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Semantics(
-                liveRegion: true,
-                child: LinearProgressIndicator(
-                  minHeight: 2,
-                  value: MediaQuery.disableAnimationsOf(context) ? .5 : null,
-                  semanticsLabel: 'Loading conversation',
-                ),
-              ),
-            ),
+          if (_session.loading && _session.events.isEmpty)
+            const StudioLoadingOverlay(label: 'Loading conversation'),
           if (!_following)
             Positioned(
               left: 0,

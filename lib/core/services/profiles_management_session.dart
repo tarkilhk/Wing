@@ -48,6 +48,7 @@ class ProfilesManagementSession extends ChangeNotifier {
   ProfilesManagementState get state {
     final available = !_disposed && _hasRoster && !_occupied;
     return ProfilesManagementState(
+      hasObservation: _hasRoster,
       scope: _server.connectionLabel,
       rows: [
         for (final profile in _profiles)

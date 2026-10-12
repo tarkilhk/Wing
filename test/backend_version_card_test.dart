@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -39,6 +40,7 @@ class _UpdateHost {
     'summary': 'success',
   };
   Completer<Map<String, dynamic>>? pendingCheck;
+  Completer<Map<String, dynamic>>? pendingStatus;
   bool statusFails = false;
   final reads = <(String, Map<String, String>)>[];
   final posts = <(String, Map<String, dynamic>)>[];
@@ -59,7 +61,7 @@ class _UpdateHost {
       if (statusFails) {
         throw StateError('private disconnected detail');
       }
-      return statusResponse;
+      return pendingStatus?.future ?? statusResponse;
     },
     post: (endpoint, body) async {
       posts.add((endpoint, body));
@@ -75,6 +77,55 @@ class _UpdateHost {
 }
 
 void main() {
+  testWidgets(
+    'known update status refresh stays quiet and publishes new output',
+    (tester) async {
+      final host = _UpdateHost();
+      final controller = BackendUpdateController(host.gateway);
+      addTearDown(controller.dispose);
+      await controller.checkForUpdate();
+      await controller.refreshStatus();
+      final pending = Completer<Map<String, dynamic>>();
+      host.pendingStatus = pending;
+      addTearDown(() {
+        if (!pending.isCompleted) pending.complete(host.statusResponse);
+      });
+      final card = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 600,
+                child: BackendVersionCard(
+                  key: card,
+                  updateController: controller,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final before = tester.getRect(find.byKey(card));
+      final refresh = controller.refreshStatus();
+      await tester.pump(const Duration(seconds: 12));
+      expect(find.byType(StudioLoading), findsNothing);
+      expect(tester.getRect(find.byKey(card)), before);
+      expect(find.byTooltip('Changes in this update'), findsOneWidget);
+      pending.complete({
+        ...host.statusResponse,
+        'lines': ['Fresh update output'],
+      });
+      await refresh;
+      await tester.pumpAndSettle();
+      expect(controller.status!.lines, ['Fresh update output']);
+      await tester.tap(find.byType(ExpansionTile));
+      await tester.pumpAndSettle();
+      expect(find.text('Fresh update output'), findsOneWidget);
+    },
+  );
   Future<void> showCard(
     WidgetTester tester,
     _UpdateHost host, {
@@ -454,7 +505,7 @@ void main() {
     await tester.pump();
     expect(find.text('Checking for updates…'), findsNothing);
     expect(find.text('Checking…'), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(StudioLoading), findsOneWidget);
     expect(find.bySemanticsLabel('Checking for updates'), findsOneWidget);
     expect(find.text('Check for updates'), findsNothing);
     expect(find.byTooltip('Check for updates'), findsOneWidget);

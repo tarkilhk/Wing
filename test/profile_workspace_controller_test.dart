@@ -197,6 +197,8 @@ class Host {
   Object? connectError;
   int connectCalls = 0;
   int disconnectCalls = 0;
+  final connectsByProfile = <String, int>{};
+  final disconnectsByProfile = <String, int>{};
   int resumeFailures = 0;
   Completer<void>? resumeStarted;
   Completer<void>? resumeDelay;
@@ -257,6 +259,11 @@ class Host {
         if (gateway.onEvent != null) {
           gateways[name] = gateway;
           connectCalls++;
+          connectsByProfile.update(
+            name,
+            (count) => count + 1,
+            ifAbsent: () => 1,
+          );
         }
         await connectDelay?.future;
         if (connectError != null) throw connectError!;
@@ -268,7 +275,14 @@ class Host {
       close: () {
         if (gateway.onEvent != null) closed.add(name);
       },
-      disconnect: () => disconnectCalls++,
+      disconnect: () {
+        disconnectCalls++;
+        disconnectsByProfile.update(
+          name,
+          (count) => count + 1,
+          ifAbsent: () => 1,
+        );
+      },
       get: (path, query) async {
         reads.add((path, query));
         if (path == 'logs') {
@@ -3334,14 +3348,14 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
-    final before = host.connectCalls;
+    final before = host.connectsByProfile['a']!;
     host.gateways['a']!.onConnectionChanged!(false);
     for (final seconds in [1, 2, 4, 8, 16]) {
       await tester.pump(Duration(seconds: seconds));
       expect(controller.error, isNull);
       expect(find.byType(MaterialBanner), findsNothing);
     }
-    expect(host.connectCalls - before, 5);
+    expect(host.connectsByProfile['a']! - before, 5);
     expect(controller.connectionStatus.liveAvailable('a'), isFalse);
     expect(chat.composer.observation.text, 'Keep this draft');
     await controller.send(chat);
@@ -3355,7 +3369,7 @@ void main() {
     // No perpetual polling after the initial burst. Returning to Wing is
     // enough to retry immediately, without a tap on Retry.
     await tester.pump(const Duration(minutes: 2));
-    expect(host.connectCalls - before, 5);
+    expect(host.connectsByProfile['a']! - before, 5);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
@@ -3380,7 +3394,7 @@ void main() {
     expect(host.calls.where((c) => c.$2 == 'prompt.submit'), hasLength(1));
     host.event('a', 'message.complete', {'text': 'Accepted queued question'});
     await tester.pumpAndSettle();
-    expect(host.connectCalls - before, 6);
+    expect(host.connectsByProfile['a']! - before, 6);
     expect(find.byType(MaterialBanner), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -3466,11 +3480,13 @@ void main() {
       final background = controller.browserResource('b');
       await background.gateway.connect();
       expect(background.loaded, isFalse);
-      final before = host.disconnectCalls;
+      final before = Map.of(host.disconnectsByProfile);
 
       controller.networkUnavailable();
 
-      expect(host.disconnectCalls, before + 2);
+      for (final profile in ['a', 'b']) {
+        expect(host.disconnectsByProfile[profile], (before[profile] ?? 0) + 1);
+      }
       expect(controller.connectionStatus.liveAvailable('a'), isFalse);
       expect(controller.connectionStatus.liveAvailable('b'), isFalse);
       await controller.resumeConnection();
@@ -3482,11 +3498,12 @@ void main() {
     'retry leaves browser-only profiles without sockets unchecked',
     () async {
       final background = controller.browserResource('b');
-      final before = host.connectCalls;
+      final before = Map.of(host.connectsByProfile);
 
       await controller.resumeConnection();
 
-      expect(host.connectCalls, before + 1);
+      expect(host.connectsByProfile['a'], before['a']! + 1);
+      expect(host.connectsByProfile['b'], before['b']);
       expect(background.loaded, isFalse);
       expect(controller.connectionStatus.liveAvailable('b'), isFalse);
       expect(controller.connectionStatus.description, 'Connected');

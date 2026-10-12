@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import 'anchored_expansion_tile.dart';
 
@@ -72,10 +73,9 @@ class _ProfileTranscriptDisclosureState
               if (widget.loading)
                 SizedBox.square(
                   dimension: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.5,
+                  child: StudioLoading(
                     color: color,
-                    semanticsLabel: 'Refreshing ${widget.label}',
+                    label: 'Refreshing ${widget.label}',
                   ),
                 )
               else if (widget.icon != null)

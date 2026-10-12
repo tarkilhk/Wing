@@ -15,6 +15,7 @@ class ProfileCapabilitiesSession extends ChangeNotifier {
   String get profileName => _gateway.scope.profileName;
 
   ProfileCapabilitiesState _state = ProfileCapabilitiesState(
+    hasObservation: false,
     kind: ProfileCapabilityKind.tools,
     rows: const [],
     loading: true,
@@ -29,6 +30,7 @@ class ProfileCapabilitiesSession extends ChangeNotifier {
   int _notificationDepth = 0;
 
   void _publish({
+    bool? hasObservation,
     ProfileCapabilityKind? kind,
     Iterable<ProfileCapability>? rows,
     bool? loading,
@@ -39,6 +41,7 @@ class ProfileCapabilitiesSession extends ChangeNotifier {
   }) {
     if (_disposed) return;
     _state = ProfileCapabilitiesState(
+      hasObservation: hasObservation ?? _state.hasObservation,
       kind: kind ?? _state.kind,
       rows: rows ?? _state.rows,
       loading: loading ?? _state.loading,
@@ -63,6 +66,7 @@ class ProfileCapabilitiesSession extends ChangeNotifier {
     _publish(
       kind: kind,
       rows: changedKind ? const [] : null,
+      hasObservation: changedKind ? false : null,
       loading: true,
       verified: false,
       error: null,
@@ -77,6 +81,7 @@ class ProfileCapabilitiesSession extends ChangeNotifier {
       if (_disposed || generation != _generation) return;
       _publish(
         rows: rows,
+        hasObservation: true,
         loading: false,
         verified: true,
         error: null,

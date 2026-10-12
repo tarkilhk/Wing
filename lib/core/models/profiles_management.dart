@@ -72,6 +72,7 @@ class ProfilesManagementDraft {
 
 class ProfilesManagementState {
   ProfilesManagementState({
+    required this.hasObservation,
     required this.scope,
     required List<ProfilesManagementRow> rows,
     required this.loading,
@@ -89,6 +90,7 @@ class ProfilesManagementState {
   final List<ProfilesManagementRow> rows;
   final List<ProfilesManagementOutcome> settlements;
   final bool loading, busy, canCreate, canOpen, canRefresh;
+  final bool hasObservation;
   final ProfilesManagementDraft? draft;
   final String? error;
   final ProfilesManagementOutcome? outcome;

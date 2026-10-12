@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'studio_loading.dart';
 import 'activity_shimmer.dart';
 import 'status_transition.dart';
 
@@ -69,17 +70,21 @@ class ConversationStatusIndicator extends StatelessWidget {
   const ConversationStatusIndicator({
     super.key,
     required this.running,
+    required this.blocked,
+    required this.label,
     required this.icon,
     required this.color,
   });
   final bool running;
+  final bool blocked;
+  final String label;
   final IconData icon;
   final Color color;
   @override
   Widget build(BuildContext context) => SizedBox.square(
     dimension: 18,
-    child: running && !MediaQuery.disableAnimationsOf(context)
-        ? CircularProgressIndicator(strokeWidth: 2, color: color)
-        : Icon(icon, size: 18, color: color),
+    child: blocked
+        ? StudioLoading(label: label, color: color, size: 18)
+        : Icon(running ? Icons.sync : icon, size: 18, color: color),
   );
 }

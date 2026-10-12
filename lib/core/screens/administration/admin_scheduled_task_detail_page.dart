@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../../models/profile_session_key.dart';
 import 'package:flutter/material.dart';
 
@@ -138,7 +139,9 @@ class _AdminScheduledTaskDetailPageState
                   ),
                 ],
               ),
-        child: RefreshIndicator(
+        child: StudioRefresh(
+          available: true,
+          label: 'Loading runs',
           onRefresh: refresh,
           child: ListView(
             key: const ValueKey('task-detail-scroll'),
@@ -241,43 +244,47 @@ class _AdminScheduledTaskDetailPageState
                 'Recent runs',
                 description:
                     'Open conversation runs to read the chat. Script runs show their recorded status and output preview here.',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (loading) const LinearProgressIndicator(),
-                    if (runError != null)
-                      TaskMessage(
-                        runError!,
-                        error: true,
-                        action: TextButton(
-                          onPressed: loading ? null : refresh,
-                          child: const Text('Refresh runs'),
+                child: StudioLoadingRegion(
+                  available: state.history != null,
+                  busy: loading,
+                  label: 'Loading runs',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (runError != null)
+                        TaskMessage(
+                          runError!,
+                          error: true,
+                          action: TextButton(
+                            onPressed: loading ? null : refresh,
+                            child: const Text('Refresh runs'),
+                          ),
                         ),
-                      ),
-                    if (runs?.isEmpty == true)
-                      Text(
-                        'No recorded runs yet.',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    if (runs?.isNotEmpty == true)
-                      TaskSurface(
-                        child: Column(
-                          children: [
-                            for (var i = 0; i < runs!.length; i++) ...[
-                              if (i > 0) const Divider(height: 1),
-                              _runTile(runs![i]),
+                      if (runs?.isEmpty == true)
+                        Text(
+                          'No recorded runs yet.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      if (runs?.isNotEmpty == true)
+                        TaskSurface(
+                          child: Column(
+                            children: [
+                              for (var i = 0; i < runs!.length; i++) ...[
+                                if (i > 0) const Divider(height: 1),
+                                _runTile(runs![i]),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                    if (state.canShowMore)
-                      TextButton(
-                        onPressed: loading ? null : session.showMore,
-                        child: const Text('Show more runs'),
-                      ),
-                    if (state.atLimit)
-                      const Text('Showing the latest 100 runs.'),
-                  ],
+                      if (state.canShowMore)
+                        TextButton(
+                          onPressed: loading ? null : session.showMore,
+                          child: const Text('Show more runs'),
+                        ),
+                      if (state.atLimit)
+                        const Text('Showing the latest 100 runs.'),
+                    ],
+                  ),
                 ),
               ),
             ],

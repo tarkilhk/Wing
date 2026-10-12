@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'package:wing/core/screens/administration/admin_health_section.dart';
 import 'package:wing/core/services/administration_operation_session.dart';
@@ -23,9 +24,7 @@ void main() {
               checkedAt: null,
               checking: true,
               incomplete: false,
-              refresh: const CircularProgressIndicator(
-                semanticsLabel: 'Refreshing profile status',
-              ),
+              refresh: const StudioLoading(label: 'Refreshing profile status'),
             ),
           ),
         ),
@@ -56,7 +55,7 @@ void main() {
       );
       await tester.pump();
       expect(find.text('Checking operation…'), findsNothing);
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(StudioLoading), findsOneWidget);
       expect(find.bySemanticsLabel('Checking operation'), findsOneWidget);
       gate.complete({
         'name': 'doctor',
@@ -67,7 +66,7 @@ void main() {
       });
       await reading;
       await tester.pumpAndSettle();
-      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.byType(StudioLoading), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

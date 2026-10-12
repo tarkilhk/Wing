@@ -1,4 +1,5 @@
 import 'activity/activity_detail_actions.dart';
+import 'studio_loading.dart';
 import 'studio_error.dart';
 
 import 'package:flutter/material.dart';
@@ -80,8 +81,6 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
     builder: (context, _) {
       final chat = widget.session.state;
       final children = <Widget>[
-        if (widget.embedded && chat.subagentsLoading)
-          const LinearProgressIndicator(minHeight: 1),
         if (chat.unconfirmedSubagentIds.isNotEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
@@ -124,9 +123,14 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
         ),
       ];
       if (widget.embedded) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: children,
+        return StudioLoadingRegion(
+          available: chat.subagentsAvailable,
+          busy: chat.subagentsLoading,
+          label: 'Loading agents',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
         );
       }
       return ProfileTranscriptDisclosure(
@@ -139,7 +143,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
         icon: Icons.account_tree_outlined,
         label: 'Subagents',
         summary: Text(chat.subagentSummary),
-        loading: chat.subagentsLoading,
+        loading: chat.subagentsLoading && !chat.subagentsAvailable,
         childrenPadding: EdgeInsets.zero,
         children: children,
       );

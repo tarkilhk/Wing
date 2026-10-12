@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,7 +35,7 @@ class ActivityDetailAction extends StatelessWidget {
     icon: busy
         ? const SizedBox.square(
             dimension: 16,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            child: StudioLoading(label: 'Opening result'),
           )
         : Icon(icon, size: 16),
   );

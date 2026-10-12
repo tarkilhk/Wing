@@ -58,6 +58,8 @@ class ProfileChatIndicator extends StatelessWidget {
       child: Semantics(
         label: label,
         child: ConversationStatusIndicator(
+          blocked: false,
+          label: 'Working',
           running: spinning,
           icon: icon,
           color: color,

@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -1322,14 +1323,9 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                             builder: (context, _) => _cards(),
                           ),
                           if (_selecting)
-                            Positioned(
-                              top: MediaQuery.paddingOf(context).top,
-                              left: 0,
-                              right: 0,
-                              child: const LinearProgressIndicator(
-                                minHeight: 2,
-                                semanticsLabel: 'Opening conversation',
-                              ),
+                            StudioLoadingOverlay(
+                              label: 'Opening conversation',
+                              topInset: MediaQuery.paddingOf(context).top,
                             ),
                           if (_stack)
                             Positioned.fill(
@@ -1373,25 +1369,6 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                                 icon: const Icon(Icons.close),
                               ),
                             ),
-                          if (_stack && _batchPending)
-                            Positioned(
-                              top: MediaQuery.paddingOf(context).top + 24,
-                              right: 24,
-                              child: Semantics(
-                                label: 'Preparing conversation images',
-                                liveRegion: true,
-                                child: SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(
-                                    key: const ValueKey(
-                                      'recent-snapshot-progress',
-                                    ),
-                                    strokeWidth: 2,
-                                    value: _reduced ? .5 : null,
-                                  ),
-                                ),
-                              ),
-                            ),
                           if (_stack)
                             Positioned(
                               bottom: MediaQuery.paddingOf(context).bottom + 16,
@@ -1401,14 +1378,6 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                                 key: _stackFooter,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (widget.session.catalogLoading)
-                                    const Padding(
-                                      padding: EdgeInsets.only(bottom: 8),
-                                      child: Text(
-                                        'Loading recent chats…',
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
                                   if (widget.session.catalogError
                                       case final error?)
                                     Row(

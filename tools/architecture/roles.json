@@ -2276,10 +2276,20 @@
       "feature": "ui-foundations",
       "library": "lib/core/widgets/studio_action_label.dart"
     },
+    "lib/core/widgets/studio_capacity_meter.dart": {
+      "role": "view",
+      "feature": "ui-foundations",
+      "library": "lib/core/widgets/studio_capacity_meter.dart"
+    },
     "lib/core/widgets/studio_error.dart": {
       "role": "view",
       "feature": "ui-foundations",
       "library": "lib/core/widgets/studio_error.dart"
+    },
+    "lib/core/widgets/studio_loading.dart": {
+      "role": "view",
+      "feature": "ui-foundations",
+      "library": "lib/core/widgets/studio_loading.dart"
     },
     "lib/core/widgets/studio_select.dart": {
       "role": "view",

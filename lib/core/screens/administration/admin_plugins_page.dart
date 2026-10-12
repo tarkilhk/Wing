@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../models/profile_plugins.dart';
 import '../../services/profile_plugins_session.dart';
@@ -53,40 +54,44 @@ class _AdminPluginsPageState extends State<AdminPluginsPage> {
         listenable: _session,
         builder: (context, _) {
           final state = _session.state;
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (state.busy) const LinearProgressIndicator(),
-              if (state.error != null)
-                AdminNotice.error(
-                  state.error!,
-                  retry: state.canRefresh ? _session.refresh : null,
+          return StudioLoadingRegion(
+            available: state.hasObservation,
+            busy: state.busy,
+            label: 'Loading plugins',
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (state.error != null)
+                  AdminNotice.error(
+                    state.error!,
+                    retry: state.canRefresh ? _session.refresh : null,
+                  ),
+                const AdminNotice(
+                  'Backend capabilities for this profile. Desktop plugin screens are not Android screens.',
                 ),
-              const AdminNotice(
-                'Backend capabilities for this profile. Desktop plugin screens are not Android screens.',
-              ),
-              if (state.verified && state.rows.isEmpty)
-                const AdminNotice('No agent plugins reported.'),
-              AdminGroup(
-                children: [
-                  for (final row in state.rows)
-                    CompactSwitchListTile(
-                      title: Text(row.name),
-                      subtitle: Text(
-                        '${row.source} · ${row.status.label}\n${row.description}',
+                if (state.verified && state.rows.isEmpty)
+                  const AdminNotice('No agent plugins reported.'),
+                AdminGroup(
+                  children: [
+                    for (final row in state.rows)
+                      CompactSwitchListTile(
+                        title: Text(row.name),
+                        subtitle: Text(
+                          '${row.source} · ${row.status.label}\n${row.description}',
+                        ),
+                        value: row.enabled,
+                        onChanged: state.canToggle
+                            ? (value) => _choose(row, value)
+                            : null,
                       ),
-                      value: row.enabled,
-                      onChanged: state.canToggle
-                          ? (value) => _choose(row, value)
-                          : null,
-                    ),
-                ],
-              ),
-              TextButton(
-                onPressed: state.canRefresh ? _session.refresh : null,
-                child: const Text('Refresh'),
-              ),
-            ],
+                  ],
+                ),
+                TextButton(
+                  onPressed: state.canRefresh ? _session.refresh : null,
+                  child: const Text('Refresh'),
+                ),
+              ],
+            ),
           );
         },
       ),

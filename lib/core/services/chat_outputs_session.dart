@@ -41,6 +41,7 @@ final class OutputPreview {
 @immutable
 final class ChatOutputsObservation {
   ChatOutputsObservation({
+    required this.hasObservation,
     required Iterable<ChatOutput> outputs,
     required this.loading,
     required this.hasMore,
@@ -50,6 +51,7 @@ final class ChatOutputsObservation {
   }) : outputs = List.unmodifiable(outputs);
   final List<ChatOutput> outputs;
   final bool loading;
+  final bool hasObservation;
   final bool hasMore;
   final String? error;
   final bool retryable;
@@ -83,6 +85,7 @@ final class ChatOutputsSession extends ChangeNotifier {
   final _outputs = <String, ChatOutput>{};
   int? _nextOffset = 0;
   bool _loading = false;
+  bool _hasObservation = false;
   String? _error;
   bool _retryable = false;
   bool _retryRefresh = false;
@@ -90,6 +93,7 @@ final class ChatOutputsSession extends ChangeNotifier {
   int _notificationDepth = 0;
 
   ChatOutputsObservation get observation => ChatOutputsObservation(
+    hasObservation: _hasObservation,
     outputs: _outputs.values,
     loading: _loading,
     hasMore: _nextOffset != null,
@@ -115,6 +119,7 @@ final class ChatOutputsSession extends ChangeNotifier {
         _outputs.putIfAbsent(output.target, () => output);
       }
       _nextOffset = page.nextOffset;
+      _hasObservation = true;
     } catch (error) {
       if (!_active) return;
       _retryable = isTemporaryWorkspaceFailure(error);

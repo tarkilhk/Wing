@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../../services/administration_logs_session.dart';
 import '../../models/profile_session_key.dart';
 import 'package:flutter/material.dart';
@@ -189,10 +190,7 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
             icon: running
                 ? const SizedBox.square(
                     dimension: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      semanticsLabel: 'Running diagnostics',
-                    ),
+                    child: StudioLoading(label: 'Running diagnostics'),
                   )
                 : const Icon(Icons.refresh),
           ),

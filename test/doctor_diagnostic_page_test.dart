@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/doctor_finding_draft_session.dart';
 import 'package:wing/core/models/administration_operation.dart';
 import 'support/administration_operation_fixture.dart';
@@ -157,7 +158,7 @@ void main() {
         await tester.tap(find.text('Ask Hermes').last);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.byType(StudioLoading), findsOneWidget);
         expect(
           tester
               .widgetList<TextButton>(find.byType(TextButton))

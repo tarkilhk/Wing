@@ -610,11 +610,6 @@ ThemeData wingTheme(Brightness brightness, {Color? accent}) {
             : tokens.muted,
       ),
     ),
-    progressIndicatorTheme: ProgressIndicatorThemeData(
-      color: tokens.accent,
-      linearTrackColor: tokens.border,
-      circularTrackColor: tokens.border,
-    ),
     textSelectionTheme: TextSelectionThemeData(
       cursorColor: tokens.accent,
       selectionColor: tokens.accent.withValues(alpha: .25),

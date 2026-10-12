@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import '../models/profile_session_key.dart';
 import 'package:wing/core/models/chat_list_status.dart';
@@ -869,7 +870,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
     ];
   }
 
-  Widget _progress() {
+  String? get _loadingLabel {
     final submitting = workspace.mutating;
     final label = submitting
         ? 'Updating chats…'
@@ -878,18 +879,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
         : _data.state.loading
         ? 'Refreshing chats…'
         : null;
-    if (label == null) return const SizedBox.shrink();
-    final reducedMotion = MediaQuery.disableAnimationsOf(context);
-    return Semantics(
-      liveRegion: true,
-      label: label,
-      child: ExcludeSemantics(
-        child: LinearProgressIndicator(
-          minHeight: 2,
-          value: reducedMotion ? 1 : null,
-        ),
-      ),
-    );
+    return label;
   }
 
   Widget _readFailure(String message, VoidCallback retry) {
@@ -1074,7 +1064,6 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
           ),
         ),
       WorkspaceConnectionStatus(status: widget.connectionStatus),
-      _progress(),
       if (workspace.visibilityNotice case final notice?)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1226,62 +1215,69 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
         ),
         body: SafeArea(
           bottom: false,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                child: TextField(
-                  key: const ValueKey('workspace-search'),
-                  controller: _search,
-                  focusNode: widget.searchFocusNode,
-                  onChanged: _setQuery,
-                  decoration: const InputDecoration(
-                    hintText: 'Search chats',
-                    prefixIcon: Icon(Icons.search, size: 20),
+          child: StudioLoadingRegion(
+            busy: _loadingLabel != null,
+            available: _data.state.available && !workspace.mutating,
+            label: _loadingLabel ?? 'Loading chats',
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  child: TextField(
+                    key: const ValueKey('workspace-search'),
+                    controller: _search,
+                    focusNode: widget.searchFocusNode,
+                    onChanged: _setQuery,
+                    decoration: const InputDecoration(
+                      hintText: 'Search chats',
+                      prefixIcon: Icon(Icons.search, size: 20),
+                    ),
                   ),
                 ),
-              ),
-              _filters(),
-              if (!workspace.repairRequired) ...notices,
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: Builder(
-                    builder: (context) {
-                      final rows = _tree();
-                      final padding = EdgeInsets.only(
-                        bottom: 88 + MediaQuery.paddingOf(context).bottom,
-                      );
-                      if (workspace.repairRequired) {
-                        return CustomScrollView(
+                _filters(),
+                if (!workspace.repairRequired) ...notices,
+                Expanded(
+                  child: StudioRefresh(
+                    available: _data.state.available,
+                    label: 'Refreshing chats',
+                    onRefresh: _refresh,
+                    child: Builder(
+                      builder: (context) {
+                        final rows = _tree();
+                        final padding = EdgeInsets.only(
+                          bottom: 88 + MediaQuery.paddingOf(context).bottom,
+                        );
+                        if (workspace.repairRequired) {
+                          return CustomScrollView(
+                            key: ValueKey('chat-list-$_archivedOnly'),
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            slivers: [
+                              SliverToBoxAdapter(
+                                child: Column(children: notices),
+                              ),
+                              SliverPadding(
+                                padding: padding,
+                                sliver: SliverList.builder(
+                                  itemCount: rows.length,
+                                  itemBuilder: (_, index) => rows[index],
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return ListView.builder(
                           key: ValueKey('chat-list-$_archivedOnly'),
                           physics: const AlwaysScrollableScrollPhysics(),
-                          slivers: [
-                            SliverToBoxAdapter(
-                              child: Column(children: notices),
-                            ),
-                            SliverPadding(
-                              padding: padding,
-                              sliver: SliverList.builder(
-                                itemCount: rows.length,
-                                itemBuilder: (_, index) => rows[index],
-                              ),
-                            ),
-                          ],
+                          padding: padding,
+                          itemCount: rows.length,
+                          itemBuilder: (_, index) => rows[index],
                         );
-                      }
-                      return ListView.builder(
-                        key: ValueKey('chat-list-$_archivedOnly'),
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: padding,
-                        itemCount: rows.length,
-                        itemBuilder: (_, index) => rows[index],
-                      );
-                    },
+                      },
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         floatingActionButton: FloatingActionButton(

@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/notification_channel_diagnostics.dart';
 import 'package:flutter/material.dart';
 import '../widgets/compact_switch.dart';
@@ -94,19 +95,22 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
               children: [
                 if (state.reloadControl.visible)
                   Card(
-                    child: Column(
-                      children: [
-                        ListTile(
-                          leading: const Icon(Icons.refresh),
-                          title: const Text('Reload settings'),
-                          subtitle: state.reloadControl.error == null
-                              ? null
-                              : StudioError(state.reloadControl.error!),
-                          onTap: state.reloadControl.invoke,
-                        ),
-                        if (state.reloadControl.busy)
-                          const LinearProgressIndicator(),
-                      ],
+                    child: StudioLoadingRegion(
+                      available: !state.reloadControl.busy,
+                      busy: state.reloadControl.busy,
+                      label: 'Reloading settings',
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: const Icon(Icons.refresh),
+                            title: const Text('Reload settings'),
+                            subtitle: state.reloadControl.error == null
+                                ? null
+                                : StudioError(state.reloadControl.error!),
+                            onTap: state.reloadControl.invoke,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 _SettingsSection(
@@ -117,101 +121,110 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                       children: [
                         Padding(
                           padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _AppearancePreview(
-                                mode: mode?.name ?? 'unconfigured',
-                                accent: accent,
-                              ),
-                              if (state.needsAppearanceRepair)
-                                const StudioError(
-                                  'Saved appearance settings need repair. Choose the affected settings below.',
+                          child: StudioLoadingRegion(
+                            available: !state.theme.busy && !state.accent.busy,
+                            busy: state.theme.busy || state.accent.busy,
+                            label: state.theme.busy
+                                ? 'Saving theme'
+                                : 'Saving accent',
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _AppearancePreview(
+                                  mode: mode?.name ?? 'unconfigured',
+                                  accent: accent,
                                 ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Theme',
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                              const SizedBox(height: 12),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  for (final option in [
-                                    (
-                                      AppThemePreference.system,
-                                      'System',
-                                      Icons.brightness_auto_outlined,
-                                    ),
-                                    (
-                                      AppThemePreference.light,
-                                      'Light',
-                                      Icons.light_mode_outlined,
-                                    ),
-                                    (
-                                      AppThemePreference.dark,
-                                      'Dark',
-                                      Icons.dark_mode_outlined,
-                                    ),
-                                  ])
-                                    ChoiceChip(
-                                      showCheckmark: false,
-                                      key: ValueKey('theme-${option.$1.name}'),
-                                      avatar: Icon(option.$3, size: 18),
-                                      label: Text(option.$2),
-                                      selected: mode == option.$1,
-                                      onSelected: state.theme.choose == null
-                                          ? null
-                                          : (_) =>
-                                                state.theme.choose!(option.$1),
-                                    ),
-                                ],
-                              ),
-                              if (state.theme.notice != null)
-                                StudioError(state.theme.notice!),
-                              if (state.theme.error != null)
-                                StudioError(state.theme.error!),
-                              if (state.theme.busy)
-                                const LinearProgressIndicator(),
-                              const SizedBox(height: 20),
-                              Text(
-                                'Accent color',
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                              const SizedBox(height: 12),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  for (final choice
-                                      in AppAccentPreference.values)
-                                    ChoiceChip(
-                                      showCheckmark: false,
-                                      key: ValueKey('accent-${choice.name}'),
-                                      label: Text(choice.appearance.label),
-                                      selected: state.accent.selected == choice,
-                                      avatar: CircleAvatar(
-                                        radius: 8,
-                                        backgroundColor:
-                                            Theme.of(context).brightness ==
-                                                Brightness.dark
-                                            ? choice.appearance.dark
-                                            : choice.appearance.light,
+                                if (state.needsAppearanceRepair)
+                                  const StudioError(
+                                    'Saved appearance settings need repair. Choose the affected settings below.',
+                                  ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Theme',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (final option in [
+                                      (
+                                        AppThemePreference.system,
+                                        'System',
+                                        Icons.brightness_auto_outlined,
                                       ),
-                                      onSelected: state.accent.choose == null
-                                          ? null
-                                          : (_) => state.accent.choose!(choice),
-                                    ),
-                                ],
-                              ),
-                              if (state.accent.notice != null)
-                                StudioError(state.accent.notice!),
-                              if (state.accent.error != null)
-                                StudioError(state.accent.error!),
-                              if (state.accent.busy)
-                                const LinearProgressIndicator(),
-                            ],
+                                      (
+                                        AppThemePreference.light,
+                                        'Light',
+                                        Icons.light_mode_outlined,
+                                      ),
+                                      (
+                                        AppThemePreference.dark,
+                                        'Dark',
+                                        Icons.dark_mode_outlined,
+                                      ),
+                                    ])
+                                      ChoiceChip(
+                                        showCheckmark: false,
+                                        key: ValueKey(
+                                          'theme-${option.$1.name}',
+                                        ),
+                                        avatar: Icon(option.$3, size: 18),
+                                        label: Text(option.$2),
+                                        selected: mode == option.$1,
+                                        onSelected: state.theme.choose == null
+                                            ? null
+                                            : (_) => state.theme.choose!(
+                                                option.$1,
+                                              ),
+                                      ),
+                                  ],
+                                ),
+                                if (state.theme.notice != null)
+                                  StudioError(state.theme.notice!),
+                                if (state.theme.error != null)
+                                  StudioError(state.theme.error!),
+
+                                const SizedBox(height: 20),
+                                Text(
+                                  'Accent color',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (final choice
+                                        in AppAccentPreference.values)
+                                      ChoiceChip(
+                                        showCheckmark: false,
+                                        key: ValueKey('accent-${choice.name}'),
+                                        label: Text(choice.appearance.label),
+                                        selected:
+                                            state.accent.selected == choice,
+                                        avatar: CircleAvatar(
+                                          radius: 8,
+                                          backgroundColor:
+                                              Theme.of(context).brightness ==
+                                                  Brightness.dark
+                                              ? choice.appearance.dark
+                                              : choice.appearance.light,
+                                        ),
+                                        onSelected: state.accent.choose == null
+                                            ? null
+                                            : (_) =>
+                                                  state.accent.choose!(choice),
+                                      ),
+                                  ],
+                                ),
+                                if (state.accent.notice != null)
+                                  StudioError(state.accent.notice!),
+                                if (state.accent.error != null)
+                                  StudioError(state.accent.error!),
+                              ],
+                            ),
                           ),
                         ),
                         const Divider(height: 1),
@@ -332,8 +345,8 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                             trailing: _requesting
                                 ? const SizedBox.square(
                                     dimension: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                                    child: StudioLoading(
+                                      label: 'Saving app settings',
                                     ),
                                   )
                                 : const Icon(Icons.chevron_right),
@@ -515,44 +528,48 @@ class _PreferenceSwitch extends StatelessWidget {
   final AppPreferenceControl<bool> control;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      if (control.selected case final bool selected)
-        CompactSwitchListTile(
-          title: Text(title),
-          subtitle: subtitle == null ? null : Text(subtitle!),
-          value: selected,
-          onChanged: control.choose,
-        )
-      else
-        ListTile(
-          title: Text(title),
-          subtitle: Wrap(
-            spacing: 8,
-            children: [
-              for (final option in [(true, 'On'), (false, 'Off')])
-                ChoiceChip(
-                  showCheckmark: false,
-                  selected: false,
-                  label: Text(option.$2),
-                  onSelected: control.choose == null
-                      ? null
-                      : (_) => control.choose!(option.$1),
-                ),
-            ],
+  Widget build(BuildContext context) => StudioLoadingRegion(
+    available: !control.busy,
+    busy: control.busy,
+    label: 'Saving app settings',
+    child: Column(
+      children: [
+        if (control.selected case final bool selected)
+          CompactSwitchListTile(
+            title: Text(title),
+            subtitle: subtitle == null ? null : Text(subtitle!),
+            value: selected,
+            onChanged: control.choose,
+          )
+        else
+          ListTile(
+            title: Text(title),
+            subtitle: Wrap(
+              spacing: 8,
+              children: [
+                for (final option in [(true, 'On'), (false, 'Off')])
+                  ChoiceChip(
+                    showCheckmark: false,
+                    selected: false,
+                    label: Text(option.$2),
+                    onSelected: control.choose == null
+                        ? null
+                        : (_) => control.choose!(option.$1),
+                  ),
+              ],
+            ),
           ),
-        ),
-      if (control.notice != null)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: StudioError(control.notice!),
-        ),
-      if (control.error != null)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: StudioError(control.error!),
-        ),
-      if (control.busy) const LinearProgressIndicator(),
-    ],
+        if (control.notice != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: StudioError(control.notice!),
+          ),
+        if (control.error != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: StudioError(control.error!),
+          ),
+      ],
+    ),
   );
 }

@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -78,7 +79,7 @@ class _HtmlPreviewScreenState extends State<HtmlPreviewScreen> {
         body: SafeArea(
           child: Center(
             child: observation.loading
-                ? const CircularProgressIndicator()
+                ? const StudioLoading.page(label: 'Loading preview')
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
                     child: Column(

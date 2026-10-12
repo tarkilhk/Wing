@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'dart:async';
@@ -138,7 +139,6 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
   Timer? _timer;
   int _generation = 0;
   SlashCompletion? _completion;
-  int _completionGeneration = -1;
   String? _error;
   bool _loading = false;
   bool _refreshing = false;
@@ -192,7 +192,6 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
       widget.composer.observeCommands(completion.items);
       setState(() {
         _completion = completion;
-        _completionGeneration = generation;
         _loading = false;
       });
       _reveal(generation);
@@ -304,10 +303,7 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
   @override
   Widget build(BuildContext context) {
     if (!SlashCompletion.isQuery(_query)) return const SizedBox.shrink();
-    final completion =
-        _completionGeneration == _generation && _completion?.query == _query
-        ? _completion
-        : null;
+    final completion = _completion?.query == _query ? _completion : null;
     final header = Row(
       children: [
         Expanded(
@@ -330,7 +326,7 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
             icon: _refreshing
                 ? const SizedBox.square(
                     dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: StudioLoading(label: 'Loading skills'),
                   )
                 : const Icon(Icons.refresh, size: 20),
           ),
@@ -346,68 +342,72 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
           side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_loading) const LinearProgressIndicator(),
-            if (_error != null)
-              Flexible(child: SingleChildScrollView(child: header))
-            else
-              header,
-            if (_error == null)
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    if (completion?.warning.isNotEmpty == true)
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(completion!.warning),
-                      ),
-                    if (completion != null && !_loading)
-                      for (final item in completion.items)
-                        ListTile(
-                          dense: true,
-                          title: Text(item.text),
-                          subtitle: Text(
-                            '${item.isSkill
-                                ? 'Skill'
-                                : item.category.isNotEmpty
-                                ? 'Command'
-                                : 'Argument'}'
-                            '${item.description.isEmpty ? '' : ' · ${item.description}'}',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: item.isSkill
-                              ? IconButton(
-                                  tooltip: 'Inspect ${item.text}',
-                                  constraints: const BoxConstraints.tightFor(
-                                    width: 48,
-                                    height: 48,
-                                  ),
-                                  onPressed: _inspecting == null
-                                      ? () => _inspect(item)
-                                      : null,
-                                  icon: identical(_inspecting, item)
-                                      ? const SizedBox.square(
-                                          dimension: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Icon(
-                                          Icons.visibility_outlined,
-                                          size: 20,
-                                        ),
-                                )
-                              : null,
-                          onTap: () => _select(completion, item),
+        child: StudioLoadingRegion(
+          available: completion != null,
+          busy: _loading,
+          label: 'Loading skills',
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_error != null)
+                Flexible(child: SingleChildScrollView(child: header))
+              else
+                header,
+              if (_error == null)
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      if (completion?.warning.isNotEmpty == true)
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text(completion!.warning),
                         ),
-                  ],
+                      if (completion != null && !_loading)
+                        for (final item in completion.items)
+                          ListTile(
+                            dense: true,
+                            title: Text(item.text),
+                            subtitle: Text(
+                              '${item.isSkill
+                                  ? 'Skill'
+                                  : item.category.isNotEmpty
+                                  ? 'Command'
+                                  : 'Argument'}'
+                              '${item.description.isEmpty ? '' : ' · ${item.description}'}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: item.isSkill
+                                ? IconButton(
+                                    tooltip: 'Inspect ${item.text}',
+                                    constraints: const BoxConstraints.tightFor(
+                                      width: 48,
+                                      height: 48,
+                                    ),
+                                    onPressed: _inspecting == null
+                                        ? () => _inspect(item)
+                                        : null,
+                                    icon: identical(_inspecting, item)
+                                        ? const SizedBox.square(
+                                            dimension: 20,
+                                            child: StudioLoading(
+                                              label: 'Loading skills',
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.visibility_outlined,
+                                            size: 20,
+                                          ),
+                                  )
+                                : null,
+                            onTap: () => _select(completion, item),
+                          ),
+                    ],
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

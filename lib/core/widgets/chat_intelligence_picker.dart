@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../models/chat_intelligence.dart';
 import '../models/model_choice.dart';
@@ -54,7 +55,7 @@ class ChatIntelligenceButton extends StatelessWidget {
             if (loading)
               const SizedBox.square(
                 dimension: 14,
-                child: CircularProgressIndicator(strokeWidth: 1.5),
+                child: StudioLoading(label: 'Loading model settings'),
               )
             else
               const Icon(Icons.memory_rounded, size: 14),

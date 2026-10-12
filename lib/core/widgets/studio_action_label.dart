@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/wing_theme.dart';
@@ -44,7 +45,7 @@ class StudioActionLabel extends StatelessWidget {
                   child: busy
                       ? const Padding(
                           padding: EdgeInsets.all(2),
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: StudioLoading(label: 'Action in progress'),
                         )
                       : Icon(_leadingIcon, size: 20),
                 ),
@@ -65,7 +66,7 @@ class StudioActionLabel extends StatelessWidget {
                     child: SizedBox.square(
                       dimension: 16,
                       child: busy
-                          ? const CircularProgressIndicator(strokeWidth: 2)
+                          ? const StudioLoading(label: 'Action in progress')
                           : Icon(_leadingIcon, size: 16),
                     ),
                   ),

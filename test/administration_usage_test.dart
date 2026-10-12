@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -375,7 +376,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.byType(StudioLoading), findsOneWidget);
     pending.completeError(StateError('Offline'));
     await tester.pumpAndSettle(const Duration(milliseconds: 250));
     expect(find.textContaining('Could not load'), findsWidgets);
@@ -402,7 +403,8 @@ void main() {
     await tester.tap(find.text('30D'));
     await tester.pump();
     expect(find.text('Loading usage…'), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    // This newly selected range has no observation yet; its chart is blocked.
+    expect(find.byType(StudioLoading), findsOneWidget);
     expect(find.bySemanticsLabel('Loading usage'), findsOneWidget);
     await tester.tap(find.text('7D'));
     await tester.pumpAndSettle(const Duration(milliseconds: 250));

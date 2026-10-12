@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'wing_app_bar.dart';
 import 'package:flutter/material.dart';
 
@@ -78,24 +79,29 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
     AppPreferenceControl<T> control,
     List<({T value, String label})> options,
     String key,
-  ) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      StudioSelect<T>(
-        key: ValueKey('$key-${control.selected}'),
-        label: title,
-        value: control.selected,
-        options: options,
-        onChanged: control.choose == null
-            ? null
-            : (value) {
-                if (value != null) control.choose!(value);
-              },
-      ),
-      if (control.busy) const LinearProgressIndicator(),
-      if (control.notice case final notice?) Text(notice),
-      if (control.error case final error?) StudioError(error),
-    ],
+  ) => StudioLoadingRegion(
+    available: !control.busy,
+    busy: control.busy,
+    label: 'Saving voice settings',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        StudioSelect<T>(
+          key: ValueKey('$key-${control.selected}'),
+          label: title,
+          value: control.selected,
+          options: options,
+          onChanged: control.choose == null
+              ? null
+              : (value) {
+                  if (value != null) control.choose!(value);
+                },
+        ),
+
+        if (control.notice case final notice?) Text(notice),
+        if (control.error case final error?) StudioError(error),
+      ],
+    ),
   );
 
   static const _engines = [
@@ -147,80 +153,93 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
   @override
   Widget build(BuildContext context) {
     final state = _session.current;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Saved on this phone',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 16),
-        _select('Voice input', state.input, _engines, 'voice.input'),
-        const SizedBox(height: 12),
-        if (state.inputDescription case final description?) Text(description),
-        if (state.languageUnavailableNotice case final notice?) ...[
-          const SizedBox(height: 12),
-          Text(notice),
-        ],
-        if (state.showLanguage) ...[
-          const SizedBox(height: 12),
-          _languageChoice(state),
-        ],
-        const SizedBox(height: 24),
-        _select('Voice output', state.output, _engines, 'voice.output'),
-        const SizedBox(height: 12),
-        if (state.outputDescription case final description?) Text(description),
-        if (state.showLocalOutput) ...[
-          const SizedBox(height: 12),
-          _select('Android voice', state.voice, state.voices, 'android-voice'),
-          if (state.noVoicesNotice case final notice?) Text(notice),
-          const SizedBox(height: 12),
-          _select('Speaking speed', state.rate, const [
-            (value: AppVoiceRate.slower, label: 'Slower'),
-            (value: AppVoiceRate.normal, label: 'Normal'),
-            (value: AppVoiceRate.faster, label: 'Faster'),
-          ], 'voice-rate'),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: state.preview,
-              icon: Icon(
-                state.previewActive ? Icons.stop : Icons.volume_up_outlined,
-              ),
-              label: Text(
-                state.previewActive ? 'Stop preview' : 'Preview Android voice',
-              ),
-            ),
+    return StudioLoadingRegion(
+      available: state.input.selected != null && state.output.selected != null,
+      busy: state.loading,
+      label: 'Loading voice settings',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Saved on this phone',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-          if (state.previewError case final error?) StudioError(error),
-        ],
-        if (state.hermesDescription case final description?) ...[
+          const SizedBox(height: 16),
+          _select('Voice input', state.input, _engines, 'voice.input'),
           const SizedBox(height: 12),
-          Text(description),
-          if (state.openHermesSettings case final open?)
+          if (state.inputDescription case final description?) Text(description),
+          if (state.languageUnavailableNotice case final notice?) ...[
+            const SizedBox(height: 12),
+            Text(notice),
+          ],
+          if (state.showLanguage) ...[
+            const SizedBox(height: 12),
+            _languageChoice(state),
+          ],
+          const SizedBox(height: 24),
+          _select('Voice output', state.output, _engines, 'voice.output'),
+          const SizedBox(height: 12),
+          if (state.outputDescription case final description?)
+            Text(description),
+          if (state.showLocalOutput) ...[
+            const SizedBox(height: 12),
+            _select(
+              'Android voice',
+              state.voice,
+              state.voices,
+              'android-voice',
+            ),
+            if (state.noVoicesNotice case final notice?) Text(notice),
+            const SizedBox(height: 12),
+            _select('Speaking speed', state.rate, const [
+              (value: AppVoiceRate.slower, label: 'Slower'),
+              (value: AppVoiceRate.normal, label: 'Normal'),
+              (value: AppVoiceRate.faster, label: 'Faster'),
+            ], 'voice-rate'),
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: open,
-                child: const Text('Open speech synthesis'),
+              child: TextButton.icon(
+                onPressed: state.preview,
+                icon: Icon(
+                  state.previewActive ? Icons.stop : Icons.volume_up_outlined,
+                ),
+                label: Text(
+                  state.previewActive
+                      ? 'Stop preview'
+                      : 'Preview Android voice',
+                ),
               ),
             ),
-        ],
-        const SizedBox(height: 12),
-        const Text(
-          'Input and output are independent. Wing never switches processing engines automatically.',
-        ),
-        if (state.loading) const LinearProgressIndicator(),
-        if (state.capabilityError case final error?) StudioError(error),
-        if (state.operationError case final error?) StudioError(error),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton(
-            onPressed: state.refresh,
-            child: const Text('Refresh Android voices and languages'),
+            if (state.previewError case final error?) StudioError(error),
+          ],
+          if (state.hermesDescription case final description?) ...[
+            const SizedBox(height: 12),
+            Text(description),
+            if (state.openHermesSettings case final open?)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: open,
+                  child: const Text('Open speech synthesis'),
+                ),
+              ),
+          ],
+          const SizedBox(height: 12),
+          const Text(
+            'Input and output are independent. Wing never switches processing engines automatically.',
           ),
-        ),
-      ],
+
+          if (state.capabilityError case final error?) StudioError(error),
+          if (state.operationError case final error?) StudioError(error),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: state.refresh,
+              child: const Text('Refresh Android voices and languages'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

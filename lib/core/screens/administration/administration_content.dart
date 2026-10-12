@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/wing_app_bar.dart';
 import '../../services/administration_logs_session.dart';
 import 'admin_plugins_page.dart';
@@ -739,64 +740,72 @@ class _HermesAdministrationContentState
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (widget.controller.switching) const LinearProgressIndicator(),
-          WorkspaceConnectionStatus(status: widget.controller.connectionStatus),
-          if (widget.controller.error != null)
-            ListTile(
-              title: StudioError(widget.controller.error!),
-              trailing: TextButton(
-                onPressed: widget.controller.retry,
-                child: const Text('Retry'),
-              ),
+      body: StudioLoadingRegion(
+        available: true,
+        busy: widget.controller.switching,
+        label: 'Switching profile',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            WorkspaceConnectionStatus(
+              status: widget.controller.connectionStatus,
             ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 40),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: ServerConnectionLabel(
-                  label: _server.connectionLabel,
-                  suffix: profile?.name,
-                  style: Theme.of(context).textTheme.bodySmall,
-                  icon: widget.controller.connection.icon,
-                  status: widget.controller.connectionStatus,
+            if (widget.controller.error != null)
+              ListTile(
+                title: StudioError(widget.controller.error!),
+                trailing: TextButton(
+                  onPressed: widget.controller.retry,
+                  child: const Text('Retry'),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 40),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ServerConnectionLabel(
+                    label: _server.connectionLabel,
+                    suffix: profile?.name,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    icon: widget.controller.connection.icon,
+                    status: widget.controller.connectionStatus,
+                  ),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: profile == null
-                ? ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      _selector(manage: true),
-                      const SizedBox(height: 12),
-                      _searchField(),
-                      ?_searchResults(profile),
-                      if (_search.isEmpty)
-                        const AdminNotice(
-                          'Choose an available profile to manage its settings. Health remains accessible.',
-                        ),
-                    ],
-                  )
-                : AdminProfileOverview(
-                    key: ValueKey(profile.scope.storageNamespace),
-                    metadata: widget.controller.discovery?.named(profile.name),
-                    session: _overviewSession!,
-                    selector: _selector(manage: true),
-                    search: _searchField(),
-                    searchResults: _searchResults(profile),
-                    destinations: {
-                      for (final d in _destinations(profile))
-                        ?d.overviewDestination: d.open,
-                    },
-                  ),
-          ),
-        ],
+            Expanded(
+              child: profile == null
+                  ? ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        _selector(manage: true),
+                        const SizedBox(height: 12),
+                        _searchField(),
+                        ?_searchResults(profile),
+                        if (_search.isEmpty)
+                          const AdminNotice(
+                            'Choose an available profile to manage its settings. Health remains accessible.',
+                          ),
+                      ],
+                    )
+                  : AdminProfileOverview(
+                      key: ValueKey(profile.scope.storageNamespace),
+                      metadata: widget.controller.discovery?.named(
+                        profile.name,
+                      ),
+                      session: _overviewSession!,
+                      selector: _selector(manage: true),
+                      search: _searchField(),
+                      searchResults: _searchResults(profile),
+                      destinations: {
+                        for (final d in _destinations(profile))
+                          ?d.overviewDestination: d.open,
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

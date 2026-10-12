@@ -186,13 +186,10 @@ class _TodoStatusIcon extends StatelessWidget {
             GatewayTodoStatus.pending => CustomPaint(
               painter: _PendingTaskPainter(tokens.muted),
             ),
-            GatewayTodoStatus.inProgress => Padding(
-              padding: const EdgeInsets.all(1),
-              child: CircularProgressIndicator(
-                strokeWidth: 1.5,
-                color: tokens.accent,
-                value: MediaQuery.disableAnimationsOf(context) ? 0.75 : null,
-              ),
+            GatewayTodoStatus.inProgress => Icon(
+              Icons.timelapse,
+              size: 16,
+              color: tokens.accent,
             ),
             GatewayTodoStatus.completed => Icon(
               Icons.check_circle,

@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -112,94 +113,98 @@ class _AdminProfilesPageState extends State<AdminProfilesPage> {
     return AdminPage(
       title: 'Profiles',
       scope: state.scope,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (state.loading || state.busy) const LinearProgressIndicator(),
-          if (state.error != null) AdminNotice.error(state.error!),
-          for (final settlement in state.settlements) ...[
-            AdminNotice(settlement.message),
-            SelectableText(settlement.manualGuidance!),
-            const SizedBox(height: 12),
-          ],
-          if (!state.busy &&
-              state.error != null &&
-              pending != null &&
-              state.draft != null)
-            Wrap(
-              spacing: 8,
+      child: StudioLoadingRegion(
+        available: state.hasObservation,
+        busy: state.loading || state.busy,
+        label: 'Loading profiles',
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (state.error != null) AdminNotice.error(state.error!),
+            for (final settlement in state.settlements) ...[
+              AdminNotice(settlement.message),
+              SelectableText(settlement.manualGuidance!),
+              const SizedBox(height: 12),
+            ],
+            if (!state.busy &&
+                state.error != null &&
+                pending != null &&
+                state.draft != null)
+              Wrap(
+                spacing: 8,
+                children: [
+                  if (state.draft!.canSubmit)
+                    TextButton(
+                      onPressed: () => unawaited(_session.submit(pending)),
+                      child: const Text('Try again'),
+                    ),
+                  if (state.draft!.canCancel)
+                    TextButton(
+                      onPressed: () => _session.cancel(pending),
+                      child: const Text('Cancel change'),
+                    ),
+                ],
+              ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: state.canCreate
+                    ? () => unawaited(_edit(_session.beginCreate()))
+                    : null,
+                icon: const Icon(Icons.add),
+                label: const Text('Create profile'),
+              ),
+            ),
+            const SizedBox(height: 16),
+            AdminGroup(
               children: [
-                if (state.draft!.canSubmit)
-                  TextButton(
-                    onPressed: () => unawaited(_session.submit(pending)),
-                    child: const Text('Try again'),
-                  ),
-                if (state.draft!.canCancel)
-                  TextButton(
-                    onPressed: () => _session.cancel(pending),
-                    child: const Text('Cancel change'),
+                for (final row in state.rows)
+                  ListTile(
+                    title: Text(row.title),
+                    subtitle: Text(row.subtitle),
+                    onTap: state.canOpen
+                        ? () => unawaited(_open(row.name))
+                        : null,
+                    trailing: PopupMenuButton<String>(
+                      enabled: row.canClone || row.canRename || row.canDelete,
+                      tooltip: 'Manage ${row.title}',
+                      itemBuilder: (_) => [
+                        if (row.canClone)
+                          const PopupMenuItem(
+                            value: 'clone',
+                            child: Text('Clone configuration'),
+                          ),
+                        if (row.canRename)
+                          const PopupMenuItem(
+                            value: 'rename',
+                            child: Text('Rename'),
+                          ),
+                        if (row.canDelete)
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Delete'),
+                          ),
+                      ],
+                      onSelected: (action) => unawaited(
+                        _edit(switch (action) {
+                          'clone' => _session.beginClone(row.name),
+                          'rename' => _session.beginRename(row.name),
+                          'delete' => _session.beginDelete(row.name),
+                          _ => null,
+                        }),
+                      ),
+                    ),
                   ),
               ],
             ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              onPressed: state.canCreate
-                  ? () => unawaited(_edit(_session.beginCreate()))
+            TextButton(
+              onPressed: state.canRefresh
+                  ? () => unawaited(_session.reload())
                   : null,
-              icon: const Icon(Icons.add),
-              label: const Text('Create profile'),
+              child: const Text('Refresh'),
             ),
-          ),
-          const SizedBox(height: 16),
-          AdminGroup(
-            children: [
-              for (final row in state.rows)
-                ListTile(
-                  title: Text(row.title),
-                  subtitle: Text(row.subtitle),
-                  onTap: state.canOpen
-                      ? () => unawaited(_open(row.name))
-                      : null,
-                  trailing: PopupMenuButton<String>(
-                    enabled: row.canClone || row.canRename || row.canDelete,
-                    tooltip: 'Manage ${row.title}',
-                    itemBuilder: (_) => [
-                      if (row.canClone)
-                        const PopupMenuItem(
-                          value: 'clone',
-                          child: Text('Clone configuration'),
-                        ),
-                      if (row.canRename)
-                        const PopupMenuItem(
-                          value: 'rename',
-                          child: Text('Rename'),
-                        ),
-                      if (row.canDelete)
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Text('Delete'),
-                        ),
-                    ],
-                    onSelected: (action) => unawaited(
-                      _edit(switch (action) {
-                        'clone' => _session.beginClone(row.name),
-                        'rename' => _session.beginRename(row.name),
-                        'delete' => _session.beginDelete(row.name),
-                        _ => null,
-                      }),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          TextButton(
-            onPressed: state.canRefresh
-                ? () => unawaited(_session.reload())
-                : null,
-            child: const Text('Refresh'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_icons.dart';
 
@@ -27,7 +28,7 @@ class AnswerActions extends StatelessWidget {
           padding: EdgeInsets.all(14),
           child: SizedBox.square(
             dimension: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            child: StudioLoading(label: 'Preparing answer'),
           ),
         ),
       IconButton(

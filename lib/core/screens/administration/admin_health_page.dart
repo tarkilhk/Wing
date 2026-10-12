@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/health_alerts/health_alert_settings_entry.dart';
 import '../../models/profile_session_key.dart';
 import '../../models/health_finding.dart';
@@ -68,7 +69,9 @@ class AdminHealthContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final findings = health.profileFindings;
-    return RefreshIndicator(
+    return StudioRefresh(
+      available: true,
+      label: 'Refreshing health',
       onRefresh: onRefresh,
       child: ListView(
         key: const PageStorageKey('administration-health-findings'),
@@ -95,13 +98,10 @@ class AdminHealthContent extends StatelessWidget {
               onPressed: profile == null || checkingProfile
                   ? null
                   : onCheckProfile,
-              icon: checkingProfile
+              icon: checkingProfile && profileCheckedAt == null
                   ? const SizedBox.square(
                       dimension: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        semanticsLabel: 'Refreshing profile status',
-                      ),
+                      child: StudioLoading(label: 'Refreshing profile status'),
                     )
                   : const Icon(Icons.refresh),
             ),

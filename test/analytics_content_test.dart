@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
@@ -75,7 +76,7 @@ void main() {
       );
       await tester.pump();
       expect(find.text('Loading usage…'), findsNothing);
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(StudioLoading), findsOneWidget);
       expect(find.bySemanticsLabel('Loading usage'), findsOneWidget);
       expect(server.requests, hasLength(3));
       expect(
@@ -246,7 +247,7 @@ void main() {
           for (var attempt = 0; attempt < 500; attempt++) {
             await tester.pump(const Duration(milliseconds: 20));
             if (find.text('Loading usage…').evaluate().isEmpty &&
-                find.byType(LinearProgressIndicator).evaluate().isEmpty) {
+                find.byType(StudioLoading).evaluate().isEmpty) {
               return;
             }
             await tester.runAsync(

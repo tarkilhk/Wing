@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/workspace_recents_session.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'support/composer_fixture.dart';
@@ -101,7 +102,7 @@ void main() {
         home: Scaffold(body: ProfileChatIndicator(chat: chat)),
       ),
     );
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(StudioLoading), findsNothing);
   });
 
   for (final terminalStatus in [
@@ -142,7 +143,7 @@ void main() {
         ),
       );
       expect(find.text('Delegated research'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(StudioLoading), findsNothing);
       expect(chat.runtime.blocksTurnAdmission, isFalse);
 
       host.event('a', 'subagent.complete', {
@@ -154,7 +155,7 @@ void main() {
       expect(find.text('Last 24 hours'), findsNothing);
       expect(find.text('Read'), findsOneWidget);
       expect(find.text('Ongoing'), findsNothing);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(StudioLoading), findsNothing);
       expect(chat.runtime.execution, ChatExecution.completed);
     });
   }
@@ -190,7 +191,7 @@ void main() {
       ),
     );
     expect(find.byTooltip('Input needed'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(StudioLoading), findsNothing);
   });
 
   test('main turn appears before the server snapshot catches up', () async {

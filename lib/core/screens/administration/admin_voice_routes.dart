@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../controllers/profile_voice_controller.dart';
 import '../../services/administration_repository.dart';
@@ -114,12 +115,12 @@ class _ProfileSpeechDefaultsState extends State<_ProfileSpeechDefaults> {
     listenable: _session,
     builder: (context, _) {
       final state = _session.state;
-      if (!state.fresh) {
+      if (!state.fresh && state.settings == null) {
         return AdminPage(
           title: 'Speech defaults',
           scope: _session.scopeLabel,
           child: state.loading
-              ? const Center(child: CircularProgressIndicator())
+              ? StudioLoading.page(label: 'Loading voice settings')
               : AdminNotice.error(
                   state.error ?? 'Speech settings are unavailable.',
                   retry: _session.loadDefaults,
@@ -170,15 +171,12 @@ class _ProfileVoiceCredentialState extends State<_ProfileVoiceCredential> {
       final field = _inventory.observation?.keys
           .where((field) => field.key == widget.name)
           .firstOrNull;
-      if (_inventory.loading ||
-          _inventory.error != null ||
-          field == null ||
-          !field.editable) {
+      if (_inventory.error != null || field == null || !field.editable) {
         return AdminPage(
           title: widget.name,
           scope: widget.profile.label,
           child: _inventory.loading
-              ? const Center(child: CircularProgressIndicator())
+              ? StudioLoading.page(label: 'Loading voice settings')
               : AdminNotice.error(
                   _inventory.error ?? 'This credential is unavailable.',
                   retry: _inventory.refresh,

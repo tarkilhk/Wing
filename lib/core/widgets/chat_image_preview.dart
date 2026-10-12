@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
@@ -151,10 +152,14 @@ class _ChatImageViewportState extends State<ChatImageViewport> {
                 frameBuilder: (context, child, frame, synchronouslyLoaded) =>
                     frame != null || synchronouslyLoaded
                     ? child
-                    : const Center(child: CircularProgressIndicator()),
+                    : const Center(
+                        child: StudioLoading(label: 'Loading image'),
+                      ),
                 loadingBuilder: (context, child, progress) => progress == null
                     ? child
-                    : const Center(child: CircularProgressIndicator()),
+                    : const Center(
+                        child: StudioLoading(label: 'Loading image'),
+                      ),
                 errorBuilder: (context, error, stack) => SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(

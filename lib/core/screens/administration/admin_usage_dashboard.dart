@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/studio_loading.dart';
 import '../../models/usage_analytics.dart';
 import '../../models/usage_cost.dart';
 import '../../services/usage_analytics_session.dart';
@@ -81,165 +82,170 @@ class _UsageDashboardState extends State<UsageDashboard> {
         : summary?.hasSubscription == true
         ? 'API-equivalent cost'
         : 'Estimated cost';
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      children: [
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: [
-            for (final days in usagePeriods)
-              _Choice(
-                label: '${days}D',
-                selected: _days == days,
-                neutral: true,
-                onPressed: () => _period(days),
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (data == null) ...[
-          const LinearProgressIndicator(semanticsLabel: 'Loading usage'),
-        ] else ...[
-          if (data.modelsError != null || data.dailyError != null)
-            AdminNotice.error(
-              '${[data.modelsError, data.dailyError].whereType<String>().join(' ')}${models != null || daily != null ? ' Showing retained data where available; last successful load ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(data.loadedAt.toLocal()))}.' : ''} Use Refresh to retry.',
-            ),
-          if (loading)
-            const LinearProgressIndicator(semanticsLabel: 'Refreshing usage'),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final stats = [
-                _Stat(
-                  label: 'Tokens',
-                  value: models == null || models.rows.isEmpty
-                      ? models == null
-                            ? 'Unavailable'
-                            : '0'
-                      : compactUsage(models.tokens.total),
-                  detail:
-                      models?.tokens.total == null &&
-                          models != null &&
-                          models.rows.isNotEmpty
-                      ? 'Some counts unavailable'
-                      : 'Across models',
-                  exact: _number(models?.tokens.total),
-                ),
-                _Stat(
-                  label: costTitle,
-                  value: models?.rows.isEmpty == true
-                      ? 'USD 0.00'
-                      : formatUsageUsd(summary?.total),
-                  detail: summary?.isPartial == true
-                      ? 'Partial total'
-                      : summary?.hasSubscription == true
-                      ? 'Not a bill'
-                      : 'Hermes estimate',
-                ),
-              ];
-              if (MediaQuery.textScalerOf(context).scale(16) > 24 ||
-                  constraints.maxWidth < 300) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [stats[0], const SizedBox(height: 12), stats[1]],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: stats[0]),
-                  const SizedBox(width: 16),
-                  Expanded(child: stats[1]),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-        ],
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 12,
-          children: [
-            Text(
-              'Usage by day',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            _quiet('${_days}D selected'),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (observation.yearError != null)
-          AdminNotice.error(observation.yearError!),
-        if (observation.year?.days.isNotEmpty == true)
-          UsageCalendar(
-            daily: observation.year!,
-            periodDates: daily?.reportedDates ?? const {},
-            selected: _selected,
-            onSelected: (day) =>
-                setState(() => _selected = _selected == day.id ? null : day.id),
-          )
-        else if (observation.year?.days.isEmpty == true)
-          _quiet('No recorded daily usage in the past year.')
-        else
-          _quiet(
-            observation.yearLoading
-                ? 'Loading activity year…'
-                : 'Activity year unavailable. Period totals may still be available.',
-          ),
-        const SizedBox(height: 20),
-        if (data != null) ...[
-          _ChartHeader(
-            section: 'Breakdown',
-            models: _breakdownModels,
-            cost: _breakdownCost,
-            onGroup: () => setState(() => _breakdownModels = !_breakdownModels),
-            onCost: (v) => setState(() => _breakdownCost = v),
-          ),
+    return StudioLoadingRegion(
+      available: data != null,
+      busy: loading,
+      label: data == null ? 'Loading usage' : 'Refreshing usage',
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        children: [
           Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
+            spacing: 4,
+            runSpacing: 4,
             children: [
-              _quiet(
-                selected == null
-                    ? 'Last $_days ${_days == 1 ? 'day' : 'days'} · all models'
-                    : MaterialLocalizations.of(
-                        context,
-                      ).formatFullDate(selected.date),
-              ),
-              if (selected != null)
-                TextButton(
-                  onPressed: () => setState(() => _selected = null),
-                  child: const Text('Selected period'),
+              for (final days in usagePeriods)
+                _Choice(
+                  label: '${days}D',
+                  selected: _days == days,
+                  neutral: true,
+                  onPressed: () => _period(days),
                 ),
             ],
           ),
           const SizedBox(height: 12),
-          _breakdown(models, selected),
-          const SizedBox(height: 24),
-          _ChartHeader(
-            section: 'Trend',
-            models: _trendModels,
-            cost: _trendCost,
-            onGroup: () => setState(() => _trendModels = !_trendModels),
-            onCost: (v) => setState(() => _trendCost = v),
+          if (data == null)
+            ...[]
+          else ...[
+            if (data.modelsError != null || data.dailyError != null)
+              AdminNotice.error(
+                '${[data.modelsError, data.dailyError].whereType<String>().join(' ')}${models != null || daily != null ? ' Showing retained data where available; last successful load ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(data.loadedAt.toLocal()))}.' : ''} Use Refresh to retry.',
+              ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final stats = [
+                  _Stat(
+                    label: 'Tokens',
+                    value: models == null || models.rows.isEmpty
+                        ? models == null
+                              ? 'Unavailable'
+                              : '0'
+                        : compactUsage(models.tokens.total),
+                    detail:
+                        models?.tokens.total == null &&
+                            models != null &&
+                            models.rows.isNotEmpty
+                        ? 'Some counts unavailable'
+                        : 'Across models',
+                    exact: _number(models?.tokens.total),
+                  ),
+                  _Stat(
+                    label: costTitle,
+                    value: models?.rows.isEmpty == true
+                        ? 'USD 0.00'
+                        : formatUsageUsd(summary?.total),
+                    detail: summary?.isPartial == true
+                        ? 'Partial total'
+                        : summary?.hasSubscription == true
+                        ? 'Not a bill'
+                        : 'Hermes estimate',
+                  ),
+                ];
+                if (MediaQuery.textScalerOf(context).scale(16) > 24 ||
+                    constraints.maxWidth < 300) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [stats[0], const SizedBox(height: 12), stats[1]],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: stats[0]),
+                    const SizedBox(width: 16),
+                    Expanded(child: stats[1]),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 24),
+          ],
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            children: [
+              Text(
+                'Usage by day',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              _quiet('${_days}D selected'),
+            ],
           ),
           const SizedBox(height: 8),
-          _trend(daily),
+          if (observation.yearError != null)
+            AdminNotice.error(observation.yearError!),
+          if (observation.year?.days.isNotEmpty == true)
+            UsageCalendar(
+              daily: observation.year!,
+              periodDates: daily?.reportedDates ?? const {},
+              selected: _selected,
+              onSelected: (day) => setState(
+                () => _selected = _selected == day.id ? null : day.id,
+              ),
+            )
+          else if (observation.year?.days.isEmpty == true)
+            _quiet('No recorded daily usage in the past year.')
+          else
+            _quiet(
+              observation.yearLoading
+                  ? 'Loading activity year…'
+                  : 'Activity year unavailable. Period totals may still be available.',
+            ),
           const SizedBox(height: 20),
-          _about(models),
-        ],
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: IconButton(
-            tooltip: 'Refresh usage',
-            onPressed: loading ? null : _session.refresh,
-            icon: const Icon(Icons.refresh, size: 18),
+          if (data != null) ...[
+            _ChartHeader(
+              section: 'Breakdown',
+              models: _breakdownModels,
+              cost: _breakdownCost,
+              onGroup: () =>
+                  setState(() => _breakdownModels = !_breakdownModels),
+              onCost: (v) => setState(() => _breakdownCost = v),
+            ),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              children: [
+                _quiet(
+                  selected == null
+                      ? 'Last $_days ${_days == 1 ? 'day' : 'days'} · all models'
+                      : MaterialLocalizations.of(
+                          context,
+                        ).formatFullDate(selected.date),
+                ),
+                if (selected != null)
+                  TextButton(
+                    onPressed: () => setState(() => _selected = null),
+                    child: const Text('Selected period'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _breakdown(models, selected),
+            const SizedBox(height: 24),
+            _ChartHeader(
+              section: 'Trend',
+              models: _trendModels,
+              cost: _trendCost,
+              onGroup: () => setState(() => _trendModels = !_trendModels),
+              onCost: (v) => setState(() => _trendCost = v),
+            ),
+            const SizedBox(height: 8),
+            _trend(daily),
+            const SizedBox(height: 20),
+            _about(models),
+          ],
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              tooltip: 'Refresh usage',
+              onPressed: loading ? null : _session.refresh,
+              icon: const Icon(Icons.refresh, size: 18),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

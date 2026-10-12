@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -146,8 +147,7 @@ void main() {
         home: Scaffold(body: Center(child: ContextRing())),
       ),
     );
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(StudioLoading), findsNothing);
     expect(find.bySemanticsLabel('Context usage unknown'), findsOneWidget);
     final paint = tester.widget<CustomPaint>(
       find.byKey(const ValueKey('context-ring-paint')),

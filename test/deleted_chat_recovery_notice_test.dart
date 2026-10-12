@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'dart:async';
 import 'dart:io';
@@ -314,7 +315,7 @@ void main() {
             tester,
             find.text('A recovery operation is still running'),
           );
-          expect(find.byType(LinearProgressIndicator), findsOneWidget);
+          expect(find.byType(StudioLoading), findsOneWidget);
           await _snapshot(tester, 'busy-${brightness.name}-${scale.toInt()}');
           expect(tester.takeException(), isNull);
         },
@@ -390,7 +391,7 @@ void main() {
       await tester.pump();
       expect(calls, 1);
       expect(_action('Retry cleanup'), findsNothing);
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(StudioLoading), findsOneWidget);
       await tester.tap(find.byTooltip('Close chat recovery'));
       await tester.pumpAndSettle();
       expect(find.byKey(_listKey), findsNothing);

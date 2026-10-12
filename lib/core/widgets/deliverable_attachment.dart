@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -107,7 +108,7 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: StudioLoading(label: 'Preparing file'),
                       )
                     : const Icon(Icons.download_outlined, size: 20),
               ),
@@ -161,10 +162,7 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          semanticsLabel: 'Saving file',
-                        ),
+                        child: StudioLoading(label: 'Saving file'),
                       )
                     : const Icon(Icons.download_outlined, size: 20),
               ),

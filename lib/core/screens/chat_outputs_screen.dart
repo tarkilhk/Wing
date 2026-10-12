@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import '../widgets/studio_error.dart';
 import 'dart:async';
@@ -501,7 +502,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_initialError == null)
-                  const CircularProgressIndicator()
+                  const StudioLoading(label: 'Loading outputs')
                 else ...[
                   StudioError(_initialError!),
                   const SizedBox(height: 12),
@@ -541,116 +542,119 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_working || _observation.loading && outputs.isNotEmpty)
-            LinearProgressIndicator(
-              semanticsLabel: _working ? 'Opening output' : 'Loading outputs',
+      body: StudioLoadingRegion(
+        available: _observation.hasObservation && !_working,
+        busy: _working,
+        label: _working ? 'Opening output' : 'Loading outputs',
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Open a file or link shared in this chat.'),
             ),
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('Open a file or link shared in this chat.'),
-          ),
-          Expanded(
-            child: _observation.loading && outputs.isEmpty
-                ? const Center(child: CircularProgressIndicator())
-                : outputs.isEmpty
-                ? Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: _observation.error != null
-                          ? StudioError(_observation.error!)
-                          : Text(
-                              (!_observation.hasMore
-                                  ? 'No files or links found in this chat.'
-                                  : 'No outputs found in the recent part of this chat. Load older outputs to look further back.'),
-                            ),
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: outputs.length,
-                    itemBuilder: (context, index) {
-                      final output = outputs[index];
-                      return ListTile(
-                        leading: Icon(switch (output.kind) {
-                          ChatOutputKind.image => Icons.image_outlined,
-                          ChatOutputKind.file =>
-                            Icons.insert_drive_file_outlined,
-                          ChatOutputKind.link => Icons.link,
-                        }),
-                        title: Text(
-                          output.label,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          output.target,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onTap: _working
-                            ? null
-                            : () => _run(
-                                () => _preview(output),
-                                offerRetry: true,
+            Expanded(
+              child: _observation.loading && !_observation.hasObservation
+                  ? StudioLoading.page(label: 'Loading outputs')
+                  : outputs.isEmpty
+                  ? Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: _observation.error != null
+                            ? StudioError(_observation.error!)
+                            : Text(
+                                (!_observation.hasMore
+                                    ? 'No files or links found in this chat.'
+                                    : 'No outputs found in the recent part of this chat. Load older outputs to look further back.'),
                               ),
-                        trailing: output.path == null
-                            ? null
-                            : IconButton(
-                                tooltip: 'Save or share ${output.label}',
-                                icon: const Icon(Icons.ios_share),
-                                onPressed: _working
-                                    ? null
-                                    : () => _run(
-                                        () async => _share(
-                                          await _session.download(output.path!),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: outputs.length,
+                      itemBuilder: (context, index) {
+                        final output = outputs[index];
+                        return ListTile(
+                          leading: Icon(switch (output.kind) {
+                            ChatOutputKind.image => Icons.image_outlined,
+                            ChatOutputKind.file =>
+                              Icons.insert_drive_file_outlined,
+                            ChatOutputKind.link => Icons.link,
+                          }),
+                          title: Text(
+                            output.label,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            output.target,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onTap: _working
+                              ? null
+                              : () => _run(
+                                  () => _preview(output),
+                                  offerRetry: true,
+                                ),
+                          trailing: output.path == null
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Save or share ${output.label}',
+                                  icon: const Icon(Icons.ios_share),
+                                  onPressed: _working
+                                      ? null
+                                      : () => _run(
+                                          () async => _share(
+                                            await _session.download(
+                                              output.path!,
+                                            ),
+                                          ),
                                         ),
-                                      ),
+                                ),
+                        );
+                      },
+                    ),
+            ),
+            if (!_observation.loading || outputs.isNotEmpty)
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (outputs.isNotEmpty &&
+                          (_observation.error != null || _observation.hasMore))
+                        _observation.error != null
+                            ? StudioError(_observation.error!)
+                            : Text(
+                                'Recent outputs shown. Load older outputs to look further back.',
                               ),
-                      );
-                    },
+                      if (_observation.error != null)
+                        TextButton(
+                          onPressed: _working || _observation.loading
+                              ? null
+                              : () => _load(refresh: _observation.retryRefresh),
+                          child: const Text('Try again'),
+                        )
+                      else if (_observation.hasMore)
+                        TextButton(
+                          onPressed: _working || _observation.loading
+                              ? null
+                              : () => _load(),
+                          child: const Text('Load older outputs'),
+                        ),
+                      if (_observation.error != null && outputs.isEmpty)
+                        TextButton(
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          child: const Text('Back to chat'),
+                        ),
+                    ],
                   ),
-          ),
-          if (!_observation.loading || outputs.isNotEmpty)
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (outputs.isNotEmpty &&
-                        (_observation.error != null || _observation.hasMore))
-                      _observation.error != null
-                          ? StudioError(_observation.error!)
-                          : Text(
-                              'Recent outputs shown. Load older outputs to look further back.',
-                            ),
-                    if (_observation.error != null)
-                      TextButton(
-                        onPressed: _working || _observation.loading
-                            ? null
-                            : () => _load(refresh: _observation.retryRefresh),
-                        child: const Text('Try again'),
-                      )
-                    else if (_observation.hasMore)
-                      TextButton(
-                        onPressed: _working || _observation.loading
-                            ? null
-                            : () => _load(),
-                        child: const Text('Load older outputs'),
-                      ),
-                    if (_observation.error != null && outputs.isEmpty)
-                      TextButton(
-                        onPressed: () => Navigator.of(context).maybePop(),
-                        child: const Text('Back to chat'),
-                      ),
-                  ],
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

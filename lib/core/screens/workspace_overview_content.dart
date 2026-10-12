@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/studio_loading.dart';
 import '../models/bots.dart';
 import '../services/bots_session.dart';
 import '../services/profile_workspace_controller.dart';
@@ -109,66 +110,62 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
     );
     return ValueListenableBuilder(
       valueListenable: colors,
-      builder: (context, choices, _) => ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (controller.recentsLoading || widget.bots.state.loading)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: LinearProgressIndicator(
-                semanticsLabel: 'Loading recent chats',
+      builder: (context, choices, _) => StudioLoadingRegion(
+        busy: _session.contentLoading,
+        available: _session.contentAvailable,
+        label: 'Loading recent chats',
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            for (final error in {
+              ...controller.recentsProfileErrors.values,
+              ...widget.bots.state.errors,
+            })
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: StudioError(error),
               ),
-            ),
-          for (final error in {
-            ...controller.recentsProfileErrors.values,
-            ...widget.bots.state.errors,
-          })
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: StudioError(error),
-            ),
-          if (items.isEmpty &&
-              controller.recentsLoaded &&
-              !widget.bots.state.loading)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 48),
-              child: Column(
-                children: [
-                  const Icon(Icons.history, size: 40),
-                  const SizedBox(height: 16),
-                  Text(
-                    controller.recentsProfileErrors.isEmpty &&
-                            widget.bots.state.errors.isEmpty
-                        ? 'No recent chats'
-                        : 'No recent chats found in available profiles',
-                  ),
-                ],
+            if (items.isEmpty && _session.contentAvailable)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 48),
+                child: Column(
+                  children: [
+                    const Icon(Icons.history, size: 40),
+                    const SizedBox(height: 16),
+                    Text(
+                      controller.recentsProfileErrors.isEmpty &&
+                              widget.bots.state.errors.isEmpty
+                          ? 'No recent chats'
+                          : 'No recent chats found in available profiles',
+                    ),
+                  ],
+                ),
               ),
-            ),
-          for (final item in items)
-            RecentIdentityCard(
-              item: item,
-              bots: widget.bots.state.bots,
-              now: now,
-              profileChoice: choices
-                  .profiles[item.chat?.key.workspace.profileName]
-                  ?.displayChoice,
-              isDefault:
-                  controller.discovery
-                      ?.named(item.chat?.key.workspace.profileName ?? '')
-                      ?.isDefault ==
-                  true,
-              onTap: controller.switching || _opening
-                  ? null
-                  : () {
-                      if (item.group case final group?) {
-                        _openGroup(group);
-                      } else {
-                        widget.onOpen(item.chat!, items);
-                      }
-                    },
-            ),
-        ],
+            for (final item in items)
+              RecentIdentityCard(
+                item: item,
+                bots: widget.bots.state.bots,
+                now: now,
+                profileChoice: choices
+                    .profiles[item.chat?.key.workspace.profileName]
+                    ?.displayChoice,
+                isDefault:
+                    controller.discovery
+                        ?.named(item.chat?.key.workspace.profileName ?? '')
+                        ?.isDefault ==
+                    true,
+                onTap: controller.switching || _opening
+                    ? null
+                    : () {
+                        if (item.group case final group?) {
+                          _openGroup(group);
+                        } else {
+                          widget.onOpen(item.chat!, items);
+                        }
+                      },
+              ),
+          ],
+        ),
       ),
     );
   }

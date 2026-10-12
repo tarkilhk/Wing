@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -5,6 +6,47 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:wing/core/widgets/installed_app_version_card.dart';
 
 void main() {
+  testWidgets(
+    'metadata arrives without moving or withholding release actions',
+    (tester) async {
+      PackageInfo.setMockInitialValues(
+        appName: 'Wing',
+        packageName: 'com.tarkilhk.wing',
+        version: '1.2.0',
+        buildNumber: '24722',
+        buildSignature: '',
+      );
+      final opened = <Uri>[];
+      final card = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 320,
+                child: InstalledAppVersionCard(
+                  key: card,
+                  openLink: (uri) async {
+                    opened.add(uri);
+                    return true;
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final before = tester.getRect(find.byKey(card));
+      expect(find.byType(StudioLoading), findsNothing);
+      expect(find.text('Version —'), findsOneWidget);
+      await tester.tap(find.text('Releases'));
+      expect(opened, [Uri.parse('https://github.com/tarkilhk/Wing/releases')]);
+      await tester.pumpAndSettle();
+      expect(find.text('Version 1.2.0'), findsOneWidget);
+      expect(tester.getRect(find.byKey(card)), before);
+    },
+  );
   testWidgets('shows the public version and keeps the Android build internal', (
     tester,
   ) async {
@@ -19,10 +61,10 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: InstalledAppVersionCard()));
     expect(find.text('Loading version information…'), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(StudioLoading), findsNothing);
     expect(
       find.bySemanticsLabel(RegExp('Loading version information')),
-      findsOneWidget,
+      findsNothing,
     );
     await tester.pumpAndSettle();
 

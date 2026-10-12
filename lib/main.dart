@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'core/services/connection_diagnostics.dart';
 import 'core/services/bots_connection_source.dart';
 import 'core/services/bots_session.dart';
@@ -1324,61 +1325,68 @@ class HomeScreenState extends State<HomeScreen> {
                   widget.onPreferencesChanged?.call();
                 },
               )
-            : Column(
-                children: [
-                  if (_opening || _entrySession.state.opening)
-                    const LinearProgressIndicator(),
-                  if (_sharedDraft.state.hasPending)
-                    ListTile(
-                      title: const Text('Shared draft ready'),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Choose where to add it before sending.'),
-                          Wrap(
-                            children: [
-                              TextButton(
-                                onPressed: !_sharedDraft.state.canReview
-                                    ? null
-                                    : _reviewPendingShare,
-                                child: const Text('Review'),
-                              ),
-                              TextButton(
-                                onPressed:
-                                    _sharedDraft.state.reviewing ||
-                                        _sharedDraft.state.discarding
-                                    ? null
-                                    : _discardIncomingShare,
-                                child: const Text('Discard'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  Expanded(
-                    child: _connections.isEmpty
-                        ? WingWelcome(
-                            onConnect: _addConnection,
-                            onRestore: () => _showRestoreConfig(context),
-                          )
-                        : Align(
-                            alignment: Alignment.topCenter,
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 720),
-                              child: ListView.builder(
-                                padding: const EdgeInsets.only(
-                                  top: 12,
-                                  bottom: 96,
+            : StudioLoadingRegion(
+                available: true,
+                busy: _opening || _entrySession.state.opening,
+                label: 'Opening workspace',
+                child: Column(
+                  children: [
+                    if (_sharedDraft.state.hasPending)
+                      ListTile(
+                        title: const Text('Shared draft ready'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Choose where to add it before sending.',
+                            ),
+                            Wrap(
+                              children: [
+                                TextButton(
+                                  onPressed: !_sharedDraft.state.canReview
+                                      ? null
+                                      : _reviewPendingShare,
+                                  child: const Text('Review'),
                                 ),
-                                itemCount: _connections.length,
-                                itemBuilder: (_, i) =>
-                                    _buildConnectionCard(_connections[i]),
+                                TextButton(
+                                  onPressed:
+                                      _sharedDraft.state.reviewing ||
+                                          _sharedDraft.state.discarding
+                                      ? null
+                                      : _discardIncomingShare,
+                                  child: const Text('Discard'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    Expanded(
+                      child: _connections.isEmpty
+                          ? WingWelcome(
+                              onConnect: _addConnection,
+                              onRestore: () => _showRestoreConfig(context),
+                            )
+                          : Align(
+                              alignment: Alignment.topCenter,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 720,
+                                ),
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.only(
+                                    top: 12,
+                                    bottom: 96,
+                                  ),
+                                  itemCount: _connections.length,
+                                  itemBuilder: (_, i) =>
+                                      _buildConnectionCard(_connections[i]),
+                                ),
                               ),
                             ),
-                          ),
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
         floatingActionButton:
             _destination == AppDestination.connections &&

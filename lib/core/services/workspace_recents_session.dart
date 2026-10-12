@@ -46,6 +46,24 @@ class WorkspaceRecentsSession extends ChangeNotifier
   );
   @override
   RecentConversationCatalog get catalog => _catalog;
+  ({
+    bool chatsLoading,
+    bool chatsLoaded,
+    bool botsLoading,
+    bool groupsAvailable,
+  })
+  _loadingFacts = (
+    chatsLoading: false,
+    chatsLoaded: false,
+    botsLoading: false,
+    groupsAvailable: false,
+  );
+  bool get contentAvailable =>
+      _items.isNotEmpty ||
+      (_loadingFacts.chatsLoaded && _loadingFacts.groupsAvailable);
+  bool get contentLoading =>
+      !contentAvailable &&
+      (_loadingFacts.chatsLoading || _loadingFacts.botsLoading);
   int _appearanceEpoch = -1;
   int _appearanceGeneration = 0;
   Set<ProfileSessionKey> _keys = {};
@@ -137,13 +155,24 @@ class WorkspaceRecentsSession extends ChangeNotifier
         controller.recentsProfileErrors.isEmpty && bots.state.errors.isEmpty
         ? null
         : 'Some recent conversations could not be loaded.';
-    if (!listEquals(facts, _facts) || error != _catalog.error) {
+    final loadingFacts = (
+      chatsLoading: controller.recentsLoading,
+      chatsLoaded: controller.recentsLoaded,
+      botsLoading: bots.state.loading,
+      groupsAvailable: bots.state.groupsAvailable,
+    );
+    final catalogChanged =
+        !listEquals(facts, _facts) || error != _catalog.error;
+    if (catalogChanged) {
       _items = items;
       _facts = facts;
       _catalog = RecentConversationCatalog(
         entries: items.map((item) => item.conversation),
         error: error,
       );
+    }
+    if (catalogChanged || loadingFacts != _loadingFacts) {
+      _loadingFacts = loadingFacts;
       notifyListeners();
     }
   }

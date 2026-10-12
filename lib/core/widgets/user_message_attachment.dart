@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -307,7 +308,7 @@ class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile>
   Widget _loading() => SizedBox(
     width: widget.previewSize?.width ?? 240,
     height: widget.previewSize?.height ?? 180,
-    child: const Center(child: CircularProgressIndicator()),
+    child: const Center(child: StudioLoading(label: 'Loading attachment')),
   );
 }
 
@@ -775,7 +776,7 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
                 onPressed: () => _retry(index),
                 icon: const Icon(Icons.refresh),
               )
-            : const CircularProgressIndicator(),
+            : const StudioLoading(label: 'Loading attachment'),
       );
     },
   );

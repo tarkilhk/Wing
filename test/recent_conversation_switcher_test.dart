@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/core/services/server_connection_status.dart';
@@ -1163,7 +1164,7 @@ void main() {
         await tester.pump();
         expect(
           find.byKey(const ValueKey('recent-snapshot-progress')),
-          findsOneWidget,
+          findsNothing,
         );
         expect(built, isEmpty);
         await _finishFrames(tester);
@@ -1495,7 +1496,7 @@ void main() {
       await tester.pump();
       expect(
         find.byKey(const ValueKey('recent-snapshot-progress')),
-        findsOneWidget,
+        findsNothing,
       );
       await _finishFrames(tester);
       expect(
@@ -1564,7 +1565,7 @@ void main() {
         );
         expect(
           find.byKey(const ValueKey('recent-snapshot-progress')),
-          findsOneWidget,
+          findsNothing,
         );
         switcher.currentState!.dismissStack();
         await _finishFrames(tester);
@@ -1625,7 +1626,7 @@ void main() {
         await _finishFrames(tester);
         expect(
           find.byKey(const ValueKey('recent-snapshot-progress')),
-          findsOneWidget,
+          findsNothing,
         );
         await tester.pump(const Duration(seconds: 16));
         await _finishFrames(tester);
@@ -1657,7 +1658,7 @@ void main() {
         const Offset(130, 400),
       );
       expect(source.opens, [source.entries[1].key]);
-      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.byType(StudioLoading), findsNothing);
       switcher.currentState!.openStack();
       await _finishFrames(tester);
       expect(find.byTooltip('Open conversation'), findsOneWidget);
@@ -1881,7 +1882,7 @@ void main() {
             await _finishFrames(tester);
             final title = tester.getRect(find.text(source.entries[1].title));
             expect(find.text('Opening conversation…'), findsNothing);
-            expect(find.byType(LinearProgressIndicator), findsOneWidget);
+            expect(find.byType(StudioLoading), findsOneWidget);
             expect(
               find.bySemanticsLabel('Opening conversation'),
               findsOneWidget,
@@ -1945,7 +1946,7 @@ void main() {
         );
         await opening;
         expect(source.selected, source.entries[0].key);
-        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(find.byType(StudioLoading), findsNothing);
         held.completeError(StateError('Retired opening failed'));
         await _finishFrames(tester);
         expect(source.opens, [source.entries[1].key]);
@@ -1986,7 +1987,7 @@ void main() {
       source.waitingOpen!.complete();
       await _finishFrames(tester);
       await selection;
-      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.byType(StudioLoading), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -2328,7 +2329,7 @@ void main() {
               const Offset(145, 400),
               const Offset(215, 400),
             );
-            expect(find.text('Loading recent chats…'), findsOneWidget);
+            expect(find.text('Loading recent chats…'), findsNothing);
             expect(find.text('No other recent chats.'), findsNothing);
             expect(
               tester
@@ -3298,7 +3299,7 @@ void main() {
                   'A group landing must not resize while initial loading feedback clears.',
             );
           }
-          expect(find.byType(LinearProgressIndicator), findsNothing);
+          expect(find.byType(StudioLoading), findsNothing);
           final switcherState = tester.state<RecentConversationSwitcherState>(
             find.byType(RecentConversationSwitcher),
           );
@@ -3426,7 +3427,7 @@ void main() {
             const ValueKey('group-transcript'),
           );
           final switchedBounds = tester.getRect(switchedViewport);
-          expect(find.bySemanticsLabel('Loading conversation'), findsOneWidget);
+          expect(find.bySemanticsLabel('Loading conversation'), findsNothing);
           await _capture(
             tester,
             frame,
@@ -3442,7 +3443,7 @@ void main() {
                   'Switching from an ordinary chat to a group keeps its viewport fixed.',
             );
           }
-          expect(find.byType(LinearProgressIndicator), findsNothing);
+          expect(find.byType(StudioLoading), findsNothing);
           await _capture(
             tester,
             frame,
@@ -3662,7 +3663,7 @@ void main() {
           );
           await _chatGesture(tester);
           expect(visit.modeEnabled, isTrue);
-          expect(find.text('Loading recent chats…'), findsOneWidget);
+          expect(find.text('Loading recent chats…'), findsNothing);
           expect(controller.current!.chat, same(original));
           expect(
             fixture.calls.where((call) => call.$2 == 'session.resume'),
@@ -3967,7 +3968,7 @@ void main() {
           }
           expect(resumeStarted.isCompleted, isTrue);
           expect(first.refreshingConversation, isTrue);
-          expect(find.byType(LinearProgressIndicator), findsOneWidget);
+          expect(find.byType(StudioLoading), findsNothing);
           expect(
             find.widgetWithText(TextField, 'Return to this draft'),
             findsOneWidget,
@@ -3985,7 +3986,7 @@ void main() {
           refreshDelay.complete();
           await _finishFrames(tester);
           expect(first.refreshingConversation, isFalse);
-          expect(find.byType(LinearProgressIndicator), findsNothing);
+          expect(find.byType(StudioLoading), findsNothing);
           expect(controller.current!.chat!.key, first.key);
           final restored = tester
               .widget<TextField>(

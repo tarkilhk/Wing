@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../controllers/profile_voice_controller.dart';
 import '../../widgets/read_recovery.dart';
@@ -44,41 +45,45 @@ class _AdminVoicePageState extends State<AdminVoicePage> {
         listenable: _session,
         builder: (context, _) {
           final state = _session.state;
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (state.loading) const LinearProgressIndicator(),
-              if (state.error != null)
-                AdminNotice.error(state.error!, retry: _session.loadDefaults),
-              if (state.settings != null) ...[
-                AdminGroup(
-                  children: [
-                    AdminRow(
-                      title: 'Speech recognition provider',
-                      subtitle: 'Configured backend providers and keys',
-                      icon: Icons.mic_none,
-                      onTap: () => widget.onRecognition(context),
-                    ),
-                    AdminRow(
-                      title: 'Speech synthesis provider',
-                      subtitle: 'Configured backend providers and keys',
-                      icon: Icons.volume_up_outlined,
-                      onTap: () => widget.onSynthesis(context),
-                    ),
-                    AdminRow(
-                      title: 'Speech defaults',
-                      subtitle: 'Language, model and automatic speech',
-                      icon: Icons.tune,
-                      onTap: () => widget.onDefaults(context),
-                    ),
-                  ],
-                ),
-                TextButton(
-                  onPressed: state.busy ? null : _session.loadDefaults,
-                  child: const Text('Refresh configured providers'),
-                ),
+          return StudioLoadingRegion(
+            available: state.settings != null,
+            busy: state.loading,
+            label: 'Loading voice settings',
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (state.error != null)
+                  AdminNotice.error(state.error!, retry: _session.loadDefaults),
+                if (state.settings != null) ...[
+                  AdminGroup(
+                    children: [
+                      AdminRow(
+                        title: 'Speech recognition provider',
+                        subtitle: 'Configured backend providers and keys',
+                        icon: Icons.mic_none,
+                        onTap: () => widget.onRecognition(context),
+                      ),
+                      AdminRow(
+                        title: 'Speech synthesis provider',
+                        subtitle: 'Configured backend providers and keys',
+                        icon: Icons.volume_up_outlined,
+                        onTap: () => widget.onSynthesis(context),
+                      ),
+                      AdminRow(
+                        title: 'Speech defaults',
+                        subtitle: 'Language, model and automatic speech',
+                        icon: Icons.tune,
+                        onTap: () => widget.onDefaults(context),
+                      ),
+                    ],
+                  ),
+                  TextButton(
+                    onPressed: state.busy ? null : _session.loadDefaults,
+                    child: const Text('Refresh configured providers'),
+                  ),
+                ],
               ],
-            ],
+            ),
           );
         },
       ),

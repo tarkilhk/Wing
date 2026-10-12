@@ -1,3 +1,5 @@
+import 'package:wing/core/widgets/studio_loading.dart';
+import '../../widgets/studio_capacity_meter.dart';
 import 'dart:async';
 import '../../widgets/studio_select.dart';
 import 'package:flutter/material.dart';
@@ -318,9 +320,9 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
             const SizedBox(height: 12),
             Text('$label ${item.text}%'),
             const SizedBox(height: 4),
-            LinearProgressIndicator(
-              value: (item.value as num).toDouble().clamp(0, 1),
-              semanticsLabel: '$label ${item.text} percent of capacity',
+            StudioCapacityMeter(
+              fraction: (item.value as num).toDouble().clamp(0, 1),
+              label: '$label ${item.text} percent of capacity',
             ),
           ],
         const SizedBox(height: 8),
@@ -355,8 +357,8 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                   onClose: _close,
                   onSave: state.canSave ? _save : null,
                 ),
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
+          child: _loading && !state.hasObservation
+              ? StudioLoading.page(label: 'Loading settings')
               : !state.hasObservation
               ? Padding(
                   padding: const EdgeInsets.all(16),

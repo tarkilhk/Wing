@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
 import 'dart:io';
@@ -266,7 +267,7 @@ void main() {
             expect(find.text('Hermes'), findsOneWidget);
             expect(tester.getTopLeft(find.byType(TextField)), composerPosition);
             expect(queries, hasLength(1));
-            expect(find.byType(LinearProgressIndicator), findsNothing);
+            expect(find.byType(StudioLoading), findsNothing);
           }
           await capture('waiting');
           await tester.tap(find.text('Hermes'));
@@ -277,7 +278,7 @@ void main() {
           expect(queries, hasLength(1));
           await tester.pump(const Duration(milliseconds: 1));
           expect(queries.map((query) => query.text), ['@h', '@herm']);
-          expect(find.byType(LinearProgressIndicator), findsOneWidget);
+          expect(find.byType(StudioLoading), findsNothing);
           expect(find.text('Hermes'), findsOneWidget);
           expect(tester.getTopLeft(find.byType(TextField)), composerPosition);
           await capture('loading');
@@ -288,6 +289,7 @@ void main() {
           refreshed.complete(
             MentionCompletion(query: queries.last, items: [_agent]),
           );
+          await tester.pump();
           await tester.pump();
           expect(tester.getTopLeft(find.byType(TextField)), composerPosition);
           await tester.tap(find.text('Hermes'));

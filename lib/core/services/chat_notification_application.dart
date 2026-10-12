@@ -230,8 +230,9 @@ final class _NotificationApplication {
           .where((value) => value.id == target.scope.connectionId)
           .firstOrNull;
       if (!_current(generation)) return;
-      if (connection == null)
+      if (connection == null) {
         throw StateError('The original connection is unavailable');
+      }
       final owner = await registry.forConnection(connection);
       if (!_current(generation)) return;
       if (owner.connectionIdentity != target.scope.connectionIdentity) {

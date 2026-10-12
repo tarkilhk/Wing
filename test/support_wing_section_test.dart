@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -213,7 +214,7 @@ void main() {
     await tester.tap(_row(_destinations.first.label));
     await tester.pump();
     expect(tester.getRect(_row(_destinations.first.label)), before);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(StudioLoading), findsOneWidget);
     for (final destination in _destinations) {
       expect(tester.widget<ListTile>(_row(destination.label)).onTap, isNull);
       await tester.tap(_row(destination.label));

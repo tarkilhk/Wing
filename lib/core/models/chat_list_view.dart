@@ -485,6 +485,7 @@ final class BrowserProfileRead {
 
 final class BrowserReadState {
   BrowserReadState({
+    required this.available,
     required this.archived,
     required this.loading,
     required this.searching,
@@ -493,6 +494,7 @@ final class BrowserReadState {
     required Map<String, BrowserProfileRead> profiles,
   }) : profiles = Map.unmodifiable(profiles);
   final bool archived, loading, searching, searchLimited;
+  final bool available;
   final String? searchError;
   final Map<String, BrowserProfileRead> profiles;
 }

@@ -6307,6 +6307,33 @@
       "selector": "main"
     },
     {
+      "id": "host-test-test/studio_loading_test.dart",
+      "kind": "host-test",
+      "path": "test/studio_loading_test.dart",
+      "selector": "main",
+      "purpose": "Shared Studio loading style and blocked-action admission regression",
+      "source": "internal/docs/TESTING.md; internal/tools/architecture/README.md",
+      "status": "supported"
+    },
+    {
+      "id": "host-test-test/loading_family_guard_test.dart",
+      "kind": "host-test",
+      "path": "test/loading_family_guard_test.dart",
+      "selector": "main",
+      "purpose": "Shared Studio loading style and blocked-action admission regression",
+      "source": "internal/docs/TESTING.md; internal/tools/architecture/README.md",
+      "status": "supported"
+    },
+    {
+      "id": "dart-main-tools/architecture/rules/loading_family.dart",
+      "kind": "guard-cli",
+      "path": "tools/architecture/rules/loading_family.dart",
+      "selector": "main",
+      "purpose": "Shared Studio loading style and blocked-action admission regression",
+      "source": "internal/docs/TESTING.md; internal/tools/architecture/README.md",
+      "status": "supported"
+    },
+    {
       "id": "host-test-test/group_notification_session_test.dart",
       "kind": "host-test",
       "path": "test/group_notification_session_test.dart",
@@ -9863,9 +9890,19 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/widgets/studio_capacity_meter.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/studio_error.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/studio_loading.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/studio_select.dart",
@@ -11268,6 +11305,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/loading_family_guard_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/logs_view_dependency_guard_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
@@ -12493,6 +12535,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/studio_loading_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/studio_selection_test.dart",
       "area": "test",
       "provenance": "tracked"
@@ -13329,6 +13376,11 @@
     },
     {
       "path": "tools/architecture/rules/library_cycles.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/loading_family.dart",
       "area": "tools",
       "provenance": "intentional-untracked"
     },

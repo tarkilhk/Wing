@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import '../widgets/activity/skill_document_viewer.dart';
 import '../widgets/studio_error.dart';
@@ -154,89 +155,92 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        '${widget.connectionLabel} · ${_session.profileName}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Changes are saved on Hermes and affect other clients using this profile.',
-                        style: metadataStyle,
-                      ),
-                      const SizedBox(height: 12),
-                      LayoutBuilder(
-                        builder: (context, constraints) =>
-                            SegmentedButton<ProfileCapabilityKind>(
-                              showSelectedIcon: false,
-                              direction:
-                                  constraints.maxWidth <
-                                      MediaQuery.textScalerOf(
-                                        context,
-                                      ).scale(300)
-                                  ? Axis.vertical
-                                  : Axis.horizontal,
-                              segments: const [
-                                ButtonSegment(
-                                  value: ProfileCapabilityKind.tools,
-                                  label: Text('Capabilities'),
-                                ),
-                                ButtonSegment(
-                                  value: ProfileCapabilityKind.skills,
-                                  label: Text('Installed skills'),
-                                ),
-                              ],
-                              selected: {_kind},
-                              onSelectionChanged: _state.busy
-                                  ? null
-                                  : (value) {
-                                      setState(() => _kind = value.single);
-                                      _session.load(_kind);
-                                    },
-                            ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        decoration: InputDecoration(
-                          hintText: _kind == ProfileCapabilityKind.tools
-                              ? 'Find a capability'
-                              : 'Find a skill',
-                          prefixIcon: Icon(Icons.search),
-                        ),
-                        onChanged: (value) => setState(() => _query = value),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_state.notice != null)
+            child: StudioLoadingRegion(
+              available: _state.hasObservation,
+              busy: _state.loading || _state.saving,
+              label: 'Loading capabilities',
+              child: Column(
+                children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(_state.notice!),
-                  ),
-                if (_state.error != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        StudioError(_state.error!),
-                        TextButton(
-                          onPressed: _state.loading || _state.busy
-                              ? null
-                              : () => _session.load(_kind),
-                          child: const Text('Retry'),
+                        Text(
+                          '${widget.connectionLabel} · ${_session.profileName}',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Changes are saved on Hermes and affect other clients using this profile.',
+                          style: metadataStyle,
+                        ),
+                        const SizedBox(height: 12),
+                        LayoutBuilder(
+                          builder: (context, constraints) =>
+                              SegmentedButton<ProfileCapabilityKind>(
+                                showSelectedIcon: false,
+                                direction:
+                                    constraints.maxWidth <
+                                        MediaQuery.textScalerOf(
+                                          context,
+                                        ).scale(300)
+                                    ? Axis.vertical
+                                    : Axis.horizontal,
+                                segments: const [
+                                  ButtonSegment(
+                                    value: ProfileCapabilityKind.tools,
+                                    label: Text('Capabilities'),
+                                  ),
+                                  ButtonSegment(
+                                    value: ProfileCapabilityKind.skills,
+                                    label: Text('Installed skills'),
+                                  ),
+                                ],
+                                selected: {_kind},
+                                onSelectionChanged: _state.busy
+                                    ? null
+                                    : (value) {
+                                        setState(() => _kind = value.single);
+                                        _session.load(_kind);
+                                      },
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          decoration: InputDecoration(
+                            hintText: _kind == ProfileCapabilityKind.tools
+                                ? 'Find a capability'
+                                : 'Find a skill',
+                            prefixIcon: Icon(Icons.search),
+                          ),
+                          onChanged: (value) => setState(() => _query = value),
                         ),
                       ],
                     ),
                   ),
-                if (_state.loading || _state.saving)
-                  const LinearProgressIndicator(),
-              ],
+                  if (_state.notice != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(_state.notice!),
+                    ),
+                  if (_state.error != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: [
+                          StudioError(_state.error!),
+                          TextButton(
+                            onPressed: _state.loading || _state.busy
+                                ? null
+                                : () => _session.load(_kind),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
           if (!_state.loading && rows.isEmpty && _state.error == null)

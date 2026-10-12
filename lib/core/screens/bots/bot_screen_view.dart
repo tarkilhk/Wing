@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../services/bot_screen_session.dart';
 import '../../services/bot_screen_window.dart';
@@ -537,17 +538,12 @@ class _BotScreenViewState extends State<BotScreenView>
                             barInset: _barAtTop ? 0 : 56,
                           ),
                   ),
-                  if (_session.busy || _session.connecting)
-                    Positioned(
+                  if ((_session.busy || _session.connecting) &&
+                      !_session.canInput)
+                    StudioLoadingOverlay(
                       key: const ValueKey('bot-screen-progress'),
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: Semantics(
-                        label: 'Connecting to bot screen',
-                        liveRegion: true,
-                        child: LinearProgressIndicator(),
-                      ),
+                      label: 'Connecting to bot screen',
+                      topInset: _barAtTop ? 64 : 0,
                     ),
                   if (message != null)
                     Positioned(

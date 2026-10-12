@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../../models/settings_edit.dart';
 import '../../models/retained_memory.dart';
 import '../../services/retained_memory_session.dart';
@@ -227,25 +228,29 @@ class _MemoryReadBody<T> extends StatelessWidget {
       return ReadRecovery(
         shouldRetry: () => facts().canRecover,
         retry: refresh,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (reading.loading) const LinearProgressIndicator(),
-            if (reading.error case final error?)
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: AdminNotice.error(
-                      '${reading.checkedAt == null ? '' : 'Last checked ${TimeOfDay.fromDateTime(reading.checkedAt!).format(context)}. '}$error',
-                      retry: reading.loading ? null : refresh,
+        child: StudioLoadingRegion(
+          available: reading.value != null,
+          busy: reading.loading,
+          label: 'Loading memory',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (reading.error case final error?)
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: AdminNotice.error(
+                        '${reading.checkedAt == null ? '' : 'Last checked ${TimeOfDay.fromDateTime(reading.checkedAt!).format(context)}. '}$error',
+                        retry: reading.loading ? null : refresh,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            if (reading.value case final value?)
-              Expanded(key: const ValueKey('content'), child: builder(value)),
-          ],
+              if (reading.value case final value?)
+                Expanded(key: const ValueKey('content'), child: builder(value)),
+            ],
+          ),
         ),
       );
     },

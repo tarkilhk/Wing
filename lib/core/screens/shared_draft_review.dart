@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import '../services/shared_draft_session.dart';
 import '../widgets/studio_selection_tile.dart';
@@ -62,160 +63,164 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
           ),
         ),
         body: SafeArea(
-          child: Column(
-            children: [
-              if (state.working) const LinearProgressIndicator(),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text(
-                      'Review',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (state.text case final String text
-                                when text.isNotEmpty) ...[
-                              SelectableText(text),
-                              if (state.files.isNotEmpty)
-                                const Divider(height: 24),
-                            ],
-                            for (final file in state.files)
-                              ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(
-                                  file.isImage
-                                      ? Icons.image_outlined
-                                      : Icons.insert_drive_file_outlined,
+          child: StudioLoadingRegion(
+            available: !state.working,
+            busy: state.working,
+            label: 'Saving shared draft',
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      Text(
+                        'Review',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (state.text case final String text
+                                  when text.isNotEmpty) ...[
+                                SelectableText(text),
+                                if (state.files.isNotEmpty)
+                                  const Divider(height: 24),
+                              ],
+                              for (final file in state.files)
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(
+                                    file.isImage
+                                        ? Icons.image_outlined
+                                        : Icons.insert_drive_file_outlined,
+                                  ),
+                                  title: Text(
+                                    file.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  subtitle: Text(_size(file.byteLength)),
                                 ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      if (state.destinationNotice case final notice?) ...[
+                        Text(notice),
+                        const SizedBox(height: 12),
+                      ],
+                      if (state.recovery case final recovery?) ...[
+                        Text(
+                          'Choose “New chat with recovered draft” in the ${recovery.profileName} profile to keep your saved text and attachments with this content. Review before sending. Queued messages will stay paused.',
+                        ),
+                        if (recovery.text.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text(
+                              recovery.text,
+                              maxLines: 6,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        Text(
+                          '${recovery.attachmentCount} attachments · ${recovery.queuedCount} queued messages',
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      Text(
+                        'Destination',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Connection: ${state.connectionLabel}'),
+                      const SizedBox(height: 12),
+                      StudioSelect<String>(
+                        key: ValueKey('share-profile-${state.profileName}'),
+                        value: state.profileName,
+                        label: 'Profile',
+                        options: [
+                          for (final profile in state.profiles)
+                            (value: profile.name, label: profile.label),
+                        ],
+                        onChanged: state.working
+                            ? null
+                            : (name) => widget.session.chooseProfile(
+                                widget.offer,
+                                name,
+                              ),
+                      ),
+                      const SizedBox(height: 12),
+                      RadioGroup<String>(
+                        groupValue: state.destination,
+                        onChanged: (value) {
+                          if (value != null) {
+                            widget.session.chooseDestination(
+                              widget.offer,
+                              state.destinations.singleWhere(
+                                (d) => d.id == value,
+                              ),
+                            );
+                          }
+                        },
+                        child: Column(
+                          children: [
+                            for (final destination in state.destinations)
+                              StudioRadioTile<String>(
+                                minTileHeight: 48,
+                                minVerticalPadding: 8,
+                                key: ValueKey(destination.presentationId),
+                                value: destination.id,
+                                enabled: !state.working,
+                                contentPadding: EdgeInsets.zero,
                                 title: Text(
-                                  file.name,
+                                  destination.label,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                subtitle: Text(_size(file.byteLength)),
                               ),
                           ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (state.destinationNotice case final notice?) ...[
-                      Text(notice),
-                      const SizedBox(height: 12),
-                    ],
-                    if (state.recovery case final recovery?) ...[
-                      Text(
-                        'Choose “New chat with recovered draft” in the ${recovery.profileName} profile to keep your saved text and attachments with this content. Review before sending. Queued messages will stay paused.',
-                      ),
-                      if (recovery.text.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Text(
-                            recovery.text,
-                            maxLines: 6,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                      if (state.canLoadMore) ...[
+                        const SizedBox(height: 4),
+                        TextButton.icon(
+                          key: const Key('share-load-more'),
+                          onPressed: state.working || state.loadingMore
+                              ? null
+                              : () => widget.session.loadMore(widget.offer),
+                          icon: const Icon(Icons.expand_more),
+                          label: Text(state.loadMoreLabel),
                         ),
-                      Text(
-                        '${recovery.attachmentCount} attachments · ${recovery.queuedCount} queued messages',
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    Text(
-                      'Destination',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text('Connection: ${state.connectionLabel}'),
-                    const SizedBox(height: 12),
-                    StudioSelect<String>(
-                      key: ValueKey('share-profile-${state.profileName}'),
-                      value: state.profileName,
-                      label: 'Profile',
-                      options: [
-                        for (final profile in state.profiles)
-                          (value: profile.name, label: profile.label),
                       ],
-                      onChanged: state.working
-                          ? null
-                          : (name) => widget.session.chooseProfile(
-                              widget.offer,
-                              name,
-                            ),
-                    ),
-                    const SizedBox(height: 12),
-                    RadioGroup<String>(
-                      groupValue: state.destination,
-                      onChanged: (value) {
-                        if (value != null) {
-                          widget.session.chooseDestination(
-                            widget.offer,
-                            state.destinations.singleWhere(
-                              (d) => d.id == value,
-                            ),
-                          );
-                        }
-                      },
-                      child: Column(
-                        children: [
-                          for (final destination in state.destinations)
-                            StudioRadioTile<String>(
-                              minTileHeight: 48,
-                              minVerticalPadding: 8,
-                              key: ValueKey(destination.presentationId),
-                              value: destination.id,
-                              enabled: !state.working,
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(
-                                destination.label,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (state.canLoadMore) ...[
-                      const SizedBox(height: 4),
-                      TextButton.icon(
-                        key: const Key('share-load-more'),
-                        onPressed: state.working || state.loadingMore
-                            ? null
-                            : () => widget.session.loadMore(widget.offer),
-                        icon: const Icon(Icons.expand_more),
-                        label: Text(state.loadMoreLabel),
-                      ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              if (state.error != null)
+                if (state.error != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: StudioError(
+                      state.error!,
+                      key: const Key('share-review-error'),
+                    ),
+                  ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: StudioError(
-                    state.error!,
-                    key: const Key('share-review-error'),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      key: const Key('share-add-to-draft'),
+                      onPressed: state.working ? null : _commit,
+                      child: Text(state.addLabel),
+                    ),
                   ),
                 ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    key: const Key('share-add-to-draft'),
-                    onPressed: state.working ? null : _commit,
-                    child: Text(state.addLabel),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -35,6 +35,7 @@ final class ProfileSupervisionSession extends ChangeNotifier {
     subagents: _chat.subagents,
     unconfirmedSubagentIds: _chat.unconfirmedSubagentIds,
     subagentsLoading: _chat.subagentsLoading,
+    subagentsAvailable: _chat.subagentsAvailable,
     subagentsError: _chat.subagentsError,
     sessionControl: _chat.sessionControl,
     sessionControlLoading: _chat.sessionControlLoading,

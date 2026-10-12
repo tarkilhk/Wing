@@ -1,3 +1,5 @@
+import 'package:wing/core/widgets/studio_loading.dart';
+import 'package:wing/core/screens/html_preview_screen.dart';
 import 'package:wing/core/services/chat_outputs_session.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -100,7 +102,7 @@ Finder _viewerAction(String label) => find.byWidgetPredicate(
 
 void main() {
   testWidgets(
-    'older outputs keep their action label while progress is visible',
+    'older outputs keep their action label and usable reading stays quiet',
     (tester) async {
       final older = Completer<ProfileHistoryPage>();
       await tester.pumpWidget(
@@ -139,7 +141,7 @@ void main() {
       await tester.pump();
       expect(find.text('Loading older outputs…'), findsNothing);
       expect(find.text('Load older outputs'), findsOneWidget);
-      expect(find.bySemanticsLabel('Loading outputs'), findsOneWidget);
+      expect(find.bySemanticsLabel('Loading outputs'), findsNothing);
       expect(
         tester
             .widget<TextButton>(
@@ -152,7 +154,7 @@ void main() {
         ProfileHistoryPage('chat', const [], 500, 500, isComplete: true),
       );
       await tester.pumpAndSettle();
-      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.byType(StudioLoading), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
@@ -1152,7 +1154,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(downloads, 1);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(HtmlPreviewScreen),
+        matching: find.byType(StudioLoading),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Open HTML'), findsNothing);
     await tester.pump(const Duration(milliseconds: 400));
     expect(downloads, 1);
@@ -1548,7 +1556,7 @@ void main() {
       ),
     );
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(StudioLoading), findsOneWidget);
     firstLoad.complete([]);
     await tester.pumpAndSettle();
     expect(find.text('No files or links found in this chat.'), findsOneWidget);

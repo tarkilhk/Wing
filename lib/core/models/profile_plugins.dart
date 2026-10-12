@@ -91,6 +91,7 @@ enum ProfilePluginsPhase { idle, loading, saving }
 
 final class ProfilePluginsState {
   ProfilePluginsState({
+    required this.hasObservation,
     required Iterable<ProfilePlugin> rows,
     required this.phase,
     required this.verified,
@@ -101,6 +102,7 @@ final class ProfilePluginsState {
   final List<ProfilePlugin> rows;
   final ProfilePluginsPhase phase;
   final bool verified, retryable;
+  final bool hasObservation;
   final String? error;
   final ProfilePluginAcknowledgement? acknowledgement;
   bool get busy => phase != ProfilePluginsPhase.idle;

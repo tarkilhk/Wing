@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/chat_runtime.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -203,7 +204,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(find.text('Summarizing conversation…'), findsOneWidget);
     expect(find.byIcon(Icons.compress_rounded), findsOneWidget);
     expect(find.byType(ShaderMask), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(StudioLoading), findsNothing);
   });
 
   test(
@@ -310,7 +311,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     runtime.beginTurn(submitting: false);
     await render(reducedMotion: true);
     expect(tester.getSize(row).height, expanded);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(StudioLoading), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -469,13 +470,13 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     );
     expect(find.text('Waiting for your message'), findsNothing);
     expect(tester.getSize(find.byType(ProfileActivityStatus)).height, 0);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(StudioLoading), findsNothing);
     expect(find.byType(ShaderMask), findsNothing);
     host.event('a', 'message.start');
     host.event('a', 'reasoning.delta', {'text': 'Planning'});
     await tester.pump();
     expect(find.text('Thinking…'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(StudioLoading), findsNothing);
     expect(find.byType(ShaderMask), findsOneWidget);
     host.event('a', 'clarify', {
       'request_id': 'city',
@@ -483,7 +484,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     });
     await tester.pump();
     expect(find.text('Waiting for your reply'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(StudioLoading), findsNothing);
     expect(find.byType(ShaderMask), findsNothing);
   });
 
@@ -559,7 +560,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         ),
       ),
     );
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(StudioLoading), findsNothing);
     expect(find.byTooltip(label()!), findsOneWidget);
     expect(find.byType(ShaderMask), findsNothing);
     expect(tester.takeException(), isNull);

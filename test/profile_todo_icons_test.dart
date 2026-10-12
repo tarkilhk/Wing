@@ -155,14 +155,8 @@ void main() {
     );
     await tester.tap(find.text('Tasks 0/1'));
     await tester.pump(const Duration(milliseconds: 300));
-    expect(
-      tester
-          .widget<CircularProgressIndicator>(
-            find.byType(CircularProgressIndicator),
-          )
-          .value,
-      isNull,
-    );
+    expect(find.byIcon(Icons.timelapse), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
     update(() => status = GatewayTodoStatus.completed);
     await tester.pumpAndSettle();
     expect(find.text('Tasks 1/1'), findsOneWidget);

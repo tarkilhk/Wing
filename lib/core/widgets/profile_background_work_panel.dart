@@ -108,7 +108,8 @@ class _ProfileBackgroundWorkPanelState
         icon: Icons.work_history_outlined,
         label: 'Background work',
         summary: Text(chat.backgroundSummary),
-        loading: refreshing,
+        loading:
+            refreshing && chat.sessionControl == null && chat.processes.isEmpty,
         childrenPadding: EdgeInsets.zero,
         children: [
           if (snapshot?.loop case final loop?)

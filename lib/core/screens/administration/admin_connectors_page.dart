@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/profile_connectors.dart';
@@ -101,93 +102,101 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
         listenable: _session,
         builder: (context, _) {
           final state = _session.state;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (state.phase == ConnectorPhase.reading)
-                const LinearProgressIndicator(),
-              if (state.failureScope == ConnectorFailureScope.read &&
-                  state.error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: AdminNotice.error(
-                    state.error!,
-                    retry: state.busy ? null : _session.refresh,
+          return StudioLoadingRegion(
+            available: state.checked,
+            busy: state.phase == ConnectorPhase.reading,
+            label: 'Loading connectors',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (state.failureScope == ConnectorFailureScope.read &&
+                    state.error != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: AdminNotice.error(
+                      state.error!,
+                      retry: state.busy ? null : _session.refresh,
+                    ),
                   ),
-                ),
-              if (state.checked)
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      const AdminNotice(
-                        'Manage the external tools available to this profile.',
-                      ),
-                      FilledButton.icon(
-                        onPressed: state.canMutate ? _add : null,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add connector'),
-                      ),
-                      TextButton(
-                        onPressed: state.busy ? null : _session.refresh,
-                        child: const Text('Refresh list'),
-                      ),
-                      if (state.connectors.isEmpty)
+                if (state.checked)
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
                         const AdminNotice(
-                          'No MCP connectors configured for this profile.',
+                          'Manage the external tools available to this profile.',
                         ),
-                      AdminGroup(
-                        children: [
-                          for (final row in state.connectors)
-                            ListTile(
-                              minTileHeight: 56,
-                              minVerticalPadding: 4,
-                              horizontalTitleGap: 12,
-                              title: Text(row.name),
-                              subtitle: Text(
-                                widget.failedConnectorNames.contains(row.name)
-                                    ? 'Failed health check · ${row.transport}'
-                                    : row.transport,
-                              ),
-                              leading:
+                        FilledButton.icon(
+                          onPressed: state.canMutate ? _add : null,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add connector'),
+                        ),
+                        TextButton(
+                          onPressed: state.busy ? null : _session.refresh,
+                          child: const Text('Refresh list'),
+                        ),
+                        if (state.connectors.isEmpty)
+                          const AdminNotice(
+                            'No MCP connectors configured for this profile.',
+                          ),
+                        AdminGroup(
+                          children: [
+                            for (final row in state.connectors)
+                              ListTile(
+                                minTileHeight: 56,
+                                minVerticalPadding: 4,
+                                horizontalTitleGap: 12,
+                                title: Text(row.name),
+                                subtitle: Text(
                                   widget.failedConnectorNames.contains(row.name)
-                                  ? Icon(
-                                      Icons.warning_amber_rounded,
-                                      color: WingTokens.of(context).warning,
+                                      ? 'Failed health check · ${row.transport}'
+                                      : row.transport,
+                                ),
+                                leading:
+                                    widget.failedConnectorNames.contains(
+                                      row.name,
                                     )
-                                  : null,
-                              trailing: CompactSwitch(
-                                semanticLabel: 'Enable ${row.name}',
-                                value: row.enabled,
-                                onChanged: state.canMutate && row.canConfigure
-                                    ? (value) => _toggle(row, value)
+                                    ? Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: WingTokens.of(context).warning,
+                                      )
+                                    : null,
+                                trailing: CompactSwitch(
+                                  semanticLabel: 'Enable ${row.name}',
+                                  value: row.enabled,
+                                  onChanged: state.canMutate && row.canConfigure
+                                      ? (value) => _toggle(row, value)
+                                      : null,
+                                ),
+                                onTap: state.canMutate
+                                    ? () => _open(
+                                        row.name,
+                                        profileName: _session.profileName,
+                                        signInOnOpen: false,
+                                      )
                                     : null,
                               ),
-                              onTap: state.canMutate
-                                  ? () => _open(
-                                      row.name,
-                                      profileName: _session.profileName,
-                                      signInOnOpen: false,
-                                    )
-                                  : null,
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      const Divider(height: 1),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Apply connector changes or retry connections for all profiles on this server.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      AdminReloadConnectorsButton(session: _session),
-                    ],
+                        const SizedBox(height: 24),
+                        const Divider(height: 1),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Apply connector changes or retry connections for all profiles on this server.',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        AdminReloadConnectorsButton(session: _session),
+                      ],
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           );
         },
       ),
@@ -286,12 +295,12 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: _session,
     builder: (context, _) {
-      if (_loading || _configuration == null) {
+      if (_configuration == null) {
         return AdminPage(
           title: _name,
           scope: _session.scopeLabel,
           child: _loading
-              ? const Center(child: CircularProgressIndicator())
+              ? StudioLoading.page(label: 'Loading connectors')
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
@@ -337,10 +346,7 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
                       const SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          semanticsLabel: 'Testing connection',
-                        ),
+                        child: StudioLoading(label: 'Testing connection'),
                       )
                     else
                       Icon(

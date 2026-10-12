@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/profile_model_defaults.dart';
@@ -138,122 +139,126 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
         ),
     ];
     final access = _edit.access;
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(
-          'New-chat defaults · Existing chats keep their model choices.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 12),
-        AdminGroup(
-          children: [
-            AdminRow(
-              title: 'Default model',
-              subtitle: data.model.hasModel
-                  ? '${data.model.provider.isEmpty ? 'Automatic provider' : data.model.provider} / ${data.model.model}'
-                  : 'No model selected',
-              icon: Icons.auto_awesome_outlined,
-              onTap: _edit.busy
-                  ? null
-                  : () async {
-                      await showProfileDefaultModelSheet(
-                        context,
-                        gateway: _profile.gateway,
-                        connectionLabel: _profile.server.connectionLabel,
-                      );
-                      if (mounted) await _edit.load();
-                    },
-            ),
-            if (fields.isNotEmpty)
+    return StudioLoadingRegion(
+      available: true,
+      busy: _edit.accessLoading,
+      label: 'Loading defaults',
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            'New-chat defaults · Existing chats keep their model choices.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          AdminGroup(
+            children: [
               AdminRow(
-                title: 'Reasoning and speed',
-                subtitle: 'Defaults supported by this model',
-                icon: Icons.speed,
+                title: 'Default model',
+                subtitle: data.model.hasModel
+                    ? '${data.model.provider.isEmpty ? 'Automatic provider' : data.model.provider} / ${data.model.model}'
+                    : 'No model selected',
+                icon: Icons.auto_awesome_outlined,
+                onTap: _edit.busy
+                    ? null
+                    : () async {
+                        await showProfileDefaultModelSheet(
+                          context,
+                          gateway: _profile.gateway,
+                          connectionLabel: _profile.server.connectionLabel,
+                        );
+                        if (mounted) await _edit.load();
+                      },
+              ),
+              if (fields.isNotEmpty)
+                AdminRow(
+                  title: 'Reasoning and speed',
+                  subtitle: 'Defaults supported by this model',
+                  icon: Icons.speed,
+                  onTap: () => adminPushProfile(
+                    context,
+                    _profile,
+                    (context, profile) => AdminSettingsPage(
+                      profile: profile,
+                      title: 'Reasoning and speed',
+                      fields: fields,
+                      expectedModel: data.model,
+                    ),
+                  ),
+                ),
+              AdminRow(
+                title: 'Fallback models',
+                subtitle: 'Ordered alternatives when a model is unavailable',
+                icon: Icons.alt_route,
                 onTap: () => adminPushProfile(
                   context,
                   _profile,
-                  (context, profile) => AdminSettingsPage(
-                    profile: profile,
-                    title: 'Reasoning and speed',
-                    fields: fields,
-                    expectedModel: data.model,
-                  ),
+                  (context, profile) => AdminFallbackPage(profile: profile),
                 ),
               ),
-            AdminRow(
-              title: 'Fallback models',
-              subtitle: 'Ordered alternatives when a model is unavailable',
-              icon: Icons.alt_route,
-              onTap: () => adminPushProfile(
+            ],
+          ),
+          if (_edit.accessError != null)
+            AdminNotice.error(_edit.accessError!, retry: _edit.refreshAccess),
+          AdminRow(
+            title: 'Account access',
+            icon: Icons.key_outlined,
+            subtitle: access?.providerId == null
+                ? 'Source unavailable · Review provider access'
+                : '${_accessLabel(access!)} · ${access.sourceLabel}',
+            onTap: () async {
+              final providerId = access?.providerId;
+              await adminPushProfile(
                 context,
                 _profile,
-                (context, profile) => AdminFallbackPage(profile: profile),
-              ),
+                (context, profile) => providerId == null
+                    ? AdminProvidersPage(profile: profile)
+                    : providerRecoveryPage(
+                        profile: profile,
+                        providerId: providerId,
+                      ),
+              );
+              if (mounted) await _edit.refreshAccess();
+            },
+          ),
+          if (fields.isEmpty)
+            const AdminNotice(
+              'Reasoning and speed capabilities were not reported for this model.',
             ),
-          ],
-        ),
-        if (_edit.accessLoading) const LinearProgressIndicator(),
-        if (_edit.accessError != null)
-          AdminNotice.error(_edit.accessError!, retry: _edit.refreshAccess),
-        AdminRow(
-          title: 'Account access',
-          icon: Icons.key_outlined,
-          subtitle: access?.providerId == null
-              ? 'Source unavailable · Review provider access'
-              : '${_accessLabel(access!)} · ${access.sourceLabel}',
-          onTap: () async {
-            final providerId = access?.providerId;
-            await adminPushProfile(
-              context,
-              _profile,
-              (context, profile) => providerId == null
-                  ? AdminProvidersPage(profile: profile)
-                  : providerRecoveryPage(
-                      profile: profile,
-                      providerId: providerId,
-                    ),
-            );
-            if (mounted) await _edit.refreshAccess();
-          },
-        ),
-        if (fields.isEmpty)
+          const SizedBox(height: 24),
+          Text('Helper models', style: Theme.of(context).textTheme.titleMedium),
           const AdminNotice(
-            'Reasoning and speed capabilities were not reported for this model.',
+            'Automatic tasks choose through Hermes. Named assignments keep their own provider.',
           ),
-        const SizedBox(height: 24),
-        Text('Helper models', style: Theme.of(context).textTheme.titleMedium),
-        const AdminNotice(
-          'Automatic tasks choose through Hermes. Named assignments keep their own provider.',
-        ),
-        AdminGroup(
-          children: [
-            for (final row in _edit.helperRows)
-              ListTile(
-                title: Text(row.assignment.task.replaceAll('_', ' ')),
-                subtitle: Text(_helperSummary(row)),
-                trailing: row.pending == null
-                    ? const Icon(Icons.chevron_right)
-                    : _pendingActions(row.assignment.task),
-                onTap: row.canChoose
-                    ? () => _chooseHelper(row.assignment.task)
-                    : null,
-              ),
-          ],
-        ),
-        if (_edit.pendingFor(null) != null)
-          ListTile(
-            title: const Text('Pending helper reset'),
-            trailing: _pendingActions(null),
+          AdminGroup(
+            children: [
+              for (final row in _edit.helperRows)
+                ListTile(
+                  title: Text(row.assignment.task.replaceAll('_', ' ')),
+                  subtitle: Text(_helperSummary(row)),
+                  trailing: row.pending == null
+                      ? const Icon(Icons.chevron_right)
+                      : _pendingActions(row.assignment.task),
+                  onTap: row.canChoose
+                      ? () => _chooseHelper(row.assignment.task)
+                      : null,
+                ),
+            ],
           ),
-        TextButton(
-          onPressed: _edit.canReset
-              ? () async =>
-                    _savedNotice(await _edit.resetHelpers(confirm: _confirm))
-              : null,
-          child: const Text('Reset all helper models'),
-        ),
-      ],
+          if (_edit.pendingFor(null) != null)
+            ListTile(
+              title: const Text('Pending helper reset'),
+              trailing: _pendingActions(null),
+            ),
+          TextButton(
+            onPressed: _edit.canReset
+                ? () async =>
+                      _savedNotice(await _edit.resetHelpers(confirm: _confirm))
+                : null,
+            child: const Text('Reset all helper models'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -266,25 +271,29 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
       builder: (context, _) => ReadRecovery(
         shouldRetry: () => _edit.canRecoverRead,
         retry: _edit.load,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_edit.loading || _edit.working) const LinearProgressIndicator(),
-            if (_edit.error != null)
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: AdminNotice.error(
-                      '${_edit.checkedAt == null ? '' : 'Last checked ${TimeOfDay.fromDateTime(_edit.checkedAt!).format(context)}. '}${_edit.error}',
-                      retry: _edit.busy || _edit.loading ? null : _edit.load,
+        child: StudioLoadingRegion(
+          available: _edit.observation != null,
+          busy: _edit.loading || _edit.working,
+          label: 'Loading defaults',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_edit.error != null)
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: AdminNotice.error(
+                        '${_edit.checkedAt == null ? '' : 'Last checked ${TimeOfDay.fromDateTime(_edit.checkedAt!).format(context)}. '}${_edit.error}',
+                        retry: _edit.busy || _edit.loading ? null : _edit.load,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            if (_edit.observation case final data?)
-              Expanded(child: _content(context, data)),
-          ],
+              if (_edit.observation case final data?)
+                Expanded(child: _content(context, data)),
+            ],
+          ),
         ),
       ),
     ),

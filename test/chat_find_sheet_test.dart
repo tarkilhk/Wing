@@ -139,7 +139,7 @@ void main() {
     await tester.pump();
     expect(find.text('Searching older messages…'), findsNothing);
     expect(find.text('Search older messages'), findsOneWidget);
-    expect(find.bySemanticsLabel('Searching messages'), findsOneWidget);
+    expect(find.bySemanticsLabel('Searching messages'), findsNothing);
     expect(
       tester
           .widget<TextButton>(

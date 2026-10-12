@@ -100,6 +100,8 @@ class ProfileActivityStatus extends StatelessWidget {
         !chat.runtime.needsInput &&
         !chat.runtime.reconnecting) {
       leading = ConversationStatusIndicator(
+        blocked: true,
+        label: 'Running command',
         running: true,
         icon: Icons.pending_outlined,
         color: color,

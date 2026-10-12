@@ -392,6 +392,8 @@ class BotGroupRuntime {
 @immutable
 class BotsSnapshot {
   BotsSnapshot({
+    required this.botsAvailable,
+    required this.groupsAvailable,
     Iterable<BotRecord> bots = const [],
     Iterable<BotGroup> groups = const [],
     this.loading = false,
@@ -409,6 +411,7 @@ class BotsSnapshot {
   final List<String> errors, groupHosts;
   final List<BotInstance> instances;
   final bool loading, busy;
+  final bool botsAvailable, groupsAvailable;
 }
 
 @immutable

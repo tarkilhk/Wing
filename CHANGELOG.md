@@ -4,6 +4,10 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Keep usable screens quiet during background refresh. Use one Wing feather
+  loading style for blocked actions, without shifting Recents, Bots or other
+  content when loading finishes.
+
 - Monitor shared group discussions across pauses between bot turns. Publish the
   latest shared reply in one replaceable notification per group; tap it to open
   the discussion. Keep unresolved input requests when newer replies arrive.

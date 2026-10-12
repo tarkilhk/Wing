@@ -43,6 +43,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   List<String> _errors = const [];
   String? _operationError;
   bool _closed = false, _loading = false, _busy = false, _visible = false;
+  bool _emptySourcesObserved = false;
   int _readGeneration = 0;
   Timer? _poll;
   Future<void>? _refreshOperation;
@@ -231,6 +232,8 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   }
 
   BotsSnapshot get state => BotsSnapshot(
+    botsAvailable: _bots.isNotEmpty || _emptySourcesObserved,
+    groupsAvailable: _groups.isNotEmpty || _emptySourcesObserved,
     bots: _rosterWithGroupActivity(),
     groups: _groups.values
         .expand((rows) => rows)
@@ -586,6 +589,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
         _ready.removeWhere((identity) => !identities.contains(identity));
       }
       final sources = _repositories!;
+      _emptySourcesObserved = sources.isEmpty;
       // Room discovery never waits for unrelated bot ownership/avatar reads.
       // Each catalog lane remains sequential across instances; appearance
       // reads share three physical slots. Publish each completed observation.

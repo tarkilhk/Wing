@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/recent_conversations/conversation_gestures.dart';
 import '../models/chat_output.dart';
 import '../models/profile_session_key.dart';
@@ -905,10 +906,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           child: SizedBox(
             width: 16,
             height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              semanticsLabel: 'Loading history',
-            ),
+            child: StudioLoading(label: 'Loading history'),
           ),
         ),
       );

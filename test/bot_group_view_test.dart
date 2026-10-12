@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/models/connection.dart';
 import 'package:wing/core/services/server_connection_status.dart';
@@ -284,27 +285,12 @@ void main() {
         expect(tester.getRect(viewport), before);
         expect(tester.getRect(reply).bottom, closeTo(bottom, .01));
         expect(find.text('Loading conversation…'), findsNothing);
-        expect(find.bySemanticsLabel('Loading conversation'), findsOneWidget);
-        expect(
-          tester
-              .getSemantics(find.byType(LinearProgressIndicator))
-              .getSemanticsData()
-              .flagsCollection
-              .isLiveRegion,
-          isTrue,
-        );
-        expect(
-          tester
-              .widget<LinearProgressIndicator>(
-                find.byType(LinearProgressIndicator),
-              )
-              .value,
-          reduced ? .5 : null,
-        );
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(find.bySemanticsLabel('Loading conversation'), findsNothing);
         waiting.complete();
         await _settleGroupMarkdown(tester);
         await tester.pump(const Duration(milliseconds: 300));
-        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(find.byType(StudioLoading), findsNothing);
         expect(tester.getRect(viewport), before);
         expect(tester.getRect(reply).bottom, closeTo(bottom, .01));
       },
@@ -1087,7 +1073,7 @@ void main() {
         );
         await tester.pump(const Duration(milliseconds: 300));
         expect(find.text('Loading conversation…'), findsNothing);
-        expect(find.byType(LinearProgressIndicator), findsOneWidget);
+        expect(find.byType(StudioLoading), findsOneWidget);
         expect(find.bySemanticsLabel('Loading conversation'), findsOneWidget);
         expect(find.byType(CircularProgressIndicator), findsNothing);
         await _render(tester, frame, 'loading-${brightness.name}-$scale');
@@ -1160,14 +1146,14 @@ void main() {
           tester.widget<ActivityShimmer>(find.byType(ActivityShimmer)).active,
           isFalse,
         );
-        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.byType(StudioLoading), findsNothing);
         await _render(tester, frame, 'approval-${brightness.name}-$scale');
         approval = false;
         await session.refresh();
         await tester.pump(const Duration(milliseconds: 300));
         reduced.value = true;
         await tester.pump();
-        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.byType(StudioLoading), findsNothing);
         expect(find.text('Bots are working…'), findsOneWidget);
         reduced.value = false;
         await tester.pump();
@@ -1232,11 +1218,11 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         expect(find.text('Sending message…'), findsOneWidget);
         expect(tester.widget<TextField>(input).readOnly, isTrue);
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.byType(StudioLoading), findsOneWidget);
         expect(
           find.descendant(
             of: find.byType(ComposerIconButton),
-            matching: find.byType(CircularProgressIndicator),
+            matching: find.byType(StudioLoading),
           ),
           findsNothing,
         );

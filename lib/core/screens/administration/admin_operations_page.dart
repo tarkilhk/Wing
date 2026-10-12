@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../../models/profile_session_key.dart';
 import '../../models/administration_operation.dart';
 import '../../services/administration_operation_session.dart';
@@ -124,88 +125,91 @@ class _AdminActionPageState extends State<AdminActionPage> {
             icon: const Icon(Icons.refresh),
           ),
       ],
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (loading)
-            const LinearProgressIndicator(semanticsLabel: 'Checking operation'),
-          if (error != null) AdminNotice.error(error),
-          if (observation.classification ==
-              AdministrationOperationOutcome.failed)
-            const StudioError('Failed')
-          else if (!hasSummary && !(checkedAt == null && loading))
-            Text(
-              observation.auditSummaryUnavailable
-                  ? 'Audit summary unavailable'
-                  : observation.outcome,
-            ),
-          if (!hasSummary &&
-              observation.classification ==
-                  AdministrationOperationOutcome.completed) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Review the findings below.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-          if (checkedAt != null && !hasSummary) ...[
-            const SizedBox(height: 8),
-            Text(
-              '${observation.terminal ? 'Checked' : 'Last updated'} ${TimeOfDay.fromDateTime(checkedAt).format(context)}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-          if (diagnosis != null) ...[
-            AdminDoctorDiagnosis(
-              diagnosis: diagnosis,
-              checkedAt: checkedAt,
-              openingFinding: _draft?.openingFinding,
-              onAskHermes:
-                  _draft?.canAsk == true && widget.onOpenSession != null
-                  ? _askHermes
-                  : null,
-            ),
-            const SizedBox(height: WingSpacing.lg),
-          ],
-          if (audit != null) ...[
-            AdminSecurityDiagnosis(report: audit, checkedAt: checkedAt),
-            const SizedBox(height: WingSpacing.lg),
-          ],
-          const SizedBox(height: 12),
-          AdminGroup(
-            children: [
-              ExpansionTile(
-                key: ValueKey(hasSummary),
-                shape: const Border(),
-                collapsedShape: const Border(),
-                initiallyExpanded: !hasSummary && !isAudit,
-                title: const Text('Diagnostic output'),
-                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: SelectableText(
-                      observation.lines.isEmpty
-                          ? 'No output yet.'
-                          : observation.lines.join('\n'),
-                      style: WingTokens.of(context).typography.mono,
-                    ),
-                  ),
-                ],
+      child: StudioLoadingRegion(
+        available: hasSummary || checkedAt != null,
+        busy: loading,
+        label: 'Checking operation',
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (error != null) AdminNotice.error(error),
+            if (observation.classification ==
+                AdministrationOperationOutcome.failed)
+              const StudioError('Failed')
+            else if (!hasSummary && !(checkedAt == null && loading))
+              Text(
+                observation.auditSummaryUnavailable
+                    ? 'Audit summary unavailable'
+                    : observation.outcome,
+              ),
+            if (!hasSummary &&
+                observation.classification ==
+                    AdministrationOperationOutcome.completed) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Review the findings below.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
-          ),
-          if (!isDiagnostic &&
-              widget.onRunAgain != null &&
-              state.canRunAgain) ...[
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: widget.onRunAgain,
-              icon: const Icon(Icons.play_arrow),
-              label: Text('Run ${widget.title} again'),
+            if (checkedAt != null && !hasSummary) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${observation.terminal ? 'Checked' : 'Last updated'} ${TimeOfDay.fromDateTime(checkedAt).format(context)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            if (diagnosis != null) ...[
+              AdminDoctorDiagnosis(
+                diagnosis: diagnosis,
+                checkedAt: checkedAt,
+                openingFinding: _draft?.openingFinding,
+                onAskHermes:
+                    _draft?.canAsk == true && widget.onOpenSession != null
+                    ? _askHermes
+                    : null,
+              ),
+              const SizedBox(height: WingSpacing.lg),
+            ],
+            if (audit != null) ...[
+              AdminSecurityDiagnosis(report: audit, checkedAt: checkedAt),
+              const SizedBox(height: WingSpacing.lg),
+            ],
+            const SizedBox(height: 12),
+            AdminGroup(
+              children: [
+                ExpansionTile(
+                  key: ValueKey(hasSummary),
+                  shape: const Border(),
+                  collapsedShape: const Border(),
+                  initiallyExpanded: !hasSummary && !isAudit,
+                  title: const Text('Diagnostic output'),
+                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SelectableText(
+                        observation.lines.isEmpty
+                            ? 'No output yet.'
+                            : observation.lines.join('\n'),
+                        style: WingTokens.of(context).typography.mono,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
+            if (!isDiagnostic &&
+                widget.onRunAgain != null &&
+                state.canRunAgain) ...[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: widget.onRunAgain,
+                icon: const Icon(Icons.play_arrow),
+                label: Text('Run ${widget.title} again'),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

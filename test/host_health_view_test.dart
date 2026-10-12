@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -119,7 +120,7 @@ void main() {
               find.bySemanticsLabel('Reading host resources'),
               findsOneWidget,
             );
-            expect(find.byType(CircularProgressIndicator), findsOneWidget);
+            expect(find.byType(StudioLoading), findsOneWidget);
             expect(
               tester
                   .widget<IconButton>(
@@ -133,7 +134,7 @@ void main() {
               isNull,
             );
           } else {
-            expect(find.byType(CircularProgressIndicator), findsNothing);
+            expect(find.byType(StudioLoading), findsNothing);
           }
           await snapshot(tester, '${brightness.name}-$scale-$scenario');
           if (scenario == 'normal') {

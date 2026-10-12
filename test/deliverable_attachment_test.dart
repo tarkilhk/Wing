@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'dart:async';
@@ -300,14 +301,14 @@ void main() {
       expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
       await tester.tap(find.byTooltip('Open preview'));
       await tester.pump();
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(StudioLoading), findsNothing);
       expect(tester.widget<IconButton>(previewButton).onPressed, isNull);
       previewPending.complete();
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Download'));
       await tester.pump();
       expect(find.byIcon(Icons.download_outlined), findsNothing);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(StudioLoading), findsOneWidget);
       expect(tester.getRect(find.byTooltip('Download')), downloadBefore);
       await tester.tap(find.byTooltip('Download'));
       expect(calls, 1);

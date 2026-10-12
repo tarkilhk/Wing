@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../models/model_choice.dart';
 import '../presentation/chat_model_labels.dart';
@@ -398,7 +399,7 @@ class _ModelChooserState extends State<ModelChooser> {
                     icon: _refreshing
                         ? const SizedBox.square(
                             dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: StudioLoading(label: 'Loading models'),
                           )
                         : const Icon(Icons.refresh_rounded, size: 20),
                   ),

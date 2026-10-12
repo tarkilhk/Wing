@@ -10,6 +10,7 @@ final class ProfileSupervisionObservation {
     required Iterable<GatewaySubagentActivity> subagents,
     required Iterable<String> unconfirmedSubagentIds,
     required this.subagentsLoading,
+    required this.subagentsAvailable,
     required this.subagentsError,
     required SessionControlSnapshot? sessionControl,
     required this.sessionControlLoading,
@@ -33,6 +34,7 @@ final class ProfileSupervisionObservation {
   final List<GatewaySubagentActivity> subagents;
   final Set<String> unconfirmedSubagentIds;
   final bool subagentsLoading;
+  final bool subagentsAvailable;
   final String? subagentsError;
   final SessionControlSnapshot? sessionControl;
   final bool sessionControlLoading, sessionControlWorking;

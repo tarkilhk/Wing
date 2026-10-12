@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -459,7 +460,7 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
-        'roster refresh stays clear of tabs in ${brightness.name} at $scale',
+        'ready roster refresh stays quiet and fixed in ${brightness.name} at $scale',
         (tester) async {
           SharedPreferences.setMockInitialValues({});
           final fixture = BotsFixture();
@@ -468,7 +469,9 @@ void main() {
           await session.refresh();
           final held = Completer<Map<String, dynamic>?>();
           fixture.readHook = (_, method, _) async =>
-              method == 'profiles.list' ? held.future : null;
+              ['profiles.list', 'groups.list'].contains(method)
+              ? held.future
+              : null;
           final refresh = session.refresh();
           var view = const BotsViewState();
           final frame = GlobalKey();
@@ -501,24 +504,23 @@ void main() {
               ),
             ),
           );
+          final searchPosition = tester.getTopLeft(
+            find.byKey(const ValueKey('bots-search')),
+          );
           for (final tab in ['Bots', 'Groups']) {
             await tester.tap(find.widgetWithText(Tab, tab));
             await tester.pump(const Duration(milliseconds: 300));
-            final progress = find.byType(LinearProgressIndicator);
-            expect(progress, findsOneWidget);
+            final progress = find.byType(StudioLoading);
+            expect(progress, findsNothing);
             expect(
-              tester.getTopLeft(progress).dy -
-                  tester.getBottomLeft(find.byType(TabBar)).dy,
-              greaterThanOrEqualTo(8),
+              tester.getTopLeft(find.byKey(const ValueKey('bots-search'))),
+              searchPosition,
             );
             expect(
-              tester.getTopLeft(find.byKey(const ValueKey('bots-search'))).dy -
-                  tester.getBottomLeft(progress).dy,
-              greaterThanOrEqualTo(16),
-            );
-            expect(
-              tester.widget<LinearProgressIndicator>(progress).semanticsLabel,
-              'Loading bots and groups',
+              tester
+                  .widget<TextField>(find.byKey(const ValueKey('bots-search')))
+                  .enabled,
+              isNot(false),
             );
             expect(
               find.text(tab == 'Bots' ? 'Atlas' : 'Research team'),
@@ -532,11 +534,16 @@ void main() {
             );
             expect(tester.takeException(), isNull);
           }
+          fixture.room['name'] = 'Updated research team';
           held.complete(null);
           await refresh;
           await tester.pumpAndSettle();
-          expect(find.byType(LinearProgressIndicator), findsNothing);
-          expect(find.text('Research team'), findsOneWidget);
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.text('Updated research team'), findsOneWidget);
+          expect(
+            tester.getTopLeft(find.byKey(const ValueKey('bots-search'))),
+            searchPosition,
+          );
           await tester.pumpWidget(const SizedBox());
         },
       );
@@ -1219,10 +1226,7 @@ void main() {
           frame,
           'group-prompt-error-${brightness.name}-$scale',
         );
-        await _revealGroup(
-          tester,
-          find.byTooltip('Generate room picture'),
-        );
+        await _revealGroup(tester, find.byTooltip('Generate room picture'));
         await tester.tap(find.byTooltip('Generate room picture'));
         await tester.pumpAndSettle();
         expect(
@@ -1440,7 +1444,7 @@ void main() {
           await tester.pump();
           await tester.drag(find.byType(ListView), const Offset(0, 1400));
           await tester.pump();
-          expect(find.byType(CircularProgressIndicator), findsOneWidget);
+          expect(find.byType(StudioLoading), findsOneWidget);
           expect(
             tester
                 .widget<IconButton>(find.byKey(const ValueKey('group-create')))
@@ -1469,7 +1473,7 @@ void main() {
           );
           held.completeError(StateError('Connection lost before confirmation'));
           await tester.pumpAndSettle();
-          expect(find.byType(CircularProgressIndicator), findsNothing);
+          expect(find.byType(StudioLoading), findsNothing);
           expect(find.text(session.state.errors.first), findsOneWidget);
           expect(
             tester

@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/activity/activity_detail_actions.dart';
 import '../../widgets/activity/skill_document_viewer.dart';
 import 'package:flutter/material.dart';
@@ -600,27 +601,30 @@ class _SkillsRead extends StatelessWidget {
       listenable: session,
       builder: (context, _) {
         final state = session.state;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (state.phase == SkillsPhase.reading || state.saving)
-              const LinearProgressIndicator(),
-            if (state.error case final error?)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: AdminNotice.error(
-                  error,
-                  retry: state.busy ? null : retry,
+        return StudioLoadingRegion(
+          available: state.hasObservation,
+          busy: state.phase == SkillsPhase.reading || state.saving,
+          label: 'Loading skills',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (state.error case final error?)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: AdminNotice.error(
+                    error,
+                    retry: state.busy ? null : retry,
+                  ),
                 ),
-              ),
-            if (state.notice case final notice?)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: AdminNotice(notice),
-              ),
-            if (state.hasObservation)
-              Expanded(key: const ValueKey('content'), child: builder(state)),
-          ],
+              if (state.notice case final notice?)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: AdminNotice(notice),
+                ),
+              if (state.hasObservation)
+                Expanded(key: const ValueKey('content'), child: builder(state)),
+            ],
+          ),
         );
       },
     ),
