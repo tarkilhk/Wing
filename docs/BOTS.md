@@ -125,6 +125,10 @@ the saved view while background reads refresh it. If a group or profile refresh
 fails, its known conversations stay available with an error; a confirmed removal
 deletes the entry.
 
+Group cards and open discussions use the same saved member artwork. While a
+member image loads, its known identity stays available; unknown member positions
+stay empty. Completed avatar reads update the card without rereading messages.
+
 Tap the instance and bot count under the title for a compact member list
 anchored beneath that row, with saved names and avatars. Tap outside or use Back
 to dismiss it. The conversation uses a group icon when no picture is saved.

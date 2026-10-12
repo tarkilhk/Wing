@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
-import '../models/bots.dart';
 import '../models/recent_conversation.dart';
 import 'recent_conversation_snapshots.dart';
 
@@ -16,7 +15,7 @@ abstract interface class RecentConversationSource implements Listenable {
   bool admits(RecentConversationKey key);
   bool opensRoute(RecentConversationKey key);
   Object previewRevision(RecentConversationKey key);
-  BotRecord? appearanceFor(RecentConversationKey key);
+  RecentConversationAppearance appearanceFor(RecentConversationKey key);
   Future<void> prepareAppearances(
     Iterable<RecentConversationKey> keys,
     bool Function() canRead,
@@ -214,12 +213,14 @@ final class RecentConversationSession extends ChangeNotifier {
   RecentConversationCard cardAt(int index) {
     final entry = entryAt(index);
     final card = _cards[entry.key];
+    final appearance = _source.appearanceFor(entry.key);
     return RecentConversationCard(
       entry: entry,
       preview: card?.preview,
       loading: card?.loading ?? false,
       error: card?.error,
-      bot: _source.appearanceFor(entry.key),
+      bot: appearance.bot,
+      groupAppearance: appearance.group,
     );
   }
 

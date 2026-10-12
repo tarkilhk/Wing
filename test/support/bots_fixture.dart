@@ -1,3 +1,6 @@
+import 'package:flutter/foundation.dart';
+import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/services/bot_group_session.dart';
 import 'dart:convert';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/bots_repository.dart';
@@ -309,4 +312,15 @@ class BotsFixture {
         throw StateError('Unexpected command $method');
     }
   }
+}
+
+/// Explicit fixed appearance observations for standalone group-session tests.
+class FixedGroupAppearances extends ChangeNotifier
+    implements BotGroupAppearanceSource {
+  FixedGroupAppearances(Iterable<BotRecord> bots)
+    : _bots = List.unmodifiable(bots);
+  final List<BotRecord> _bots;
+  @override
+  BotGroupAppearance appearanceForGroup(BotGroup group) =>
+      BotGroupAppearance.forGroup(group, _bots);
 }

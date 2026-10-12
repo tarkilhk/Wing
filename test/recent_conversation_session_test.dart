@@ -1,5 +1,4 @@
 import 'package:wing/core/services/recent_conversation_snapshots.dart';
-import 'package:wing/core/models/bots.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -70,7 +69,8 @@ class _Source extends ChangeNotifier implements RecentConversationSource {
   @override
   bool admits(RecentConversationKey key) => current && !denied.contains(key);
   @override
-  BotRecord? appearanceFor(RecentConversationKey key) => null;
+  RecentConversationAppearance appearanceFor(RecentConversationKey key) =>
+      const RecentConversationAppearance();
   @override
   Future<void> prepareAppearances(
     Iterable<RecentConversationKey> keys,

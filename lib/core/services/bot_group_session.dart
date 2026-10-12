@@ -9,6 +9,11 @@ import '../models/recent_conversation.dart';
 import 'hermes_voice.dart';
 import 'recent_conversation_snapshots.dart';
 
+/// Canonical member appearance observations, shared by live and passive views.
+abstract interface class BotGroupAppearanceSource implements Listenable {
+  BotGroupAppearance appearanceForGroup(BotGroup group);
+}
+
 /// Exact group visit and text revision captured before microphone admission.
 final class BotGroupVoiceDraft {
   const BotGroupVoiceDraft._(this._owner, this._revision, this.text);
@@ -23,21 +28,24 @@ class BotGroupSession extends ChangeNotifier {
   BotGroupSession(
     this.repository,
     BotGroup group, {
-    required Iterable<BotRecord> appearances,
+    required this.appearances,
     required this.reads,
     required this.groupMessages,
   }) : _group = group {
     repository.retain();
-    for (final member in group.members) {
-      final matches = appearances.where(
-        (bot) =>
-            bot.scope.connectionId == group.scope.connectionId &&
-            bot.scope.connectionIdentity == group.scope.connectionIdentity &&
-            bot.profile.name == member.profile,
-      );
-      if (matches.length == 1) _appearances[member.id] = matches.single;
-    }
+    _appearance = appearances.appearanceForGroup(group);
+    appearances.addListener(_appearanceChanged);
   }
+  final BotGroupAppearanceSource appearances;
+  late BotGroupAppearance _appearance;
+  void _appearanceChanged() {
+    if (_closed) return;
+    final next = appearances.appearanceForGroup(group);
+    if (_appearance == next) return;
+    _appearance = next;
+    notifyListeners();
+  }
+
   final BotGroupReadState reads;
   final RecentGroupMessages? groupMessages;
   Future<void> acknowledgeVisibleMessages(int sequence) async {
@@ -73,10 +81,10 @@ class BotGroupSession extends ChangeNotifier {
       return;
     }
     _group = next;
+    _appearance = appearances.appearanceForGroup(next);
     notifyListeners();
   }
 
-  final _appearances = <String, BotRecord>{};
   List<ComposerReference> _references = const [];
   List<ComposerReference> get composerReferences => _references;
 
@@ -89,7 +97,7 @@ class BotGroupSession extends ChangeNotifier {
           MentionCandidate(
             label: member.name,
             detail: _memberToken(member),
-            appearance: _appearances[member.id],
+            appearance: appearance(member.profile),
             reference: ComposerReference(
               kind: ComposerReferenceKind.agent,
               token: _memberToken(member),
@@ -201,7 +209,9 @@ class BotGroupSession extends ChangeNotifier {
   final _events = <int, BotGroupEvent>{};
   BotRecord? appearance(String profile) {
     final matches = group.members.where((member) => member.profile == profile);
-    return matches.length == 1 ? _appearances[matches.single.id] : null;
+    return matches.length == 1
+        ? _appearance.byHandle[matches.single.handle]
+        : null;
   }
 
   BotGroupRuntime? _runtime;
@@ -442,6 +452,7 @@ class BotGroupSession extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    appearances.removeListener(_appearanceChanged);
     _poll?.cancel();
     repository.release();
     super.dispose();

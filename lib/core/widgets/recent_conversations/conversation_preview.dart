@@ -244,7 +244,7 @@ class ConversationCardPlaceholder extends StatelessWidget {
                     title: card.entry.group!.name,
                     avatar: BotGroupIdentity(
                       group: card.entry.group!,
-                      bots: card.preview?.group?.appearances.values ?? const [],
+                      bots: card.groupAppearance.byHandle.values,
                       size: 32,
                     ),
                   )
@@ -292,7 +292,7 @@ class _SavedGroupPageState extends State<_SavedGroupPage> {
     });
     return BotGroupConversation(
       group: group,
-      appearances: preview?.appearances.values ?? const [],
+      appearances: widget.card.groupAppearance.byHandle.values,
       onBack: () {},
       actions: [
         IconButton(
@@ -317,7 +317,10 @@ class _SavedGroupPageState extends State<_SavedGroupPage> {
             : BotGroupMessage(
                 group: group,
                 message: messages[index],
-                appearance: preview?.appearances[messages[index].senderHandle],
+                appearance: widget
+                    .card
+                    .groupAppearance
+                    .byHandle[messages[index].senderHandle],
                 loadImages: false,
               ),
       ),

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'dart:async';
@@ -576,6 +577,220 @@ void main() {
   }
 
   test(
+    'cold group cards prepare canonical member identity while presence waits',
+    () async {
+      final roomFixture = BotsFixture();
+      roomFixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': DateTime.now().millisecondsSinceEpoch / 1000,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Saved group reply'},
+      });
+      final started = Completer<void>(), release = Completer<void>();
+      roomFixture.readHook = (_, method, _) async {
+        if (method == 'session.active_list') {
+          if (!started.isCompleted) started.complete();
+          await release.future;
+        }
+        return null;
+      };
+      final bots = BotsSession((_) async => [roomFixture.repository]);
+      final recents = WorkspaceRecentsSession(controller, bots);
+      final refresh = bots.refresh();
+      addTearDown(() async {
+        if (!release.isCompleted) release.complete();
+        await refresh;
+        recents.dispose();
+        bots.dispose();
+      });
+      await started.future;
+      await Future<void>.delayed(Duration.zero);
+      final room = recents.catalog.entries.singleWhere(
+        (entry) => entry.group != null,
+      );
+      final activity = ValueNotifier<ChatNoticeActivity?>(null);
+      addTearDown(activity.dispose);
+      final visit = controller.recentConversationSession(
+        recents: recents,
+        entries: recents.catalog.entries,
+        onOpenGroup: (_) async {},
+        activity: activity,
+      );
+      addTearDown(visit.dispose);
+      visit.activate();
+      visit.prepare([room.key]);
+      for (var i = 0; i < 4; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final card = visit.cardAt(
+        visit.entries.indexWhere((entry) => entry.key == room.key),
+      );
+      expect(
+        card.groupAppearance.byHandle.keys,
+        containsAll(['bot_atlas', 'bot_mira']),
+      );
+      expect(card.groupAppearance.byHandle['bot_atlas']!.title, 'Atlas');
+      expect(bots.state.loading, isTrue);
+      expect(roomFixture.commands, isEmpty);
+    },
+  );
+
+  test(
+    'group avatar changes replace pixels without rereading group messages',
+    () async {
+      final roomFixture = BotsFixture();
+      roomFixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': DateTime.now().millisecondsSinceEpoch / 1000,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Saved group reply'},
+      });
+      var logs = 0;
+      roomFixture.readHook = (_, method, _) async {
+        if (method == 'groups.log') logs++;
+        return null;
+      };
+      final bots = BotsSession((_) async => [roomFixture.repository]);
+      final recents = WorkspaceRecentsSession(controller, bots);
+      addTearDown(bots.dispose);
+      addTearDown(recents.dispose);
+      await bots.refresh();
+      await Future<void>.delayed(Duration.zero);
+      final room = recents.catalog.entries.singleWhere(
+        (entry) => entry.group != null,
+      );
+      final activity = ValueNotifier<ChatNoticeActivity?>(null);
+      addTearDown(activity.dispose);
+      final visit = controller.recentConversationSession(
+        recents: recents,
+        entries: recents.catalog.entries,
+        onOpenGroup: (_) async {},
+        activity: activity,
+      );
+      addTearDown(visit.dispose);
+      visit.activate();
+      visit.prepare([room.key]);
+      for (var i = 0; i < 4; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final index = visit.entries.indexWhere((entry) => entry.key == room.key);
+      final before = visit.cardRevision(room.key),
+          data = visit.previewRevision(room.key);
+      final reading = visit.cardAt(index).preview!;
+      final reads = logs;
+      final roster = await roomFixture.repository.bots();
+      roomFixture.profiles.first['ui_meta']['hermes-bots']['title'] =
+          'Resolved Atlas';
+      bots.invalidateAppearances();
+      await bots.appearancesForProfiles([
+        roster.first.scope,
+      ], canRead: () => true);
+      await Future<void>.delayed(Duration.zero);
+      expect(visit.cardRevision(room.key), isNot(before));
+      expect(visit.previewRevision(room.key), data);
+      expect(visit.cardAt(index).preview, same(reading));
+      expect(
+        visit.cardAt(index).groupAppearance.byHandle['bot_atlas']!.title,
+        'Resolved Atlas',
+      );
+      expect(logs, reads);
+      expect(roomFixture.commands, isEmpty);
+    },
+  );
+
+  test(
+    'group identity publishes all members before a held shared avatar',
+    () async {
+      final roomFixture = BotsFixture();
+      roomFixture.profiles.first['has_avatar'] = true;
+      roomFixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': DateTime.now().millisecondsSinceEpoch / 1000,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Saved group reply'},
+      });
+      final started = Completer<void>(), release = Completer<void>();
+      var assets = 0, logs = 0;
+      const png =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=';
+      roomFixture.readHook = (_, method, _) async {
+        if (method == 'groups.log') logs++;
+        if (method == 'profiles.get_asset') {
+          assets++;
+          if (!started.isCompleted) started.complete();
+          await release.future;
+          return {'found': true, 'data': png};
+        }
+        return null;
+      };
+      final bots = BotsSession((_) async => [roomFixture.repository]);
+      final recents = WorkspaceRecentsSession(controller, bots);
+      final refresh = bots.refresh();
+      addTearDown(() async {
+        if (!release.isCompleted) release.complete();
+        await refresh;
+        recents.dispose();
+        bots.dispose();
+      });
+      await started.future;
+      await Future<void>.delayed(Duration.zero);
+      final room = recents.catalog.entries.singleWhere((e) => e.group != null);
+      final activity = ValueNotifier<ChatNoticeActivity?>(null);
+      addTearDown(activity.dispose);
+      final visit = controller.recentConversationSession(
+        recents: recents,
+        entries: recents.catalog.entries,
+        onOpenGroup: (_) async {},
+        activity: activity,
+      );
+      addTearDown(visit.dispose);
+      visit.activate();
+      visit.prepare([room.key]);
+      for (var i = 0; i < 6; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final index = visit.entries.indexWhere((e) => e.key == room.key);
+      expect(
+        visit.cardAt(index).groupAppearance.byHandle.keys,
+        containsAll(['bot_atlas', 'bot_mira']),
+      );
+      expect(
+        visit.cardAt(index).groupAppearance.byHandle['bot_atlas']!.avatar,
+        isNull,
+      );
+      final before = visit.cardRevision(room.key),
+          reading = visit.cardAt(index).preview!;
+      final reads = logs;
+      expect(
+        assets,
+        1,
+        reason:
+            'Roster and card preparation must share one physical avatar request',
+      );
+      release.complete();
+      await refresh;
+      for (var i = 0; i < 4; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(
+        visit.cardAt(index).groupAppearance.byHandle['bot_atlas']!.avatar,
+        orderedEquals(base64Decode(png)),
+      );
+      expect(visit.cardRevision(room.key), isNot(before));
+      expect(visit.cardAt(index).preview, same(reading));
+      expect(logs, reads);
+      expect(assets, 1);
+      expect(roomFixture.commands, isEmpty);
+    },
+  );
+
+  test(
     'pinch catalog matches merged Recents freshness order including rooms',
     () async {
       final botFixture = BotsFixture();
@@ -637,7 +852,7 @@ void main() {
         List.generate(6, (i) => 'Group answer ${115 + i}'),
       );
       expect(
-        visit.cardAt(index).preview!.group!.appearances.keys,
+        visit.cardAt(index).groupAppearance.byHandle.keys,
         contains('bot_atlas'),
       );
       expect(visit.previewRevision(room.key), revision);

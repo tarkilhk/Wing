@@ -96,11 +96,7 @@ class BotGroupPicture extends StatelessWidget {
               left: origin.dx + point.dx * avatarSize,
               top: origin.dy + point.dy * avatarSize,
               child: bot == null
-                  ? Icon(
-                      Icons.smart_toy_outlined,
-                      size: avatarSize,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    )
+                  ? SizedBox.square(dimension: avatarSize)
                   : BotAvatar(
                       name: bot.title,
                       shape: bot.shape,

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:wing/core/services/recent_conversation_snapshots.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'package:wing/core/models/bots.dart';
@@ -113,9 +114,14 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
   @override
   bool admits(RecentConversationKey key) => current;
   final appearances = <RecentConversationKey, BotRecord>{};
+  final groupAppearances = <RecentConversationKey, BotGroupAppearance>{};
   int appearancePreparations = 0;
   @override
-  BotRecord? appearanceFor(RecentConversationKey key) => appearances[key];
+  RecentConversationAppearance appearanceFor(RecentConversationKey key) =>
+      RecentConversationAppearance(
+        bot: appearances[key],
+        group: groupAppearances[key] ?? const BotGroupAppearance.empty(),
+      );
   @override
   Future<void> prepareAppearances(
     Iterable<RecentConversationKey> keys,
@@ -368,6 +374,30 @@ void main() {
     }
   });
 
+  testWidgets('shared group identity never invents unresolved member avatars', (
+    tester,
+  ) async {
+    final fixture = BotsFixture();
+    final group = (await fixture.repository.groups(groupMessages: null)).single;
+    final roster = await fixture.repository.bots();
+    Widget render(Iterable<BotRecord> bots) => MaterialApp(
+      theme: wingTheme(Brightness.dark),
+      home: Scaffold(
+        body: BotGroupIdentity(group: group, bots: bots, size: 32),
+      ),
+    );
+    await tester.pumpWidget(render(const []));
+    expect(find.byIcon(Icons.smart_toy_outlined), findsNothing);
+    expect(find.byType(BotAvatar), findsNothing);
+    await tester.pumpWidget(render([roster.first]));
+    expect(find.byIcon(Icons.smart_toy_outlined), findsNothing);
+    expect(find.byType(BotAvatar), findsOneWidget);
+    await tester.pumpWidget(render(roster));
+    expect(find.byIcon(Icons.smart_toy_outlined), findsNothing);
+    expect(find.byType(BotAvatar), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('group passive card ${brightness.name} $scale', (
@@ -399,6 +429,7 @@ void main() {
                 connectionLabel: 'Home server',
                 card: RecentConversationCard(
                   entry: entry,
+                  groupAppearance: BotGroupAppearance.forGroup(group, roster),
                   preview: RecentConversationPreview(
                     entry: entry,
                     reading: TranscriptReadingSnapshot(
@@ -418,12 +449,6 @@ void main() {
                           timestamp: DateTime(2026, 10, 12),
                         ),
                       ],
-                      appearances: {
-                        for (final member in group.members)
-                          member.handle: roster.singleWhere(
-                            (bot) => bot.profile.name == member.profile,
-                          ),
-                      },
                     ),
                   ),
                 ),
@@ -648,6 +673,7 @@ void main() {
       double textScale = 1,
       GlobalKey? frame,
       Widget Function(RecentConversationCard)? buildPreview,
+      Widget? liveChild,
       bool dormant = false,
     }) async {
       if (!dormant) await session.select(source.selected);
@@ -688,32 +714,36 @@ void main() {
                         ),
                       ),
                     ),
-                child: Scaffold(
-                  body: ConversationGestureBoundary(
-                    child: ColoredBox(
-                      color: Theme.of(context).colorScheme.surface,
-                      child: Column(
-                        children: [
-                          Text(
-                            'Mounted conversation ${source.selected.chat!.sessionId}',
+                child:
+                    liveChild ??
+                    Scaffold(
+                      body: ConversationGestureBoundary(
+                        child: ColoredBox(
+                          color: Theme.of(context).colorScheme.surface,
+                          child: Column(
+                            children: [
+                              Text(
+                                'Mounted conversation ${source.selected.chat!.sessionId}',
+                              ),
+                              const ConversationGestureBoundary(
+                                blocked: true,
+                                child: SizedBox(
+                                  height: 150,
+                                  child: Center(
+                                    child: Text('Selectable message'),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: ListView(
+                                  children: const [SizedBox(height: 1800)],
+                                ),
+                              ),
+                            ],
                           ),
-                          const ConversationGestureBoundary(
-                            blocked: true,
-                            child: SizedBox(
-                              height: 150,
-                              child: Center(child: Text('Selectable message')),
-                            ),
-                          ),
-                          Expanded(
-                            child: ListView(
-                              children: const [SizedBox(height: 1800)],
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
               ),
             ),
           ),
@@ -1116,6 +1146,114 @@ void main() {
       pending.complete(source._readyPreview(entry));
       await _finishFrames(tester);
     });
+
+    testWidgets(
+      'group appearance replaces shared pixels without another preview read',
+      (tester) async {
+        final fixture = BotsFixture();
+        final group = (await fixture.repository.groups(
+          groupMessages: null,
+        )).single;
+        final entry = RecentConversationEntry.group(group);
+        source.entries[1] = entry;
+        final builds = <BotGroupAppearance>[];
+        await mount(
+          tester,
+          buildPreview: (card) {
+            if (card.entry.key == entry.key) builds.add(card.groupAppearance);
+            return ConversationPreview(card: card, connectionLabel: 'Host');
+          },
+        );
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        final pixels = find.byKey(ValueKey((entry.key, 'snapshot')));
+        expect(pixels, findsOneWidget);
+        final old = tester.widget<RawImage>(pixels).image!;
+        final reads = source.previewReads;
+        expect(builds.last.byHandle, isEmpty);
+        final roster = await fixture.repository.bots();
+        source.groupAppearances[entry.key] = BotGroupAppearance.forGroup(
+          group,
+          roster,
+        );
+        source.notifyListeners();
+        await tester.pump();
+        expect(tester.widget<RawImage>(pixels).image, same(old));
+        await _finishFrames(tester);
+        expect(
+          builds.last.byHandle.keys,
+          containsAll(['bot_atlas', 'bot_mira']),
+        );
+        expect(tester.widget<RawImage>(pixels).image, isNot(same(old)));
+        expect(old.debugDisposed, isTrue);
+        expect(source.previewReads, reads);
+        final ready = tester.widget<RawImage>(pixels).image!;
+        switcher.currentState!.dismissStack();
+        await _finishFrames(tester);
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        expect(tester.widget<RawImage>(pixels).image, same(ready));
+        expect(source.previewReads, reads);
+      },
+    );
+
+    testWidgets(
+      'genuine viewport refreshes identity after returning without replacing it while parked',
+      (tester) async {
+        final key = source.selected;
+        final fixture = BotsFixture();
+        source.appearances[key] = (await fixture.repository.bots()).first;
+        final child = ListenableBuilder(
+          listenable: source,
+          builder: (context, _) => Scaffold(
+            body: Center(child: Text(source.appearances[key]!.title)),
+          ),
+        );
+        await mount(tester, liveChild: child);
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        final pixels = find.byKey(ValueKey((key, 'snapshot')));
+        final old = tester.widget<RawImage>(pixels).image!;
+        final oldBytes = await tester.runAsync(
+          () => old.toByteData(format: ui.ImageByteFormat.png),
+        );
+        fixture.profiles.first['ui_meta']['hermes-bots']['title'] =
+            'Resolved Atlas with current identity';
+        source.appearances[key] = (await fixture.repository.bots()).first;
+        source.notifyListeners();
+        await _finishFrames(tester);
+        expect(
+          tester.widget<RawImage>(pixels).image,
+          same(old),
+          reason:
+              'Parked actual viewport must not be replaced by a reconstruction',
+        );
+        switcher.currentState!.dismissStack();
+        await _finishFrames(tester);
+        expect(
+          find.text('Resolved Atlas with current identity'),
+          findsOneWidget,
+        );
+        final reads = source.historyReads;
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        final next = tester.widget<RawImage>(pixels).image!;
+        expect(next, isNot(same(old)));
+        final nextBytes = await tester.runAsync(
+          () => next.toByteData(format: ui.ImageByteFormat.png),
+        );
+        expect(
+          listEquals(
+            oldBytes!.buffer.asUint8List(),
+            nextBytes!.buffer.asUint8List(),
+          ),
+          isFalse,
+          reason:
+              'New actual viewport pixels must contain the resolved identity',
+        );
+        expect(source.historyReads, reads);
+      },
+    );
 
     testWidgets('resizing the stack restarts its image batch', (tester) async {
       await mount(tester);

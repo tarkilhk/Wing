@@ -4,6 +4,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Use saved group member artwork in Recents cards, update it when avatars arrive,
+  and share the same appearance preparation and screenshot revisions with chats.
+
 - Keep known chats and group discussions in Recents when a refresh fails. Share
   the cached conversation list, screenshots and recent group messages across
   visits, and reuse prepared cards while background refreshes run.

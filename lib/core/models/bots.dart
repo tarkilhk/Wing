@@ -87,25 +87,33 @@ class BotRecord {
   );
 
   /// Adopt a confirmed asset write independently of metadata acknowledgements.
-  BotRecord withAvatar(Uint8List? image) => BotRecord(
-    scope: scope,
-    instance: instance,
-    profile: profile,
-    title: title,
-    shape: shape,
-    color: color,
-    pinned: pinned,
-    hidden: hidden,
-    hasAvatar: image != null,
-    revision: revision,
-    metadata: metadata,
-    chat: chat,
-    resolvedChat: resolvedChat,
-    workerLastActive: workerLastActive,
-    preview: preview,
-    presence: presence,
-    avatar: image,
-  );
+  BotRecord withAvatar(Uint8List? image) =>
+      _withAvatar(image, hasAvatar: image != null);
+
+  /// Reading an asset does not change Hermes's saved has-avatar metadata.
+  BotRecord withObservedAvatar(Uint8List? image) =>
+      _withAvatar(image, hasAvatar: hasAvatar);
+
+  BotRecord _withAvatar(Uint8List? image, {required bool hasAvatar}) =>
+      BotRecord(
+        scope: scope,
+        instance: instance,
+        profile: profile,
+        title: title,
+        shape: shape,
+        color: color,
+        pinned: pinned,
+        hidden: hidden,
+        hasAvatar: hasAvatar,
+        revision: revision,
+        metadata: metadata,
+        chat: chat,
+        resolvedChat: resolvedChat,
+        workerLastActive: workerLastActive,
+        preview: preview,
+        presence: presence,
+        avatar: image,
+      );
 
   BotRecord withMetadata({
     required Map<String, Object?> metadata,
@@ -148,6 +156,39 @@ class BotGroupMember {
 }
 
 @immutable
+/// Immutable member display observations borrowed from the canonical owner.
+final class BotGroupAppearance {
+  const BotGroupAppearance.empty() : byHandle = const {};
+  BotGroupAppearance._(Map<String, BotRecord> appearances)
+    : byHandle = Map.unmodifiable(appearances);
+
+  factory BotGroupAppearance.forGroup(
+    BotGroup group,
+    Iterable<BotRecord> bots,
+  ) {
+    final appearances = <String, BotRecord>{};
+    for (final member in group.members) {
+      final matches = bots.where(
+        (bot) =>
+            bot.scope.connectionId == group.scope.connectionId &&
+            bot.scope.connectionIdentity == group.scope.connectionIdentity &&
+            bot.profile.name == member.profile,
+      );
+      if (matches.length == 1) appearances[member.handle] = matches.single;
+    }
+    return BotGroupAppearance._(appearances);
+  }
+
+  final Map<String, BotRecord> byHandle;
+  @override
+  bool operator ==(Object other) =>
+      other is BotGroupAppearance && mapEquals(byHandle, other.byHandle);
+  @override
+  int get hashCode => Object.hashAllUnordered(
+    byHandle.entries.map((entry) => Object.hash(entry.key, entry.value)),
+  );
+}
+
 class BotGroup {
   BotGroup({
     required this.scope,

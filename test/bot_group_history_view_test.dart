@@ -129,7 +129,7 @@ void main() {
                   group,
                   reads: BotGroupReadState(),
                   groupMessages: null,
-                  appearances: appearances,
+                  appearances: FixedGroupAppearances(appearances),
                 ),
               ),
             ),

@@ -29,6 +29,53 @@ class _AvatarPicker extends BotAvatarIo {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test(
+    'live groups borrow the same canonical appearance updates as cards',
+    () async {
+      final fixture = BotsFixture();
+      final bots = BotsSession((_) async => [fixture.repository]);
+      addTearDown(bots.dispose);
+      await bots.refresh();
+      final group = bots.observedGroups.single;
+      final visit = bots.openGroup(group);
+      addTearDown(visit.dispose);
+      var changes = 0;
+      visit.addListener(() => changes++);
+      expect(visit.appearance('atlas')!.title, 'Atlas');
+      final unchanged = bots.appearanceForGroup(group);
+      await bots.refresh();
+      expect(bots.appearanceForGroup(group), unchanged);
+      expect(
+        changes,
+        0,
+        reason: 'An unchanged roster must retain canonical group identity',
+      );
+      final roster = await fixture.repository.bots();
+      fixture.profiles.first['ui_meta']['hermes-bots']['title'] =
+          'Resolved Atlas';
+      bots.invalidateAppearances();
+      await bots.appearancesForProfiles([
+        roster.first.scope,
+      ], canRead: () => true);
+      expect(visit.appearance('atlas')!.title, 'Resolved Atlas');
+      expect(
+        visit.appearance('atlas'),
+        same(bots.appearanceForGroup(group).byHandle['bot_atlas']),
+      );
+      expect(changes, greaterThan(0));
+      final before = changes;
+      await bots.appearancesForProfiles([
+        roster.last.scope,
+      ], canRead: () => true);
+      expect(
+        changes,
+        before,
+        reason: 'Unrelated bot metadata must not redraw the group',
+      );
+      expect(fixture.commands, isEmpty);
+    },
+  );
+
   test('passive group preview reuses the discovery message tail', () async {
     final fixture = BotsFixture();
     final groupMessages = RecentGroupMessages();
@@ -55,7 +102,7 @@ void main() {
     final preview = BotGroupSession(
       fixture.repository,
       group,
-      appearances: const [],
+      appearances: FixedGroupAppearances(const []),
       reads: BotGroupReadState(),
       groupMessages: groupMessages,
     );
@@ -298,7 +345,7 @@ void main() {
       final preview = BotGroupSession(
         fixture.repository,
         group,
-        appearances: const [],
+        appearances: FixedGroupAppearances(const []),
         reads: BotGroupReadState(),
         groupMessages: null,
       );
@@ -343,7 +390,7 @@ void main() {
       final preview = BotGroupSession(
         fixture.repository,
         group,
-        appearances: const [],
+        appearances: FixedGroupAppearances(const []),
         reads: BotGroupReadState(),
         groupMessages: groupMessages,
       );
@@ -406,7 +453,7 @@ void main() {
         fixture.repository,
         current,
         groupMessages: groupMessages,
-        appearances: const [],
+        appearances: FixedGroupAppearances(const []),
         reads: BotGroupReadState(),
       );
       addTearDown(visit.dispose);
@@ -453,7 +500,7 @@ void main() {
         fixture.repository,
         group,
         groupMessages: null,
-        appearances: const [],
+        appearances: FixedGroupAppearances(const []),
         reads: BotGroupReadState(),
       )..setVisible(true);
       final session = open();
@@ -1710,7 +1757,7 @@ void main() {
         fixture.repository,
         group,
         groupMessages: null,
-        appearances: [foreign, roster[1], roster[1]],
+        appearances: FixedGroupAppearances([foreign, roster[1], roster[1]]),
 
         reads: BotGroupReadState(),
       );
@@ -1751,7 +1798,7 @@ void main() {
         group,
         reads: BotGroupReadState(),
         groupMessages: null,
-        appearances: const [],
+        appearances: FixedGroupAppearances(const []),
       );
       addTearDown(session.dispose);
       final waiting = Completer<void>();
@@ -1793,7 +1840,7 @@ void main() {
         group,
         reads: BotGroupReadState(),
         groupMessages: null,
-        appearances: const [],
+        appearances: FixedGroupAppearances(const []),
       );
       addTearDown(session.dispose);
       expect(await session.send('Hello @bot_atlas'), false);
@@ -1822,7 +1869,7 @@ void main() {
         fixture.repository,
         group,
         groupMessages: null,
-        appearances: const [],
+        appearances: FixedGroupAppearances(const []),
 
         reads: BotGroupReadState(),
       );
@@ -1865,7 +1912,7 @@ void main() {
         fixture.repository,
         group,
         groupMessages: null,
-        appearances: const [],
+        appearances: FixedGroupAppearances(const []),
 
         reads: BotGroupReadState(),
       );
@@ -1908,7 +1955,7 @@ void main() {
       fixture.repository,
       group,
       groupMessages: null,
-      appearances: const [],
+      appearances: FixedGroupAppearances(const []),
 
       reads: BotGroupReadState(),
     );
@@ -1948,7 +1995,7 @@ void main() {
         fixture.repository,
         group,
         groupMessages: null,
-        appearances: const [],
+        appearances: FixedGroupAppearances(const []),
 
         reads: BotGroupReadState(),
       );
@@ -1984,7 +2031,7 @@ void main() {
       fixture.repository,
       group,
       groupMessages: null,
-      appearances: const [],
+      appearances: FixedGroupAppearances(const []),
 
       reads: BotGroupReadState(),
     );

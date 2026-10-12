@@ -284,8 +284,9 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       ..addAll(widget.session.keysAround(_focusedIndex));
     _completed.clear();
     for (final key in _initialBatch) {
-      if (_snapshots.imageFor(key) != null &&
-          _snapshots.revisionFor(key) == _snapshotRevision(key)) {
+      if (_preservesMountedViewport(key) ||
+          _snapshots.imageFor(key) != null &&
+              _snapshots.revisionFor(key) == _snapshotRevision(key)) {
         _completeCard(key);
       }
     }
@@ -376,7 +377,8 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
         final revision = _snapshotRevision(key);
         // Retain the last usable pixels while refreshing this same identity.
         // record() replaces/disposes them atomically after a completed paint.
-        if (snapshots.imageFor(key) != null &&
+        if (_preservesMountedViewport(key) ||
+            snapshots.imageFor(key) != null &&
                 snapshots.revisionFor(key) == revision ||
             _failures[key] == revision) {
           _completeCard(key);
@@ -513,9 +515,15 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   int _captureBytes(double ratio) =>
       (_size.width * ratio).ceil() * (_size.height * ratio).ceil() * 4;
 
-  Object _snapshotRevision(RecentConversationKey key) => _snapshots.isLive(key)
-      ? widget.session.previewRevision(key)
-      : widget.session.cardRevision(key);
+  Object _snapshotRevision(RecentConversationKey key) =>
+      widget.session.cardRevision(key);
+
+  // Keep the genuine viewport while its live subtree is parked beneath cards.
+  // The next opening captures its completed real paint with current identity.
+  bool _preservesMountedViewport(RecentConversationKey key) =>
+      key == widget.chatKey &&
+      _snapshots.isLive(key) &&
+      _snapshots.imageFor(key) != null;
 
   bool _imagesPending(BuildContext? subtree) {
     var pending = false;
@@ -530,6 +538,10 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   }
 
   void _captureLive() {
+    if (_snapshots.revisionFor(widget.chatKey) !=
+        widget.session.cardRevision(widget.chatKey)) {
+      _liveDirty = true;
+    }
     if (_liveCapture != null || !_liveDirty || _active || _size.isEmpty) return;
     final boundary = _liveBoundary.currentContext?.findRenderObject();
     if (boundary is! RenderRepaintBoundary || !boundary.attached) return;
@@ -539,7 +551,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     final environment = _renderEnvironment;
     final insets = _liveInsets;
     final size = _size;
-    final revision = session.previewRevision(key);
+    final revision = session.cardRevision(key);
     final ratio = _captureRatio();
     final bytes = _captureBytes(ratio);
     snapshots.reserve(bytes);
@@ -562,7 +574,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
               environment != _renderEnvironment ||
               insets != _liveInsets ||
               size != _size ||
-              revision != session.previewRevision(key)) {
+              revision != session.cardRevision(key)) {
             image?.dispose();
             return;
           }
@@ -1152,7 +1164,12 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     if (_placeholders.length >= 6 && !_placeholders.containsKey(key)) {
       _placeholders.remove(_placeholders.keys.first);
     }
-    final revision = (card.entry.title, card.entry.group, card.bot);
+    final revision = (
+      card.entry.title,
+      card.entry.group,
+      card.bot,
+      card.groupAppearance,
+    );
     final previous = _placeholders[key];
     if (previous?.revision == revision) return previous!.child;
     final child = RepaintBoundary(

@@ -19,7 +19,7 @@ typedef BotsSources =
 
 /// Owns the cross-instance roster and mutation lifetime, independent of the
 /// currently selected chat profile. Failed refreshes retain usable observations.
-class BotsSession extends ChangeNotifier {
+class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   BotsSession(
     this._sources, {
     Future<BotsPreferences> Function()? loadPreferences,
@@ -83,6 +83,31 @@ class BotsSession extends ChangeNotifier {
   BotRecord? cachedAppearance(ProfileSessionKey key) {
     final scope = _appearanceKeys[key];
     return scope == null ? null : _appearanceCache[scope];
+  }
+
+  @override
+  BotGroupAppearance appearanceForGroup(BotGroup group) {
+    if (_closed) return const BotGroupAppearance.empty();
+    final known = <BotRecord>[];
+    for (final profile
+        in group.members.map((member) => member.profile).toSet()) {
+      final scope = WorkspaceScope(
+        connectionId: group.scope.connectionId,
+        connectionIdentity: group.scope.connectionIdentity,
+        profileName: profile,
+      );
+      final cached = _appearanceCache[scope];
+      if (cached != null) {
+        known.add(cached);
+      } else {
+        known.addAll(
+          (_bots[group.scope.connectionIdentity] ?? const <BotRecord>[]).where(
+            (bot) => bot.scope == scope,
+          ),
+        );
+      }
+    }
+    return BotGroupAppearance.forGroup(group, known);
   }
 
   bool _sameAppearanceMetadata(BotRecord a, BotRecord b) =>
@@ -166,6 +191,39 @@ class BotsSession extends ChangeNotifier {
     }
   }
 
+  Future<BotRecord?> _sharedAppearanceRead(
+    BotsRepository source,
+    BotRecord bot,
+    bool Function() canRead,
+  ) async {
+    if (!canRead()) return null;
+    final cached = _appearanceCache[bot.scope];
+    if (cached != null &&
+        _sameAppearanceMetadata(cached, bot) &&
+        _avatarRead.contains(bot.scope)) {
+      return bot.withObservedAvatar(cached.avatar);
+    }
+    final admissions = _appearanceAdmissions.putIfAbsent(bot.scope, () => {});
+    admissions.add(canRead);
+    final read = _appearanceReads.putIfAbsent(
+      bot.scope,
+      () => _readAppearance(
+        source,
+        bot,
+        () => !_closed && admissions.any((admit) => admit()),
+      ),
+    );
+    try {
+      return await read;
+    } finally {
+      admissions.remove(canRead);
+      if (identical(_appearanceReads[bot.scope], read)) {
+        _appearanceReads.remove(bot.scope);
+        _appearanceAdmissions.remove(bot.scope);
+      }
+    }
+  }
+
   BotsSnapshot get state => BotsSnapshot(
     bots: _rosterWithGroupActivity(),
     groups: _groups.values
@@ -216,15 +274,32 @@ class BotsSession extends ChangeNotifier {
       .where((group) => group.key == key)
       .firstOrNull;
 
-  /// Capture already enriched roster appearance for this room visit. Typing
-  /// references never starts another roster or avatar read.
-  BotGroupSession openGroup(BotGroup group) => BotGroupSession(
-    repository(group.scope.connectionIdentity),
-    group,
-    groupMessages: _groupMessages,
-    appearances: _bots[group.scope.connectionIdentity] ?? const [],
-    reads: groupReads,
-  );
+  /// Borrow canonical identity for live and passive room visits. References
+  /// observe the same owner without starting roster or avatar reads.
+  BotGroupSession openGroup(BotGroup group) {
+    final version = _appearanceVersion;
+    for (final bot in appearanceForGroup(group).byHandle.values) {
+      // A roster observation is already enriched; admit it once to the same
+      // canonical cache. Existing pending observations keep their asset fence.
+      if (!_appearanceCache.containsKey(bot.scope)) {
+        _cacheAppearance(bot, assetRead: true);
+      }
+    }
+    if (version != _appearanceVersion) {
+      // A live visit can be created during route composition. Borrowers see
+      // canonical facts now; publish after that attaching caller returns.
+      scheduleMicrotask(() {
+        if (!_closed) notifyListeners();
+      });
+    }
+    return BotGroupSession(
+      repository(group.scope.connectionIdentity),
+      group,
+      groupMessages: _groupMessages,
+      appearances: this,
+      reads: groupReads,
+    );
+  }
 
   /// Screen identity is the profile, independent of its canonical conversation.
   /// Resolve actual roster metadata from the captured instance; opening a screen
@@ -384,11 +459,11 @@ class BotsSession extends ChangeNotifier {
         try {
           final roster = await _appearanceRoster(source);
           if (!current()) return const {};
-          for (final bot in roster) {
+          Future<void> prepareBot(BotRecord bot) async {
             final owned = matching.where((key) => matches(bot, key)).toList();
-            if (owned.isEmpty) continue;
+            if (owned.isEmpty) return;
             if (!enrich) {
-              if (!admit()) continue;
+              if (!admit()) return;
               final cached = _appearanceCache[bot.scope];
               final identity =
                   cached != null && _sameAppearanceMetadata(cached, bot)
@@ -397,7 +472,7 @@ class BotsSession extends ChangeNotifier {
               for (final key in owned) {
                 appearances[key] = identity;
               }
-              continue;
+              return;
             }
             var appearance = _appearanceCache[bot.scope];
             if (appearance == null ||
@@ -413,30 +488,8 @@ class BotsSession extends ChangeNotifier {
               notifyListeners();
             }
             if (!_avatarRead.contains(bot.scope) && admit()) {
-              final admissions = _appearanceAdmissions.putIfAbsent(
-                bot.scope,
-                () => {},
-              );
-              admissions.add(admit);
-              final read = _appearanceReads.putIfAbsent(
-                bot.scope,
-                () => _readAppearance(
-                  source,
-                  bot,
-                  () => current() && admissions.any((canUse) => canUse()),
-                ),
-              );
-              BotRecord? enriched;
-              try {
-                enriched = await read;
-              } finally {
-                admissions.remove(admit);
-                if (identical(_appearanceReads[bot.scope], read)) {
-                  _appearanceReads.remove(bot.scope);
-                  _appearanceAdmissions.remove(bot.scope);
-                }
-              }
-              if (!current()) return const {};
+              final enriched = await _sharedAppearanceRead(source, bot, admit);
+              if (!current()) return;
               if (enriched != null) {
                 appearance = _cacheAppearance(enriched, assetRead: true);
               }
@@ -445,6 +498,8 @@ class BotsSession extends ChangeNotifier {
               appearances[key] = appearance;
             }
           }
+
+          await Future.wait(roster.map(prepareBot));
         } catch (_) {
           // Decoration cannot prevent reading another instance's conversations.
         } finally {
@@ -516,29 +571,30 @@ class BotsSession extends ChangeNotifier {
       }
       final sources = _repositories!;
       // Room discovery never waits for unrelated bot ownership/avatar reads.
-      // Each lane remains sequential across instances; bot assets still have
-      // the existing four-read bound. Publish each completed observation.
+      // Each catalog lane remains sequential across instances; appearance
+      // reads share three physical slots. Publish each completed observation.
       Future<void> readBots() async {
         for (final source in sources) {
           if (!current()) return;
           final identity = source.scope.connectionIdentity;
           try {
-            final roster = await source.bots();
+            final roster = await _appearanceRoster(source);
             if (!current()) return;
             final presence = await source.presence(roster);
             final enriched = <BotRecord>[];
-            // Bound physical reads, including image allocation, to four bots.
+            // Roster and card assets borrow one three-slot physical lane.
             for (var start = 0; start < roster.length; start += 4) {
               if (!current()) return;
               enriched.addAll(
                 await Future.wait(
-                  roster
-                      .skip(start)
-                      .take(4)
-                      .map(
-                        (bot) =>
-                            source.enrich(bot, presence: presence[bot.id]!),
-                      ),
+                  roster.skip(start).take(4).map((bot) async {
+                    final appearance = await _sharedAppearanceRead(
+                      source,
+                      bot,
+                      current,
+                    );
+                    return (appearance ?? bot).withPresence(presence[bot.id]!);
+                  }),
                 ),
               );
             }

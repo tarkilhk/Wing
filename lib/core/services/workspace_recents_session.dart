@@ -130,6 +130,7 @@ class WorkspaceRecentsSession extends ChangeNotifier
           item.chat?.project,
           item.bot,
           item.group,
+          item.group == null ? null : bots.appearanceForGroup(item.group!),
         ),
     ];
     final error =

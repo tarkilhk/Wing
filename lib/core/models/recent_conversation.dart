@@ -38,13 +38,26 @@ final class RecentConversationEntry {
 
 /// Immutable passive discussion facts; no room visibility/read authority.
 final class GroupConversationPreview {
-  GroupConversationPreview({
-    required Iterable<TranscriptMessage> messages,
-    required Map<String, BotRecord> appearances,
-  }) : messages = List.unmodifiable(messages),
-       appearances = Map.unmodifiable(appearances);
+  GroupConversationPreview({required Iterable<TranscriptMessage> messages})
+    : messages = List.unmodifiable(messages);
   final List<TranscriptMessage> messages;
-  final Map<String, BotRecord> appearances;
+}
+
+/// Every card borrows current identity separately from its saved transcript.
+final class RecentConversationAppearance {
+  const RecentConversationAppearance({
+    this.bot,
+    this.group = const BotGroupAppearance.empty(),
+  });
+  final BotRecord? bot;
+  final BotGroupAppearance group;
+  @override
+  bool operator ==(Object other) =>
+      other is RecentConversationAppearance &&
+      bot == other.bot &&
+      group == other.group;
+  @override
+  int get hashCode => Object.hash(bot, group);
 }
 
 /// A captured catalog, including usable entries after partial failure.
@@ -79,12 +92,14 @@ final class RecentConversationCard {
     required this.entry,
     this.preview,
     this.bot,
+    this.groupAppearance = const BotGroupAppearance.empty(),
     this.loading = false,
     this.error,
   });
   final RecentConversationEntry entry;
   final RecentConversationPreview? preview;
   final BotRecord? bot;
+  final BotGroupAppearance groupAppearance;
   final bool loading;
   final String? error;
 }

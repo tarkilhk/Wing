@@ -132,7 +132,7 @@ void main() {
       group,
       reads: reads,
       groupMessages: null,
-      appearances: const [],
+      appearances: FixedGroupAppearances(const []),
     );
     addTearDown(session.dispose);
     await session.refresh();
@@ -172,7 +172,7 @@ void main() {
         fixture.repository,
         group,
         groupMessages: null,
-        appearances: const [],
+        appearances: FixedGroupAppearances(const []),
         reads: reads,
       );
       addTearDown(session.dispose);

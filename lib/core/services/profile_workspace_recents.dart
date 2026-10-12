@@ -76,6 +76,7 @@ final class _WorkspaceRecentConversationSource
   final WorkspaceRecentsCache recents;
   BotsSession get bots => recents.bots;
   Set<ProfileSessionKey> _appearanceDemand = {};
+  Set<WorkspaceScope> _groupAppearanceDemand = {};
   int _appearanceEpoch = -1;
   final ProfileWorkspaceController controller;
   @override
@@ -163,8 +164,14 @@ final class _WorkspaceRecentConversationSource
   }
 
   @override
-  BotRecord? appearanceFor(RecentConversationKey key) =>
-      key.chat == null ? null : bots.cachedAppearance(key.chat!);
+  RecentConversationAppearance appearanceFor(RecentConversationKey key) {
+    final group = _group(key);
+    return group == null
+        ? RecentConversationAppearance(
+            bot: key.chat == null ? null : bots.cachedAppearance(key.chat!),
+          )
+        : RecentConversationAppearance(group: bots.appearanceForGroup(group));
+  }
 
   @override
   Future<void> prepareAppearances(
@@ -175,19 +182,40 @@ final class _WorkspaceRecentConversationSource
         .map((key) => key.chat)
         .whereType<ProfileSessionKey>()
         .toSet();
+    final profiles = <WorkspaceScope>{
+      for (final key in keys)
+        if (_group(key) case final group?)
+          for (final member in group.members)
+            WorkspaceScope(
+              connectionId: group.scope.connectionId,
+              connectionIdentity: group.scope.connectionIdentity,
+              profileName: member.profile,
+            ),
+    };
     if (_appearanceEpoch == bots.appearanceEpoch &&
-        setEquals(demand, _appearanceDemand)) {
+        setEquals(demand, _appearanceDemand) &&
+        setEquals(profiles, _groupAppearanceDemand)) {
       return;
     }
     _appearanceEpoch = bots.appearanceEpoch;
     _appearanceDemand = demand;
+    _groupAppearanceDemand = profiles;
     try {
-      await bots.appearancesForConversations(
-        demand,
-        canRead: () => current && canRead(),
-      );
+      await Future.wait([
+        bots.appearancesForConversations(
+          demand,
+          canRead: () => current && canRead(),
+        ),
+        bots.appearancesForProfiles(
+          profiles,
+          canRead: () => current && canRead(),
+        ),
+      ]);
     } finally {
-      if (!canRead()) _appearanceDemand = {};
+      if (!canRead()) {
+        _appearanceDemand = {};
+        _groupAppearanceDemand = {};
+      }
     }
   }
 
@@ -330,10 +358,6 @@ final class _WorkspaceRecentConversationSource
                     ?.handle,
               ),
           ],
-          appearances: {
-            for (final member in group.members)
-              member.handle: ?session.appearance(member.profile),
-          },
         ),
       );
     } finally {
