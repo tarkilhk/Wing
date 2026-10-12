@@ -45,23 +45,19 @@ class BotGroupConversation extends StatelessWidget {
         avatar: BotGroupIdentity(group: group, bots: appearances, size: 32),
       ),
       actions: actions,
-      contextRow: showMembers
-          ? Row(
-              children: [
-                Expanded(child: instanceHeader),
-                SizedBox(
-                  key: membersAnchor,
-                  child: IconButton(
-                    key: const ValueKey('group-members-entry'),
-                    tooltip:
-                        'Show group members · ${group.members.length} bots',
-                    onPressed: onMembers,
-                    icon: const Icon(Icons.group_outlined, size: 18),
-                  ),
-                ),
-              ],
-            )
-          : null,
+      contextRow: instanceHeader,
+      contextActions: [
+        if (showMembers)
+          SizedBox(
+            key: membersAnchor,
+            child: IconButton(
+              key: const ValueKey('group-members-entry'),
+              tooltip: 'Show group members · ${group.members.length} bots',
+              onPressed: onMembers,
+              icon: const Icon(Icons.group_outlined, size: 18),
+            ),
+          ),
+      ],
     ),
     body: SafeArea(
       child: Column(

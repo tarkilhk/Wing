@@ -57,7 +57,8 @@ Recents cards. Neither gesture requires opening Recents first.
 
 Beneath the title, the instance uses the same saved icon and status LED as the
 other screens. Tap the icon/LED for connection details or the instance name to
-switch instances. The people icon opens the group members.
+switch instances. The people icon opens the group members. The instance icon and
+LED stay in the standard header position while you type.
 
 Tap the microphone in the group message box to dictate, using the voice-input
 choice from App settings. Stop finishes the recording; Cancel keeps your draft.

@@ -34,6 +34,7 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.leading,
     this.actions = const [],
     this.contextRow,
+    this.contextActions = const [],
     this.contextHeight = 48,
     this.bottom,
     this.backgroundColor,
@@ -43,7 +44,8 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.titleSpacing = 8,
     this.automaticallyImplyLeading = true,
     bool inlineActions = false,
-  }) : _large =
+  }) : assert(contextRow != null || contextActions.isEmpty),
+       _large =
            !inlineActions && MediaQuery.textScalerOf(context).scale(16) >= 24 {
     final style = titleStyle(context);
     final label = title is Text ? (title as Text).data : null;
@@ -64,7 +66,7 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
     painter.dispose();
   }
   final Widget? title, leading, contextRow;
-  final List<Widget> actions;
+  final List<Widget> actions, contextActions;
   final PreferredSizeWidget? bottom;
   final double contextHeight, titleSpacing;
   final Color? backgroundColor, surfaceTintColor;
@@ -118,7 +120,17 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
                     height: contextHeight,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: contextRow,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: contextActions.isEmpty
+                            ? contextRow
+                            : Row(
+                                children: [
+                                  Expanded(child: contextRow!),
+                                  ...contextActions,
+                                ],
+                              ),
+                      ),
                     ),
                   ),
                 if (_large && actions.isNotEmpty)

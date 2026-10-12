@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/models/connection.dart';
 import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
@@ -98,6 +99,138 @@ Future<void> _render(WidgetTester tester, GlobalKey key, String name) async {
 }
 
 void main() {
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'discussion instance position matches standard header ${brightness.name} $scale',
+        (tester) async {
+          final size = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          final group = (await fixture.repository.groups(
+            groupMessages: null,
+          )).first;
+          final status = ServerConnectionStatus('Claw')
+            ..accessAvailable()
+            ..liveChanged('discussion', true);
+          addTearDown(status.dispose);
+          final frame = GlobalKey();
+          Widget identity() => ServerConnectionLabel(
+            label: 'Claw',
+            icon: ConnectionIcon.cloud,
+            status: status,
+          );
+          Future<void> show({
+            required bool discussion,
+            required bool keyboard,
+          }) async {
+            await tester.pumpWidget(
+              MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(scale),
+                    padding: const EdgeInsets.only(top: 24),
+                    viewInsets: EdgeInsets.only(bottom: keyboard ? 280 : 0),
+                  ),
+                  child: child!,
+                ),
+                home: RepaintBoundary(
+                  key: frame,
+                  child: Builder(
+                    builder: (context) {
+                      final actions = [
+                        IconButton(
+                          tooltip: 'Group options',
+                          onPressed: () {},
+                          icon: const Icon(Icons.more_horiz),
+                        ),
+                      ];
+                      return discussion
+                          ? BotGroupConversation(
+                              group: group,
+                              appearances: const [],
+                              instanceHeader: identity(),
+                              transcript: const Center(
+                                child: Text('Discussion'),
+                              ),
+                              composer: const SizedBox(height: 64),
+                              actions: actions,
+                              onBack: () {},
+                              onMembers: () {},
+                              showMembers: !keyboard,
+                            )
+                          : Scaffold(
+                              appBar: WingAppBar(
+                                context: context,
+                                leading: const BackButton(),
+                                title: WingConversationTitle(
+                                  title: group.name,
+                                  avatar: BotGroupIdentity(
+                                    group: group,
+                                    bots: const [],
+                                    size: 32,
+                                  ),
+                                ),
+                                actions: actions,
+                                contextRow: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: identity(),
+                                ),
+                              ),
+                              body: const Center(
+                                child: Text('Standard screen'),
+                              ),
+                            );
+                    },
+                  ),
+                ),
+              ),
+            );
+            await tester.pump();
+          }
+
+          Map<String, Rect> geometry() => {
+            'icon': tester.getRect(find.byIcon(Icons.cloud_outlined)),
+            'led': tester.getRect(
+              find.byKey(const ValueKey('server-connection-led')),
+            ),
+            'name': tester.getRect(find.text('Claw')),
+            'details': tester.getRect(
+              find.byKey(const ValueKey('connection-status-target')),
+            ),
+          };
+          await show(discussion: false, keyboard: false);
+          final standard = geometry();
+          await _render(
+            tester,
+            frame,
+            'instance-standard-${brightness.name}-$scale',
+          );
+          for (final keyboard in [false, true]) {
+            await show(discussion: true, keyboard: keyboard);
+            expect(find.byType(ServerConnectionLabel), findsOneWidget);
+            expect(
+              geometry(),
+              standard,
+              reason:
+                  'The shared instance identity must occupy the standard screen position, including with the keyboard open.',
+            );
+            expect(tester.takeException(), isNull);
+            await _render(
+              tester,
+              frame,
+              'instance-position-${brightness.name}-$scale-keyboard-$keyboard',
+            );
+          }
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
   for (final reduced in [false, true]) {
     testWidgets(
       'group cached landing keeps viewport geometry across first runtime refresh reduced=$reduced',
@@ -836,6 +969,10 @@ void main() {
             fixture.events.where((event) => event['kind'] == 'message.user'),
             hasLength(2),
           );
+          final details = find.byKey(
+            const ValueKey('connection-status-target'),
+          );
+          final standardDetails = tester.getRect(details);
           keyboard.value = true;
           await tester.enterText(
             input,
@@ -843,6 +980,8 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(tester.getRect(send).bottom, lessThanOrEqualTo(844 - 280));
+          expect(details, findsOneWidget);
+          expect(tester.getRect(details), standardDetails);
           expect(tester.takeException(), isNull);
           await _render(tester, frame, 'keyboard-${brightness.name}-$scale');
           await tester.pumpWidget(const SizedBox());
