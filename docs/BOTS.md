@@ -94,8 +94,11 @@ closing the popup, failed generation and restarting Wing. Clearing it keeps it
 empty until you enter another description. It does not sync to other devices.
 Generation uses the chosen instance's default profile image provider and accepts
 generated originals up to 8 MB. Uploads accept PNG, JPEG and WebP up to 2 MB.
-Wing crops a 256 px square thumbnail and compresses it
-to at most 45 KB for upload. Creating the group saves its picture on the chosen
+Wing crops a square thumbnail up to 256 px and compresses it
+to at most 45 KB for upload. Transparent pictures keep their transparency over
+the icon color; detailed transparent pictures may use a smaller PNG to fit.
+A checkerboard drawn into the image remains part of the picture.
+Creating the group saves its picture on the chosen
 Hermes backend; another Wing device connected to that backend can load it.
 Removing a picture restores the member-avatar collage. Icons appear in the group list and
 conversation header. Desktop uses a

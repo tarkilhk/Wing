@@ -158,6 +158,51 @@ Uint8List _samsungTrailer() {
 }
 
 void main() {
+  for (final indexed in [false, true]) {
+    test('room PNG crop preserves clear and soft alpha, indexed=$indexed', () {
+      final source = image_lib.Image(width: 32, height: 16, numChannels: 4);
+      for (final pixel in source) {
+        pixel.setRgba(255, 0, 0, pixel.x < 12 ? 0 : (pixel.x < 20 ? 128 : 255));
+      }
+      final paletteSource = image_lib.Image(
+        width: 32,
+        height: 16,
+        numChannels: 4,
+        withPalette: true,
+      );
+      paletteSource.palette!
+        ..setRgba(0, 255, 0, 0, 0)
+        ..setRgba(1, 255, 0, 0, 128)
+        ..setRgba(2, 255, 0, 0, 255);
+      for (final pixel in paletteSource) {
+        pixel.index = pixel.x < 12 ? 0 : (pixel.x < 20 ? 1 : 2);
+      }
+      final png = image_lib.encodePng(indexed ? paletteSource : source);
+      final original = image_lib.decodePng(png)!;
+      expect(original.getPixel(16, 8).a, 128);
+      final result = encodeRoomThumbnail((png, 45000));
+      final decoded = image_lib.decodePng(result)!;
+      expect((decoded.width, decoded.height), (256, 256));
+      expect(decoded.getPixel(0, 128).a, 0);
+      expect(decoded.getPixel(128, 128).a, 128);
+      expect(decoded.getPixel(255, 128).a, 255);
+      expect(decoded.getPixel(128, 128).r, 255);
+    });
+  }
+  test('room WebP thumbnail preserves transparent and partial alpha', () {
+    final bytes = File(
+      'test/fixtures/images/bounded-compressed-alpha.webp',
+    ).readAsBytesSync();
+    final original = image_lib.decodeWebP(bytes)!;
+    expect(original.any((pixel) => pixel.a == 0), true);
+    expect(original.any((pixel) => pixel.a > 0 && pixel.a < 255), true);
+    final result = encodeRoomThumbnail((bytes, 45000));
+    final decoded = image_lib.decodePng(result)!;
+    expect(result.length, lessThanOrEqualTo(45000));
+    expect(decoded.any((pixel) => pixel.a == 0), true);
+    expect(decoded.any((pixel) => pixel.a > 0 && pixel.a < 255), true);
+  });
+
   test(
     'JPEG rejects dimensions before the decoder can allocate MCU blocks',
     () {

@@ -563,6 +563,65 @@ void main() {
     },
   );
 
+  for (final operation in ['upload', 'generate']) {
+    test(
+      'detailed transparent room pictures keep alpha through $operation, saving and reload',
+      () async {
+        final (fixture, session, backend) = await editingRoster();
+        final random = Random(9);
+        final source = image.Image(width: 256, height: 256, numChannels: 4);
+        for (final pixel in source) {
+          pixel.setRgba(
+            random.nextInt(256),
+            random.nextInt(256),
+            random.nextInt(256),
+            pixel.x < 32 || pixel.y < 32 ? 0 : (pixel.x < 64 ? 128 : 255),
+          );
+        }
+        final bytes = image.encodePng(source);
+        expect(bytes.length, greaterThan(BotsRepository.groupPictureMaxBytes));
+        fixture.commandHook = (profile, method, params) async {
+          if (method == 'image.generate') {
+            return {'success': true, 'image_data': base64Encode(bytes)};
+          }
+          return backend.command(profile, method, params);
+        };
+        final draft = BotGroupDraftSession(
+          session,
+          existing: session.state.groups.single,
+          pictureIo: _Picker(() async => bytes),
+        );
+        addTearDown(draft.dispose);
+        if (operation == 'upload') {
+          await draft.pickPicture(canUse: () => true);
+        } else {
+          await draft.generatePicture('Transparent emblem', canUse: () => true);
+        }
+        expect(draft.error, isNull);
+        expect(
+          draft.picture!.length,
+          lessThanOrEqualTo(BotsRepository.groupPictureMaxBytes),
+        );
+        final decoded = image.decodeImage(draft.picture!)!;
+        expect(decoded.getPixel(0, 0).a, 0);
+        expect(
+          decoded.getPixel(decoded.width * 48 ~/ 256, decoded.height ~/ 2).a,
+          128,
+        );
+        expect(
+          decoded.getPixel(decoded.width ~/ 2, decoded.height ~/ 2).a,
+          255,
+        );
+        expect(await draft.save(canUse: () => true), true);
+        await session.refresh();
+        expect(
+          session.state.groups.single.picture,
+          orderedEquals(draft.picture!),
+        );
+      },
+    );
+  }
+
   test(
     'a detailed source photo is compressed below the Hermes metadata limit',
     () async {

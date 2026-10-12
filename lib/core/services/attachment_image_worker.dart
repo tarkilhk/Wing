@@ -357,6 +357,16 @@ Uint8List encodeRoomThumbnail((Uint8List, int) input) {
   square.textData = null;
   final png = image_lib.encodePng(square);
   if (png.length <= maxBytes) return png;
+  // JPEG cannot represent alpha. Reduce transparent artwork's resolution
+  // instead, retaining fully transparent pixels and soft edges in PNG.
+  if (square.any((pixel) => pixel.aNormalized < 1)) {
+    for (final size in [192, 128, 96, 64]) {
+      final smaller = image_lib.copyResize(square, width: size, height: size);
+      final candidate = image_lib.encodePng(smaller);
+      if (candidate.length <= maxBytes) return candidate;
+    }
+    throw StateError('Room picture could not fit the upload limit');
+  }
   for (final quality in [85, 70, 50]) {
     final jpeg = image_lib.encodeJpg(
       square,

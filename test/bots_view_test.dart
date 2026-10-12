@@ -145,6 +145,148 @@ void main() {
   for (final brightness in [Brightness.dark, Brightness.light]) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
+        'transparent group pictures blend with their frame ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = scale == 1
+              ? const Size(390, 844)
+              : const Size(320, 640);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final bytes = await tester.runAsync(() async {
+            final recorder = ui.PictureRecorder();
+            final canvas = Canvas(recorder);
+            canvas.drawRect(
+              const Rect.fromLTWH(85, 0, 85, 256),
+              Paint()..color = const Color(0x80ff0000),
+            );
+            canvas.drawRect(
+              const Rect.fromLTWH(170, 0, 86, 256),
+              Paint()..color = const Color(0xffff0000),
+            );
+            final picture = recorder.endRecording();
+            final raster = await picture.toImage(256, 256);
+            final png = await raster.toByteData(format: ui.ImageByteFormat.png);
+            raster.dispose();
+            picture.dispose();
+            return encodeRoomThumbnail((png!.buffer.asUint8List(), 45000));
+          });
+          final theme = wingTheme(brightness);
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: theme,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: RepaintBoundary(
+                  key: frame,
+                  child: ColoredBox(
+                    color: theme.colorScheme.surface,
+                    child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        for (final color in [null, ProfileColorChoice.cyan])
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final size in [32.0, 40.0, 48.0, 64.0, 88.0])
+                                BotGroupPicture(
+                                  key: ValueKey('transparent-$color-$size'),
+                                  image: bytes,
+                                  color: color,
+                                  size: size,
+                                ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.runAsync(() async {
+            for (final size in [32, 40, 48, 64, 88]) {
+              await precacheImage(
+                ResizeImage(MemoryImage(bytes!), width: size),
+                frame.currentContext!,
+              );
+            }
+          });
+          await tester.pumpAndSettle();
+          final samples = await tester.runAsync(() async {
+            final boundary =
+                frame.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary;
+            final raster = await boundary.toImage();
+            final rgba = await raster.toByteData(
+              format: ui.ImageByteFormat.rawRgba,
+            );
+            final samples = <Color>[];
+            for (final color in [null, ProfileColorChoice.cyan]) {
+              for (final size in [32.0, 40.0, 48.0, 64.0, 88.0]) {
+                final rect = tester.getRect(
+                  find.byKey(ValueKey('transparent-$color-$size')),
+                );
+                for (final x in [.16, .5, .84]) {
+                  final offset =
+                      (rect.center.dy.floor() * raster.width +
+                          (rect.left + rect.width * x).floor()) *
+                      4;
+                  samples.add(
+                    Color.fromARGB(
+                      rgba!.getUint8(offset + 3),
+                      rgba.getUint8(offset),
+                      rgba.getUint8(offset + 1),
+                      rgba.getUint8(offset + 2),
+                    ),
+                  );
+                }
+              }
+            }
+            raster.dispose();
+            return samples;
+          });
+          await _capture(
+            tester,
+            frame,
+            'transparent-group-${brightness.name}-$scale',
+          );
+          var index = 0;
+          for (final background in [
+            theme.colorScheme.primaryContainer,
+            desktopProfileSwatches[ProfileColorChoice.cyan.slot!],
+          ]) {
+            for (var size = 0; size < 5; size++) {
+              for (final expected in [
+                background,
+                Color.alphaBlend(const Color(0x80ff0000), background),
+                const Color(0xffff0000),
+              ]) {
+                final actual = samples![index++];
+                for (final (a, b) in [
+                  (actual.r, expected.r),
+                  (actual.g, expected.g),
+                  (actual.b, expected.b),
+                ]) {
+                  expect(
+                    a,
+                    closeTo(b, 1 / 255),
+                    reason: 'sample ${index - 1}: $actual expected $expected',
+                  );
+                }
+              }
+            }
+          }
+        },
+      );
+
+      testWidgets(
         'group avatar collage fits every member ${brightness.name} $scale',
         (tester) async {
           tester.view.physicalSize = scale == 1

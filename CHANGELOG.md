@@ -25,6 +25,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Bots and discussions
 
+- Preserve transparency in uploaded and generated group icons, including pictures
+  that need compression to fit the saved icon limit.
+
 - Show active discussion membership on bot cards and animate their saved shapes.
 
 - Prepare generated group pictures up to 8 MB before compressing the saved icon,
