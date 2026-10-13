@@ -472,7 +472,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
   }
 
-  Future<void> _openRecentGroup(BotGroup group) {
+  Future<void> _openRecentGroup(
+    BotGroup group, {
+    AppDestination origin = AppDestination.activity,
+  }) {
     return Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (groupContext) {
@@ -480,9 +483,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           final connection = _groupConnection(group);
           final discussion = GroupConversationSwitcher(
             groupKey: RecentConversationEntry.group(group).key,
-            onLeave: () => _leaveRecentConversation(
-              RecentConversationEntry.group(group).key,
-            ),
+            onLeave: () => _leaveConversation(origin),
+            onLeaveRecents: () => _leaveConversation(AppDestination.activity),
             createSession: () => controller.groupRecentConversationSession(
               group: group,
               recents: _recents,
@@ -492,7 +494,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 MaterialPageRoute(
                   builder: (chatContext) => RecentConversationRouteScope(
                     recents: _recents,
-                    onLeave: _leaveRecentConversation,
+                    origin: AppDestination.activity,
+                    onLeave: _leaveConversation,
                     child: ProfileWorkspaceScreen(
                       controller: controller,
                       enableNotifications: widget.enableNotifications,
@@ -590,6 +593,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
     _selectDestination(AppDestination.chats);
     setState(() {
+      _chatOrigin = AppDestination.activity;
       _recentVisit = visit;
       _recentRenderedChat = controller.current?.chat;
     });
@@ -599,7 +603,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     if (_recentVisit?.active != true) {
       _recentVisit?.dispose();
       final route = RecentConversationRouteScope.maybeOf(context);
-      _recentVisit = route == null
+      _recentVisit = route?.origin != AppDestination.activity
           ? controller.chatRecentConversationSession(
               recents: _recents,
               chat: chat,
@@ -607,7 +611,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               activity: () => ChatNoticeActivityScope.of(context),
             )
           : controller.recentConversationSession(
-              recents: route.recents,
+              recents: route!.recents,
               entries: route.recents.catalog.entries,
               onOpenGroup: _openRecentGroup,
               activity: ChatNoticeActivityScope.of(context),
@@ -3290,41 +3294,26 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   void _leaveChat() {
     if (_recentSwitcher.currentState?.dismissStack() == true) return;
-    final key = controller.current?.chat?.key;
-    if (key != null &&
-        (_recentVisit?.modeEnabled == true ||
-            RecentConversationRouteScope.maybeOf(context) != null)) {
-      _leaveRecentConversation(RecentConversationKey.chat(key));
-      return;
-    }
-    final origin = _chatOrigin;
-    _disposeRecentVisit();
-    controller.showList();
-    if (origin != null) _selectDestination(origin);
+    final origin =
+        _chatOrigin ??
+        RecentConversationRouteScope.maybeOf(context)?.origin ??
+        AppDestination.chats;
+    _leaveConversation(
+      _recentVisit?.modeEnabled == true ? AppDestination.activity : origin,
+    );
   }
 
-  void _leaveRecentConversation(RecentConversationKey key) {
+  void _leaveConversation(AppDestination destination) {
     final borrowed = RecentConversationRouteScope.maybeOf(context);
     if (borrowed != null) {
       _disposeRecentVisit();
-      borrowed.onLeave(key);
+      borrowed.onLeave(destination);
       return;
     }
-    final group = key.group != null;
-    final bot = key.chat != null && _bots.cachedAppearance(key.chat!) != null;
     final workspaceRoute = ModalRoute.of(context);
     _disposeRecentVisit();
     controller.showList();
-    if (group || bot) {
-      _botsView = BotsViewState(
-        tab: group ? 1 : 0,
-        query: _botsView.query,
-        showHidden: _botsView.showHidden,
-      );
-    }
-    _selectDestination(
-      group || bot ? AppDestination.bots : AppDestination.chats,
-    );
+    _selectDestination(destination);
     Navigator.of(context).popUntil((route) => route == workspaceRoute);
   }
 
@@ -3358,6 +3347,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   /// Bring a reused workspace route back to its chat after a notification tap.
   void showNotificationChat() {
     _disposeRecentVisit();
+    _chatOrigin = null;
     setState(() {});
     if (_destination != AppDestination.chats) {
       _selectDestination(AppDestination.chats);
@@ -3450,7 +3440,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   onViewChanged: (view) => setState(() => _botsView = view),
                   onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
                   onOpenChat: _openBotChat,
-                  onOpenGroup: _openRecentGroup,
+                  onOpenGroup: (group) =>
+                      _openRecentGroup(group, origin: AppDestination.bots),
                 ),
                 AppDestination.analytics => HermesAnalyticsContent(
                   key: ValueKey(controller.connectionIdentity),

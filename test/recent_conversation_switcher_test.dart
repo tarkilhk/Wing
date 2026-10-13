@@ -469,7 +469,7 @@ void main() {
     for (final target in ['chat', 'bot', 'group']) {
       for (final pinch in [false, true]) {
         testWidgets(
-          'Recents Back returns to canonical $target menu from ${fromGroup ? 'group' : 'Recents'} after ${pinch ? 'pinch' : 'swipe'}',
+          'Recents Back returns to Recents from $target entered through ${fromGroup ? 'group' : 'Recents'} after ${pinch ? 'pinch' : 'swipe'}',
           (tester) async {
             SharedPreferences.setMockInitialValues({});
             final preferences = await SharedPreferences.getInstance();
@@ -541,9 +541,6 @@ void main() {
             }
             await _finishFrames(tester);
             await _chatGesture(tester, pinch: pinch);
-            // A first swipe may land on a different native route. Pinch there
-            // so selection uses that route's actual shared catalog.
-            if (!pinch) await _chatGesture(tester);
             final switcher = tester.widget<RecentConversationSwitcher>(
               find.byType(RecentConversationSwitcher),
             );
@@ -591,17 +588,8 @@ void main() {
               reason: 'Back must unwind all borrowed conversation routes.',
             );
             expect(controller.current?.chat, isNull);
-            if (target == 'chat') {
-              expect(find.text('Chats'), findsOneWidget);
-            } else {
-              final search = tester.widget<TextField>(
-                find.byKey(const ValueKey('bots-search')),
-              );
-              expect(
-                search.decoration!.hintText,
-                target == 'group' ? 'Search groups' : 'Search bots',
-              );
-            }
+            expect(find.text('Recents'), findsOneWidget);
+            expect(find.byKey(const ValueKey('bots-search')), findsNothing);
             expect(tester.takeException(), isNull);
             await tester.pumpWidget(const SizedBox());
           },
@@ -3457,14 +3445,8 @@ void main() {
             findsNothing,
           );
           expect(controller.current?.chat, isNull);
-          expect(find.byKey(const ValueKey('bots-search')), findsOneWidget);
-          expect(
-            tester
-                .widget<TextField>(find.byKey(const ValueKey('bots-search')))
-                .decoration!
-                .hintText,
-            'Search groups',
-          );
+          expect(find.text('Recents'), findsOneWidget);
+          expect(find.byKey(const ValueKey('bots-search')), findsNothing);
           expect(visit.active, isFalse);
           expect(botFixture.commands, commands);
           expect(tester.takeException(), isNull);
@@ -3474,9 +3456,136 @@ void main() {
     }
   }
 
+  for (final entry in ['Chats', 'Bots', 'Groups', 'Recents group']) {
+    for (final cancelPinch in [false, true]) {
+      testWidgets(
+        'direct $entry entry preserves Back destination${cancelPinch ? ' after a canceled pinch' : ''}',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          final preferences = await SharedPreferences.getInstance();
+          final appPreferences = AppPreferences(preferences);
+          final fixture = _ScreenFixture();
+          final controller = ProfileWorkspaceController(
+            access: ConnectionAccess(
+              connection: SavedConnection(
+                id: 'host',
+                label: 'Home server',
+                host: 'localhost',
+                port: 1,
+                apiKey: '',
+              ),
+              dashboardOAuth: null,
+            ),
+            connectionIdentity: 'instance-1',
+            preferences: preferences,
+            appPreferences: appPreferences,
+            gatewayFactory: fixture.gateway,
+          );
+          addTearDown(controller.dispose);
+          addTearDown(appPreferences.dispose);
+          await controller.initialize();
+          if (entry == 'Chats') {
+            await controller.openSession(
+              ProfileSessionKey(controller.current!.scope, 'chat-0'),
+            );
+          }
+          final bots = BotsFixture();
+          bots.profiles
+            ..clear()
+            ..add(BotsFixture.profile('personal', 'Atlas'));
+          bots.profiles.single['canonical_session']['id'] = 'chat-0';
+          bots.events.add({
+            'room_id': 'room-1',
+            'seq': 1,
+            'kind': 'message.member',
+            'created_at': fixture.now + 1,
+            'actor': {'kind': 'member', 'id': 'atlas'},
+            'payload': {'text': 'Recent group reply'},
+          });
+          final activity = ValueNotifier<ChatNoticeActivity?>(null);
+          addTearDown(activity.dispose);
+          tester.view.physicalSize = const Size(390, 800);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(Brightness.dark),
+              builder: (_, child) =>
+                  ChatNoticeActivityScope(activity: activity, child: child!),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                initialDestination: entry == 'Chats'
+                    ? AppDestination.chats
+                    : entry == 'Recents group'
+                    ? AppDestination.activity
+                    : AppDestination.bots,
+                createBotsSession: () =>
+                    BotsSession((_) async => [bots.repository]),
+              ),
+            ),
+          );
+          await _finishFrames(tester);
+          if (entry == 'Bots') {
+            await tester.tap(find.text('Atlas').first);
+          } else if (entry == 'Groups') {
+            await tester.tap(find.text('Groups').first);
+            await _finishFrames(tester);
+            await tester.enterText(
+              find.byKey(const ValueKey('bots-search')),
+              'Research',
+            );
+            await _finishFrames(tester);
+            await tester.tap(find.text('Research team').first);
+          } else if (entry == 'Recents group') {
+            await tester.tap(find.text('Research team').first);
+          }
+          await _finishFrames(tester);
+          final visit = tester
+              .widget<RecentConversationSwitcher>(
+                find.byType(RecentConversationSwitcher),
+              )
+              .session;
+          expect(visit.modeEnabled, isFalse);
+          if (cancelPinch) {
+            await _chatGesture(tester, returnToStart: true);
+            expect(visit.modeEnabled, isFalse);
+          }
+          await tester.binding.handlePopRoute();
+          await _finishFrames(tester);
+          expect(find.byType(ProfileTranscript), findsNothing);
+          expect(
+            find.byType(BotGroupScreen, skipOffstage: false),
+            findsNothing,
+          );
+          expect(controller.current?.chat, isNull);
+          if (entry == 'Bots' || entry == 'Groups') {
+            final search = tester.widget<TextField>(
+              find.byKey(const ValueKey('bots-search')),
+            );
+            expect(
+              search.decoration!.hintText,
+              entry == 'Groups' ? 'Search groups' : 'Search bots',
+            );
+            expect(
+              search.controller!.text,
+              entry == 'Groups' ? 'Research' : '',
+            );
+          } else {
+            expect(
+              find.text(entry == 'Chats' ? 'Chats' : 'Recents'),
+              findsOneWidget,
+            );
+          }
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
   for (final botEntry in [false, true]) {
     testWidgets(
-      'pinch entry from ${botEntry ? 'Bots' : 'an empty new chat'} retains Back origin',
+      'pinch entry from ${botEntry ? 'Bots' : 'an empty new chat'} changes Back destination to Recents',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         final preferences = await SharedPreferences.getInstance();
@@ -3563,9 +3672,8 @@ void main() {
         await _finishFrames(tester);
         expect(visit.active, isFalse);
         expect(controller.current!.chat, isNull);
-        if (botEntry) {
-          expect(find.byKey(const ValueKey('bots-search')), findsOneWidget);
-        }
+        expect(find.text('Recents'), findsOneWidget);
+        expect(find.byKey(const ValueKey('bots-search')), findsNothing);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
       },
@@ -4019,7 +4127,12 @@ void main() {
           expect(find.byTooltip('Open navigation menu'), findsOneWidget);
           await tester.binding.handlePopRoute();
           await _finishFrames(tester);
-          expect(find.text('Chats'), findsOneWidget);
+          expect(
+            find.text(
+              brightness == Brightness.dark && scale == 1 ? 'Chats' : 'Recents',
+            ),
+            findsOneWidget,
+          );
           expect(controller.current!.chat, isNull);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox.shrink());

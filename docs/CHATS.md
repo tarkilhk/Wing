@@ -38,8 +38,11 @@ older, with the oldest and newest linked in a circle. A two-finger
 horizontal swipe switches to the adjacent conversation directly, including
 before the first pinch. Icon-only controls also
 support keyboard and accessibility navigation. Opening a group shows its group
-chat; Back returns to the cards. Back from the cards returns to the conversation,
-then to its original Chats, Bots or Recents screen.
+chat. Back closes the cards first. Back from a conversation opened through
+Recents, a two-finger swipe or the card viewport returns to **Recents**, even
+if you never opened Recents from the menu. Direct entry from **Chats** returns
+to Chats; direct entry from **Bots** or **Groups** returns to Bots with its
+selected tab and search intact.
 When you return to
 a conversation already loaded in this workspace, its retained messages appear
 while Wing refreshes quietly from Hermes; new replies appear when the server

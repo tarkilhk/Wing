@@ -11,12 +11,14 @@ class GroupConversationSwitcher extends StatefulWidget {
     required this.createSession,
     required this.groupKey,
     required this.onLeave,
+    required this.onLeaveRecents,
     required this.previewBuilder,
     required this.child,
   });
   final RecentConversationSession Function() createSession;
   final RecentConversationKey groupKey;
   final VoidCallback onLeave;
+  final VoidCallback onLeaveRecents;
   final Widget Function(RecentConversationCard) previewBuilder;
   final Widget child;
   @override
@@ -53,8 +55,11 @@ class _GroupConversationSwitcherState extends State<GroupConversationSwitcher>
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && _switcher.currentState?.dismissStack() != true) {
+          final leave = _session.modeEnabled
+              ? widget.onLeaveRecents
+              : widget.onLeave;
           _session.dispose();
-          widget.onLeave();
+          leave();
         }
       },
       child: RecentConversationSwitcher(

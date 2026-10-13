@@ -135,9 +135,10 @@ the reading viewport fixed.
 
 Pinch inward on the discussion to open the same cards as normal chat Recents.
 The group remains mounted with its draft and reading position. Tap its card or
-use Back to close the stack. Back from the discussion returns to Groups.
-Switching to another conversation uses its normal chat window; Back closes any
-open card stack first, then returns to Chats, Bots or Groups for the selected
+use Back to close the stack. Direct entry from Groups returns to the Bots
+screen with Groups and its search retained. Opening from Recents, switching
+with a two-finger swipe or entering the card viewport makes **Recents** the
+Back destination. Back closes any open card stack first, then leaves the
 conversation. Earlier conversations are cleared from the navigation stack.
 Cards do not mark group messages as read.
 
