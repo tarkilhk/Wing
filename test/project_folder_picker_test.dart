@@ -1,4 +1,9 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:wing/core/services/server_files_browser.dart';
 import 'package:wing/core/services/server_files_repository.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -105,10 +110,47 @@ Map<String, dynamic> directory(String path) => {
 };
 
 void main() {
+  const capture = bool.fromEnvironment('CAPTURE_PROJECT_FOLDER');
+  const captureKey = ValueKey('project-folder-capture');
+  setUpAll(() async {
+    if (!capture) return;
+    const fonts = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final font in {
+      'Roboto': '$fonts/Roboto-Regular.ttf',
+      'MaterialIcons': '$fonts/MaterialIcons-Regular.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
+    }.entries) {
+      await (FontLoader(font.key)..addFont(
+            Future.value(
+              ByteData.sublistView(await File(font.value).readAsBytes()),
+            ),
+          ))
+          .load();
+    }
+  });
+  Future<void> capturePicker(WidgetTester tester, String name) async {
+    if (!capture) return;
+    await tester.runAsync(() async {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(captureKey),
+      );
+      final image = await boundary.toImage(pixelRatio: 2);
+      try {
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        final file = File('build/design-previews/folder-recovery/$name.png');
+        file.parent.createSync(recursive: true);
+        file.writeAsBytesSync(bytes!.buffer.asUint8List());
+      } finally {
+        image.dispose();
+      }
+    });
+  }
+
   Future<void> showPicker(
     WidgetTester tester, {
     required ServerFilesRepository files,
     ValueChanged<String?>? onResult,
+    String? initialPath,
     Brightness brightness = Brightness.dark,
     double scale = 1,
   }) async {
@@ -122,7 +164,7 @@ void main() {
             textScaler: TextScaler.linear(scale),
             disableAnimations: true,
           ),
-          child: child!,
+          child: RepaintBoundary(key: captureKey, child: child!),
         ),
         home: Builder(
           builder: (context) => Scaffold(
@@ -131,6 +173,7 @@ void main() {
                 final result = await showDialog<String>(
                   context: context,
                   builder: (_) => ProjectFolderPickerDialog(
+                    initialPath: initialPath,
                     createBrowser: () =>
                         ServerFilesBrowser(files: files, isCurrent: () => true),
                   ),
@@ -149,6 +192,102 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'missing saved folder can browse Hermes folders ${brightness.name} $scale',
+        (tester) async {
+          final reads = <String?>[];
+          final firstRoot = Completer<Map<String, dynamic>>();
+          final retryRoot = Completer<Map<String, dynamic>>();
+          String? selected;
+          await showPicker(
+            tester,
+            brightness: brightness,
+            scale: scale,
+            initialPath: '/srv/Missing project',
+            onResult: (value) => selected = value,
+            files: ServerFilesRepository(
+              read: (_, query) {
+                final path = query['path'];
+                reads.add(path);
+                if (path == '/srv/Missing project') {
+                  return Future.error(StateError('ENOENT'));
+                }
+                if (reads.length == 2) return firstRoot.future;
+                if (reads.length == 3) return retryRoot.future;
+                return Future.value(directory(path ?? '/srv'));
+              },
+              write: null,
+            ),
+          );
+          IconButton action(String key) =>
+              tester.widget<IconButton>(find.byKey(ValueKey(key)));
+          expect(reads, ['/srv/Missing project']);
+          expect(action('project-folder-up').onPressed, isNull);
+          expect(action('project-folder-continue').onPressed, isNull);
+          expect(action('project-folder-home').onPressed, isNotNull);
+          expect(
+            find.textContaining('Could not open this folder'),
+            findsOneWidget,
+          );
+          final error = find.textContaining('Could not open this folder');
+          expect(
+            DefaultTextStyle.of(tester.element(error)).style.fontSize,
+            wingTheme(brightness).textTheme.bodySmall!.fontSize,
+          );
+          await capturePicker(
+            tester,
+            'folder-recovery-${brightness.name}-$scale-error',
+          );
+          await tester.tap(find.byKey(const ValueKey('project-folder-home')));
+          await tester.pump();
+          await tester.pump();
+          expect(reads, ['/srv/Missing project', null]);
+          expect(find.bySemanticsLabel('Loading folders'), findsOneWidget);
+          expect(action('project-folder-home').onPressed, isNull);
+          expect(action('project-folder-continue').onPressed, isNull);
+          await capturePicker(
+            tester,
+            'folder-recovery-${brightness.name}-$scale-loading',
+          );
+          firstRoot.completeError(StateError('root read failed'));
+          await tester.pumpAndSettle();
+          expect(find.bySemanticsLabel('Loading folders'), findsNothing);
+          expect(
+            find.textContaining('Could not open this folder'),
+            findsOneWidget,
+          );
+          expect(action('project-folder-home').onPressed, isNotNull);
+          await tester.tap(find.byTooltip('Retry folder loading'));
+          await tester.pump();
+          await tester.pump();
+          expect(reads, ['/srv/Missing project', null, null]);
+          expect(find.bySemanticsLabel('Loading folders'), findsOneWidget);
+          retryRoot.complete(directory('/srv'));
+          await tester.pumpAndSettle();
+          expect(find.bySemanticsLabel('Loading folders'), findsNothing);
+          expect(
+            find.textContaining('Could not open this folder'),
+            findsNothing,
+          );
+          expect(find.text('Client Work'), findsOneWidget);
+          await capturePicker(
+            tester,
+            'folder-recovery-${brightness.name}-$scale-root',
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('project-folder-/srv/Docs')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('project-folder-continue')),
+          );
+          await tester.pumpAndSettle();
+          expect(selected, '/srv/Docs');
+          expect(reads, ['/srv/Missing project', null, null, '/srv/Docs']);
+          expect(tester.takeException(), isNull);
+        },
+      );
+
       testWidgets('folder navigation and selection ${brightness.name} $scale', (
         tester,
       ) async {

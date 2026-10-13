@@ -35,6 +35,7 @@ void main() {
       'Roboto': '$fontDirectory/Roboto-Regular.ttf',
       'MaterialIcons': '$fontDirectory/MaterialIcons-Regular.otf',
       'WingIcons': 'assets/fonts/wing-icons.ttf',
+      'WingProjectIcons': 'assets/fonts/codicons.ttf',
     }.entries) {
       await (FontLoader(font.key)..addFont(
             Future.value(
@@ -494,11 +495,27 @@ void main() {
               );
               await tester.tap(find.byKey(const ValueKey('project-color-7')));
               await tester.ensureVisible(
+                find.byKey(const ValueKey('project-choose-icon')),
+              );
+              await tester.tap(
+                find.byKey(const ValueKey('project-choose-icon')),
+              );
+              await tester.pumpAndSettle();
+              await tester.enterText(
+                find.byKey(const ValueKey('project-icon-search-field')),
+                'rocket',
+              );
+              await tester.pumpAndSettle();
+              await tester.ensureVisible(
                 find.byKey(const ValueKey('project-icon-rocket')),
               );
               await tester.tap(
                 find.byKey(const ValueKey('project-icon-rocket')),
               );
+              await tester.tap(
+                find.byKey(const ValueKey('project-icon-confirm')),
+              );
+              await tester.pumpAndSettle();
               await tester.ensureVisible(
                 find.byTooltip('Change primary folder'),
               );

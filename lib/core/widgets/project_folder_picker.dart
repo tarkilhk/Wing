@@ -74,6 +74,14 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
           icon: const Icon(Icons.arrow_upward),
         ),
       ),
+      StudioButtonPress(
+        child: IconButton(
+          key: const ValueKey('project-folder-home'),
+          tooltip: 'Browse Hermes folders',
+          onPressed: _browser.busy ? null : () => unawaited(_browser.open()),
+          icon: const Icon(Icons.home_outlined),
+        ),
+      ),
       const Spacer(),
       StudioButtonPress(
         child: IconButton(
@@ -173,7 +181,12 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
                   key: _errorKey,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: StudioError(error)),
+                    Expanded(
+                      child: DefaultTextStyle.merge(
+                        style: Theme.of(context).textTheme.bodySmall,
+                        child: StudioError(error),
+                      ),
+                    ),
                     StudioButtonPress(
                       child: IconButton(
                         tooltip: 'Retry folder loading',
