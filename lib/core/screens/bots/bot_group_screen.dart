@@ -588,7 +588,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                 enabled: !_session.loading && !_refreshingGroup,
                 child: const Text('Refresh group'),
               ),
-              if (canStop)
+              if (_session.canStopGroupWork)
                 const StudioPopupMenuItem(
                   value: 'stop',
                   child: Text('Stop group work'),

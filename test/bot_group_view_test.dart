@@ -102,6 +102,142 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
+        'group menu stops deferred work without active flags ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          fixture.events.add(
+            _event(1, 'message.member', 'atlas', 'Saved group reply'),
+          );
+          fixture.readHook = (profile, method, params) async {
+            if (method != 'groups.state') return null;
+            return {
+              'room': fixture.room,
+              'driver_status': {
+                'working': false,
+                'blocked': false,
+                'pending_actions': fixture.pending,
+              },
+            };
+          };
+          final group = (await fixture.repository.groups(
+            groupMessages: null,
+          )).first;
+          final stopGate = Completer<void>();
+          fixture.commandHook = (profile, method, params) async {
+            if (method != 'groups.stop') return null;
+            await stopGate.future;
+            fixture.pending.clear();
+            return {'cancelled': 1};
+          };
+          final frame = GlobalKey();
+          late BotGroupSession session;
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: frame,
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: BotGroupScreen(
+                  onEdit: (_) async => null,
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () =>
+                      const LocalVoiceInputSettings(language: ''),
+                  createSession: () => session = BotGroupSession(
+                    fixture.repository,
+                    group,
+                    reads: BotGroupReadState(),
+                    groupMessages: null,
+                    appearances: FixedGroupAppearances(const []),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await _settleGroupMarkdown(tester);
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Group options'));
+          await tester.pumpAndSettle();
+          expect(find.text('Stop group work'), findsNothing);
+          await tester.tapAt(const Offset(20, 500));
+          await tester.pumpAndSettle();
+          fixture.pending.add({'kind': 'retry', 'task_id': 'stranded-task'});
+          await session.refresh();
+          await tester.pumpAndSettle();
+          expect(find.text('Interrupted work'), findsOneWidget);
+          expect(find.byTooltip('Stop group work'), findsNothing);
+          final input = find.byType(TextField);
+          await tester.enterText(input, 'Keep this draft');
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Group options'));
+          await tester.pumpAndSettle();
+          final stop = find.text('Stop group work');
+          expect(stop, findsOneWidget);
+          final stopRect = tester.getRect(stop);
+          expect(stopRect.left, greaterThanOrEqualTo(0));
+          expect(
+            stopRect.right,
+            lessThanOrEqualTo(tester.view.physicalSize.width),
+          );
+          expect(
+            stopRect.bottom,
+            lessThanOrEqualTo(tester.view.physicalSize.height),
+          );
+          await _render(
+            tester,
+            frame,
+            'deferred-stop-menu-${brightness.name}-$scale',
+          );
+          await tester.tap(stop);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(session.acting, isTrue);
+          expect(session.canStopGroupWork, isFalse);
+          final calls = fixture.commands
+              .where((call) => call.$2 == 'groups.stop')
+              .toList();
+          expect(calls, hasLength(1));
+          expect(calls.single.$1, 'default');
+          expect(calls.single.$3['room_id'], group.id);
+          expect(calls.single.$3['cancel_id'], isNotEmpty);
+          expect(
+            fixture.commands.any((call) => call.$2 == 'groups.retry'),
+            isFalse,
+          );
+          expect(
+            tester.widget<TextField>(input).controller!.text,
+            'Keep this draft',
+          );
+          stopGate.complete();
+          await tester.pumpAndSettle();
+          expect(session.acting, isFalse);
+          expect(session.runtime!.actions, isEmpty);
+          expect(session.canStopGroupWork, isFalse);
+          expect(find.text('Interrupted work'), findsNothing);
+          expect(find.text('Saved group reply'), findsOneWidget);
+          expect(
+            tester.widget<TextField>(input).controller!.text,
+            'Keep this draft',
+          );
+          await tester.tap(find.byTooltip('Group options'));
+          await tester.pumpAndSettle();
+          expect(find.text('Stop group work'), findsNothing);
+          await tester.tapAt(const Offset(20, 500));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+          await tester.pumpAndSettle();
+        },
+      );
+      testWidgets(
         'manual group refresh is visible and automatic reads stay quiet ${brightness.name} $scale',
         (tester) async {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);

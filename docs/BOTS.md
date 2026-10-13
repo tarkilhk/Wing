@@ -155,6 +155,9 @@ that button, with saved names and avatars. Tap outside or use Back
 to dismiss it. Without a saved room picture, the conversation shows its
 member-avatar collage.
 The ellipsis menu contains Edit group, working histories, Refresh and Stop.
+Stop group work is also available when interrupted work is waiting for Retry,
+even if the bots are no longer running. Stop cancels that pending work and keeps
+the conversation history; send a follow-up in the same group to continue.
 Refresh rereads messages, activity and approval state; it does not restart the bots.
 A separate Wing pulse appears while your refresh is running, without changing
 action icons or moving the messages. Wing also refreshes this state automatically. Recognized bot mentions display as bold,

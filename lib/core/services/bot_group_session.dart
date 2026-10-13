@@ -246,6 +246,12 @@ class BotGroupSession extends ChangeNotifier {
   BotGroupRuntime? get runtime => _runtime;
   bool _acting = false;
   bool get acting => _acting;
+  bool get canStopGroupWork =>
+      !_closed &&
+      !_acting &&
+      (_runtime?.working == true ||
+          _runtime?.blocked == true ||
+          _runtime?.actions.any((action) => action.kind == 'retry') == true);
   List<BotGroupEvent> get events => List.unmodifiable(
     _events.values.toList()..sort((a, b) => a.sequence.compareTo(b.sequence)),
   );
