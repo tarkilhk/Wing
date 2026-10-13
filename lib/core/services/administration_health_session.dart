@@ -126,6 +126,10 @@ class AdministrationHealthSession extends ChangeNotifier {
     });
     final checks = checksFor(gateway);
     checks.updateModel(overview.observations['model']?.data);
+    // Attach independently of full-check expiry. The task list may already
+    // hold a newer result, which must win before publishing restored findings.
+    final tasks = _tasksFor(overview.profile);
+    if (tasks.tasks != null) health.updateTasks(tasks);
     health.selectProfile(overview);
     health.updateProfileChecks(checks.healthObservation);
     if (healthSnapshotExpired(_refreshedAt[name], _now()) ||
@@ -133,6 +137,18 @@ class AdministrationHealthSession extends ChangeNotifier {
       unawaited(refresh(gateway));
     }
   }
+
+  ScheduledTasksController _tasksFor(ProfileAdministration profile) =>
+      _tasks.putIfAbsent(profile.name, () {
+        final source = ScheduledTasksController.acquire(profile, preferences);
+        void listener() {
+          if (!_disposed) health.updateTasks(source);
+        }
+
+        _taskListeners[profile.name] = listener;
+        source.addListener(listener);
+        return source;
+      });
 
   Future<void> refresh(ProfileGateway gateway) {
     if (_disposed) return Future.value();
@@ -142,19 +158,7 @@ class AdministrationHealthSession extends ChangeNotifier {
     if (overview == null) return Future.value();
     if (_refreshes[name] case final pending?) return pending;
     final checks = checksFor(gateway);
-    final tasks = _tasks.putIfAbsent(name, () {
-      final source = ScheduledTasksController.acquire(
-        overview.profile,
-        preferences,
-      );
-      void listener() {
-        if (!_disposed) health.updateTasks(source);
-      }
-
-      _taskListeners[name] = listener;
-      source.addListener(listener);
-      return source;
-    });
+    final tasks = _tasksFor(overview.profile);
     // Schedule after registering the future so synchronous notifications cannot
     // expose an enabled refresh button while this work is already underway.
     final refresh =

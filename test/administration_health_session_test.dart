@@ -1,5 +1,6 @@
 import 'package:wing/core/models/administration_operation.dart';
 import 'support/administration_operation_fixture.dart';
+import 'support/health_alerts_fixture.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:wing/core/screens/administration/admin_runtime_health.dart';
 import 'package:wing/core/services/administration_health_session.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/scheduled_tasks_controller.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 
@@ -522,6 +524,123 @@ void main() {
       await tester.pump(Duration.zero);
       expect(requests, [('GET', 'actions/doctor/status', null)]);
       expect(session.health.diagnostics['ops/doctor']!.outcome, 'Completed');
+      session.dispose();
+    },
+  );
+
+  for (final removed in [false, true]) {
+    testWidgets(
+      'task list recovery clears a restored scheduled task alert (removed: $removed)',
+      (tester) async {
+        now = DateTime.now();
+        taskRows = [
+          {
+            'id': 'failed',
+            'enabled': true,
+            'state': 'scheduled',
+            'last_error': 'Delivery failed',
+            'schedule': {'kind': 'interval', 'minutes': 60},
+          },
+        ];
+        var session = create();
+        await select(session, 'default');
+        session.dispose();
+        await session.saved;
+
+        // Saved profile checks suppress a full refresh after reopening Health.
+        final fixture = HealthAlertsFixture(preferences, repository: server);
+        session = fixture.owner.healthSession();
+        requests.clear();
+        session.select(workspaces['default']!.gateway);
+        await tester.pump();
+        expect(requests, isEmpty);
+        final alerts = fixture.coordinator;
+        final tasks = ScheduledTasksController.acquire(
+          server.profile('default'),
+          preferences,
+        );
+        try {
+          await fixture.owner.hostResources().refresh();
+          expect(alerts.alerts.single.title, 'Scheduled tasks');
+          final occurrence = alerts.alerts.single.occurrence;
+
+          // An unavailable task read is not evidence of recovery.
+          tasksOffline = true;
+          await tasks.refresh();
+          expect(alerts.alerts.single.occurrence, occurrence);
+          tasksOffline = false;
+          if (removed) {
+            taskRows.clear();
+          } else {
+            taskRows.single['last_error'] = '';
+          }
+          await tasks.refresh();
+          expect(tasks.tasks!.any((task) => task.needsAttention), isFalse);
+          expect(alerts.alerts, isEmpty);
+          await session.saved;
+          final finding = session.health.profileFindings.singleWhere(
+            (f) => f.title == 'Scheduled tasks',
+          );
+          expect(
+            finding.detail,
+            removed ? 'No scheduled tasks' : '1 task · No reported errors',
+          );
+        } finally {
+          tasks.release();
+          fixture.dispose();
+          await session.saved;
+        }
+        session = create();
+        session.select(workspaces['default']!.gateway);
+        expect(
+          session.health.profileFindings
+              .singleWhere((f) => f.title == 'Scheduled tasks')
+              .detail,
+          removed ? 'No scheduled tasks' : '1 task · No reported errors',
+        );
+        session.dispose();
+      },
+    );
+  }
+
+  testWidgets(
+    'task data loaded before health selection replaces its saved failure',
+    (tester) async {
+      taskRows = [
+        {
+          'id': 'failed',
+          'enabled': true,
+          'state': 'scheduled',
+          'last_error': 'Delivery failed',
+          'schedule': {'kind': 'interval', 'minutes': 60},
+        },
+      ];
+      var session = create();
+      await select(session, 'default');
+      session.dispose();
+      await session.saved;
+      final tasks = ScheduledTasksController.acquire(
+        server.profile('default'),
+        preferences,
+      );
+      taskRows.single['last_error'] = '';
+      await tasks.refresh();
+      session = create();
+      final observedDetails = <String>[];
+      session.health.addListener(() {
+        for (final finding in session.health.profileFindings) {
+          if (finding.title == 'Scheduled tasks') {
+            observedDetails.add(finding.detail);
+          }
+        }
+      });
+      requests.clear();
+      session.select(workspaces['default']!.gateway);
+      await tester.pump();
+      expect(requests, isEmpty);
+      expect(observedDetails, isNotEmpty);
+      expect(observedDetails, everyElement('1 task · No reported errors'));
+      tasks.release();
       session.dispose();
     },
   );

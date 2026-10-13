@@ -68,6 +68,8 @@ Memory and disk also have separate **Native Hermes critical pressure alert** swi
 
 Wing watches while foregrounded or while its existing background task monitoring is active. Health alerts do not keep monitoring running by themselves. Paused or failed readings can leave an issue qualified as last known. Doctor and security audit findings do not generate these alerts.
 
+Scheduled-task alerts clear when a successful task-list refresh confirms the error is resolved or the failed task has been removed, including after restarting Wing.
+
 The toolbar warning triangle appears only while issues need attention. Tap it to browse issues, then tap an alert or its open icon to reach the settings where you can act. A connector alert opens the failed connector directly; if several failed, the connector list marks them. Profile alerts keep the connection and profile captured by the check. Resource alerts open Hermes health. Tapping a brief notice opens the same destination. Use the checkmark to acknowledge an issue and silence its cues for that occurrence, or the snooze icon to pause cues for 30 minutes. Both actions confirm immediately in the dialog and remove the issue from the toolbar warning and its count. Review acknowledged and snoozed issues under **Hermes health → Health alerts** until recovery. Snooze expiry restores the warning. Escalation or recurrence alerts you again. These choices last for the current connection session; restarting Wing resets them. Dismissing a notice keeps the issue; recovery clears it. Backend connection failures never create health alerts; the connection LED shows availability and recovery. These are in-app alerts and do not require Android notification permission.
 
 ## Analytics
