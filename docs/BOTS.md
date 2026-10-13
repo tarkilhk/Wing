@@ -1,6 +1,8 @@
 # Bots
 
-Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Pinned entries lead the list. Names and message previews sit on the left, with saved artwork on the right. The floating + creates a bot or group for the selected tab. Lists refresh automatically while visible.
+Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Pinned entries lead the list. Names and message previews sit on the left, with saved artwork on the right. The floating + creates a bot or group for the selected tab. Lists refresh automatically while visible. Usable lists refresh quietly.
+Wing's feather pulse appears when initial loading prevents you from using the
+list, without moving the cards when loading finishes.
 
 Tap a bot's avatar to edit its appearance. Tap its name or message preview to open its continuing **Bot Chat**. Back returns to the same tab and search. Bot Chats use the usual conversation screen, showing its saved avatar to the left of its display name when available. Tap that avatar or name in the chat header to open Bot settings. Back returns to your conversation with its draft intact.
 
@@ -125,14 +127,18 @@ timestamps, with Copy in the same header. Type `@` in the composer to choose a
 member; the picker inserts at the cursor. The conversation opens
 at its latest messages and renders older messages as you scroll up. Your reading
 window stays in place as replies arrive; reaching the bottom or using the down
-arrow shows those replies. The arrow uses the same motion as normal chats. Loading
-uses a thin bar above the messages, keeping the reading viewport fixed.
+arrow shows those replies. The arrow uses the same motion as normal chats.
+Initial loading uses Wing's feather pulse in the upper corner while messages
+are unavailable. Existing messages refresh quietly, and loading feedback keeps
+the reading viewport fixed.
 
 Pinch inward on the discussion to open the same cards as normal chat Recents.
 The group remains mounted with its draft and reading position. Tap its card or
-use Back to return; Back again returns to the screen that opened the group.
-Opening another conversation uses its normal chat window; Back restores the
-group's cards. Cards do not mark group messages as read.
+use Back to close the stack. Back from the discussion returns to Groups.
+Switching to another conversation uses its normal chat window; Back closes any
+open card stack first, then returns to Chats, Bots or Groups for the selected
+conversation. Earlier conversations are cleared from the navigation stack.
+Cards do not mark group messages as read.
 
 Recents and the card browser share a cached list and screenshots. Reopening uses
 the saved view while background reads refresh it. You can swipe to another
@@ -146,15 +152,17 @@ stay empty. Completed avatar reads update the card without rereading messages.
 
 Tap the people icon under the title for a compact member list anchored beneath
 that button, with saved names and avatars. Tap outside or use Back
-to dismiss it. The conversation uses a group icon when no picture is saved.
+to dismiss it. Without a saved room picture, the conversation shows its
+member-avatar collage.
 The ellipsis menu contains Edit group, working histories, Refresh and Stop.
 Refresh rereads messages, activity and approval state; it does not restart the bots. Wing also
 refreshes this state automatically. Recognized bot mentions display as bold,
 colored `@Name` text. Copy preserves the original message.
 While work is active, the empty composer offers Stop; entering a draft offers
-Send. A compact status above the composer shows sending, loading, work or
-approval needs. Hermes currently exposes group activity rather than individual
-bots typing, so Wing displays “Bots are working…”.
+Send. A compact status above the composer shows sending, group updates, work or
+approval needs. Background refresh does not show a loading animation. Hermes
+currently exposes group activity rather than individual bots typing, so Wing
+displays “Bots are working…”.
 
 Internal group workers stay out of the default Chats list and chat notifications,
 so they do not produce `Group: <UUID>` alerts, including after opening a worker
@@ -206,7 +214,7 @@ conversations, pet avatars or automatic screen opening. Hosted groups use bots
 from one instance, although the bot roster and ordinary settings work across
 saved instances.
 
-See [Administration](ADMINISTRATION.md) for profile configuration and [Chats](CHATS.md) for conversation actions.
+## Bot messages and delivery
 
 Messages from other bots appear on the left with their name, avatar when available,
 formatted text and time. Copy copies the message body. Replies from the bot you
@@ -223,7 +231,7 @@ when the outcome is uncertain. Raw details keeps the exact receipts.
 An unmatched “Bot delivery process finished” notice stays separate. Expand
 Output to inspect the runner's command and result.
 
-### Bot working histories
+## Bot working histories
 
 Internal group-worker sessions stay out of Recents and ordinary chat notifications.
 To inspect one, open the group, choose **⋯ → Bot working histories**, then select
@@ -235,3 +243,6 @@ and preserves your draft. Send group messages from the group composer.
 
 If no current worker history is available, the viewer says so. A failed read
 shows an error with Refresh; it does not claim the history is empty.
+
+See [Administration](ADMINISTRATION.md) for profile configuration and
+[Chats](CHATS.md) for conversation actions.

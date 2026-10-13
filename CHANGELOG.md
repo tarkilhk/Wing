@@ -41,6 +41,10 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Bots and discussions
 
+- Open a profile's Bot Chat by long pressing its icon in the Chats header.
+- Open Bot settings from the Bot Chat header avatar or name, with MCP
+  connectors available alongside the bot's configuration editors.
+
 - Preserve transparency in uploaded and generated group icons, including pictures
   that need compression to fit the saved icon limit.
 
@@ -92,10 +96,12 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Recents and composing
 
-- Switch between chats opened from Recents with a two-finger sideways swipe.
-  Pinch inward to leave a card stack open, swipe through the circular stack with
-  momentum and tap a card to expand its conversation. Back restores the Recents
-  filter; drafts stay with their chats.
+- Switch between chats and group discussions with a two-finger sideways swipe,
+  without opening Recents first. Pinch inward to browse the circular card stack
+  with momentum and tap a card to open its conversation. Back closes the stack
+  first, then returns to Chats, Bots or Groups; drafts stay with their chats.
+- Keep slash-command invocations when a timeout or lost connection leaves the
+  outcome uncertain. Report the uncertainty without automatically retrying.
 - Show soft edge cues for replies and confirmed requests for input in other
   recent conversations. Animate switching with retained conversation snapshots
   and keep available Recents rows visible during background refresh.
@@ -171,9 +177,10 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ### Recovery and other fixes
 
-- Keep Chats interactive after confirmed chat and project changes. Refresh in the
-  background with progress and retry feedback, preserving totals, search results
-  and scroll position. Dismissing an action menu no longer reloads the list.
+- Keep Chats interactive after confirmed chat and project changes. Refresh
+  quietly in the background, preserving totals, search results and scroll
+  position. Failed reads offer retry. Dismissing an action menu no longer
+  reloads the list.
 - Fix chat menus turning the screen pale when a live update replaces their row.
 - Scope Project filter choices to the selected profiles and retain project icons.
 - Keep saved-chat connection recovery alive when its chat-list screen is replaced.
