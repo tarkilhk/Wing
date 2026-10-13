@@ -32,6 +32,7 @@ class HealthAlertsCoordinator extends ChangeNotifier {
   Timer? _reminder;
   final _sessions = <ProfileWorkspaceController, HealthAlertsSession>{};
   final _listeners = <ProfileWorkspaceController, VoidCallback>{};
+  final _activeOwners = <ProfileWorkspaceController>{};
   bool _foreground = true, _closed = false;
   List<HealthAlert> get alerts {
     final result = _sessions.values.expand((s) => s.alerts).toList();
@@ -50,6 +51,7 @@ class HealthAlertsCoordinator extends ChangeNotifier {
   }
 
   void setForeground(bool value) {
+    if (value && !_foreground) _activeOwners.clear();
     _foreground = value;
     _reconcile();
   }
@@ -61,6 +63,7 @@ class HealthAlertsCoordinator extends ChangeNotifier {
       if (owners.contains(owner)) continue;
       owner.removeListener(_listeners.remove(owner)!);
       final session = _sessions.remove(owner)!;
+      _activeOwners.remove(owner);
       session.removeListener(_changed);
       session.dispose();
     }
@@ -93,6 +96,20 @@ class HealthAlertsCoordinator extends ChangeNotifier {
         _foreground && owner.hasMountedRoutes ||
         background && owner.hasActiveChats;
     _sessions[owner]?.setActive(active);
+    final resumed = active ? _activeOwners.add(owner) : false;
+    if (!active) _activeOwners.remove(owner);
+    if (resumed && settings.settings.enabled && settings.settings.profile) {
+      // Acknowledged incidents still need recovery checks. Use their captured
+      // profiles, including those that are not selected in the workspace.
+      final profiles = _sessions[owner]!.alerts
+          .where((alert) => alert.destination == 'Scheduled tasks')
+          .map((alert) => alert.profileName)
+          .whereType<String>()
+          .toSet();
+      for (final name in profiles) {
+        unawaited(owner.healthSession().refreshScheduledTasks(name));
+      }
+    }
     // Borrow existing profile observations. Selection may perform its existing
     // initial/expired access checks; never start server doctor/audit in a watcher.
     if (active &&
@@ -153,6 +170,7 @@ class HealthAlertsCoordinator extends ChangeNotifier {
       e.value.dispose();
     }
     _sessions.clear();
+    _activeOwners.clear();
     super.dispose();
   }
 }

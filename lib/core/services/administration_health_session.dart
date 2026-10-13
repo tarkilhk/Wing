@@ -150,6 +150,15 @@ class AdministrationHealthSession extends ChangeNotifier {
         return source;
       });
 
+  /// Recheck a retained task issue without selecting its profile or launching
+  /// provider, connector or server diagnostics. Borrow the list's shared owner.
+  Future<void> refreshScheduledTasks(String profileName) {
+    if (_disposed) return Future.value();
+    final source = _tasksFor(server.profile(profileName));
+    if (source.tasks != null) health.updateTasks(source);
+    return source.loading ? Future.value() : source.refresh();
+  }
+
   Future<void> refresh(ProfileGateway gateway) {
     if (_disposed) return Future.value();
     _requireConnection(gateway);

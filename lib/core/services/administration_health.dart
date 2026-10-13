@@ -32,7 +32,6 @@ class AdministrationHealth extends ChangeNotifier {
   final _profiles = <String, _ProfileHealthState>{};
   _ProfileHealthState get _profileState =>
       _profiles.putIfAbsent(profileName!, _ProfileHealthState.new);
-  AdministrationHealthFinding? get _tasks => _profileState.tasks;
   AdministrationHealthFinding? get _profileChecks => _profileState.checks;
   Timer? _expiry;
   bool _disposed = false;
@@ -371,6 +370,31 @@ class AdministrationHealth extends ChangeNotifier {
     _changed();
   }
 
+  /// Captured task observations remain available independently of selection so
+  /// recovery can retire an issue belonging to another profile.
+  Map<String, AdministrationHealthFinding> get scheduledTaskFindings =>
+      Map.unmodifiable({
+        for (final entry in _profiles.entries)
+          entry.key: ?_taskFinding(entry.value),
+      });
+
+  AdministrationHealthFinding? _taskFinding(_ProfileHealthState state) {
+    final task = state.tasks;
+    return task == null
+        ? null
+        : _finding(
+            task.title,
+            state.taskLoading || state.taskError != null
+                ? AdministrationHealthStatus.unknown
+                : task.status,
+            task.detail,
+            at: task.checkedAt,
+            loading: state.taskLoading,
+            error: state.taskError,
+            destination: task.destination,
+          );
+  }
+
   AdministrationHealthFinding _finding(
     String title,
     AdministrationHealthStatus status,
@@ -486,19 +510,7 @@ class AdministrationHealth extends ChangeNotifier {
         ),
       );
     }
-    if (_tasks case final task?) {
-      findings.add(
-        _finding(
-          task.title,
-          task.status,
-          task.detail,
-          at: task.checkedAt,
-          loading: _profileState.taskLoading,
-          error: _profileState.taskError,
-          destination: task.destination,
-        ),
-      );
-    }
+    if (_taskFinding(_profileState) case final task?) findings.add(task);
     if (_profileChecks case final checks?) {
       findings.add(
         _finding(

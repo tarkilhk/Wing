@@ -171,13 +171,29 @@ class HealthAlertsSession extends ChangeNotifier {
         _evaluator.unknown(alert.id);
       }
     }
-    if (health.profileName case final name? when policy.profile) {
-      for (final finding in health.profileFindings) {
+    if (policy.profile) {
+      final findings = [
+        for (final entry in health.scheduledTaskFindings.entries)
+          (entry.key, entry.value, const <String>[]),
+        if (health.profileName case final name?)
+          for (final finding in health.profileFindings)
+            if (finding.destination != 'Scheduled tasks')
+              (
+                name,
+                finding,
+                finding.destination == 'MCP connectors'
+                    ? health.failedConnectorNames
+                    : const <String>[],
+              ),
+      ];
+      for (final (name, finding, connectors) in findings) {
         final at = finding.checkedAt;
         final current =
             at != null &&
             !now.isBefore(at) &&
             now.difference(at) < health.maxAge;
+        final taskUnknown =
+            finding.destination == 'Scheduled tasks' && !current;
         _evaluator.finding(
           key: '${host.connectionIdentity}:profile:$name:${finding.title}',
           title: finding.title,
@@ -185,12 +201,11 @@ class HealthAlertsSession extends ChangeNotifier {
           scope: HealthAlertScope.profile,
           profileName: name,
           destination: finding.destination,
-          connectorNames: finding.destination == 'MCP connectors'
-              ? health.failedConnectorNames
-              : const [],
+          connectorNames: connectors,
           at: at,
           failed:
-              at == null ||
+              taskUnknown ||
+                  at == null ||
                   now.isBefore(at) ||
                   finding.status == AdministrationHealthStatus.unknown
               ? null

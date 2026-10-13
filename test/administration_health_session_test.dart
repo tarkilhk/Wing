@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/models/health_alert.dart';
 import 'package:wing/core/screens/administration/admin_runtime_health.dart';
 import 'package:wing/core/services/administration_health_session.dart';
 import 'package:wing/core/services/administration_repository.dart';
@@ -642,6 +643,145 @@ void main() {
       expect(observedDetails, everyElement('1 task · No reported errors'));
       tasks.release();
       session.dispose();
+    },
+  );
+
+  testWidgets(
+    'fresh task data clears an acknowledged alert for an unselected profile after restart',
+    (tester) async {
+      now = DateTime.now();
+      var fixture = HealthAlertsFixture(preferences, repository: server);
+      var session = fixture.owner.healthSession();
+      List<HealthAlert> taskAlerts() => fixture.coordinator.alerts
+          .where((alert) => alert.title == 'Scheduled tasks')
+          .toList();
+      await select(session, 'default');
+      taskRows = [
+        {
+          'id': 'failed',
+          'enabled': true,
+          'state': 'scheduled',
+          'last_error': 'Delivery failed',
+          'schedule': {'kind': 'interval', 'minutes': 60},
+        },
+      ];
+      await select(session, 'work');
+      final issue = taskAlerts().single;
+      await fixture.coordinator.acknowledge(issue);
+      expect(taskAlerts().single.acknowledged, isTrue);
+      fixture.dispose();
+      await session.saved;
+
+      fixture = HealthAlertsFixture(preferences, repository: server);
+      session = fixture.owner.healthSession();
+      session.select(workspaces['default']!.gateway);
+      await tester.pump();
+      final tasks = ScheduledTasksController.acquire(
+        server.profile('work'),
+        preferences,
+      );
+      try {
+        expect(session.health.profileName, 'default');
+        expect(taskAlerts().single.profileName, 'work');
+        taskRows.single['last_error'] = '';
+        await tasks.refresh();
+        expect(tasks.tasks!.single.needsAttention, isFalse);
+        expect(taskAlerts(), isEmpty);
+        expect(session.health.profileName, 'default');
+      } finally {
+        tasks.release();
+        fixture.dispose();
+        await session.saved;
+      }
+    },
+  );
+
+  testWidgets(
+    'restored acknowledged task alerts recheck only their captured profile and recover on resume',
+    (tester) async {
+      now = DateTime.now();
+      var fixture = HealthAlertsFixture(preferences, repository: server);
+      var session = fixture.owner.healthSession();
+      await select(session, 'default');
+      taskRows = [
+        {
+          'id': 'failed',
+          'enabled': true,
+          'state': 'scheduled',
+          'last_error': 'Delivery failed',
+          'schedule': {'kind': 'interval', 'minutes': 60},
+        },
+      ];
+      await select(session, 'work');
+      final issue = fixture.coordinator.alerts.singleWhere(
+        (alert) => alert.title == 'Scheduled tasks',
+      );
+      await fixture.coordinator.acknowledge(issue);
+      fixture.dispose();
+      await session.saved;
+
+      // An offline recovery read must retain the issue and its acknowledgement.
+      tasksOffline = true;
+      requests.clear();
+      fixture = HealthAlertsFixture(preferences, repository: server);
+      session = fixture.owner.healthSession();
+      try {
+        session.select(workspaces['default']!.gateway);
+        await tester.pump();
+        expect(session.health.profileName, 'default');
+        final retained = fixture.coordinator.alerts.singleWhere(
+          (alert) => alert.title == 'Scheduled tasks',
+        );
+        expect(retained.acknowledged, isTrue);
+        expect(retained.lastKnown, isTrue);
+        expect(retained.occurrence, issue.occurrence);
+        expect(requests.where((r) => r.$2 == 'cron/jobs').map((r) => r.$3), [
+          'work',
+        ]);
+        expect(
+          requests.any(
+            (r) => r.$2.startsWith('setup.') || r.$2.startsWith('ops/'),
+          ),
+          isFalse,
+        );
+
+        fixture.coordinator.setForeground(false);
+        tasksOffline = false;
+        taskRows.single['last_error'] = '';
+        fixture.coordinator.setForeground(true);
+        await tester.pump();
+        expect(
+          fixture.coordinator.alerts.where(
+            (alert) => alert.title == 'Scheduled tasks',
+          ),
+          isEmpty,
+        );
+        expect(session.health.profileName, 'default');
+        expect(requests.where((r) => r.$2 == 'cron/jobs').map((r) => r.$3), [
+          'work',
+          'work',
+        ]);
+        expect(
+          requests.any(
+            (r) => r.$2.startsWith('setup.') || r.$2.startsWith('ops/'),
+          ),
+          isFalse,
+        );
+      } finally {
+        fixture.dispose();
+        await session.saved;
+      }
+      fixture = HealthAlertsFixture(preferences, repository: server);
+      try {
+        expect(
+          fixture.coordinator.alerts.where(
+            (alert) => alert.title == 'Scheduled tasks',
+          ),
+          isEmpty,
+        );
+      } finally {
+        fixture.dispose();
+      }
     },
   );
 
