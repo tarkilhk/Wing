@@ -20,6 +20,7 @@ import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/screens/profile_workspace_browser.dart';
 import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/widgets/context_ring.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/profile_browser_fixture.dart';
 import 'support/browser_mutations_fixture.dart';
@@ -273,13 +274,15 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('project-action-rename')));
+      await tester.tap(
+        find.byKey(const ValueKey('project-action-editProject')),
+      );
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const ValueKey('project-name-field')),
         'Renamed work project',
       );
-      await tester.tap(find.byKey(const ValueKey('project-rename-save')));
+      await tester.tap(find.byKey(const ValueKey('project-edit-confirm')));
       await tester.pumpAndSettle();
       expect(
         host.projectChanges['work/work-project']?['label'],
@@ -406,6 +409,218 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final failedStep in ['folder', 'details']) {
+        testWidgets(
+          'Edit project feedback ${brightness.name} $scale failure=$failedStep',
+          (tester) async {
+            final semantics = tester.ensureSemantics();
+            try {
+              final host = await useMutationHost();
+              final folderGate = Completer<void>();
+              final detailsGate = Completer<void>();
+              host.rpcDelays['projects.add_folder'] = folderGate;
+              host.rpcDelays['projects.update'] = detailsGate;
+              host.failPrimaryFolder = failedStep == 'folder';
+              host.failProjectUpdate = failedStep == 'details';
+              addTearDown(() {
+                if (!folderGate.isCompleted) folderGate.complete();
+                if (!detailsGate.isCompleted) detailsGate.complete();
+                tester.view.resetViewInsets();
+              });
+              await showActions(tester, brightness: brightness, scale: scale);
+              final project = find.byKey(
+                const ValueKey('project-work-work-project'),
+              );
+              await tester.ensureVisible(project);
+              await tester.tap(
+                find.descendant(
+                  of: project,
+                  matching: find.byTooltip('Project actions'),
+                ),
+              );
+              await tester.pumpAndSettle();
+              expect(
+                find.byKey(const ValueKey('project-action-rename')),
+                findsNothing,
+              );
+              expect(
+                find.byKey(const ValueKey('project-action-appearance')),
+                findsNothing,
+              );
+              await actionCapture(
+                tester,
+                'project-edit-menu-${brightness.name}-$scale',
+              );
+              await tester.tap(
+                find.byKey(const ValueKey('project-action-editProject')),
+              );
+              await tester.pumpAndSettle();
+              final name = find.byKey(const ValueKey('project-name-field'));
+              expect(
+                tester.widget<TextField>(name).controller!.text,
+                'Work project',
+              );
+              expect(find.byTooltip('Change primary folder'), findsOneWidget);
+              await actionCapture(
+                tester,
+                'project-edit-form-${brightness.name}-$scale',
+              );
+              await tester.enterText(name, 'Edited work project');
+              tester.view.viewInsets = FakeViewPadding(
+                bottom: 260 * tester.view.devicePixelRatio,
+              );
+              await tester.pumpAndSettle();
+              final save = find.byKey(const ValueKey('project-edit-confirm'));
+              expect(save.hitTestable(), findsOneWidget);
+              expect(tester.getRect(save).bottom, lessThanOrEqualTo(844 - 260));
+              await actionCapture(
+                tester,
+                'project-edit-keyboard-${brightness.name}-$scale',
+              );
+              tester.view.resetViewInsets();
+              await tester.pumpAndSettle();
+              await tester.ensureVisible(
+                find.byKey(const ValueKey('project-color-7')),
+              );
+              await tester.tap(find.byKey(const ValueKey('project-color-7')));
+              await tester.ensureVisible(
+                find.byKey(const ValueKey('project-icon-rocket')),
+              );
+              await tester.tap(
+                find.byKey(const ValueKey('project-icon-rocket')),
+              );
+              await tester.ensureVisible(
+                find.byTooltip('Change primary folder'),
+              );
+              await tester.tap(find.byTooltip('Change primary folder'));
+              await tester.pumpAndSettle();
+              expect(
+                tester
+                    .widget<Text>(
+                      find.byKey(const ValueKey('project-folder-location')),
+                    )
+                    .data,
+                '/work',
+              );
+              await tester.tap(
+                find.byKey(const ValueKey('project-folder-/work/new')),
+              );
+              await tester.pumpAndSettle();
+              await tester.tap(
+                find.byKey(const ValueKey('project-folder-continue')),
+              );
+              await tester.pumpAndSettle();
+              await tester.tap(save);
+              await tester.pumpAndSettle();
+              expect(find.bySemanticsLabel('Saving project'), findsOneWidget);
+              expect(tester.widget<IconButton>(save).onPressed, isNull);
+              expect(tester.widget<TextField>(name).enabled, isFalse);
+              await tester.tap(save, warnIfMissed: false);
+              await tester.tapAt(const Offset(8, 8));
+              await tester.binding.handlePopRoute();
+              await tester.pump();
+              expect(find.text('Edit project'), findsOneWidget);
+              expect(
+                host.wireCalls.where((m) => m == 'projects.add_folder'),
+                hasLength(1),
+              );
+              expect(
+                host.wireCalls.where((m) => m == 'projects.update'),
+                isEmpty,
+              );
+              final footer = tester.getRect(save);
+              await actionCapture(
+                tester,
+                'project-edit-saving-folder-${brightness.name}-$scale',
+              );
+              folderGate.complete();
+              await tester.pumpAndSettle();
+              if (failedStep == 'details') {
+                expect(find.bySemanticsLabel('Saving project'), findsOneWidget);
+                expect(tester.getRect(save), footer);
+                expect(
+                  controller.current!.projects.single['path'],
+                  '/work/new',
+                );
+                expect(
+                  controller.current!.projects.single['name'],
+                  'Work project',
+                );
+                await actionCapture(
+                  tester,
+                  'project-edit-saving-details-${brightness.name}-$scale',
+                );
+                detailsGate.complete();
+                await tester.pumpAndSettle();
+                expect(find.textContaining('Folder saved.'), findsOneWidget);
+              } else {
+                expect(
+                  host.wireCalls.where((m) => m == 'projects.update'),
+                  isEmpty,
+                );
+                expect(controller.current!.projects.single['path'], '/work');
+                detailsGate.complete();
+              }
+              expect(find.bySemanticsLabel('Saving project'), findsNothing);
+              expect(
+                tester.widget<TextField>(name).controller!.text,
+                'Edited work project',
+              );
+              expect(
+                tester
+                    .widget<Text>(
+                      find.byKey(const ValueKey('project-chosen-folder')),
+                    )
+                    .data,
+                '/work/new',
+              );
+              expect(save.hitTestable(), findsOneWidget);
+              await actionCapture(
+                tester,
+                'project-edit-error-${brightness.name}-$scale-$failedStep',
+              );
+              host.failPrimaryFolder = false;
+              host.failProjectUpdate = false;
+              await tester.tap(save);
+              await tester.pumpAndSettle();
+              expect(find.text('Edit project'), findsNothing);
+              expect(
+                controller.current!.projects.single['name'],
+                'Edited work project',
+              );
+              expect(
+                controller.current!.projects.single['color'],
+                'hsl(210 68% 58%)',
+              );
+              expect(controller.current!.projects.single['icon'], 'rocket');
+              expect(
+                (controller.current!.projects.single['folders'] as List).map(
+                  (f) => f['path'],
+                ),
+                containsAll(['/work', '/work/new']),
+              );
+              expect(
+                host.wireCalls.where((m) => m == 'projects.add_folder'),
+                hasLength(failedStep == 'folder' ? 2 : 1),
+              );
+              expect(
+                host.wireCalls.where((m) => m == 'projects.remove_folder'),
+                isEmpty,
+              );
+              expect(host.folderCreates, isEmpty);
+              expect(tester.takeException(), isNull);
+              await tester.pumpWidget(const SizedBox.shrink());
+            } finally {
+              semantics.dispose();
+            }
+          },
+        );
+      }
+    }
+  }
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
@@ -554,7 +769,7 @@ void main() {
                 );
                 if (scale == 2) {
                   await tester.drag(
-                    find.byKey(const ValueKey('project-create-error')),
+                    find.byKey(const ValueKey('project-save-error')),
                     const Offset(0, -240),
                   );
                   await tester.pumpAndSettle();
@@ -824,7 +1039,12 @@ void main() {
           'Keep this unsent draft',
         );
         expect(find.byKey(const ValueKey('chat-filter-profile')), findsNothing);
-        expect(find.text('Reconnecting to Prestige'), findsOneWidget);
+        expect(find.text('Reconnecting to Prestige'), findsNothing);
+        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(
+          tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
+          'Reconnecting',
+        );
 
         if (leaveChat) {
           await tester.binding.handlePopRoute();

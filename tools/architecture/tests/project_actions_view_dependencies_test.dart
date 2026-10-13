@@ -11,7 +11,7 @@ const _otherAdapter = 'lib/core/services/profile_gateway.dart';
 const _owner = 'lib/core/services/chat_browser_data.dart';
 const _model = 'lib/core/models/browser_actions.dart';
 const _part = 'lib/core/screens/project_actions_part.dart';
-const _page = 'class _ProjectDialog {}';
+const _page = 'class ProjectEditorDialog {}';
 
 class _Case {
   const _Case(this.name, this.files, this.exit, {this.libraries = const {}});
