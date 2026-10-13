@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/server_reference.dart';
 import '../services/server_files_browser.dart';
 import '../theme/wing_theme.dart';
+import 'composer_icon_button.dart';
 import 'studio_error.dart';
 import 'studio_loading.dart';
 
@@ -85,11 +86,14 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
       const Spacer(),
       StudioButtonPress(
         child: IconButton(
-          tooltip: 'New folder',
+          tooltip: _naming ? 'Close new folder' : 'New folder',
           onPressed: !_browser.canCreate
               ? null
               : () => setState(() => _naming = !_naming),
-          icon: const Icon(Icons.create_new_folder_outlined),
+          icon: ComposerActionGlyph(
+            icon: _naming ? Icons.close : Icons.create_new_folder_outlined,
+            identity: _naming ? 'stop' : 'new-folder',
+          ),
         ),
       ),
       StudioButtonPress(
@@ -106,6 +110,7 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
     child: ListTile(
       key: ValueKey('project-folder-${folder.path}'),
       contentPadding: EdgeInsets.zero,
+      visualDensity: const VisualDensity(vertical: -2),
       leading: Container(
         width: 36,
         height: 36,

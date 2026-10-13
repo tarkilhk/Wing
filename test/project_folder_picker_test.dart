@@ -413,6 +413,25 @@ void main() {
       'Created',
     );
     await tester.pump();
+    final close = find.byTooltip('Close new folder');
+    expect(
+      find.descendant(of: close, matching: find.byIcon(Icons.close)),
+      findsOneWidget,
+    );
+    await tester.tap(close);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('project-new-folder-name')), findsNothing);
+    await tester.tap(find.byTooltip('New folder'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const ValueKey('project-new-folder-name')),
+          )
+          .controller!
+          .text,
+      'Created',
+    );
     await tester.tap(find.byKey(const ValueKey('project-new-folder-create')));
     await tester.pump();
     await tester.pump();

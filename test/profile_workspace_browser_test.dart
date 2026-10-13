@@ -724,7 +724,7 @@ void main() {
               );
               tester.view.resetViewInsets();
               await tester.pumpAndSettle();
-              await tester.tap(find.byTooltip('New folder'));
+              await tester.tap(find.byTooltip('Close new folder'));
               await tester.pumpAndSettle();
               await tester.tap(
                 find.byKey(
