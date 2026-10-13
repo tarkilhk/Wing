@@ -7,6 +7,11 @@ when loading finishes.
 
 Tap a bot's avatar to edit its appearance. Tap its name or message preview to open its continuing **Bot Chat**. Back returns to the same tab and search. Bot Chats use the usual conversation screen, showing its saved avatar to the left of its display name when available. Tap that avatar or name in the chat header to open Bot settings. Back returns to your conversation with its draft intact.
 
+Messages received from other bots use left-aligned bubbles tinted from each
+sender’s avatar color, with the same readable text and timestamp styling as
+group discussions. Replies from the bot whose chat is open use the usual
+assistant layout.
+
 The chat screen opens immediately after the tap. Wing's feather pulse appears
 while the conversation loads. You can go Back during loading; a failed load
 offers Retry in the chat screen.

@@ -214,13 +214,13 @@ class ProfileMessage extends StatelessWidget {
     final colors = theme.colorScheme;
     final appearance = senderAppearance;
     final name = appearance?.title ?? message.sender!;
-    final bubbleColor = botBubbleColors?.fill ?? colors.surfaceContainerHigh;
-    final footerColor =
-        botBubbleColors?.footer ?? Color.lerp(colors.surface, bubbleColor, .5)!;
-    final date = _timestamp(
-      context,
-      color: botBubbleColors?.timestamp ?? colors.onSurfaceVariant,
-    );
+    final bubbleColors =
+        botBubbleColors ??
+        BotBubbleColors.fromAvatar(
+          BotAvatar.resolveColor(appearance?.color ?? '', name),
+          theme,
+        );
+    final date = _timestamp(context, color: bubbleColors.timestamp);
     return Padding(
       padding: const EdgeInsets.only(bottom: WingSpacing.md),
       child: LayoutBuilder(
@@ -286,22 +286,16 @@ class ProfileMessage extends StatelessWidget {
                     key: ValueKey(('bot-message-bubble', message.id)),
                     borderRadius: WingRadius.card,
                     child: ColoredBox(
-                      color: bubbleColor,
+                      color: bubbleColors.fill,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _speakerHeader(
-                            context,
-                            name,
-                            botBubbleColors?.text ?? colors.onSurface,
-                          ),
+                          _speakerHeader(context, name, bubbleColors.text),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
                             child: Theme(
-                              data:
-                                  botBubbleColors?.markdownTheme(theme) ??
-                                  theme,
+                              data: bubbleColors.markdownTheme(theme),
                               child: MarkdownMessageContent(
                                 data: message.text,
                                 loadImages: loadImages,
@@ -314,7 +308,7 @@ class ProfileMessage extends StatelessWidget {
                           if (date != null)
                             ColoredBox(
                               key: ValueKey(('bot-message-footer', message.id)),
-                              color: footerColor,
+                              color: bubbleColors.footer,
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,

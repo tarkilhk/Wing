@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/bot_bubble_colors.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/bot_avatar.dart';
 import 'package:wing/core/models/bots.dart';
@@ -156,6 +157,44 @@ void main() {
             find.byKey(
               const ValueKey<(String, Object?)>(('bot-message-bubble', 4)),
             ),
+          );
+          final bubbleFinder = find.byKey(
+            const ValueKey<(String, Object?)>(('bot-message-bubble', 4)),
+          );
+          final theme = Theme.of(tester.element(bubbleFinder));
+          final palette = BotBubbleColors.fromAvatar(
+            BotAvatar.resolveColor(bot.color, bot.title),
+            theme,
+          );
+          expect(
+            tester
+                .widget<ColoredBox>(
+                  find
+                      .descendant(
+                        of: bubbleFinder,
+                        matching: find.byType(ColoredBox),
+                      )
+                      .first,
+                )
+                .color,
+            palette.fill,
+          );
+          expect(
+            tester
+                .widget<ColoredBox>(
+                  find.byKey(
+                    const ValueKey<(String, Object?)>((
+                      'bot-message-footer',
+                      4,
+                    )),
+                  ),
+                )
+                .color,
+            palette.footer,
+          );
+          expect(
+            tester.widget<Text>(find.text('15 Sep, 14:07')).style?.color,
+            palette.timestamp,
           );
           final avatar = tester.getRect(find.byType(BotAvatar));
           expect(avatar.left, closeTo(16, .01));

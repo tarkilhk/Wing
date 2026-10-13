@@ -150,14 +150,7 @@ class BotGroupMessage extends StatelessWidget {
       senderAppearance: appearance,
       botBubbleColors: message.sender == null
           ? null
-          : _GroupBubblePalette.forMessage(context, message.senderHandle) ??
-                BotBubbleColors.fromAvatar(
-                  BotAvatar.resolveColor(
-                    appearance?.color ?? '',
-                    appearance?.title ?? message.sender!,
-                  ),
-                  Theme.of(context),
-                ),
+          : _GroupBubblePalette.forMessage(context, message.senderHandle),
       onSenderTap: onSenderTap,
       loadImages: loadImages,
     ),
