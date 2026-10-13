@@ -6,9 +6,161 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/dashboard_read_transport.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 
+import 'support/loopback_http_fixtures.dart';
+
 void main() {
+  useRealHttpClientsForLoopbackFixtures();
+  for (final outcome in ['complete', 'stalled', 'closed']) {
+    testWidgets('progressing profile history $outcome uses an inactivity limit', (
+      tester,
+    ) async {
+      final previous = HttpOverrides.current;
+      HttpOverrides.global = null;
+      final savedReply = 'Saved reply ${List.filled(65536, 'x').join()}';
+      final started = Completer<void>();
+      final advances = List.generate(3, (_) => Completer<void>());
+      final delivered = List.generate(3, (_) => Completer<void>());
+      late HttpServer server;
+      await tester.runAsync(() async {
+        server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        server.listen((request) async {
+          if (request.uri.path == '/') {
+            request.response.write(
+              'window.__HERMES_SESSION_TOKEN__="fixture";',
+            );
+          } else {
+            expect(request.uri.queryParameters['profile'], 'personal');
+            request.response.headers.contentType = ContentType.json;
+            final bytes = utf8.encode(
+              jsonEncode({
+                'session_id': 'chat',
+                'messages': [
+                  {'id': 1, 'role': 'assistant', 'content': savedReply},
+                ],
+                'pagination': {
+                  'offset': 0,
+                  'limit': 50,
+                  'order': 'latest',
+                  'returned': 1,
+                },
+              }),
+            );
+            final part = (bytes.length / 4).ceil();
+            request.response.add(bytes.sublist(0, part));
+            await request.response.flush();
+            started.complete();
+            for (var i = 0; i < advances.length; i++) {
+              await advances[i].future;
+              try {
+                final begin = part * (i + 1);
+                request.response.add(
+                  bytes.sublist(begin, (begin + part).clamp(0, bytes.length)),
+                );
+                await request.response.flush();
+              } on SocketException {
+                break;
+              } finally {
+                delivered[i].complete();
+              }
+            }
+          }
+          await request.response.close();
+        });
+      });
+      final gateway = ProfileGateway.forConnection(
+        ConnectionAccess(
+          connection: SavedConnection(
+            id: 'slow-history',
+            label: 'Fixture',
+            host: '127.0.0.1',
+            port: server.port,
+            dashboardPortOverride: server.port,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
+        ),
+        WorkspaceScope(connectionId: 'slow-history', profileName: 'personal'),
+      );
+      addTearDown(() async {
+        for (final advance in advances) {
+          if (!advance.isCompleted) advance.complete();
+        }
+        gateway.close();
+        await tester.runAsync(() => server.close(force: true));
+        HttpOverrides.global = previous;
+      });
+      ProfileHistoryPage? result;
+      Object? failure;
+      gateway
+          .history('chat')
+          .then<void>(
+            (value) {
+              result = value;
+            },
+            onError: (Object error) {
+              failure = error;
+            },
+          );
+      for (var i = 0; i < 100 && !started.isCompleted; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      expect(started.isCompleted, isTrue);
+      for (var i = 0; i < (outcome == 'complete' ? 3 : 2); i++) {
+        await tester.pump(const Duration(seconds: 20));
+        expect(
+          failure,
+          isNull,
+          reason:
+              'History is still receiving bytes after ${(i + 1) * 20} seconds',
+        );
+        expect(result, isNull);
+        advances[i].complete();
+        for (var n = 0; n < 100 && !delivered[i].isCompleted; n++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump();
+        }
+        expect(delivered[i].isCompleted, isTrue);
+        // Let the real socket deliver its chunk before advancing the virtual clock.
+        for (var n = 0; n < 5; n++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump();
+        }
+      }
+      if (outcome == 'stalled') {
+        await tester.pump(const Duration(seconds: 46));
+        expect(failure, isA<DashboardReadTimeout>());
+      } else if (outcome == 'closed') {
+        gateway.close();
+      }
+      for (var i = 0; i < 100 && result == null && failure == null; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      if (outcome == 'complete') {
+        expect(failure, isNull);
+        expect(result!.rows.single['content'], savedReply);
+      } else {
+        expect(failure, isNotNull);
+        expect(result, isNull);
+      }
+      gateway.close();
+      // Drain dart:io's pooled-connection idle timer in the widget clock.
+      await tester.pump(const Duration(seconds: 15));
+    });
+  }
+
   test('closing an image reader preserves shared in-flight login', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final loginStarted = Completer<void>();
@@ -198,7 +350,7 @@ void main() {
     },
   );
 
-  for (final stage in ['headers', 'body', 'authentication']) {
+  for (final stage in ['headers', 'body', 'authentication', 'ticket']) {
     test('stalled $stage times out and closes the actual socket', () async {
       final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
       final accepted = Completer<void>();
@@ -235,7 +387,9 @@ void main() {
         await serverSub.cancel();
         await server.close();
       });
-      final request = client.apiGetBytes('fs/download', maxBytes: 1024);
+      final request = stage == 'ticket'
+          ? client.mintWebSocketTicket()
+          : client.apiGetBytes('fs/download', maxBytes: 1024);
       final assertion = expectLater(request, throwsA(isA<TimeoutException>()));
       await accepted.future.timeout(const Duration(seconds: 2));
       await assertion;

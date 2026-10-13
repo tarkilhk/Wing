@@ -2799,7 +2799,8 @@ void main() {
             ),
             isTrue,
           );
-          await tester.pump(const Duration(seconds: 4));
+          // A slow history response can outlast the former 20-second cutoff.
+          await tester.pump(const Duration(seconds: 25));
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(find.byType(BotsContent), findsNothing);
           expect(tester.getRect(find.byTooltip('Back')), backRect);

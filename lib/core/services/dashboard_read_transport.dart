@@ -14,7 +14,7 @@ class DashboardReadTimeout extends TimeoutException {
   String toString() => message!;
 }
 
-/// Bounds response headers and body, and aborts the actual HTTP operation.
+/// Bounds inactivity and aborts the actual HTTP operation when progress stops.
 /// Authentication reads use this same transport before authenticated file reads.
 class DashboardReadTransport {
   DashboardReadTransport(this.client, {required this.timeout});
@@ -43,15 +43,33 @@ class DashboardReadTransport {
           ..followRedirects = false
           ..headers.addAll(headers);
     if (body != null) request.body = body;
-    try {
-      return await _receive(request, abort, maxBytes).timeout(
-        timeout,
-        onTimeout: () {
-          cancel();
-          throw DashboardReadTimeout(timeout);
+    final result = Completer<http.Response>();
+    Timer? inactivity;
+    void progress() {
+      if (abort.isCompleted || result.isCompleted) return;
+      inactivity?.cancel();
+      inactivity = Timer(timeout, () {
+        if (result.isCompleted) return;
+        result.completeError(DashboardReadTimeout(timeout));
+        cancel();
+      });
+    }
+
+    progress();
+    unawaited(
+      _receive(request, abort, maxBytes, progress).then<void>(
+        (response) {
+          if (!result.isCompleted) result.complete(response);
         },
-      );
+        onError: (Object error, StackTrace stack) {
+          if (!result.isCompleted) result.completeError(error, stack);
+        },
+      ),
+    );
+    try {
+      return await result.future;
     } finally {
+      inactivity?.cancel();
       cancel();
       _pending.remove(abort);
     }
@@ -61,8 +79,10 @@ class DashboardReadTransport {
     http.AbortableRequest request,
     Completer<void> abort,
     int? maxBytes,
+    void Function() progress,
   ) async {
     final streamed = await client.send(request);
+    progress();
     if (abort.isCompleted ||
         maxBytes != null &&
             streamed.contentLength != null &&
@@ -83,6 +103,7 @@ class DashboardReadTransport {
           result.completeError(const DashboardReadTooLarge());
           unawaited(subscription.cancel());
         } else {
+          if (chunk.isNotEmpty) progress();
           bytes.add(chunk);
         }
       },

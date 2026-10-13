@@ -345,13 +345,9 @@ class ProfileGateway {
       );
       final credentials =
           await (gateway.connectionStatus?.observeAccess(
-                () => dashboard.gatewayCredentials().timeout(
-                  const Duration(seconds: 20),
-                ),
+                dashboard.gatewayCredentials,
               ) ??
-              dashboard.gatewayCredentials().timeout(
-                const Duration(seconds: 20),
-              ));
+              dashboard.gatewayCredentials());
       if (closed) throw StateError('Gateway is closed');
       logConnectionDiagnostic(
         'gateway.credentials_ready',
@@ -399,9 +395,11 @@ class ProfileGateway {
     gateway = ProfileGateway(
       apiPricing: ModelsDevPricing.shared.load,
       scope: scope,
-      get: (endpoint, query) => dashboard
-          .apiGet(endpoint, queryParameters: query)
-          .timeout(const Duration(seconds: 20)),
+      // The dashboard transport bounds and aborts the actual response read.
+      // A shorter Future timeout rejects healthy slow history while leaving
+      // its HTTP request running after the conversation reports failure.
+      get: (endpoint, query) =>
+          dashboard.apiGet(endpoint, queryParameters: query),
       ownedPatch: (endpoint, body, canDispatch, onDispatched) async {
         var dispatchAllowed = true;
         try {
@@ -508,9 +506,7 @@ class ProfileGateway {
         if (result is! Map) throw const FormatException('Missing RPC result');
         return Map<String, dynamic>.from(result);
       },
-      discover: () => ProfilesRepository(
-        dashboard.apiGet,
-      ).discover().timeout(const Duration(seconds: 20)),
+      discover: () => ProfilesRepository(dashboard.apiGet).discover(),
       connect: () =>
           connecting ??
           (connected && socket != null

@@ -1198,7 +1198,8 @@ class DashboardClient {
   Future<String> mintWebSocketTicket({bool retried = false}) async {
     final headers = await _authHeaders();
     _requireCurrentAccess();
-    final res = await _http.post(
+    final res = await _reads.request(
+      'POST',
       Uri.parse('$_baseUrl/api/auth/ws-ticket'),
       headers: headers,
     );
@@ -1236,7 +1237,7 @@ class DashboardClient {
   }) async {
     var stage = 'authentication';
     try {
-      final headers = await _authHeaders().timeout(readTimeout);
+      final headers = await _authHeaders();
       _requireCurrentAccess();
       final uri = Uri.parse(
         '$_baseUrl/api/$endpoint',
@@ -1300,7 +1301,7 @@ class DashboardClient {
     int? maxBytes,
     bool retried = false,
   }) async {
-    final headers = await _authHeaders().timeout(readTimeout);
+    final headers = await _authHeaders();
     _requireCurrentAccess();
     final uri = Uri.parse(
       '$_baseUrl/api/$endpoint',
