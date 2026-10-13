@@ -173,6 +173,18 @@ void main() {
                   child: RepaintBoundary(key: frame, child: child!),
                 ),
                 home: Scaffold(
+                  appBar: AppBar(
+                    title: const Text('Recents'),
+                    bottom: PreferredSize(
+                      preferredSize: const Size.fromHeight(48),
+                      child: Row(
+                        children: const [
+                          Expanded(child: Text('Instance')),
+                          StudioLoadingSlot(),
+                        ],
+                      ),
+                    ),
+                  ),
                   body: WorkspaceActivityContent(
                     recents: recents,
                     visible: true,
@@ -195,7 +207,14 @@ void main() {
               expect(recents.items(), isEmpty);
               final progress = find.byType(StudioLoading);
               expect(progress, findsOneWidget);
-              expect(tester.getTopLeft(progress).dy, listPosition.dy);
+              expect(
+                find.ancestor(of: progress, matching: find.byType(AppBar)),
+                findsOneWidget,
+              );
+              expect(
+                tester.getRect(progress).bottom,
+                lessThanOrEqualTo(listPosition.dy),
+              );
               expect(
                 tester.widget<StudioLoading>(progress).label,
                 'Loading recent chats',
@@ -304,6 +323,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
+          appBar: AppBar(actions: const [StudioLoadingSlot()]),
           body: WorkspaceActivityContent(
             recents: recents,
             visible: false,

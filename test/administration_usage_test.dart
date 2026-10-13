@@ -402,6 +402,7 @@ void main() {
     await show(tester);
     await tester.tap(find.text('30D'));
     await tester.pump();
+    await tester.pump();
     expect(find.text('Loading usage…'), findsNothing);
     // This newly selected range has no observation yet; its chart is blocked.
     expect(find.byType(StudioLoading), findsOneWidget);

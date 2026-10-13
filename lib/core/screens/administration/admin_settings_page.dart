@@ -367,7 +367,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                   onSave: state.canSave ? _save : null,
                 ),
           child: _loading && !state.hasObservation
-              ? StudioLoading.page(label: 'Loading settings')
+              ? StudioPageLoading.waiting(label: 'Loading settings')
               : !state.hasObservation
               ? Padding(
                   padding: const EdgeInsets.all(16),

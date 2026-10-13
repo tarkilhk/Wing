@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -66,14 +67,21 @@ void main() {
       };
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: HermesAnalyticsContent(
-              controller: controller,
-              repository: server.server,
+          home: Builder(
+            builder: (context) => Scaffold(
+              appBar: WingAppBar(
+                context: context,
+                title: const Text('Analytics'),
+              ),
+              body: HermesAnalyticsContent(
+                controller: controller,
+                repository: server.server,
+              ),
             ),
           ),
         ),
       );
+      await tester.pump();
       await tester.pump();
       expect(find.text('Loading usage…'), findsNothing);
       expect(find.byType(StudioLoading), findsOneWidget);
@@ -261,8 +269,14 @@ void main() {
         for (var visit = 0; visit < 12; visit++) {
           await tester.pumpWidget(
             MaterialApp(
-              home: Scaffold(
-                body: HermesAnalyticsContent(controller: controller),
+              home: Builder(
+                builder: (context) => Scaffold(
+                  appBar: WingAppBar(
+                    context: context,
+                    title: const Text('Analytics'),
+                  ),
+                  body: HermesAnalyticsContent(controller: controller),
+                ),
               ),
             ),
           );

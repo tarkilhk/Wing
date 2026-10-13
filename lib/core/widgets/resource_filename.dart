@@ -1,4 +1,5 @@
 import 'wing_app_bar.dart';
+import 'server_connection_label.dart';
 import 'package:flutter/material.dart';
 
 import '../presentation/resource_identity.dart';
@@ -141,6 +142,13 @@ class ResourceViewerAppBar extends StatelessWidget
            bottom: BorderSide(color: WingTokens.of(context).border),
          ),
          actions: actions,
+         contextRow: switch (ServerConnectionScope.of(context)) {
+           final status? => ServerConnectionLabel(
+             label: status.label,
+             status: status,
+           ),
+           null => null,
+         },
        );
   final WingAppBar _header;
   @override

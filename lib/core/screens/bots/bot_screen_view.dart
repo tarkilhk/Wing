@@ -7,6 +7,7 @@ import '../../widgets/bot_display_viewport.dart';
 import '../../widgets/bot_display_surface.dart';
 import '../../widgets/studio_error.dart';
 import '../../widgets/wing_app_bar.dart';
+import '../../widgets/server_connection_label.dart';
 import '../../theme/wing_theme.dart';
 
 class BotScreenView extends StatefulWidget {
@@ -505,265 +506,275 @@ class _BotScreenViewState extends State<BotScreenView>
                   (!status.running
                       ? 'Start the bot’s screen to view it.'
                       : null));
-    return PopScope(
-      canPop: _canPop,
-      onPopInvokedWithResult: (popped, _) {
-        if (!popped) _back();
-      },
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        appBar: _fullscreen
-            ? null
-            : WingAppBar(
-                context: context,
-                title: Text(
-                  '${_session.bot.title} screen',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                leading: _action('Close screen', Icons.arrow_back, _leave),
-              ),
-        body: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, bounds) {
-              final panelHeight = (bounds.maxHeight - inset - 80).clamp(
-                48.0,
-                280.0,
-              );
-              return Stack(
-                children: [
-                  Positioned.fill(
-                    key: const ValueKey('bot-screen-display'),
-                    top: _barAtTop ? 56 : 0,
-                    child: _session.frame == null
-                        ? const Center(
-                            child: Icon(
-                              Icons.desktop_windows_outlined,
-                              size: 48,
-                            ),
-                          )
-                        : BotDisplaySurface(
-                            frame: _session.frame!,
-                            viewport: _viewport,
-                            canInput: _session.canInput,
-                            keyboardInset: inset,
-                            barInset: _barAtTop ? 0 : 56,
-                          ),
+    return StudioLoadingFrame(
+      child: PopScope(
+        canPop: _canPop,
+        onPopInvokedWithResult: (popped, _) {
+          if (!popped) _back();
+        },
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          appBar: _fullscreen
+              ? null
+              : WingAppBar(
+                  context: context,
+                  title: Text(
+                    '${_session.bot.title} screen',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  if ((_session.busy || _session.connecting) &&
-                      !_session.canInput)
-                    StudioLoadingOverlay(
-                      key: const ValueKey('bot-screen-progress'),
-                      label: 'Connecting to bot screen',
-                      topInset: _barAtTop ? 64 : 0,
-                    ),
-                  if (message != null)
-                    Positioned(
-                      key: const ValueKey('bot-screen-error'),
-                      top: _barAtTop ? 64 : 8,
-                      left: 16,
-                      right: 16,
-                      child: Material(
-                        color: colors.surface,
-                        borderRadius: WingRadius.card,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(maxHeight: panelHeight),
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (_session.error != null ||
-                                    _windowError != null)
-                                  StudioError(message)
-                                else
-                                  Text(message),
-                                if (status?.installed == false &&
-                                    status?.installCommand != null)
-                                  SelectableText(status!.installCommand!),
-                              ],
+                  leading: _action('Close screen', Icons.arrow_back, _leave),
+                  contextRow: ServerConnectionLabel(
+                    label: _session.bot.instance,
+                    status: ServerConnectionScope.of(context),
+                  ),
+                ),
+          body: SafeArea(
+            child: LayoutBuilder(
+              builder: (context, bounds) {
+                final panelHeight = (bounds.maxHeight - inset - 80).clamp(
+                  48.0,
+                  280.0,
+                );
+                return Stack(
+                  children: [
+                    Positioned.fill(
+                      key: const ValueKey('bot-screen-display'),
+                      top: _barAtTop ? 56 : 0,
+                      child: _session.frame == null
+                          ? const Center(
+                              child: Icon(
+                                Icons.desktop_windows_outlined,
+                                size: 48,
+                              ),
+                            )
+                          : BotDisplaySurface(
+                              frame: _session.frame!,
+                              viewport: _viewport,
+                              canInput: _session.canInput,
+                              keyboardInset: inset,
+                              barInset: _barAtTop ? 0 : 56,
                             ),
-                          ),
+                    ),
+                    if ((_session.busy || _session.connecting) &&
+                        !_session.canInput)
+                      Positioned.fill(
+                        child: StudioPageLoading.waiting(
+                          key: const ValueKey('bot-screen-progress'),
+                          label: 'Connecting to bot screen',
                         ),
                       ),
-                    ),
-                  if (_keyboard &&
-                      _foreground &&
-                      _session.controlling &&
-                      _session.connected)
-                    Positioned(
-                      key: const ValueKey('bot-screen-keyboard'),
-                      left: 0,
-                      top: 0,
-                      width: 1,
-                      height: 1,
-                      child: IgnorePointer(
-                        child: Opacity(
-                          opacity: 0,
-                          child: TextField(
-                            controller: _typing,
-                            focusNode: _focus,
-                            // Desktop gestures and controls share this bridge.
-                            // Only explicit keyboard dismissal should unfocus it.
-                            onTapOutside: (_) {},
-                            obscureText: true,
-                            obscuringCharacter: '\u200b',
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            enableIMEPersonalizedLearning: false,
-                            enableInteractiveSelection: false,
-                            decoration: const InputDecoration.collapsed(
-                              hintText: 'Type on the bot’s screen',
-                            ),
-                            onSubmitted: (_) {
-                              _key(0xff0d);
-                              _focus.requestFocus();
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                  Positioned(
-                    key: const ValueKey('bot-screen-controls'),
-                    left: 8,
-                    right: 8,
-                    top: _barAtTop ? 8 : null,
-                    bottom: _barAtTop ? null : inset + 8,
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 650),
+                    if (message != null)
+                      Positioned(
+                        key: const ValueKey('bot-screen-error'),
+                        top: _barAtTop ? 64 : 8,
+                        left: 16,
+                        right: 16,
                         child: Material(
-                          color: colors.surface.withValues(alpha: .94),
+                          color: colors.surface,
                           borderRadius: WingRadius.card,
-                          child: AnimatedBuilder(
-                            animation: _viewport,
-                            builder: (context, _) => SizedBox(
-                              height: 48,
-                              child: Row(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(maxHeight: panelHeight),
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  GestureDetector(
-                                    onVerticalDragUpdate: (e) {
-                                      if (e.delta.dy.abs() > 1) {
-                                        setState(() {
-                                          _barAtTop = e.delta.dy < 0;
-                                          _more = false;
-                                        });
-                                      }
-                                    },
-                                    child: _action(
-                                      'Move controls',
-                                      Icons.drag_handle,
-                                      () => setState(() {
-                                        _barAtTop = !_barAtTop;
-                                        _more = false;
-                                      }),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: LayoutBuilder(
-                                      builder: (context, statusBounds) => Tooltip(
-                                        message: control,
-                                        child: Semantics(
-                                          label: control,
-                                          liveRegion: true,
-                                          child: ExcludeSemantics(
-                                            child: Text(
-                                              statusBounds.maxWidth < 110 ||
-                                                      MediaQuery.textScalerOf(
-                                                            context,
-                                                          ).scale(13) >
-                                                          18
-                                                  ? _session.controlling
-                                                        ? 'You'
-                                                        : _session
-                                                              .humanHasControl
-                                                        ? 'Held'
-                                                        : _session.connected
-                                                        ? 'Bot'
-                                                        : 'Off'
-                                                  : control,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: _session.controlling
-                                                    ? colors.error
-                                                    : colors.onSurface,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  _session.controlling
-                                      ? _action(
-                                          'Hand control back',
-                                          Icons.pan_tool_outlined,
-                                          _session.busy ? null : _handBack,
-                                        )
-                                      : _action(
-                                          'Take control',
-                                          Icons.touch_app_outlined,
-                                          _session.canTakeOver
-                                              ? _takeOver
-                                              : null,
-                                        ),
-                                  _action(
-                                    _keyboard
-                                        ? 'Hide keyboard'
-                                        : 'Show keyboard',
-                                    Icons.keyboard_outlined,
-                                    _session.canInput ? _toggleKeyboard : null,
-                                    selected:
-                                        _keyboard || _modifiers.isNotEmpty,
-                                  ),
-                                  _action(
-                                    'More screen controls',
-                                    Icons.more_horiz,
-                                    () => setState(() => _more = !_more),
-                                    selected:
-                                        _more ||
-                                        _modifiers.isNotEmpty ||
-                                        _viewport.buttons != 0,
-                                  ),
-                                  _action(
-                                    _fullscreen
-                                        ? 'Exit fullscreen'
-                                        : 'Enter fullscreen',
-                                    _fullscreen
-                                        ? Icons.fullscreen_exit
-                                        : Icons.fullscreen,
-                                    _toggleFullscreen,
-                                  ),
+                                  if (_session.error != null ||
+                                      _windowError != null)
+                                    StudioError(message)
+                                  else
+                                    Text(message),
+                                  if (status?.installed == false &&
+                                      status?.installCommand != null)
+                                    SelectableText(status!.installCommand!),
                                 ],
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                  if (_more)
+                    if (_keyboard &&
+                        _foreground &&
+                        _session.controlling &&
+                        _session.connected)
+                      Positioned(
+                        key: const ValueKey('bot-screen-keyboard'),
+                        left: 0,
+                        top: 0,
+                        width: 1,
+                        height: 1,
+                        child: IgnorePointer(
+                          child: Opacity(
+                            opacity: 0,
+                            child: TextField(
+                              controller: _typing,
+                              focusNode: _focus,
+                              // Desktop gestures and controls share this bridge.
+                              // Only explicit keyboard dismissal should unfocus it.
+                              onTapOutside: (_) {},
+                              obscureText: true,
+                              obscuringCharacter: '\u200b',
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              enableIMEPersonalizedLearning: false,
+                              enableInteractiveSelection: false,
+                              decoration: const InputDecoration.collapsed(
+                                hintText: 'Type on the bot’s screen',
+                              ),
+                              onSubmitted: (_) {
+                                _key(0xff0d);
+                                _focus.requestFocus();
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
                     Positioned(
-                      key: const ValueKey('bot-screen-more'),
+                      key: const ValueKey('bot-screen-controls'),
                       left: 8,
                       right: 8,
-                      top: _barAtTop ? 64 : null,
-                      bottom: _barAtTop ? null : inset + 64,
-                      child: Material(
-                        color: colors.surface,
-                        borderRadius: WingRadius.card,
+                      top: _barAtTop ? 8 : null,
+                      bottom: _barAtTop ? null : inset + 8,
+                      child: Center(
                         child: ConstrainedBox(
-                          constraints: BoxConstraints(maxHeight: panelHeight),
-                          child: _commands(),
+                          constraints: const BoxConstraints(maxWidth: 650),
+                          child: Material(
+                            color: colors.surface.withValues(alpha: .94),
+                            borderRadius: WingRadius.card,
+                            child: AnimatedBuilder(
+                              animation: _viewport,
+                              builder: (context, _) => SizedBox(
+                                height: 48,
+                                child: Row(
+                                  children: [
+                                    if (_fullscreen) const StudioLoadingSlot(),
+                                    GestureDetector(
+                                      onVerticalDragUpdate: (e) {
+                                        if (e.delta.dy.abs() > 1) {
+                                          setState(() {
+                                            _barAtTop = e.delta.dy < 0;
+                                            _more = false;
+                                          });
+                                        }
+                                      },
+                                      child: _action(
+                                        'Move controls',
+                                        Icons.drag_handle,
+                                        () => setState(() {
+                                          _barAtTop = !_barAtTop;
+                                          _more = false;
+                                        }),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: LayoutBuilder(
+                                        builder: (context, statusBounds) => Tooltip(
+                                          message: control,
+                                          child: Semantics(
+                                            label: control,
+                                            liveRegion: true,
+                                            child: ExcludeSemantics(
+                                              child: Text(
+                                                statusBounds.maxWidth < 110 ||
+                                                        MediaQuery.textScalerOf(
+                                                              context,
+                                                            ).scale(13) >
+                                                            18
+                                                    ? _session.controlling
+                                                          ? 'You'
+                                                          : _session
+                                                                .humanHasControl
+                                                          ? 'Held'
+                                                          : _session.connected
+                                                          ? 'Bot'
+                                                          : 'Off'
+                                                    : control,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: _session.controlling
+                                                      ? colors.error
+                                                      : colors.onSurface,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    _session.controlling
+                                        ? _action(
+                                            'Hand control back',
+                                            Icons.pan_tool_outlined,
+                                            _session.busy ? null : _handBack,
+                                          )
+                                        : _action(
+                                            'Take control',
+                                            Icons.touch_app_outlined,
+                                            _session.canTakeOver
+                                                ? _takeOver
+                                                : null,
+                                          ),
+                                    _action(
+                                      _keyboard
+                                          ? 'Hide keyboard'
+                                          : 'Show keyboard',
+                                      Icons.keyboard_outlined,
+                                      _session.canInput
+                                          ? _toggleKeyboard
+                                          : null,
+                                      selected:
+                                          _keyboard || _modifiers.isNotEmpty,
+                                    ),
+                                    _action(
+                                      'More screen controls',
+                                      Icons.more_horiz,
+                                      () => setState(() => _more = !_more),
+                                      selected:
+                                          _more ||
+                                          _modifiers.isNotEmpty ||
+                                          _viewport.buttons != 0,
+                                    ),
+                                    _action(
+                                      _fullscreen
+                                          ? 'Exit fullscreen'
+                                          : 'Enter fullscreen',
+                                      _fullscreen
+                                          ? Icons.fullscreen_exit
+                                          : Icons.fullscreen,
+                                      _toggleFullscreen,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                ],
-              );
-            },
+                    if (_more)
+                      Positioned(
+                        key: const ValueKey('bot-screen-more'),
+                        left: 8,
+                        right: 8,
+                        top: _barAtTop ? 64 : null,
+                        bottom: _barAtTop ? null : inset + 64,
+                        child: Material(
+                          color: colors.surface,
+                          borderRadius: WingRadius.card,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(maxHeight: panelHeight),
+                            child: _commands(),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),

@@ -1556,6 +1556,7 @@ void main() {
       ),
     );
 
+    await tester.pump();
     expect(find.byType(StudioLoading), findsOneWidget);
     firstLoad.complete([]);
     await tester.pumpAndSettle();

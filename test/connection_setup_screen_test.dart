@@ -582,6 +582,10 @@ void main() {
           expect(rect.left, greaterThanOrEqualTo(0));
           expect(rect.right, lessThanOrEqualTo(320));
           expect(rect.bottom, lessThanOrEqualTo(380));
+          await _capture(
+            tester,
+            '${brightness.name}-signin-keyboard-${scale}x',
+          );
           expect(tester.takeException(), isNull);
         },
       );

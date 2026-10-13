@@ -1,16 +1,9 @@
-import 'studio_loading.dart';
 import 'package:wing/core/models/chat_list_status.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 
 class ChatStatusDot extends StatelessWidget {
-  const ChatStatusDot(
-    this.status, {
-    super.key,
-    required this.live,
-    this.detail,
-  });
-  final bool live;
+  const ChatStatusDot(this.status, {super.key, this.detail});
   final ChatListStatus status;
   final String? detail;
   @override
@@ -29,24 +22,18 @@ class ChatStatusDot extends StatelessWidget {
       message: label,
       child: Semantics(
         label: label,
-        child: ExcludeSemantics(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: Center(
-              child: live && status == ChatListStatus.working
-                  ? StudioLoading(label: label, size: 18, color: color)
-                  : Container(
-                      width: size,
-                      height: size,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: hollow ? Colors.transparent : color,
-                        border: hollow
-                            ? Border.all(color: color, width: 1.5)
-                            : null,
-                      ),
-                    ),
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: Center(
+            child: Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: hollow ? Colors.transparent : color,
+                border: hollow ? Border.all(color: color, width: 1.5) : null,
+              ),
             ),
           ),
         ),

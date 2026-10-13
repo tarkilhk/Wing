@@ -375,7 +375,7 @@ class _AdminTaskRouteState extends State<AdminTaskRoute> {
         title: widget.title,
         scope: widget.profile.label,
         child: controller.loading
-            ? StudioLoading.page(label: 'Loading task history')
+            ? StudioPageLoading.waiting(label: 'Loading task history')
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [

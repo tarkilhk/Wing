@@ -1,4 +1,7 @@
 import 'package:wing/core/widgets/studio_loading.dart';
+import 'package:wing/core/widgets/chat_profile_bar.dart';
+import 'package:wing/core/widgets/server_connection_label.dart';
+import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/widgets/deleted_chat_recovery_notice.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -82,6 +85,7 @@ void main() {
       RepaintBoundary(
         key: const ValueKey('capture'),
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: wingTheme(brightness),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
@@ -298,6 +302,7 @@ void main() {
       await tester.tap(find.text('Pin'));
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('Updating chats…'), findsNothing);
+      await tester.pump();
       expect(find.byType(StudioLoading), findsOneWidget);
       expect(find.bySemanticsLabel('Updating chats…'), findsOneWidget);
       expect(
@@ -390,6 +395,71 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'Chats pulse stays in the instance row ${brightness.name} $scale',
+        (tester) async {
+          await show(tester, brightness: brightness, scale: scale);
+          final search = find.byKey(const ValueKey('workspace-search'));
+          final profiles = find.byType(ChatProfileBar);
+          final instance = find.byType(ServerConnectionLabel);
+          final slot = find.byKey(const ValueKey('studio-loading-slot'));
+          final before = {
+            'search': tester.getRect(search),
+            'profiles': tester.getRect(profiles),
+            'instance': tester.getRect(instance),
+            'slot': tester.getRect(slot),
+          };
+          await menu(tester, 'newest');
+          final gate = Completer<void>();
+          addTearDown(() {
+            if (!gate.isCompleted) gate.complete();
+          });
+          host.mutationDelay = gate;
+          host.failMutation = true;
+          await tester.tap(find.text('Pin'));
+          await tester.pump(const Duration(milliseconds: 400));
+          await tester.pump();
+          final pulse = find.byType(StudioLoading);
+          expect(pulse, findsOneWidget);
+          expect(
+            find.ancestor(of: pulse, matching: find.byType(WingAppBar)),
+            findsOneWidget,
+          );
+          final glyph = tester.getRect(pulse);
+          expect(glyph.center.dy, closeTo(before['instance']!.center.dy, 1));
+          expect(glyph.left, greaterThanOrEqualTo(before['profiles']!.right));
+          expect(glyph.overlaps(before['search']!), isFalse);
+          expect(glyph.right, lessThanOrEqualTo(scale == 1 ? 374 : 304));
+          for (final entry in {
+            'search': search,
+            'profiles': profiles,
+            'instance': instance,
+            'slot': slot,
+          }.entries) {
+            expect(tester.getRect(entry.value), before[entry.key]);
+          }
+          await screenshot(
+            tester,
+            'header-progress-${brightness.name}-$scale-pending',
+          );
+          gate.complete();
+          await tester.pumpAndSettle();
+          expect(pulse, findsNothing);
+          for (final entry in {
+            'search': search,
+            'profiles': profiles,
+            'instance': instance,
+            'slot': slot,
+          }.entries) {
+            expect(tester.getRect(entry.value), before[entry.key]);
+          }
+          await screenshot(
+            tester,
+            'header-progress-${brightness.name}-$scale-ready',
+          );
+        },
+      );
+
       testWidgets(
         'refresh status ${brightness.name} $scale remains fixed and interactive',
         (tester) async {

@@ -309,7 +309,7 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
           title: _name,
           scope: _session.scopeLabel,
           child: _loading
-              ? StudioLoading.page(label: 'Loading connectors')
+              ? StudioPageLoading.waiting(label: 'Loading connectors')
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [

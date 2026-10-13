@@ -119,7 +119,7 @@ class _AdminProviderDetailState extends State<AdminProviderDetail> {
             if (_notice != null)
               Semantics(liveRegion: true, child: AdminNotice(_notice!)),
             if (access == null && _isBusy)
-              StudioLoading.page(label: 'Loading provider'),
+              StudioPageLoading.waiting(label: 'Loading provider'),
             if (access != null) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

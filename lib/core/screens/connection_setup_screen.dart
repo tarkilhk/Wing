@@ -191,7 +191,11 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           leading: StudioButtonPress(
             child: BackButton(onPressed: _saving ? null : _back),
           ),
-          title: Text(_editing ? 'Edit instance' : 'Add instance'),
+          title: Text(
+            _editing ? 'Edit instance' : 'Add instance',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: [
             if (_step != ConnectionSetupStep.review)
               Padding(

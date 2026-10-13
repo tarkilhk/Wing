@@ -1,3 +1,4 @@
+import '../wing_app_bar.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
@@ -1298,9 +1299,11 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                         excluding: _active,
                         child: IgnorePointer(
                           ignoring: _active,
-                          child: _selecting && !_paintingSelected
-                              ? _selectionChild ?? widget.child
-                              : widget.child,
+                          child: StudioLoadingFrame(
+                            child: _selecting && !_paintingSelected
+                                ? _selectionChild ?? widget.child
+                                : widget.child,
+                          ),
                         ),
                       ),
                     ),
@@ -1324,9 +1327,18 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                             builder: (context, _) => _cards(),
                           ),
                           if (_selecting)
-                            StudioLoadingOverlay(
-                              label: 'Opening conversation',
-                              topInset: MediaQuery.paddingOf(context).top,
+                            PositionedDirectional(
+                              top:
+                                  MediaQuery.paddingOf(context).top +
+                                  WingAppBar.conversationTitleHeight(context),
+                              end: 16,
+                              child: StudioLoadingFrame(
+                                child: StudioPageLoading(
+                                  active: true,
+                                  label: 'Opening conversation',
+                                  child: const StudioLoadingSlot(),
+                                ),
+                              ),
                             ),
                           if (_stack)
                             Positioned.fill(

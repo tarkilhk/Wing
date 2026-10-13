@@ -32,6 +32,15 @@ class AdminPage extends StatelessWidget {
 
       title: Text(title, maxLines: 6, softWrap: true),
       actions: actions,
+      contextRow: ServerConnectionScope.of(context) == null
+          ? Text(scope, style: Theme.of(context).textTheme.bodySmall)
+          : ServerConnectionLabel(
+              label: scope,
+              pickerMode: pickerMode,
+              includeProfiles:
+                  scope != ServerConnectionScope.of(context)?.label,
+              status: ServerConnectionScope.of(context),
+            ),
     ),
     bottomNavigationBar: bottomNavigationBar == null
         ? null
@@ -41,24 +50,7 @@ class AdminPage extends StatelessWidget {
             ),
             child: bottomNavigationBar,
           ),
-    body: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: ServerConnectionScope.of(context) == null
-              ? Text(scope, style: Theme.of(context).textTheme.bodySmall)
-              : ServerConnectionLabel(
-                  label: scope,
-                  pickerMode: pickerMode,
-                  includeProfiles:
-                      scope != ServerConnectionScope.of(context)?.label,
-                  status: ServerConnectionScope.of(context),
-                ),
-        ),
-        Expanded(child: child),
-      ],
-    ),
+    body: child,
   );
 }
 

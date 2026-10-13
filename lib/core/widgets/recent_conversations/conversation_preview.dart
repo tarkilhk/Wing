@@ -245,37 +245,34 @@ class ConversationCardPlaceholder extends StatelessWidget {
   final RecentConversationCard card;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: Theme.of(context).colorScheme.surface,
-    child: SafeArea(
-      bottom: false,
-      child: Align(
-        alignment: AlignmentDirectional.topStart,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: WingSpacing.lg,
-            vertical: WingSpacing.md,
-          ),
-          child: DefaultTextStyle(
-            style: WingAppBar.titleStyle(context),
-            child: card.entry.group != null
-                ? WingConversationTitle(
-                    title: card.entry.group!.name,
-                    avatar: BotGroupIdentity(
-                      group: card.entry.group!,
-                      bots: card.groupAppearance.byHandle.values,
-                      size: 32,
-                    ),
-                  )
-                : BotConversationTitle(
-                    title: card.entry.title,
-                    bot: card.bot,
-                    mood: null,
-                  ),
-          ),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: WingAppBar(
+      context: context,
+      automaticallyImplyLeading: false,
+      titleSpacing: WingSpacing.lg,
+      title: card.entry.group != null
+          ? WingConversationTitle(
+              title: card.entry.group!.name,
+              avatar: BotGroupIdentity(
+                group: card.entry.group!,
+                bots: card.groupAppearance.byHandle.values,
+                size: 32,
+              ),
+            )
+          : BotConversationTitle(
+              title: card.entry.title,
+              bot: card.bot,
+              mood: null,
+            ),
+      contextRow: switch (ServerConnectionScope.of(context)) {
+        final status? => ServerConnectionLabel(
+          label: status.label,
+          status: status,
         ),
-      ),
+        null => const SizedBox.shrink(),
+      },
     ),
+    body: const SizedBox.expand(),
   );
 }
 

@@ -9,6 +9,14 @@ void main() {
     'LinearProgressIndicator()': false,
     'ActivityShimmer(active: true, child: Text())': false,
     'ChatWorkingBorder(working: true, child: Text())': false,
+    'const desktop.ChatWorkingBorder(working: true, child: Text())': false,
+    "StudioLoadingOverlay(label: 'Loading')": false,
+    "const studio.StudioLoadingOverlay(label: 'Loading')": false,
+    "StudioLoading.page(label: 'Loading')": false,
+    "const studio.StudioLoading.page(label: 'Loading')": false,
+    "StudioPageLoading.waiting(label: 'Loading')": true,
+    "StudioPageLoading(active: true, label: 'Loading', child: Widget())": true,
+    "StudioLoadingSlot()": true,
     "StudioActivityIndicator(active: true, label: 'Working', icon: Icons.pending, color: Colors.blue)":
         true,
     'material.CircularProgressIndicator()': false,
@@ -34,8 +42,29 @@ void main() {
       addTearDown(fixture.dispose);
       final findings = loading.check(fixture.snapshot);
       expect(findings, entry.value ? isEmpty : isNotEmpty);
+      for (final finding in findings) {
+        expect(finding.id, loading.id);
+        expect(finding.file, 'lib/view.dart');
+        expect(finding.line, 1);
+      }
     });
   }
+  test('desktop working borders belong only to ongoing Chats rows', () {
+    final fixture = FixtureWorkspace({
+      'files': {
+        loading.desktopChatRows: {
+          'role': 'view',
+          'source':
+              'void build() { '
+              'ChatWorkingBorder(working: true, child: Widget()); '
+              'const desktop.ChatWorkingBorder(working: true, child: Widget()); '
+              'StudioPageLoading.waiting(label: "Loading"); }',
+        },
+      },
+    });
+    addTearDown(fixture.dispose);
+    expect(loading.check(fixture.snapshot), isEmpty);
+  });
   test('only the shared owner may integrate native refresh mechanics', () {
     final fixture = FixtureWorkspace({
       'files': {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'health_alerts/health_alert_bell.dart';
+import 'studio_loading.dart';
 
 /// Shared identity geometry for bot chats and passive group previews.
 class WingConversationTitle extends StatelessWidget {
@@ -54,6 +55,7 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
                 56 -
                 16 -
                 48 -
+                (contextRow == null ? 32 : 0) -
                 (_large ? 0 : actions.length * 48))
             .clamp(80.0, double.infinity);
     final painter = TextPainter(
@@ -77,6 +79,21 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
   static TextStyle titleStyle(BuildContext context) => Theme.of(
     context,
   ).textTheme.titleLarge!.copyWith(fontSize: 24, fontWeight: FontWeight.w600);
+
+  /// Conversation previews and mounted chats use a single-line title surface.
+  /// Cached pixels reserve the same context-row slot for opening feedback.
+  static double conversationTitleHeight(BuildContext context) {
+    final painter = TextPainter(
+      text: TextSpan(text: 'Title', style: titleStyle(context)),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final height = (painter.height + 8).clamp(48.0, double.infinity);
+    painter.dispose();
+    return height;
+  }
+
   double get _bottomHeight =>
       (contextRow == null ? 0 : contextHeight) +
       (_large && actions.isNotEmpty ? 48 : 0) +
@@ -107,7 +124,11 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
                   )
                 : title!,
           ),
-    actions: [const HealthAlertBell(), if (!_large) ...actions],
+    actions: [
+      const HealthAlertBell(),
+      if (!_large) ...actions,
+      if (contextRow == null) const StudioLoadingSlot(),
+    ],
     bottom: _bottomHeight == 0
         ? null
         : PreferredSize(
@@ -122,14 +143,22 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: contextActions.isEmpty
-                            ? contextRow
-                            : Row(
-                                children: [
-                                  Expanded(child: contextRow!),
-                                  ...contextActions,
-                                ],
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: SizedBox(
+                                height: contextHeight,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: contextRow!,
+                                ),
                               ),
+                            ),
+                            ...contextActions,
+                            const StudioLoadingSlot(),
+                          ],
+                        ),
                       ),
                     ),
                   ),

@@ -217,12 +217,16 @@ void main() {
         expect(tester.takeException(), isNull);
         await screenshot(tester, 'picker-${brightness.name}-$scale');
         final semantics = tester.ensureSemantics();
-        expect(
-          tester.getSemantics(
-            find.byKey(const ValueKey('workspace-profile-personal')),
+        await tester.pump();
+        final selected = find.descendant(
+          of: find.byKey(const ValueKey('workspace-profile-personal')),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics && widget.properties.selected == true,
           ),
-          isSemantics(isSelected: true),
         );
+        expect(selected, findsOneWidget);
+        expect(tester.getSemantics(selected), isSemantics(isSelected: true));
         semantics.dispose();
         await tester.tapAt(const Offset(5, 800));
         await tester.pumpAndSettle();

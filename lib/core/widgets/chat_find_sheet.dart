@@ -58,185 +58,201 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
     final query = state.query;
     final matches = state.matches;
     final hasMore = state.hasMore;
-    return Material(
-      child: AnimatedPadding(
-        duration: const Duration(milliseconds: 150),
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * .78,
-            child: StudioLoadingRegion(
-              available: state.hasLoadedMessages,
-              busy: state.loading && state.hasLoadedMessages,
-              label: 'Searching messages',
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                    child: TextField(
-                      controller: _query,
-                      autofocus: true,
-                      onChanged: _queryChanged,
-                      decoration: const InputDecoration(
-                        labelText: 'Find in chat',
-                        prefixIcon: Icon(Icons.search),
-                        border: OutlineInputBorder(
-                          borderRadius: WingRadius.control,
-                        ),
+    return StudioLoadingFrame(
+      child: Material(
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 150),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * .78,
+              child: StudioLoadingRegion(
+                available: state.hasLoadedMessages,
+                busy: state.loading && state.hasLoadedMessages,
+                label: 'Searching messages',
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _query,
+                              autofocus: true,
+                              onChanged: _queryChanged,
+                              decoration: const InputDecoration(
+                                labelText: 'Find in chat',
+                                prefixIcon: Icon(Icons.search),
+                                border: OutlineInputBorder(
+                                  borderRadius: WingRadius.control,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const StudioLoadingSlot(),
+                        ],
                       ),
                     ),
-                  ),
 
-                  Expanded(
-                    child: state.loading && !state.hasLoadedMessages
-                        ? const StudioLoading.page(label: 'Searching messages')
-                        : !state.hasLoadedMessages && state.error != null
-                        ? Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: StudioError(state.error!),
-                          )
-                        : query.isEmpty
-                        ? const _Message('Type to search this chat.')
-                        : matches.isEmpty
-                        ? _Message(
-                            hasMore
-                                ? 'No matches in the messages loaded so far.'
-                                : 'No matching messages.',
-                          )
-                        : ListView.builder(
-                            itemCount: matches.length,
-                            itemBuilder: (_, index) {
-                              final entry = matches[index];
-                              final role = entry.role;
-                              final key = entry;
-                              final expanded = _expanded.contains(key);
-                              return ExpansionTile(
-                                key: ValueKey((_query.text, key)),
-                                initiallyExpanded: expanded,
-                                onExpansionChanged: (open) => setState(() {
-                                  if (open) {
-                                    _expanded.add(key);
-                                  } else {
-                                    _expanded.remove(key);
-                                  }
-                                }),
-                                leading: Icon(
-                                  role == 'user'
-                                      ? Icons.person_outline
-                                      : Icons.smart_toy_outlined,
-                                ),
-                                title: Text(
-                                  entry.text,
-                                  maxLines: 5,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                subtitle: Text(role),
-                                children: [
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Padding(
+                    Expanded(
+                      child: state.loading && !state.hasLoadedMessages
+                          ? const StudioPageLoading.waiting(
+                              label: 'Searching messages',
+                            )
+                          : !state.hasLoadedMessages && state.error != null
+                          ? Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: StudioError(state.error!),
+                            )
+                          : query.isEmpty
+                          ? const _Message('Type to search this chat.')
+                          : matches.isEmpty
+                          ? _Message(
+                              hasMore
+                                  ? 'No matches in the messages loaded so far.'
+                                  : 'No matching messages.',
+                            )
+                          : ListView.builder(
+                              itemCount: matches.length,
+                              itemBuilder: (_, index) {
+                                final entry = matches[index];
+                                final role = entry.role;
+                                final key = entry;
+                                final expanded = _expanded.contains(key);
+                                return ExpansionTile(
+                                  key: ValueKey((_query.text, key)),
+                                  initiallyExpanded: expanded,
+                                  onExpansionChanged: (open) => setState(() {
+                                    if (open) {
+                                      _expanded.add(key);
+                                    } else {
+                                      _expanded.remove(key);
+                                    }
+                                  }),
+                                  leading: Icon(
+                                    role == 'user'
+                                        ? Icons.person_outline
+                                        : Icons.smart_toy_outlined,
+                                  ),
+                                  title: Text(
+                                    entry.text,
+                                    maxLines: 5,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  subtitle: Text(role),
+                                  children: [
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          0,
+                                          16,
+                                          8,
+                                        ),
+                                        child: StudioButtonPress(
+                                          child: TextButton.icon(
+                                            onPressed:
+                                                entry.canSelect &&
+                                                    !state.retired
+                                                ? () {
+                                                    if (_session.select(
+                                                          entry,
+                                                        ) &&
+                                                        mounted) {
+                                                      Navigator.of(
+                                                        context,
+                                                      ).pop(true);
+                                                    }
+                                                  }
+                                                : null,
+                                            icon: const Icon(Icons.open_in_new),
+                                            label: const Text('View in chat'),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Padding(
                                       padding: const EdgeInsets.fromLTRB(
                                         16,
                                         0,
                                         16,
-                                        8,
+                                        12,
                                       ),
-                                      child: StudioButtonPress(
-                                        child: TextButton.icon(
-                                          onPressed:
-                                              entry.canSelect && !state.retired
-                                              ? () {
-                                                  if (_session.select(entry) &&
-                                                      mounted) {
-                                                    Navigator.of(
-                                                      context,
-                                                    ).pop(true);
-                                                  }
-                                                }
-                                              : null,
-                                          icon: const Icon(Icons.open_in_new),
-                                          label: const Text('View in chat'),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      16,
-                                      0,
-                                      16,
-                                      12,
-                                    ),
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: SelectableText(entry.text),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                  ),
-                  if (!state.loading || state.hasLoadedMessages)
-                    SafeArea(
-                      top: false,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: MediaQuery.sizeOf(context).height * .28,
-                        ),
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (query.isNotEmpty && matches.isNotEmpty)
-                                Text(
-                                  hasMore
-                                      ? '${_formatCount(matches.length)} matching ${matches.length == 1 ? 'message' : 'messages'} in loaded messages'
-                                      : '${_formatCount(matches.length)} matching ${matches.length == 1 ? 'message' : 'messages'}',
-                                ),
-                              if (state.error != null &&
-                                  state.hasLoadedMessages)
-                                StudioError(state.error!),
-                              if (state.error != null)
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  children: [
-                                    StudioButtonPress(
-                                      child: TextButton(
-                                        onPressed:
-                                            state.loading || state.retired
-                                            ? null
-                                            : _session.retry,
-                                        child: const Text('Try again'),
-                                      ),
-                                    ),
-                                    StudioButtonPress(
-                                      child: TextButton(
-                                        onPressed: () =>
-                                            Navigator.of(context).maybePop(),
-                                        child: const Text('Close'),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: SelectableText(entry.text),
                                       ),
                                     ),
                                   ],
-                                )
-                              else if (query.isNotEmpty && hasMore)
-                                StudioButtonPress(
-                                  child: TextButton(
-                                    onPressed: state.loading || state.retired
-                                        ? null
-                                        : _session.loadOlder,
-                                    child: const Text('Search older messages'),
+                                );
+                              },
+                            ),
+                    ),
+                    if (!state.loading || state.hasLoadedMessages)
+                      SafeArea(
+                        top: false,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.sizeOf(context).height * .28,
+                          ),
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (query.isNotEmpty && matches.isNotEmpty)
+                                  Text(
+                                    hasMore
+                                        ? '${_formatCount(matches.length)} matching ${matches.length == 1 ? 'message' : 'messages'} in loaded messages'
+                                        : '${_formatCount(matches.length)} matching ${matches.length == 1 ? 'message' : 'messages'}',
                                   ),
-                                ),
-                            ],
+                                if (state.error != null &&
+                                    state.hasLoadedMessages)
+                                  StudioError(state.error!),
+                                if (state.error != null)
+                                  Wrap(
+                                    alignment: WrapAlignment.center,
+                                    children: [
+                                      StudioButtonPress(
+                                        child: TextButton(
+                                          onPressed:
+                                              state.loading || state.retired
+                                              ? null
+                                              : _session.retry,
+                                          child: const Text('Try again'),
+                                        ),
+                                      ),
+                                      StudioButtonPress(
+                                        child: TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(context).maybePop(),
+                                          child: const Text('Close'),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else if (query.isNotEmpty && hasMore)
+                                  StudioButtonPress(
+                                    child: TextButton(
+                                      onPressed: state.loading || state.retired
+                                          ? null
+                                          : _session.loadOlder,
+                                      child: const Text(
+                                        'Search older messages',
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

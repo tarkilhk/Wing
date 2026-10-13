@@ -2889,6 +2889,7 @@ void main() {
               'bot-chat-settings-${brightness.name}-$scale',
             );
             await tester.scrollUntilVisible(find.text('MCP connectors'), 200);
+            await tester.pumpAndSettle();
             expect(find.text('MCP connectors'), findsOneWidget);
             await _capture(
               tester,

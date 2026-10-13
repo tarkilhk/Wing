@@ -200,7 +200,7 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
               onSave: _state.canSave ? _save : null,
             ),
       child: _state.loading && !_state.hasObservation
-          ? StudioLoading.page(label: 'Loading profile identity')
+          ? StudioPageLoading.waiting(label: 'Loading profile identity')
           : !_state.hasObservation
           ? Padding(
               padding: const EdgeInsets.all(16),

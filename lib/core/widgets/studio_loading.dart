@@ -9,18 +9,11 @@ class StudioLoading extends StatefulWidget {
     required this.label,
     this.size = 24,
     this.color,
-  }) : _page = false;
-
-  /// An unavailable content area uses the same upper trailing loading position.
-  const StudioLoading.page({super.key, required this.label})
-    : size = 18,
-      color = null,
-      _page = true;
+  });
 
   final String label;
   final double size;
   final Color? color;
-  final bool _page;
 
   @override
   State<StudioLoading> createState() => _StudioLoadingState();
@@ -103,15 +96,7 @@ class _StudioLoadingState extends State<StudioLoading>
         ),
       ),
     );
-    return widget._page
-        ? Align(
-            alignment: AlignmentDirectional.topEnd,
-            child: Padding(
-              padding: const EdgeInsetsDirectional.only(end: 16),
-              child: glyph,
-            ),
-          )
-        : glyph;
+    return glyph;
   }
 }
 
@@ -168,7 +153,156 @@ class _Feathers extends CustomPainter {
       color != oldDelegate.color || animate != oldDelegate.animate;
 }
 
-/// Paints loading over a region, keeping its child and geometry in place.
+/// The presentation belongs to a page Scaffold or an explicit modal frame.
+/// Weak Scaffold keys keep independent pages isolated without an app-wide ledger.
+final _pagePresentations = Expando<_LoadingPresentation>();
+
+class _LoadingPresentation extends ValueNotifier<String?> {
+  _LoadingPresentation() : super(null);
+  final _operations = <Object, String>{};
+  bool _queued = false, _disposed = false;
+
+  static _LoadingPresentation of(BuildContext context) {
+    final frame = context
+        .dependOnInheritedWidgetOfExactType<_LoadingFrameScope>();
+    if (frame != null) return frame.presentation;
+    final page = Scaffold.of(context);
+    return _pagePresentations[page] ??= _LoadingPresentation();
+  }
+
+  void report(Object operation, String? label) {
+    if (_disposed) return;
+    if (label == null) {
+      _operations.remove(operation);
+    } else {
+      _operations[operation] = label;
+    }
+    if (_queued) return;
+    _queued = true;
+    // Body and header are siblings; never rebuild the header during body build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _queued = false;
+      if (!_disposed) value = _operations.values.firstOrNull;
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _operations.clear();
+    super.dispose();
+  }
+}
+
+/// Gives a modal or an immersive page its own loading lifetime and header slot.
+class StudioLoadingFrame extends StatefulWidget {
+  const StudioLoadingFrame({super.key, required this.child});
+  final Widget child;
+  @override
+  State<StudioLoadingFrame> createState() => _StudioLoadingFrameState();
+}
+
+class _StudioLoadingFrameState extends State<StudioLoadingFrame> {
+  final _presentation = _LoadingPresentation();
+  @override
+  void dispose() {
+    _presentation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _LoadingFrameScope(
+    presentation: _presentation,
+    child: _LoadingScope(active: false, child: widget.child),
+  );
+}
+
+class _LoadingFrameScope extends InheritedWidget {
+  const _LoadingFrameScope({required this.presentation, required super.child});
+  final _LoadingPresentation presentation;
+  @override
+  bool updateShouldNotify(_LoadingFrameScope oldWidget) =>
+      presentation != oldWidget.presentation;
+}
+
+/// A fixed header compartment; its width stays reserved when the page is ready.
+class StudioLoadingSlot extends StatelessWidget {
+  const StudioLoadingSlot({super.key, this.height = 48});
+  final double height;
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    key: const ValueKey('studio-loading-slot'),
+    width: 32,
+    height: height,
+    child: Center(
+      child: ValueListenableBuilder<String?>(
+        valueListenable: _LoadingPresentation.of(context),
+        builder: (_, label, _) => label == null
+            ? const SizedBox.shrink()
+            : StudioLoading(label: label, size: 18),
+      ),
+    ),
+  );
+}
+
+/// Reports page loading to its header without painting over or moving content.
+class StudioPageLoading extends StatefulWidget {
+  const StudioPageLoading({
+    super.key,
+    required this.active,
+    required this.label,
+    required this.child,
+  });
+  const StudioPageLoading.waiting({super.key, required this.label})
+    : active = true,
+      child = const SizedBox.shrink();
+  final bool active;
+  final String label;
+  final Widget child;
+  @override
+  State<StudioPageLoading> createState() => _StudioPageLoadingState();
+}
+
+class _StudioPageLoadingState extends State<StudioPageLoading> {
+  final _operation = Object();
+  _LoadingPresentation? _presentation;
+  void _report() {
+    if (!widget.active) {
+      _presentation?.report(_operation, null);
+      _presentation = null;
+      return;
+    }
+    final next = _LoadingPresentation.of(context);
+    if (!identical(next, _presentation)) {
+      _presentation?.report(_operation, null);
+      _presentation = next;
+    }
+    _presentation!.report(_operation, widget.label);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _report();
+  }
+
+  @override
+  void didUpdateWidget(StudioPageLoading oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _report();
+  }
+
+  @override
+  void dispose() {
+    _presentation?.report(_operation, null);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// Availability admits a page pulse; nested regions share the outer operation.
 class StudioLoadingRegion extends StatelessWidget {
   const StudioLoadingRegion({
     super.key,
@@ -177,40 +311,19 @@ class StudioLoadingRegion extends StatelessWidget {
     required this.label,
     required this.child,
   });
-  final bool busy;
-  final bool available;
+  final bool busy, available;
   final String label;
   final Widget child;
-
   @override
   Widget build(BuildContext context) {
     final inherited = _LoadingScope.maybeOf(context);
     final blocked = busy && !available;
-    return Stack(
-      fit: StackFit.passthrough,
-      children: [
-        _LoadingScope(active: blocked || inherited, child: child),
-        if (blocked && !inherited) StudioLoadingOverlay(label: label),
-      ],
+    return StudioPageLoading(
+      active: blocked && !inherited,
+      label: label,
+      child: _LoadingScope(active: blocked || inherited, child: child),
     );
   }
-}
-
-/// The shared upper trailing position for content waiting inside a Stack.
-class StudioLoadingOverlay extends StatelessWidget {
-  const StudioLoadingOverlay({
-    super.key,
-    required this.label,
-    this.topInset = 0,
-  });
-  final String label;
-  final double topInset;
-  @override
-  Widget build(BuildContext context) => PositionedDirectional(
-    top: topInset,
-    end: 16,
-    child: StudioLoading(label: label, size: 18),
-  );
 }
 
 class _LoadingScope extends InheritedWidget {

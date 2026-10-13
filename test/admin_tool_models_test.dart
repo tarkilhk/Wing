@@ -113,6 +113,7 @@ void main() {
     expect(fixture.requests.where((request) => request.$1 == 'PUT'), isEmpty);
     await tester.tap(find.text('Use model'));
     await tester.pump();
+    await tester.pump();
     expect(find.text('Saving…'), findsNothing);
     expect(find.text('Use model'), findsOneWidget);
     expect(find.bySemanticsLabel('Saving model'), findsOneWidget);

@@ -176,146 +176,162 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
       0.0,
       MediaQuery.sizeOf(context).height * 0.82,
     );
-    return PopScope(
-      canPop: !_saving || _allowPop,
-      child: AnimatedPadding(
-        duration: WingMotion.standard,
-        curve: WingMotion.curve,
-        padding: EdgeInsets.only(bottom: keyboard),
-        child: SizedBox(
-          height: height,
-          child: Column(
-            children: [
-              ListTile(
-                dense: true,
-                title: Text(
-                  'Profile default model',
-                  style: Theme.of(context).textTheme.titleLarge,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text(
-                  '$_profileName on $_connectionLabel',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: StudioButtonPress(
-                  child: IconButton(
-                    tooltip: 'Close',
-                    onPressed: _saving
-                        ? null
-                        : () => Navigator.pop(context, false),
-                    icon: const Icon(Icons.close_rounded),
+    return StudioLoadingFrame(
+      child: PopScope(
+        canPop: !_saving || _allowPop,
+        child: AnimatedPadding(
+          duration: WingMotion.standard,
+          curve: WingMotion.curve,
+          padding: EdgeInsets.only(bottom: keyboard),
+          child: SizedBox(
+            height: height,
+            child: Column(
+              children: [
+                ListTile(
+                  dense: true,
+                  title: Text(
+                    'Profile default model',
+                    style: Theme.of(context).textTheme.titleLarge,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
-                child: Text(
-                  'For new chats only',
-                  style: tokens.typography.body.copyWith(color: tokens.muted),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: WingSpacing.lg,
+                  subtitle: Text(
+                    '$_profileName on $_connectionLabel',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  child: StudioError(
-                    _error!,
-                    key: const Key('profile-model-error'),
-                  ),
-                ),
-              if (_edit.canReview || _edit.reviewing)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: WingSpacing.lg,
-                  ),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: StudioButtonPress(
-                      child: TextButton(
-                        onPressed: _edit.canReview ? _reviewChanges : null,
-                        child: StudioActionLabel(
-                          'Review changes',
-                          busy: _edit.reviewing,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const StudioLoadingSlot(),
+                      StudioButtonPress(
+                        child: IconButton(
+                          tooltip: 'Close',
+                          onPressed: _saving
+                              ? null
+                              : () => Navigator.pop(context, false),
+                          icon: const Icon(Icons.close_rounded),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-              if (_notice != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: WingSpacing.lg,
                   ),
-                  child: Text(_notice!, key: const Key('profile-model-notice')),
+                  child: Text(
+                    'For new chats only',
+                    style: tokens.typography.body.copyWith(color: tokens.muted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              Expanded(
-                child: _loading
-                    ? const StudioLoading.page(label: 'Loading models')
-                    : _error != null && _choices.isEmpty
-                    ? Center(
-                        child: StudioButtonPress(
-                          child: TextButton(
-                            key: const Key('profile-model-retry'),
-                            onPressed: _load,
-                            child: const Text('Retry'),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: WingSpacing.lg,
+                    ),
+                    child: StudioError(
+                      _error!,
+                      key: const Key('profile-model-error'),
+                    ),
+                  ),
+                if (_edit.canReview || _edit.reviewing)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: WingSpacing.lg,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: StudioButtonPress(
+                        child: TextButton(
+                          onPressed: _edit.canReview ? _reviewChanges : null,
+                          child: StudioActionLabel(
+                            'Review changes',
+                            busy: _edit.reviewing,
                           ),
                         ),
-                      )
-                    : ModelChooser(
-                        choices: _choices,
-                        selected: _selected == null
-                            ? null
-                            : ModelSelection.model(_selected!),
-                        onSelected: (selection) {
-                          final choice = selection.choice;
-                          if (_saving || choice == null) return;
-                          _edit.select(choice);
-                        },
-                        onRefresh: _refreshChoices,
-                        scopeLabel: 'Models for $_profileName',
-                        keyPrefix: 'profile-model',
-                        enabled: !_saving,
-                      ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  WingSpacing.lg,
-                  WingSpacing.sm,
-                  WingSpacing.lg,
-                  WingSpacing.md,
-                ),
-                child: OverflowBar(
-                  alignment: MainAxisAlignment.end,
-                  overflowAlignment: OverflowBarAlignment.end,
-                  spacing: 8,
-                  overflowSpacing: 8,
-                  children: [
-                    StudioButtonPress(
-                      child: TextButton(
-                        onPressed: _saving
-                            ? null
-                            : () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
                       ),
                     ),
-                    StudioButtonPress(
-                      child: FilledButton(
-                        key: const Key('profile-model-save'),
-                        onPressed: _dirty && !_saving && !_edit.reviewing
-                            ? _save
-                            : null,
-                        child: StudioActionLabel('Save default', busy: _saving),
-                      ),
+                  ),
+                if (_notice != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: WingSpacing.lg,
                     ),
-                  ],
+                    child: Text(
+                      _notice!,
+                      key: const Key('profile-model-notice'),
+                    ),
+                  ),
+                Expanded(
+                  child: _loading
+                      ? const StudioPageLoading.waiting(label: 'Loading models')
+                      : _error != null && _choices.isEmpty
+                      ? Center(
+                          child: StudioButtonPress(
+                            child: TextButton(
+                              key: const Key('profile-model-retry'),
+                              onPressed: _load,
+                              child: const Text('Retry'),
+                            ),
+                          ),
+                        )
+                      : ModelChooser(
+                          choices: _choices,
+                          selected: _selected == null
+                              ? null
+                              : ModelSelection.model(_selected!),
+                          onSelected: (selection) {
+                            final choice = selection.choice;
+                            if (_saving || choice == null) return;
+                            _edit.select(choice);
+                          },
+                          onRefresh: _refreshChoices,
+                          scopeLabel: 'Models for $_profileName',
+                          keyPrefix: 'profile-model',
+                          enabled: !_saving,
+                        ),
                 ),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    WingSpacing.lg,
+                    WingSpacing.sm,
+                    WingSpacing.lg,
+                    WingSpacing.md,
+                  ),
+                  child: OverflowBar(
+                    alignment: MainAxisAlignment.end,
+                    overflowAlignment: OverflowBarAlignment.end,
+                    spacing: 8,
+                    overflowSpacing: 8,
+                    children: [
+                      StudioButtonPress(
+                        child: TextButton(
+                          onPressed: _saving
+                              ? null
+                              : () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      StudioButtonPress(
+                        child: FilledButton(
+                          key: const Key('profile-model-save'),
+                          onPressed: _dirty && !_saving && !_edit.reviewing
+                              ? _save
+                              : null,
+                          child: StudioActionLabel(
+                            'Save default',
+                            busy: _saving,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

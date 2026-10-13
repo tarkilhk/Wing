@@ -2785,6 +2785,15 @@
       "selector": "main"
     },
     {
+      "id": "host-test-test/chat_working_border_test.dart",
+      "kind": "host-test",
+      "path": "test/chat_working_border_test.dart",
+      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
+      "source": "internal/docs/TESTING.md; test/chat_working_border_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
       "id": "host-test-test/clarify_server_request_test.dart",
       "kind": "host-test",
       "path": "test/clarify_server_request_test.dart",
@@ -9526,6 +9535,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/widgets/chat_working_border.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
       "path": "lib/core/widgets/compact_activity_row.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -10784,6 +10798,11 @@
       "path": "test/chat_runtime_observation_guard_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/chat_working_border_test.dart",
+      "area": "test",
+      "provenance": "tracked"
     },
     {
       "path": "test/clarify_server_request_test.dart",
@@ -14750,6 +14769,7 @@
         "lib/core/widgets/chat_notice_activity_scope.dart",
         "lib/core/widgets/chat_profile_bar.dart",
         "lib/core/widgets/chat_status_dot.dart",
+        "lib/core/widgets/chat_working_border.dart",
         "lib/core/widgets/compact_switch.dart",
         "lib/core/widgets/composer_action_button.dart",
         "lib/core/widgets/composer_action_settings.dart",
@@ -14879,6 +14899,7 @@
         "test/chat_notification_test.dart",
         "test/chat_outputs_screen_test.dart",
         "test/chat_profile_bar_test.dart",
+        "test/chat_working_border_test.dart",
         "test/cloud_connection_journey_test.dart",
         "test/command_feedback_test.dart",
         "test/compact_switch_test.dart",
@@ -15792,6 +15813,7 @@
         "test/chat_outputs_session_test.dart",
         "test/chat_profile_bar_test.dart",
         "test/chat_runtime_observation_guard_test.dart",
+        "test/chat_working_border_test.dart",
         "test/clarify_server_request_test.dart",
         "test/cloud_connection_journey_test.dart",
         "test/command_feedback_test.dart",

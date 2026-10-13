@@ -112,7 +112,7 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
                         padding: const EdgeInsets.all(24),
                         child:
                             reader.historyLoading && !_session.historyAvailable
-                            ? const StudioLoading(
+                            ? const StudioPageLoading.waiting(
                                 label: 'Loading working history',
                               )
                             : Text(

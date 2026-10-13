@@ -3390,8 +3390,21 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               context: context,
 
               title: Text(_destination.label, maxLines: 6, softWrap: true),
-              contextRow: _destination == AppDestination.activity
-                  ? _instanceHeader()
+              contextRow:
+                  _destination == AppDestination.activity ||
+                      _destination == AppDestination.health ||
+                      _destination == AppDestination.analytics
+                  ? ServerConnectionLabel(
+                      label: controller.connection.label,
+                      icon: controller.connection.icon,
+                      pickerMode: _destination == AppDestination.analytics
+                          ? WorkspacePickerMode.profiles
+                          : null,
+                      suffix: _destination == AppDestination.activity
+                          ? null
+                          : controller.current?.scope.profileName,
+                      status: controller.connectionStatus,
+                    )
                   : null,
               actions: [
                 if (_destination == AppDestination.settings &&
@@ -3411,27 +3424,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         label: 'Updating conversation',
         child: Column(
           children: [
-            if (_destination == AppDestination.health ||
-                _destination == AppDestination.analytics)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ServerConnectionLabel(
-                    label: controller.connection.label,
-                    icon: controller.connection.icon,
-                    pickerMode: _destination == AppDestination.analytics
-                        ? WorkspacePickerMode.profiles
-                        : null,
-                    suffix:
-                        _destination == AppDestination.health ||
-                            _destination == AppDestination.analytics
-                        ? controller.current?.scope.profileName
-                        : null,
-                    status: controller.connectionStatus,
-                  ),
-                ),
-              ),
             if (_destination != AppDestination.bots &&
                 _destination != AppDestination.settings &&
                 _destination != AppDestination.administration)

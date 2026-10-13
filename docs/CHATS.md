@@ -10,6 +10,10 @@ You can open a visible chat while its profile or chat list is refreshing. Wing
 opens the conversation and loads its history independently of that refresh.
 Back returns to Chats while the conversation is still connecting.
 
+Ongoing chats keep the desktop app's moving border around their row and a steady
+status dot. With reduced motion, the border stays still. Opening the chat and its
+actions remain available while Hermes works.
+
 Inside a chat, tap the project name below the chat title to open the project
 picker and move the chat. The chat title is passive.
 
@@ -38,10 +42,11 @@ chat; Back returns to the cards. Back from the cards returns to the conversation
 then to its original Chats, Bots or Recents screen.
 When you return to
 a conversation already loaded in this workspace, its retained messages appear
-while Wing refreshes from Hermes. The thin bar at the top stays visible during
-refresh; new replies appear when the server history arrives. If refresh fails,
+while Wing refreshes quietly from Hermes; new replies appear when the server
+history arrives. If refresh fails,
 the retained conversation stays readable with a retry notice. A conversation
-without retained history still needs its initial server load.
+without retained history still needs its initial server load, indicated by the
+Wing pulse in the fixed header slot beside the instance details.
 
 Sent messages have a compact footer with the date on the left and icon-only
 Edit and Restore actions on the right. Copy sits outside the bubble at its

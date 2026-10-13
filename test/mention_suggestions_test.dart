@@ -339,6 +339,7 @@ void main() {
       MentionCompletion(query: queries.last, items: [_agent]),
     );
     await tester.pump();
+    await tester.pump();
     expect(find.text('Hermes'), findsOneWidget);
     await tester.enterText(find.byType(TextField), '@her');
     await tester.tap(find.byTooltip('Close references'));

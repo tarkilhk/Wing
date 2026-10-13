@@ -334,6 +334,17 @@ void main() {
           expect(find.bySemanticsLabel('Refreshing group'), findsOneWidget);
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(find.text('Refreshing group'), findsNothing);
+          final pulse = find.byType(StudioLoading);
+          expect(
+            find.ancestor(of: pulse, matching: find.byType(WingAppBar)),
+            findsOneWidget,
+          );
+          final pulseRect = tester.getRect(pulse);
+          final identityRect = tester.getRect(
+            find.byType(ServerConnectionLabel),
+          );
+          expect(pulseRect.center.dy, closeTo(identityRect.center.dy, 1));
+          expect(pulseRect.overlaps(transcriptRect), isFalse);
           expect(find.byIcon(Icons.more_horiz), findsOneWidget);
           expect(tester.getRect(transcript), transcriptRect);
           expect(tester.getRect(input), composerRect);
@@ -341,7 +352,7 @@ void main() {
           expect(tester.widget<TextField>(input).readOnly, isFalse);
           await _render(tester, frame, 'refreshing-${brightness.name}-$scale');
           reduced.value = true;
-          await tester.pump();
+          await tester.pumpAndSettle();
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(tester.binding.transientCallbackCount, 0);
           await tester.tap(find.byTooltip('Group options'));
@@ -361,6 +372,7 @@ void main() {
           expect(find.bySemanticsLabel('Refreshing group'), findsOneWidget);
           logGate.complete();
           await automatic;
+          await tester.pump();
           await _settleGroupMarkdown(tester);
           await tester.pumpAndSettle();
           expect(find.byType(StudioLoading), findsNothing);
@@ -383,6 +395,14 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.byType(StudioLoading), findsNothing);
           expect(find.textContaining('could not refresh'), findsOneWidget);
+          await tester.scrollUntilVisible(
+            find.text('Fresh group reply'),
+            150,
+            scrollable: find
+                .descendant(of: transcript, matching: find.byType(Scrollable))
+                .last,
+          );
+          await _settleGroupMarkdown(tester);
           expect(find.text('Fresh group reply'), findsOneWidget);
           fixture.readHook = null;
           await tester.tap(find.byTooltip('Group options'));

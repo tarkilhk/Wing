@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/host_resources_session.dart';
 import 'support/host_resources_fixture.dart';
 import 'dart:async';
@@ -141,7 +140,7 @@ void main() {
         expect(find.byType(AlertDialog), findsNothing);
         expect(enabled(), isFalse);
         expect(
-          find.descendant(of: runAll, matching: find.byType(StudioLoading)),
+          find.descendant(of: runAll, matching: find.byIcon(Icons.refresh)),
           findsOneWidget,
         );
         expect(find.text('Starting…'), findsNWidgets(2));
@@ -160,7 +159,7 @@ void main() {
         expect(find.textContaining('Running'), findsNWidgets(2));
         expect(enabled(), isFalse);
         expect(
-          find.descendant(of: runAll, matching: find.byType(StudioLoading)),
+          find.descendant(of: runAll, matching: find.byIcon(Icons.refresh)),
           findsOneWidget,
         );
         await snapshot(tester, '${brightness.name}-$scale-running');
@@ -170,7 +169,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
         expect(enabled(), isFalse);
         expect(
-          find.descendant(of: runAll, matching: find.byType(StudioLoading)),
+          find.descendant(of: runAll, matching: find.byIcon(Icons.refresh)),
           findsOneWidget,
         );
         expect(find.textContaining('No issues found'), findsOneWidget);

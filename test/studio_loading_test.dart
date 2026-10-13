@@ -12,6 +12,66 @@ import 'package:wing/core/widgets/studio_action_label.dart';
 import 'package:wing/core/widgets/activity/activity_detail_actions.dart';
 
 void main() {
+  testWidgets('modal loading cannot leak into the underlying page', (
+    tester,
+  ) async {
+    var first = true, second = true, modal = true;
+    late StateSetter change;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StudioLoadingFrame(
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              change = setState;
+              return Column(
+                children: [
+                  const StudioLoadingSlot(),
+                  StudioPageLoading(
+                    active: first,
+                    label: 'First read',
+                    child: const SizedBox(),
+                  ),
+                  StudioPageLoading(
+                    active: second,
+                    label: 'Second read',
+                    child: const SizedBox(),
+                  ),
+                  if (modal)
+                    const StudioLoadingFrame(
+                      child: Column(
+                        children: [
+                          StudioLoadingSlot(),
+                          StudioPageLoading.waiting(label: 'Modal read'),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(StudioLoading), findsNWidgets(2));
+    change(() {
+      first = false;
+      modal = false;
+    });
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(
+      tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
+      'Second read',
+    );
+    change(() => second = false);
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(StudioLoading), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('action icons stay fixed ${brightness.name} $scale', (
@@ -168,6 +228,7 @@ void main() {
                   child: TickerMode(
                     enabled: visible,
                     child: Scaffold(
+                      appBar: AppBar(actions: const [StudioLoadingSlot()]),
                       body: Row(
                         children: [
                           StudioActivityIndicator(
@@ -238,7 +299,10 @@ void main() {
               child: RepaintBoundary(key: frame, child: child!),
             ),
             home: Scaffold(
-              appBar: AppBar(title: const Text('Wing loading')),
+              appBar: AppBar(
+                title: const Text('Wing loading'),
+                actions: const [StudioLoadingSlot()],
+              ),
               body: StatefulBuilder(
                 builder: (_, setState) {
                   change = setState;
@@ -285,6 +349,7 @@ void main() {
         for (final phase in ['blocked', 'ready']) {
           change(() => available = phase == 'ready');
           await tester.pump(const Duration(milliseconds: 400));
+          await tester.pump();
           expect(
             find.byType(StudioLoading),
             available ? findsOneWidget : findsNWidgets(2),
@@ -322,6 +387,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
+            appBar: AppBar(actions: const [StudioLoadingSlot()]),
             body: StatefulBuilder(
               builder: (_, setState) {
                 change = setState;
@@ -371,6 +437,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
+          appBar: AppBar(actions: const [StudioLoadingSlot()]),
           body: StatefulBuilder(
             builder: (_, setState) {
               change = setState;
@@ -398,6 +465,7 @@ void main() {
     final before = tester.getRect(find.byKey(content));
     change(() => busy = true);
     await tester.pump();
+    await tester.pump();
     final loading = find.byType(StudioLoading);
     expect(loading, findsOneWidget);
     expect(tester.getRect(find.byKey(content)), before);
@@ -408,6 +476,7 @@ void main() {
     expect(tester.getRect(find.byKey(content)), before);
     change(() => busy = false);
     await tester.pump();
+    await tester.pump();
     expect(loading, findsNothing);
     expect(tester.getRect(find.byKey(content)), before);
   });
@@ -416,9 +485,10 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
-          body: StudioLoadingRegion(
+          appBar: AppBar(actions: const [StudioLoadingSlot()]),
+          body: const StudioLoadingRegion(
             available: false,
             busy: true,
             label: 'Loading workspace',
@@ -434,6 +504,7 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
     expect(find.byType(StudioLoading), findsNWidgets(2));
     expect(find.bySemanticsLabel('Loading workspace'), findsOneWidget);
     expect(find.bySemanticsLabel('Loading chats'), findsNothing);
@@ -486,6 +557,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
+            appBar: AppBar(actions: const [StudioLoadingSlot()]),
             body: StudioRefresh(
               available: available,
               onRefresh: () {

@@ -82,57 +82,66 @@ class DeletedChatRecoverySheet extends StatelessWidget {
     final height = (MediaQuery.sizeOf(context).height * 0.82)
         .clamp(0.0, 720.0)
         .toDouble();
-    return SafeArea(
-      top: false,
-      child: SizedBox(
-        height: height,
-        child: ValueListenableBuilder<DeletedDraftCleanupPresentation>(
-          valueListenable: presentation,
-          builder: (context, value, _) => CustomScrollView(
-            key: const ValueKey('deleted-chat-recovery-list'),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    WingSpacing.lg,
-                    0,
-                    WingSpacing.sm,
-                    WingSpacing.sm,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Chat deletion',
-                          style: Theme.of(context).textTheme.titleLarge,
+    return StudioLoadingFrame(
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: height,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  WingSpacing.lg,
+                  0,
+                  WingSpacing.sm,
+                  WingSpacing.sm,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Chat deletion',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    const StudioLoadingSlot(),
+                    StudioButtonPress(
+                      child: IconButton(
+                        tooltip: 'Close chat recovery',
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ValueListenableBuilder<DeletedDraftCleanupPresentation>(
+                  valueListenable: presentation,
+                  builder: (context, value, _) => CustomScrollView(
+                    key: const ValueKey('deleted-chat-recovery-list'),
+                    slivers: [
+                      if (value.entries.isEmpty)
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.all(WingSpacing.lg),
+                            child: Text('No chat deletions need attention.'),
+                          ),
+                        ),
+                      SliverList.builder(
+                        itemCount: value.entries.length,
+                        itemBuilder: (context, index) => _RecoveryEntry(
+                          key: ValueKey(value.entries[index].key),
+                          entry: value.entries[index],
                         ),
                       ),
-                      StudioButtonPress(
-                        child: IconButton(
-                          tooltip: 'Close chat recovery',
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                        ),
+                      const SliverToBoxAdapter(
+                        child: SizedBox(height: WingSpacing.lg),
                       ),
                     ],
                   ),
                 ),
               ),
-              if (value.entries.isEmpty)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.all(WingSpacing.lg),
-                    child: Text('No chat deletions need attention.'),
-                  ),
-                ),
-              SliverList.builder(
-                itemCount: value.entries.length,
-                itemBuilder: (context, index) => _RecoveryEntry(
-                  key: ValueKey(value.entries[index].key),
-                  entry: value.entries[index],
-                ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: WingSpacing.lg)),
             ],
           ),
         ),

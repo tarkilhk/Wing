@@ -2,7 +2,8 @@
 
 Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Pinned entries lead the list. Names and message previews sit on the left, with saved artwork on the right. The floating + creates a bot or group for the selected tab. Lists refresh automatically while visible. Usable lists refresh quietly.
 Wing's feather pulse appears when initial loading prevents you from using the
-list, without moving the cards when loading finishes.
+list. It sits at the right of the instance row, without covering or moving the cards
+when loading finishes.
 
 Tap a bot's avatar to edit its appearance. Tap its name or message preview to open its continuing **Bot Chat**. Back returns to the same tab and search. Bot Chats use the usual conversation screen, showing its saved avatar to the left of its display name when available. Tap that avatar or name in the chat header to open Bot settings. Back returns to your conversation with its draft intact.
 

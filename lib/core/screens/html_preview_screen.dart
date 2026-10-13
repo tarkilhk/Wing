@@ -80,7 +80,7 @@ class _HtmlPreviewScreenState extends State<HtmlPreviewScreen> {
         body: SafeArea(
           child: Center(
             child: observation.loading
-                ? const StudioLoading.page(label: 'Loading preview')
+                ? const StudioPageLoading.waiting(label: 'Loading preview')
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
                     child: Column(

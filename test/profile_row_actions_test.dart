@@ -1191,9 +1191,7 @@ void main() {
         expect(find.byTooltip(label), findsOneWidget);
       }
       await tester.pumpWidget(
-        MaterialApp(
-          home: ChatStatusDot(chatListStatus({'unread': true}), live: false),
-        ),
+        MaterialApp(home: ChatStatusDot(chatListStatus({'unread': true}))),
       );
       expect(find.byTooltip('Unread'), findsOneWidget);
       expect(find.byType(StudioLoading), findsNothing);

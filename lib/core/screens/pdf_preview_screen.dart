@@ -56,7 +56,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
         body: SafeArea(
           child: Center(
             child: observation.loading
-                ? const StudioLoading.page(label: 'Loading PDF')
+                ? const StudioPageLoading.waiting(label: 'Loading PDF')
                 : observation.error != null
                 ? SingleChildScrollView(
                     padding: const EdgeInsets.all(16),

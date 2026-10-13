@@ -721,10 +721,12 @@ class _BotGroupScreenState extends State<BotGroupScreen>
             ),
           ),
           if (_refreshingGroup || (_session.loading && _session.events.isEmpty))
-            StudioLoadingOverlay(
-              label: _refreshingGroup
-                  ? 'Refreshing group'
-                  : 'Loading conversation',
+            Positioned.fill(
+              child: StudioPageLoading.waiting(
+                label: _refreshingGroup
+                    ? 'Refreshing group'
+                    : 'Loading conversation',
+              ),
             ),
           if (!_following)
             Positioned(

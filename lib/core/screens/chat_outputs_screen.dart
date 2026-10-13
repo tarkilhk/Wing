@@ -502,7 +502,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_initialError == null)
-                  const StudioLoading(label: 'Loading outputs')
+                  const StudioPageLoading.waiting(label: 'Loading outputs')
                 else ...[
                   StudioError(_initialError!),
                   const SizedBox(height: 12),
@@ -561,7 +561,7 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
             ),
             Expanded(
               child: _observation.loading && !_observation.hasObservation
-                  ? StudioLoading.page(label: 'Loading outputs')
+                  ? StudioPageLoading.waiting(label: 'Loading outputs')
                   : outputs.isEmpty
                   ? Center(
                       child: SingleChildScrollView(

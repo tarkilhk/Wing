@@ -735,6 +735,13 @@ class _HermesAdministrationContentState
           ),
         ),
         title: const Text('Administration'),
+        contextRow: ServerConnectionLabel(
+          label: _server.connectionLabel,
+          suffix: profile?.name,
+          style: Theme.of(context).textTheme.bodySmall,
+          icon: widget.controller.connection.icon,
+          status: widget.controller.connectionStatus,
+        ),
         actions: [
           StudioButtonPress(
             child: IconButton(
@@ -770,22 +777,6 @@ class _HermesAdministrationContentState
                   ),
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 40),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ServerConnectionLabel(
-                    label: _server.connectionLabel,
-                    suffix: profile?.name,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    icon: widget.controller.connection.icon,
-                    status: widget.controller.connectionStatus,
-                  ),
-                ),
-              ),
-            ),
             Expanded(
               child: profile == null
                   ? ListView(

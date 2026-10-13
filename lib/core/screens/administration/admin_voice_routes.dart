@@ -120,7 +120,7 @@ class _ProfileSpeechDefaultsState extends State<_ProfileSpeechDefaults> {
           title: 'Speech defaults',
           scope: _session.scopeLabel,
           child: state.loading
-              ? StudioLoading.page(label: 'Loading voice settings')
+              ? StudioPageLoading.waiting(label: 'Loading voice settings')
               : AdminNotice.error(
                   state.error ?? 'Speech settings are unavailable.',
                   retry: _session.loadDefaults,
@@ -176,7 +176,7 @@ class _ProfileVoiceCredentialState extends State<_ProfileVoiceCredential> {
           title: widget.name,
           scope: widget.profile.label,
           child: _inventory.loading
-              ? StudioLoading.page(label: 'Loading voice settings')
+              ? StudioPageLoading.waiting(label: 'Loading voice settings')
               : AdminNotice.error(
                   _inventory.error ?? 'This credential is unavailable.',
                   retry: _inventory.refresh,

@@ -20,61 +20,71 @@ class TextSizeSettingsCard extends StatelessWidget {
       valueListenable: preferences.state,
       builder: (context, state, _) {
         final control = state.textSize;
-        return PopScope(
-          canPop: !control.busy,
-          child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: StudioLoadingRegion(
-                available: !control.busy,
-                busy: control.busy,
-                label: 'Saving text size',
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Text size',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('Follows your Android text size.'),
-                    const SizedBox(height: 16),
-                    Semantics(
-                      label: 'Text size preview',
-                      child: ExcludeSemantics(
-                        child: Text('A little easier to read.'),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    RadioGroup<AppTextSizePreference>(
-                      groupValue: control.selected,
-                      onChanged: (value) async {
-                        final choose = control.choose;
-                        if (value == null || choose == null) return;
-                        final saved = await choose(value);
-                        if (saved && sheetContext.mounted) {
-                          Navigator.of(sheetContext).pop();
-                        }
-                      },
-                      child: Column(
+        return StudioLoadingFrame(
+          child: PopScope(
+            canPop: !control.busy,
+            child: SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: StudioLoadingRegion(
+                  available: !control.busy,
+                  busy: control.busy,
+                  label: 'Saving text size',
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          for (final preference in AppTextSizePreference.values)
-                            StudioRadioTile<AppTextSizePreference>(
-                              contentPadding: EdgeInsets.zero,
-                              minTileHeight: 48,
-                              minVerticalPadding: 8,
-                              enabled: control.choose != null,
-                              value: preference,
-                              title: Text(preference.label),
-                              subtitle: Text(preference.description),
+                          Expanded(
+                            child: Text(
+                              'Text size',
+                              style: Theme.of(context).textTheme.titleLarge,
                             ),
+                          ),
+                          const StudioLoadingSlot(height: 24),
                         ],
                       ),
-                    ),
-                    if (control.notice != null) StudioError(control.notice!),
-                    if (control.error != null) StudioError(control.error!),
-                  ],
+                      const SizedBox(height: 8),
+                      const Text('Follows your Android text size.'),
+                      const SizedBox(height: 16),
+                      Semantics(
+                        label: 'Text size preview',
+                        child: ExcludeSemantics(
+                          child: Text('A little easier to read.'),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      RadioGroup<AppTextSizePreference>(
+                        groupValue: control.selected,
+                        onChanged: (value) async {
+                          final choose = control.choose;
+                          if (value == null || choose == null) return;
+                          final saved = await choose(value);
+                          if (saved && sheetContext.mounted) {
+                            Navigator.of(sheetContext).pop();
+                          }
+                        },
+                        child: Column(
+                          children: [
+                            for (final preference
+                                in AppTextSizePreference.values)
+                              StudioRadioTile<AppTextSizePreference>(
+                                contentPadding: EdgeInsets.zero,
+                                minTileHeight: 48,
+                                minVerticalPadding: 8,
+                                enabled: control.choose != null,
+                                value: preference,
+                                title: Text(preference.label),
+                                subtitle: Text(preference.description),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (control.notice != null) StudioError(control.notice!),
+                      if (control.error != null) StudioError(control.error!),
+                    ],
+                  ),
                 ),
               ),
             ),

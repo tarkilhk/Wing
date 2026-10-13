@@ -307,6 +307,7 @@ void main() {
           await _snapshot(tester, 'notice-${brightness.name}-${scale.toInt()}');
           await _open(tester);
           await _snapshot(tester, 'review-${brightness.name}-${scale.toInt()}');
+          final headerSlot = tester.getRect(find.byType(StudioLoadingSlot));
           await _reach(tester, _action('Check chat'));
           _minimumTarget(tester, _action('Check chat'));
           await tester.tap(_action('Check chat').hitTestable());
@@ -316,6 +317,13 @@ void main() {
             find.text('A recovery operation is still running'),
           );
           expect(find.byType(StudioLoading), findsOneWidget);
+          expect(tester.getRect(find.byType(StudioLoadingSlot)), headerSlot);
+          expect(
+            headerSlot.contains(
+              tester.getRect(find.byType(StudioLoading)).center,
+            ),
+            isTrue,
+          );
           await _snapshot(tester, 'busy-${brightness.name}-${scale.toInt()}');
           expect(tester.takeException(), isNull);
         },
@@ -391,6 +399,7 @@ void main() {
       await tester.pump();
       expect(calls, 1);
       expect(_action('Retry cleanup'), findsNothing);
+      await tester.pump();
       expect(find.byType(StudioLoading), findsOneWidget);
       await tester.tap(find.byTooltip('Close chat recovery'));
       await tester.pumpAndSettle();

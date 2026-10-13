@@ -19,6 +19,7 @@ import '../widgets/chat_list_menu.dart';
 import '../widgets/read_recovery.dart';
 import '../widgets/chat_profile_bar.dart';
 import '../widgets/chat_status_dot.dart';
+import '../widgets/chat_working_border.dart';
 import '../widgets/bot_avatar.dart';
 import '../widgets/profile_selector.dart';
 import '../widgets/server_connection_label.dart';
@@ -183,10 +184,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
             choice.id,
             choice.label,
             switch (choice.decoration) {
-              BrowserChoiceDecoration.status => ChatStatusDot(
-                choice.status!,
-                live: false,
-              ),
+              BrowserChoiceDecoration.status => ChatStatusDot(choice.status!),
               BrowserChoiceDecoration.profile => const Icon(
                 Icons.person_outline,
               ),
@@ -604,59 +602,64 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
     return Builder(
       builder: (anchor) => Padding(
         padding: const EdgeInsets.only(left: 28, right: 8),
-        child: StudioButtonPress(
-          child: ListTile(
-            key: ValueKey('chat-${e.profile}-${e.id}'),
-            contentPadding: EdgeInsets.zero,
-            minTileHeight: 48,
-            minVerticalPadding: largeText ? 6 : 0,
-            horizontalTitleGap: 6,
-            minLeadingWidth: 18,
-            leading: ChatStatusDot(e.status, live: true),
-            title: largeText || !hasMetrics
-                ? title
-                : Row(
-                    children: [
-                      Expanded(child: title),
-                      const SizedBox(width: 8),
-                      if (showTokens) SizedBox(width: 56, child: metrics.first),
-                      if (showTokens && showUpdated) const SizedBox(width: 8),
-                      if (showUpdated) SizedBox(width: 28, child: metrics.last),
-                    ],
-                  ),
-            subtitle: detail.isEmpty && !(largeText && hasMetrics)
-                ? null
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (largeText && hasMetrics)
-                        Wrap(spacing: 12, children: metrics),
-                      if (detail.isNotEmpty)
-                        Text(
-                          detail.join(' · '),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: WingTokens.of(context).muted,
+        child: ChatWorkingBorder(
+          working: e.status == ChatListStatus.working,
+          child: StudioButtonPress(
+            child: ListTile(
+              key: ValueKey('chat-${e.profile}-${e.id}'),
+              contentPadding: EdgeInsets.zero,
+              minTileHeight: 48,
+              minVerticalPadding: largeText ? 6 : 0,
+              horizontalTitleGap: 6,
+              minLeadingWidth: 18,
+              leading: ChatStatusDot(e.status),
+              title: largeText || !hasMetrics
+                  ? title
+                  : Row(
+                      children: [
+                        Expanded(child: title),
+                        const SizedBox(width: 8),
+                        if (showTokens)
+                          SizedBox(width: 56, child: metrics.first),
+                        if (showTokens && showUpdated) const SizedBox(width: 8),
+                        if (showUpdated)
+                          SizedBox(width: 28, child: metrics.last),
+                      ],
+                    ),
+              subtitle: detail.isEmpty && !(largeText && hasMetrics)
+                  ? null
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (largeText && hasMetrics)
+                          Wrap(spacing: 12, children: metrics),
+                        if (detail.isNotEmpty)
+                          Text(
+                            detail.join(' · '),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: WingTokens.of(context).muted,
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
+              trailing: Builder(
+                builder: (button) => StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Chat actions',
+                    icon: const Icon(Icons.more_horiz, size: 18),
+                    onPressed: _pending || workspace.switching
+                        ? null
+                        : () => _run(() => _chatActions(button, e)),
                   ),
-            trailing: Builder(
-              builder: (button) => StudioButtonPress(
-                child: IconButton(
-                  tooltip: 'Chat actions',
-                  icon: const Icon(Icons.more_horiz, size: 18),
-                  onPressed: _pending || workspace.switching
-                      ? null
-                      : () => _run(() => _chatActions(button, e)),
                 ),
               ),
+              onLongPress: _pending || workspace.switching
+                  ? null
+                  : () => _run(() => _chatActions(anchor, e)),
+              onTap: _pending ? null : () => _openChat(e),
             ),
-            onLongPress: _pending || workspace.switching
-                ? null
-                : () => _run(() => _chatActions(anchor, e)),
-            onTap: _pending ? null : () => _openChat(e),
           ),
         ),
       ),
@@ -999,10 +1002,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
                 child: ListTile(
                   key: ValueKey('saved-draft-${draft.key.sessionId}'),
                   contentPadding: const EdgeInsets.only(left: 16, right: 0),
-                  leading: const ChatStatusDot(
-                    ChatListStatus.draft,
-                    live: false,
-                  ),
+                  leading: const ChatStatusDot(ChatListStatus.draft),
                   title: Text(
                     title,
                     maxLines: 2,

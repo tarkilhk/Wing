@@ -120,6 +120,7 @@ void main() {
               ),
             ),
           );
+          await tester.pump();
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(
             find.bySemanticsLabel('Loading working history'),

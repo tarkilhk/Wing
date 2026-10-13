@@ -55,7 +55,7 @@ class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
           );
         }
         if (!snapshot.hasData) {
-          return StudioLoading.page(label: 'Loading privacy policy');
+          return StudioPageLoading.waiting(label: 'Loading privacy policy');
         }
         return Markdown(
           checkboxBuilder: (checked) => StudioTaskMarker(completed: checked),
