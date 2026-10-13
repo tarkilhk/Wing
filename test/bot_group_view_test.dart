@@ -104,6 +104,89 @@ Future<void> _render(WidgetTester tester, GlobalKey key, String name) async {
 void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group microphone stays beside bottom action ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          final group = (await readFixtureGroups(
+            fixture.repository,
+            groupMessages: null,
+          )).single;
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: frame,
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: BotGroupScreen(
+                  voiceInputSettings: () =>
+                      const LocalVoiceInputSettings(language: ''),
+                  stopVoicePlayback: () async {},
+                  createSession: () => BotGroupSession(
+                    fixture.repository,
+                    group,
+                    groupMessages: null,
+                    appearances: FixedGroupAppearances(const []),
+                    reads: BotGroupReadState(),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final input = find.byKey(const ValueKey('group-message-composer'));
+          final microphone = find.byTooltip('Dictate message');
+          void expectBottomActions(String label) {
+            final mic = tester.getRect(microphone);
+            final action = tester.getRect(find.byTooltip(label));
+            expect(mic.center.dy, closeTo(action.center.dy, 1));
+            expect(mic.right, lessThanOrEqualTo(action.left));
+            expect(mic.width, greaterThanOrEqualTo(48));
+            expect(mic.height, greaterThanOrEqualTo(48));
+            expect(tester.takeException(), isNull);
+          }
+
+          expectBottomActions('Send group message');
+          await tester.enterText(input, 'One line');
+          await tester.pumpAndSettle();
+          expectBottomActions('Send group message');
+          await tester.enterText(
+            input,
+            'Anything else is wrong and you must stop it immediately.\n\n'
+            'I need you guys to refocus your plans on achieving this!!!!!',
+          );
+          await tester.pumpAndSettle();
+          expectBottomActions('Send group message');
+          await _render(tester, frame, 'microphone-${brightness.name}-$scale');
+          tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+          await tester.pumpAndSettle();
+          expectBottomActions('Send group message');
+          await _render(
+            tester,
+            frame,
+            'microphone-keyboard-${brightness.name}-$scale',
+          );
+          fixture.sendLost = true;
+          await tester.tap(find.byTooltip('Send group message'));
+          await tester.pumpAndSettle();
+          expectBottomActions('Retry same message');
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
       for (final continuing in [false, true]) {
         testWidgets(
           'group ${continuing ? 'continues' : 'menu stops'} deferred work without active flags ${brightness.name} $scale',

@@ -171,7 +171,6 @@ class BotGroupComposer extends StatelessWidget {
                   decoration: InputDecoration(
                     isDense: true,
                     hintMaxLines: 1,
-                    suffixIcon: microphone,
                     hintText: controller.text.isEmpty
                         ? 'Message the group'
                         : null,
@@ -183,6 +182,7 @@ class BotGroupComposer extends StatelessWidget {
                   ),
                 ),
               ),
+              microphone,
               action,
             ],
           ),
