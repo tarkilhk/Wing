@@ -53,6 +53,9 @@ void main() {
     expect(tester.getRect(card), position);
     await tester.pump(const Duration(seconds: 12));
     expect(find.byType(StudioLoading), findsOneWidget);
+    expect(find.textContaining('Reconnecting'), findsNothing);
+    expect(find.textContaining('Your draft stays here'), findsNothing);
+    expect(tester.getSize(bar).height, 0);
     expect(tester.getRect(card), position);
     status.endRecovery('chat');
     await tester.pump();
@@ -88,14 +91,18 @@ void main() {
       final expanded = tester.getSize(bar).height;
       expect(expanded, greaterThan(entering));
       expect(
-        find.bySemanticsLabel('Chat unavailable · Your draft stays here.'),
+        find.bySemanticsLabel(
+          'Chat unavailable · Tap the status icon to retry.',
+        ),
         findsOneWidget,
       );
 
       status.endRecovery('chat');
       await tester.pump();
       expect(
-        find.bySemanticsLabel('Chat unavailable · Your draft stays here.'),
+        find.bySemanticsLabel(
+          'Chat unavailable · Tap the status icon to retry.',
+        ),
         findsNothing,
       );
       await tester.pump(const Duration(milliseconds: 60));
@@ -106,14 +113,14 @@ void main() {
       status.failRecovery('chat', 'History unavailable');
       await tester.pumpAndSettle();
       expect(
-        find.text('Chat unavailable · Your draft stays here.'),
+        find.text('Chat unavailable · Tap the status icon to retry.'),
         findsOneWidget,
       );
       await render(tester, showHint: false);
       await tester.pumpAndSettle();
       expect(tester.getSize(bar).height, 0);
       expect(
-        find.text('Chat unavailable · Your draft stays here.'),
+        find.text('Chat unavailable · Tap the status icon to retry.'),
         findsNothing,
       );
       await render(tester);

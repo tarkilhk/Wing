@@ -8,6 +8,9 @@ Wing attempts to restore the visible workspace connection when you return to the
 
 Changing a connection's address or credentials replaces its access configuration. Check that you are opening the intended saved instance before sending work.
 
+The Wing pulses in the header during reconnection, without a status text row.
+If recovery fails, tap the connection status icon and choose **Retry connection**.
+
 ## Access headers
 
 Authenticated proxies can use **Sign in → Custom setup → Access headers**. Most connections need only the dashboard URL and login. Leave a replacement blank to keep a saved value, enter a replacement explicitly, or remove it. Header names must be unique ignoring case; names and values must be single-line. Managed authentication headers cannot be overridden.

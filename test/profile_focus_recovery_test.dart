@@ -208,6 +208,7 @@ void main() {
           await tester.pump(const Duration(seconds: 12));
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(find.textContaining('Reconnecting'), findsNothing);
+          expect(find.textContaining('Your draft stays here'), findsNothing);
           for (final card in tester.widgetList<RecentIdentityCard>(cards)) {
             expect(card.onTap, isNotNull);
           }

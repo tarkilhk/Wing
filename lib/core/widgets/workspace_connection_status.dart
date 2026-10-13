@@ -35,7 +35,7 @@ class WorkspaceConnectionStatus extends StatelessWidget {
                         ServerConnectionPhase.disconnected =>
                           status.recoveryProblem == null
                               ? 'Offline · Tap the status icon to retry.'
-                              : 'Chat unavailable · Your draft stays here.',
+                              : 'Chat unavailable · Tap the status icon to retry.',
                         _ => status.description,
                       },
                       maxLines: 1,
