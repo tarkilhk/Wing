@@ -251,29 +251,19 @@ class _ProjectAppearancePicker extends StatelessWidget {
       const SizedBox(height: 8),
       Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color:
-                  (_parseProjectColor(color) ??
-                          Theme.of(context).colorScheme.primary)
-                      .withValues(alpha: .16),
-              borderRadius: WingRadius.control,
-            ),
-            child: Icon(
-              ProjectIconGlyphs.of(icon),
-              color:
-                  _parseProjectColor(color) ??
-                  Theme.of(context).colorScheme.primary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Text(projectIconLabel(icon))),
           StudioButtonPress(
-            child: IconButton.outlined(
+            child: IconButton(
               key: const ValueKey('project-choose-icon'),
               tooltip: 'Choose project icon',
+              style: IconButton.styleFrom(
+                backgroundColor:
+                    (_parseProjectColor(color) ??
+                            Theme.of(context).colorScheme.primary)
+                        .withValues(alpha: .16),
+                foregroundColor:
+                    _parseProjectColor(color) ??
+                    Theme.of(context).colorScheme.primary,
+              ),
               onPressed: !enabled
                   ? null
                   : () async {
@@ -284,9 +274,11 @@ class _ProjectAppearancePicker extends StatelessWidget {
                       );
                       if (chosen != null && context.mounted) onIcon(chosen);
                     },
-              icon: const Icon(Icons.chevron_right),
+              icon: Icon(ProjectIconGlyphs.of(icon)),
             ),
           ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(projectIconLabel(icon))),
         ],
       ),
     ],
@@ -491,13 +483,16 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
                     ),
                   ),
                   StudioButtonPress(
-                    child: IconButton.filled(
+                    child: IconButton(
                       key: ValueKey(
                         _editing
                             ? 'project-edit-confirm'
                             : 'project-create-confirm',
                       ),
                       tooltip: _editing ? 'Save changes' : 'Create project',
+                      style: IconButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                      ),
                       onPressed:
                           _pending || _name.text.trim().isEmpty || _path.isEmpty
                           ? null

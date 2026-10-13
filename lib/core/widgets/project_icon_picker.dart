@@ -270,9 +270,12 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
                     ),
                     const SizedBox(width: 12),
                     StudioButtonPress(
-                      child: IconButton.filled(
+                      child: IconButton(
                         key: const ValueKey('project-icon-confirm'),
                         tooltip: 'Use selected icon',
+                        style: IconButton.styleFrom(
+                          foregroundColor: scheme.primary,
+                        ),
                         onPressed: () => Navigator.pop(context, _selected),
                         icon: const Icon(Icons.check),
                       ),

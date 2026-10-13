@@ -199,7 +199,20 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const ValueKey('project-choose-icon')),
       );
-      await tester.tap(find.byKey(const ValueKey('project-choose-icon')));
+      final preview = find.byKey(const ValueKey('project-choose-icon'));
+      final button = tester.widget<IconButton>(preview);
+      expect(
+        (button.icon as Icon).icon,
+        ProjectIconGlyphs.of('folder-library'),
+      );
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
+      expect(tester.getSize(preview).width, greaterThanOrEqualTo(48));
+      expect(tester.getSize(preview).height, greaterThanOrEqualTo(48));
+      await captureScreen(
+        tester,
+        'form-${brightness.name}-${scale.toInt()}-${keyboard.toInt()}',
+      );
+      await tester.tap(preview);
       await tester.pumpAndSettle();
     }
   }
@@ -375,6 +388,20 @@ void main() {
             await tester.pumpAndSettle();
             expect(find.byType(ProjectIconPicker), findsNothing);
             expect(find.text('Groups & teams'), findsOneWidget);
+            expect(
+              (tester
+                          .widget<IconButton>(
+                            find.byKey(const ValueKey('project-choose-icon')),
+                          )
+                          .icon
+                      as Icon)
+                  .icon,
+              ProjectIconGlyphs.of('organization'),
+            );
+            await captureScreen(
+              tester,
+              'form-selected-${brightness.name}-${scale.toInt()}-${keyboard.toInt()}',
+            );
             expect(tester.takeException(), isNull);
           },
         );

@@ -118,6 +118,12 @@ void main() {
           .enabled,
       isFalse,
     );
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const ValueKey('project-choose-icon')))
+          .onPressed,
+      isNull,
+    );
     await tester.tapAt(const Offset(8, 8));
     await tester.binding.handlePopRoute();
     await tester.pump();
@@ -128,6 +134,12 @@ void main() {
 
     expect(find.text('Renamed project'), findsOneWidget);
     expect(find.textContaining('not acknowledged'), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const ValueKey('project-choose-icon')))
+          .onPressed,
+      isNotNull,
+    );
     host.failMutation = false;
     await tester.tap(find.byKey(const ValueKey('project-edit-confirm')));
     await tester.pumpAndSettle();
