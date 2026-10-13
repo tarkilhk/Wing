@@ -69,6 +69,43 @@ void main() {
 
   for (final failed in [false, true]) {
     test(
+      'network change during recovery awaits ${failed ? 'failed' : 'successful'} replacement',
+      () async {
+        final history = Completer<void>();
+        host.heldHistoryStarted = Completer<void>();
+        host.heldHistoryDelay = history;
+        final calls = host.connectCalls;
+        final recovery = controller.reconnect(chat.key.workspace);
+        await host.heldHistoryStarted!.future;
+
+        final networkRecovery = controller.resumeConnection(
+          networkChanged: true,
+        );
+        final refresh = controller.refreshActivity();
+        await Future<void>.delayed(Duration.zero);
+        if (failed) {
+          host.connectError = StateError('Replacement connection failed');
+        }
+        history.complete();
+        await Future.wait([recovery, networkRecovery, refresh]);
+
+        expect(
+          controller.activityProfileErrors,
+          failed ? {'server': 'Live status could not be loaded.'} : isEmpty,
+          reason:
+              'Recents must not report Live status could not be loaded. '
+              'after an overlapping network recovery.',
+        );
+        expect(controller.connectionStatus.liveAvailable('a'), !failed);
+        expect(host.connectCalls, calls + 2);
+        expect(chat.composer.observation.text, 'Keep my draft');
+        expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      },
+    );
+  }
+
+  for (final failed in [false, true]) {
+    test(
       'activity refresh waits for ${failed ? 'failed' : 'successful'} recovery',
       () async {
         final connection = Completer<void>();

@@ -268,6 +268,7 @@ class ProfileWorkspaceData {
   Timer? _retry;
   bool _reconnecting = false;
   Future<void>? _reconnectFuture;
+  bool _restartReconnect = false;
   bool _recovering = false;
   bool _loaded = false;
   bool _offlineSnapshot = false;
@@ -2302,6 +2303,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
       // until its next timeout. Re-open it when Android reports a new route.
       for (final resource in _resources.values) {
         if (connectionStatus.liveAvailable(resource.scope.profileName)) {
+          // The shared recovery may already be reading history over the old
+          // route. Its borrowers must await a fresh pass on the new socket.
+          if (resource._reconnectFuture != null) {
+            resource._restartReconnect = true;
+          }
           resource.gateway.disconnect();
           resource.gateway.onConnectionChanged?.call(false);
         }
@@ -8332,9 +8338,23 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<void> _reconnect(ProfileWorkspaceData resource) {
     // A notification tap must await recovery already started by another caller.
-    return resource._reconnectFuture ??= _performReconnect(
-      resource,
-    ).whenComplete(() => resource._reconnectFuture = null);
+    if (resource._reconnectFuture case final pending?) return pending;
+    final completion = Completer<void>();
+    resource._reconnectFuture = completion.future;
+    unawaited(() async {
+      try {
+        do {
+          resource._restartReconnect = false;
+          await _performReconnect(resource);
+        } while (!_closed && resource._restartReconnect);
+        completion.complete();
+      } catch (error, stack) {
+        completion.completeError(error, stack);
+      } finally {
+        resource._reconnectFuture = null;
+      }
+    }());
+    return completion.future;
   }
 
   Future<void> _performReconnect(ProfileWorkspaceData resource) async {
@@ -8355,7 +8375,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final resumedChats = <ProfileChat>[];
     try {
       await resource.gateway.connect();
-      if (_closed) return;
+      if (_closed || resource._restartReconnect) return;
       for (final chat in resource._chats.values.toList()) {
         if (resource.blocksSession(chat._key.sessionId)) continue;
         if (!chat.runtime.blocksTurnAdmission &&
@@ -8393,6 +8413,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           if (!read.current()) continue;
           rethrow;
         }
+        if (_closed || resource._restartReconnect) return;
         if (!read.owned()) continue;
         final applied = result != null && read.current();
         final partial = chat.reading.streaming;
@@ -8407,6 +8428,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           if (!continuation.current()) continue;
           rethrow;
         }
+        if (_closed || resource._restartReconnect) return;
         if (!continuation.current()) continue;
         if (!chat.runtime.blocksTurnAdmission) chat.reading.updateStreaming('');
         chat._runtime.recovered();
@@ -8417,6 +8439,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       await _journal();
       await _refreshSessions(resource);
+      if (_closed || resource._restartReconnect) return;
       logConnectionDiagnostic(
         'workspace.recovered',
         details: {
@@ -8442,6 +8465,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       // sessions change. A restored chat socket must not stay orange during it.
       await _scheduleNotificationReconciliation(resource);
     } catch (failure, stack) {
+      if (_closed || resource._restartReconnect) return;
       retry = isTemporaryWorkspaceFailure(failure);
       logConnectionDiagnostic(
         'workspace.recovery_failed',
@@ -8477,9 +8501,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _changed();
       // Idle conversations and the session list also need recovery. A failed
       // connection must not depend on whether a prompt happens to be running.
-      if (retry ||
-          resource._reconnectError == null &&
-              resource._chats.values.any((c) => c.runtime.reconnecting)) {
+      if (!resource._restartReconnect &&
+          (retry ||
+              resource._reconnectError == null &&
+                  resource._chats.values.any((c) => c.runtime.reconnecting))) {
         _scheduleReconnect(resource);
       }
     }
