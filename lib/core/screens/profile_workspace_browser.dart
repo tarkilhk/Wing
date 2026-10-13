@@ -1366,9 +1366,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
                     onLongPress:
                         !enabled || workspace.offline || workspace.recovering
                         ? null
-                        : () => setState(
-                            () => _showProjectFab = !_showProjectFab,
-                          ),
+                        : () {
+                            unawaited(Feedback.forLongPress(context));
+                            setState(() => _showProjectFab = !_showProjectFab);
+                          },
                     child: StudioButtonPress(
                       child: FloatingActionButton(
                         key: const ValueKey('workspace-new-chat'),

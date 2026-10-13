@@ -387,11 +387,8 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('project-choose-folder')));
       await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('project-folder-path')),
-        '/work/new',
-      );
-      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('project-folder-/work/new')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('project-create-confirm')));
@@ -462,11 +459,40 @@ void main() {
                 find.byKey(const ValueKey('project-choose-folder')),
               );
               await tester.pumpAndSettle();
-              await tester.enterText(
-                find.byKey(const ValueKey('project-folder-path')),
-                '/work/bangkok-oct26',
+              await actionCapture(
+                tester,
+                'folder-browser-${brightness.name}-$scale',
               );
-              await tester.pump();
+              await tester.tap(find.byTooltip('New folder'));
+              await tester.pumpAndSettle();
+              await tester.enterText(
+                find.byKey(const ValueKey('project-new-folder-name')),
+                'New trip',
+              );
+              tester.view.viewInsets = FakeViewPadding(
+                bottom: 260 * tester.view.devicePixelRatio,
+              );
+              await tester.pumpAndSettle();
+              expect(
+                find
+                    .byKey(const ValueKey('project-new-folder-create'))
+                    .hitTestable(),
+                findsOneWidget,
+              );
+              await actionCapture(
+                tester,
+                'folder-browser-keyboard-${brightness.name}-$scale',
+              );
+              tester.view.resetViewInsets();
+              await tester.pumpAndSettle();
+              await tester.tap(find.byTooltip('New folder'));
+              await tester.pumpAndSettle();
+              await tester.tap(
+                find.byKey(
+                  const ValueKey('project-folder-/work/bangkok-oct26'),
+                ),
+              );
+              await tester.pumpAndSettle();
               await tester.tap(
                 find.byKey(const ValueKey('project-folder-continue')),
               );

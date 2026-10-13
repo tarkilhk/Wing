@@ -1,3 +1,4 @@
+import '../services/server_files_browser.dart';
 import '../widgets/studio_action_label.dart';
 import '../widgets/studio_error.dart';
 import '../widgets/project_folder_picker.dart';
@@ -330,11 +331,11 @@ class _ProjectAppearancePicker extends StatelessWidget {
 class NewProjectDialog extends StatefulWidget {
   const NewProjectDialog({
     super.key,
-    required this.discover,
+    required this.createFolders,
     required this.create,
   });
 
-  final Future<List<ProjectFolderSuggestion>> Function() discover;
+  final ServerFilesBrowser Function() createFolders;
   final Future<void> Function(ProjectCreationDraft) create;
 
   @override
@@ -360,7 +361,8 @@ class _NewProjectDialogState extends State<NewProjectDialog> {
   Future<void> _chooseFolder() async {
     final path = await showDialog<String>(
       context: context,
-      builder: (_) => ProjectFolderPickerDialog(discover: widget.discover),
+      builder: (_) =>
+          ProjectFolderPickerDialog(createBrowser: widget.createFolders),
     );
     if (!mounted || path == null) return;
     setState(() => _path = path);

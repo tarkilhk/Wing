@@ -11,6 +11,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -145,6 +146,51 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+    'New chat long press gives haptic feedback when toggling New project',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final haptics = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'HapticFeedback.vibrate') haptics.add(call);
+          return null;
+        },
+      );
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+
+      try {
+        await show(tester);
+        final chat = find.byKey(const ValueKey('workspace-new-chat'));
+        final project = find.byKey(const ValueKey('workspace-new-project'));
+        expect(haptics, isEmpty);
+
+        await tester.longPress(chat);
+        await tester.pumpAndSettle();
+        expect(project, findsOneWidget);
+        expect(haptics, hasLength(1));
+
+        await tester.longPress(chat);
+        await tester.pumpAndSettle();
+        expect(project, findsNothing);
+        expect(haptics, hasLength(2));
+        expect(
+          host.wireCalls.where((method) => method == 'session.create'),
+          isEmpty,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {

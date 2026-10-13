@@ -1641,6 +1641,16 @@
       "feature": "connections",
       "library": "lib/core/services/server_connection_status.dart"
     },
+    "lib/core/services/server_files_browser.dart": {
+      "role": "application",
+      "feature": "server-files",
+      "library": "lib/core/services/server_files_browser.dart"
+    },
+    "lib/core/services/server_files_repository.dart": {
+      "role": "data",
+      "feature": "server-files",
+      "library": "lib/core/services/server_files_repository.dart"
+    },
     "lib/core/services/settings_edit_session.dart": {
       "role": "application",
       "feature": "settings-and-forms",

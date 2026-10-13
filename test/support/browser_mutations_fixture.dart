@@ -91,6 +91,23 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
       },
       get: (endpoint, query) async {
         final path = Uri.parse(endpoint).path;
+        if (path == 'files') {
+          final location = query['path'] ?? '/work';
+          return {
+            'path': location,
+            'parent': location == '/work' ? null : '/work',
+            'entries': location == '/work'
+                ? [
+                    for (final name in ['new', 'bangkok-oct26'])
+                      {
+                        'name': name,
+                        'path': '/work/$name',
+                        'is_directory': true,
+                      },
+                  ]
+                : [],
+          };
+        }
         if (path != 'sessions/search' &&
             path.startsWith('sessions/') &&
             path.split('/').length == 2) {

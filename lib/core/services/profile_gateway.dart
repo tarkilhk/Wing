@@ -1,5 +1,6 @@
 import '../models/chat_list_view.dart' show ProjectFolderSuggestion;
 import 'profile_model_catalog.dart';
+import 'server_files_repository.dart';
 import 'gateway_endpoint.dart';
 import 'remote_files_client.dart';
 import 'models_dev_pricing.dart';
@@ -151,6 +152,18 @@ class ProfileGateway {
         document: document,
         profile: scope.profileName,
       );
+  late final ServerFilesRepository files = ServerFilesRepository(
+    read: read,
+    write: (endpoint, body, canDispatch) async {
+      await requireProfile();
+      return postOwned(
+        endpoint,
+        body,
+        canDispatch: canDispatch,
+        onDispatched: () {},
+      );
+    },
+  );
   final WorkspaceScope scope;
   final ApiPricingRead? _apiPricing;
   late final modelCatalog = ProfileModelCatalog(
@@ -1346,34 +1359,7 @@ class ProfileGateway {
     if (name.trim().isEmpty || path.trim().isEmpty) {
       throw ArgumentError('A project name and folder are required');
     }
-    await requireProfile();
-    late final Map<String, dynamic> directory;
-    try {
-      directory = await postOwned(
-        'files/mkdir',
-        {'path': path},
-        canDispatch: canDispatch,
-        onDispatched: () {},
-      );
-    } on DashboardRequestNotSentException {
-      rethrow;
-    } catch (_) {
-      throw StateError(
-        'Could not create the project folder. Check the path and permissions, then try again.',
-      );
-    }
-    final folder = directory['path'];
-    final entry = directory['entry'];
-    if (directory['ok'] != true ||
-        folder is! String ||
-        folder.trim().isEmpty ||
-        entry is! Map ||
-        entry['is_directory'] != true ||
-        entry['path'] != folder) {
-      throw StateError(
-        'Hermes did not confirm the project folder. Check the folder and try again.',
-      );
-    }
+    final folder = await files.createDirectory(path, canDispatch: canDispatch);
     final result = await _browserCommand('projects.create', {
       'name': name,
       'folders': [folder],

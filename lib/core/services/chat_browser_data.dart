@@ -1,3 +1,4 @@
+import 'server_files_browser.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import '../models/profile_session_key.dart';
 import 'package:wing/core/models/chat_list_status.dart';
@@ -644,7 +645,7 @@ final class ChatBrowserData extends ChangeNotifier {
 
   Future<void> createProject({
     required Future<void> Function(
-      Future<List<ProjectFolderSuggestion>> Function(),
+      ServerFilesBrowser Function(),
       Future<void> Function(ProjectCreationDraft),
     )
     showEditor,
@@ -656,12 +657,8 @@ final class ChatBrowserData extends ChangeNotifier {
         identical(_controller.current, resource) &&
         !_controller.switching;
     await showEditor(
-      () {
-        if (!active()) {
-          throw StateError('Profile changed. Open the project dialog again.');
-        }
-        return resource.gateway.discoverProjectFolders();
-      },
+      () =>
+          ServerFilesBrowser(files: resource.gateway.files, isCurrent: active),
       (draft) async {
         if (!active()) {
           throw StateError('Profile changed. Open the project dialog again.');

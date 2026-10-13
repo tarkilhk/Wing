@@ -1,13 +1,18 @@
-import 'package:wing/core/theme/wing_theme.dart';
-import 'studio_error.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-import '../models/chat_list_view.dart';
+import '../models/server_reference.dart';
+import '../services/server_files_browser.dart';
+import '../theme/wing_theme.dart';
+import 'studio_error.dart';
+import 'studio_loading.dart';
+import 'wing_app_bar.dart';
 
+/// Folder-selection presentation over the shared server filesystem browser.
 class ProjectFolderPickerDialog extends StatefulWidget {
-  final Future<List<ProjectFolderSuggestion>> Function() discover;
-
-  const ProjectFolderPickerDialog({super.key, required this.discover});
+  const ProjectFolderPickerDialog({super.key, required this.createBrowser});
+  final ServerFilesBrowser Function() createBrowser;
 
   @override
   State<ProjectFolderPickerDialog> createState() =>
@@ -15,133 +20,244 @@ class ProjectFolderPickerDialog extends StatefulWidget {
 }
 
 class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
-  final _path = TextEditingController();
-  List<ProjectFolderSuggestion>? _suggestions;
-  bool _loading = false;
-  bool _hasPath = false;
-  bool _failed = false;
+  late final ServerFilesBrowser _browser;
+  final _name = TextEditingController();
+  final _scroll = ScrollController();
+  final _errorKey = GlobalKey();
+  bool _naming = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _browser = widget.createBrowser();
+    unawaited(_browser.open());
+  }
 
   @override
   void dispose() {
-    _path.dispose();
+    _browser.dispose();
+    _name.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> _findFolders() async {
-    if (_loading) return;
-    setState(() {
-      _loading = true;
-      _failed = false;
-    });
-    try {
-      final suggestions = await widget.discover();
-      if (!mounted) return;
-      setState(() => _suggestions = suggestions);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _failed = true;
-        _suggestions = null;
+  Future<void> _createFolder() async {
+    final created = await _browser.createFolder(_name.text);
+    if (!mounted) return;
+    if (created) {
+      setState(() => _naming = false);
+      _name.clear();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final errorContext = _errorKey.currentContext;
+        if (errorContext != null) {
+          unawaited(Scrollable.ensureVisible(errorContext));
+        }
       });
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _select(ProjectFolderSuggestion suggestion) {
-    _path.text = suggestion.path;
-    _path.selection = TextSelection.collapsed(offset: _path.text.length);
-    setState(() => _hasPath = true);
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    scrollable: true,
-    title: const Text('Project folder on Hermes host'),
-    content: SizedBox(
-      width: 440,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            key: const ValueKey('project-folder-path'),
-            controller: _path,
-            onChanged: (value) =>
-                setState(() => _hasPath = value.trim().isNotEmpty),
-            decoration: const InputDecoration(labelText: 'Absolute path'),
-          ),
-          const SizedBox(height: 12),
-          StudioButtonPress(
-            child: IconButton.outlined(
-              key: const ValueKey('project-folder-find'),
-              tooltip: 'Find folders',
-              onPressed: _loading ? null : _findFolders,
-              icon: _loading
-                  ? SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(
-                        value: MediaQuery.disableAnimationsOf(context)
-                            ? 0.75
-                            : null,
-                        strokeWidth: 2,
-                        semanticsLabel: 'Finding project folders',
-                      ),
-                    )
-                  : const Icon(Icons.search),
-            ),
-          ),
-          if (_failed) ...[
-            const SizedBox(height: 8),
-            const StudioError(
-              'Folders could not be loaded. Enter an absolute path instead.',
-            ),
-          ] else if (_suggestions case final suggestions?) ...[
-            const SizedBox(height: 8),
-            if (suggestions.isEmpty)
-              const Text(
-                'No repository folders found. Enter an absolute path instead.',
-              )
-            else
-              SizedBox(
-                height: 220,
-                child: ListView.builder(
-                  itemCount: suggestions.length,
-                  itemBuilder: (context, index) {
-                    final suggestion = suggestions[index];
-                    return StudioButtonPress(
-                      child: ListTile(
-                        key: ValueKey('project-folder-${suggestion.path}'),
-                        title: Text(suggestion.label),
-                        subtitle: Text(suggestion.path),
-                        onTap: () => _select(suggestion),
-                      ),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ],
-      ),
-    ),
-    actions: [
+  Widget _tools() => Row(
+    children: [
       StudioButtonPress(
         child: IconButton(
-          tooltip: 'Cancel',
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.close),
+          key: const ValueKey('project-folder-up'),
+          tooltip: 'Up one level',
+          onPressed: _browser.busy || _browser.directory?.parent == null
+              ? null
+              : () => unawaited(_browser.up()),
+          icon: const Icon(Icons.arrow_upward),
+        ),
+      ),
+      const Spacer(),
+      StudioButtonPress(
+        child: IconButton(
+          tooltip: 'New folder',
+          onPressed: !_browser.canCreate
+              ? null
+              : () => setState(() => _naming = !_naming),
+          icon: const Icon(Icons.create_new_folder_outlined),
         ),
       ),
       StudioButtonPress(
-        child: IconButton.filled(
-          key: const ValueKey('project-folder-continue'),
-          tooltip: 'Use folder',
-          onPressed: _hasPath
-              ? () => Navigator.pop(context, _path.text.trim())
-              : null,
-          icon: const Icon(Icons.check),
+        child: IconButton(
+          tooltip: 'Refresh folders',
+          onPressed: _browser.busy ? null : () => unawaited(_browser.refresh()),
+          icon: const Icon(Icons.refresh),
         ),
       ),
     ],
+  );
+
+  Widget _folder(ServerReferenceEntry folder) => StudioButtonPress(
+    child: ListTile(
+      key: ValueKey('project-folder-${folder.path}'),
+      contentPadding: EdgeInsets.zero,
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: .14),
+          borderRadius: WingRadius.control,
+        ),
+        child: Icon(
+          Icons.folder_outlined,
+          color: Theme.of(context).colorScheme.primary,
+          size: 22,
+        ),
+      ),
+      title: Text(folder.name),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: _browser.busy ? null : () => unawaited(_browser.open(folder.path)),
+    ),
+  );
+
+  Widget _body() => Scrollbar(
+    controller: _scroll,
+    thumbVisibility: true,
+    child: CustomScrollView(
+      controller: _scroll,
+      slivers: [
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Tooltip(
+                message: _browser.displayedPath ?? 'Hermes folders',
+                child: Text(
+                  _browser.displayedPath ?? 'Hermes folders',
+                  key: const ValueKey('project-folder-location'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              _tools(),
+              if (_naming) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const ValueKey('project-new-folder-name'),
+                        controller: _name,
+                        enabled: !_browser.busy,
+                        onChanged: (_) => setState(() {}),
+                        onSubmitted: (_) => unawaited(_createFolder()),
+                        decoration: const InputDecoration(
+                          labelText: 'Folder name',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    StudioButtonPress(
+                      child: IconButton.filled(
+                        key: const ValueKey('project-new-folder-create'),
+                        tooltip: 'Create folder',
+                        onPressed: _browser.busy || _name.text.trim().isEmpty
+                            ? null
+                            : () => unawaited(_createFolder()),
+                        icon: const Icon(Icons.check),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (_browser.error case final error?)
+                Row(
+                  key: _errorKey,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: StudioError(error)),
+                    StudioButtonPress(
+                      child: IconButton(
+                        tooltip: 'Retry folder loading',
+                        onPressed: _browser.busy
+                            ? null
+                            : () => unawaited(_browser.retry()),
+                        icon: const Icon(Icons.refresh),
+                      ),
+                    ),
+                  ],
+                ),
+              const Divider(height: 16),
+            ],
+          ),
+        ),
+        if (_browser.directory != null &&
+            !(_browser.busy &&
+                _browser.displayedPath != _browser.directory?.path))
+          if (_browser.folders.isEmpty)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: Text('No folders here')),
+            )
+          else
+            SliverList.builder(
+              itemCount: _browser.folders.length,
+              itemBuilder: (_, index) => _folder(_browser.folders[index]),
+            ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _browser,
+    builder: (context, _) => PopScope(
+      canPop: !_browser.creating,
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: StudioLoadingFrame(
+          child: StudioLoadingRegion(
+            busy: _browser.busy,
+            available: !_browser.busy,
+            label: _browser.creating ? 'Creating folder' : 'Loading folders',
+            child: SizedBox(
+              width: 440,
+              height: MediaQuery.sizeOf(context).height * .9,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    WingModalHeader(
+                      title: const Text(
+                        'Choose folder',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      closeLabel: 'Cancel',
+                      onClose: _browser.creating
+                          ? null
+                          : () => Navigator.pop(context),
+                    ),
+                    Expanded(child: _body()),
+                    const Divider(height: 16),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: StudioButtonPress(
+                        child: IconButton.filled(
+                          key: const ValueKey('project-folder-continue'),
+                          tooltip: 'Use this folder',
+                          onPressed: _browser.canSelect && !_naming
+                              ? () => Navigator.pop(
+                                  context,
+                                  _browser.directory!.path,
+                                )
+                              : null,
+                          icon: const Icon(Icons.check),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 }

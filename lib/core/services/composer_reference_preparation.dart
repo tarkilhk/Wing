@@ -95,7 +95,7 @@ final class ComposerReferencePreparation {
     if (directory != null) filter = '';
     ServerReferenceDirectory listing;
     try {
-      listing = await repository.directory(path);
+      listing = await repository.files.directory(path);
     } catch (_) {
       requireCurrent();
       if (directory != null || fileQuery || term.contains('/')) rethrow;
@@ -207,7 +207,7 @@ final class ComposerReferencePreparation {
       final requested = c.isAbsolute(ref.target)
           ? c.normalize(ref.target)
           : c.normalize(c.join(cwd!, ref.target));
-      final entry = await repository.entry(
+      final entry = await repository.files.entry(
         requested,
         canonical: selected.any((r) => r.token == ref.token),
         folder: ref.kind == ComposerReferenceKind.folder,
@@ -227,7 +227,10 @@ final class ComposerReferencePreparation {
         if (entry.directory) {
           throw FormatException('${ref.token} is no longer a file.');
         }
-        final bytes = await repository.bytes(entry, maxBytes: maxFileBytes);
+        final bytes = await repository.files.bytes(
+          entry,
+          maxBytes: maxFileBytes,
+        );
         requireCurrent();
         if (_binary(entry, bytes)) {
           throw FormatException(
@@ -312,7 +315,9 @@ final class ComposerReferencePreparation {
       for (final hit in hits) {
         requireCurrent();
         final parent = c.dirname(hit);
-        final listing = parents[parent] ??= await repository.directory(parent);
+        final listing = parents[parent] ??= await repository.files.directory(
+          parent,
+        );
         requireCurrent();
         final entry = listing.entries
             .where(
@@ -336,7 +341,7 @@ final class ComposerReferencePreparation {
         requireCurrent();
         final path = pending.removeLast();
         if (!visited.add(path)) continue;
-        final listing = await repository.directory(path);
+        final listing = await repository.files.directory(path);
         requireCurrent();
         final visible =
             listing.entries
@@ -375,7 +380,10 @@ final class ComposerReferencePreparation {
       var metadata = '${entry.size} bytes';
       if (entry.size! <= maxFileBytes) {
         try {
-          final bytes = await repository.bytes(entry, maxBytes: maxFileBytes);
+          final bytes = await repository.files.bytes(
+            entry,
+            maxBytes: maxFileBytes,
+          );
           requireCurrent();
           if (!_binary(entry, bytes)) {
             metadata = '${bytes.where((b) => b == 10).length + 1} lines';

@@ -6350,6 +6350,24 @@
       "source": "internal/docs/DESIGN_SYSTEM.md; test/bot_bubble_colors_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-test/server_files_browser_test.dart",
+      "kind": "host-test",
+      "path": "test/server_files_browser_test.dart",
+      "purpose": "Shared server filesystem admission and browser visit regressions",
+      "source": "internal/docs/CHAT_BROWSER_REFRESH.md; internal/docs/AT_REFERENCES.md; internal/docs/TESTING.md",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/server_files_repository_test.dart",
+      "kind": "host-test",
+      "path": "test/server_files_repository_test.dart",
+      "purpose": "Shared server filesystem admission and browser visit regressions",
+      "source": "internal/docs/CHAT_BROWSER_REFRESH.md; internal/docs/AT_REFERENCES.md; internal/docs/TESTING.md",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -14612,6 +14630,26 @@
       "path": "website/workspaces.html",
       "area": "website",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/services/server_files_browser.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/server_files_repository.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/server_files_browser_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/server_files_repository_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

@@ -1,5 +1,7 @@
 import 'dart:async';
-import 'package:wing/core/models/chat_list_view.dart';
+import 'package:wing/core/services/server_files_browser.dart';
+import 'package:wing/core/services/server_files_repository.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
@@ -35,6 +37,7 @@ class _ProjectScreenHost {
       };
     },
     get: (path, query) async {
+      if (path == 'files') return directory(query['path'] ?? '/srv');
       if (path != 'sessions') throw StateError('Unexpected read $path');
       return {
         'sessions': const [],
@@ -83,23 +86,57 @@ class _ProjectScreenHost {
   );
 }
 
+Map<String, dynamic> directory(String path) => {
+  'path': path,
+  'parent': path == '/srv' ? null : '/srv',
+  'entries': path == '/srv'
+      ? [
+          for (final name in ['Client Work', 'Docs'])
+            {'name': name, 'path': '/srv/$name', 'is_directory': true},
+          {
+            'name': 'notes.txt',
+            'path': '/srv/notes.txt',
+            'is_directory': false,
+            'size': 3,
+            'mime_type': 'text/plain',
+          },
+        ]
+      : [],
+};
+
 void main() {
   Future<void> showPicker(
     WidgetTester tester, {
-    required Future<List<ProjectFolderSuggestion>> Function() discover,
-    required ValueChanged<String?> onResult,
+    required ServerFilesRepository files,
+    ValueChanged<String?>? onResult,
+    Brightness brightness = Brightness.dark,
+    double scale = 1,
   }) async {
+    await tester.binding.setSurfaceSize(Size(scale == 1 ? 390 : 320, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        theme: wingTheme(brightness),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            disableAnimations: true,
+          ),
+          child: child!,
+        ),
         home: Builder(
           builder: (context) => Scaffold(
             body: ElevatedButton(
-              onPressed: () async => onResult(
-                await showDialog<String>(
+              onPressed: () async {
+                final result = await showDialog<String>(
                   context: context,
-                  builder: (_) => ProjectFolderPickerDialog(discover: discover),
-                ),
-              ),
+                  builder: (_) => ProjectFolderPickerDialog(
+                    createBrowser: () =>
+                        ServerFilesBrowser(files: files, isCurrent: () => true),
+                  ),
+                );
+                onResult?.call(result);
+              },
               child: const Text('Open'),
             ),
           ),
@@ -110,196 +147,154 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  for (final failed in [false, true]) {
-    testWidgets(
-      'folder discovery retains feedback until ${failed ? 'failure' : 'success'}',
-      (tester) async {
-        final gate = Completer<List<ProjectFolderSuggestion>>();
-        var calls = 0;
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('folder navigation and selection ${brightness.name} $scale', (
+        tester,
+      ) async {
+        String? result;
+        final reads = <String?>[];
         await showPicker(
           tester,
-          discover: () {
-            calls++;
-            return gate.future;
-          },
-          onResult: (_) {},
+          brightness: brightness,
+          scale: scale,
+          files: ServerFilesRepository(
+            read: (_, query) async {
+              reads.add(query['path']);
+              return directory(query['path'] ?? '/srv');
+            },
+            write: null,
+          ),
+          onResult: (value) => result = value,
         );
-        final findFolders = find.byKey(const ValueKey('project-folder-find'));
-        await tester.tap(findFolders);
-        await tester.pump();
-        expect(
-          find.bySemanticsLabel('Finding project folders'),
-          findsOneWidget,
-        );
-        expect(tester.widget<IconButton>(findFolders).onPressed, isNull);
-        await tester.enterText(
-          find.byKey(const ValueKey('project-folder-path')),
-          '/srv/manual',
-        );
-        await tester.pump(const Duration(milliseconds: 200));
-        expect(
-          find.bySemanticsLabel('Finding project folders'),
-          findsOneWidget,
-        );
-        expect(calls, 1);
-        if (failed) {
-          gate.completeError(StateError('offline'));
-        } else {
-          gate.complete(const [
-            ProjectFolderSuggestion(path: '/srv/docs', label: 'Docs'),
-          ]);
-        }
-        await tester.pumpAndSettle();
-        expect(find.bySemanticsLabel('Finding project folders'), findsNothing);
-        expect(tester.widget<IconButton>(findFolders).onPressed, isNotNull);
-        if (failed) {
-          expect(
-            find.textContaining('Folders could not be loaded'),
-            findsOneWidget,
-          );
-        } else {
-          expect(find.text('Docs'), findsOneWidget);
-        }
+        expect(reads, [null]);
+        expect(find.text('notes.txt'), findsNothing);
         expect(
           tester
-              .widget<TextField>(
-                find.byKey(const ValueKey('project-folder-path')),
+              .widget<IconButton>(
+                find.byKey(const ValueKey('project-folder-up')),
               )
-              .controller!
-              .text,
-          '/srv/manual',
+              .onPressed,
+          isNull,
         );
-        await tester.pumpWidget(const SizedBox.shrink());
-      },
-    );
+        await tester.tap(
+          find.byKey(const ValueKey('project-folder-/srv/Client Work')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('/srv/Client Work'), findsOneWidget);
+        expect(find.text('No folders here'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('project-folder-up')));
+        await tester.pumpAndSettle();
+        expect(find.text('/srv'), findsOneWidget);
+        await tester.tap(
+          find.byKey(const ValueKey('project-folder-/srv/Docs')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
+        await tester.pumpAndSettle();
+        expect(result, '/srv/Docs');
+        expect(tester.takeException(), isNull);
+      });
+    }
   }
 
-  testWidgets('manual path is available without scanning the host', (
+  for (final fail in [false, true]) {
+    testWidgets('held folder refresh ${fail ? 'failure' : 'success'}', (
+      tester,
+    ) async {
+      final gate = Completer<Map<String, dynamic>>();
+      var calls = 0;
+      await showPicker(
+        tester,
+        files: ServerFilesRepository(
+          read: (_, query) {
+            calls++;
+            return calls == 1 ? Future.value(directory('/srv')) : gate.future;
+          },
+          write: null,
+        ),
+      );
+      await tester.tap(find.byTooltip('Refresh folders'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.bySemanticsLabel('Loading folders'), findsOneWidget);
+      expect(find.text('Client Work'), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const ValueKey('project-folder-continue')),
+            )
+            .onPressed,
+        isNull,
+      );
+      if (fail) {
+        gate.completeError(StateError('denied'));
+      } else {
+        gate.complete(directory('/srv/Docs'));
+      }
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Loading folders'), findsNothing);
+      if (fail) {
+        expect(
+          find.textContaining('Could not open this folder'),
+          findsOneWidget,
+        );
+      } else {
+        expect(find.text('/srv/Docs'), findsOneWidget);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('new folder holds progress and opens the confirmed directory', (
     tester,
   ) async {
-    var discoveries = 0;
-    String? result;
+    final gate = Completer<void>();
+    final writes = <String>[];
     await showPicker(
       tester,
-      discover: () async {
-        discoveries++;
-        return const [];
-      },
-      onResult: (value) => result = value,
+      files: ServerFilesRepository(
+        read: (_, query) async => directory(query['path'] ?? '/srv'),
+        write: (_, body, active) async {
+          await gate.future;
+          if (!active()) throw StateError('retired');
+          writes.add(body['path'] as String);
+          return {
+            'ok': true,
+            'path': '/srv/Created',
+            'entry': {'path': '/srv/Created', 'is_directory': true},
+          };
+        },
+      ),
     );
-
-    expect(discoveries, 0);
+    await tester.tap(find.byTooltip('New folder'));
+    await tester.pumpAndSettle();
     await tester.enterText(
-      find.byKey(const ValueKey('project-folder-path')),
-      '  /srv/manual  ',
+      find.byKey(const ValueKey('project-new-folder-name')),
+      'Created',
     );
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
-    await tester.pumpAndSettle();
-
-    expect(result, '/srv/manual');
-    expect(discoveries, 0);
-  });
-
-  testWidgets('find folders fills the manual path with a discovered root', (
-    tester,
-  ) async {
-    var discoveries = 0;
-    String? result;
-    await showPicker(
-      tester,
-      discover: () async {
-        discoveries++;
-        return const [
-          ProjectFolderSuggestion(path: '/srv/wing', label: 'Wing'),
-          ProjectFolderSuggestion(path: '/srv/docs', label: 'Docs'),
-        ];
-      },
-      onResult: (value) => result = value,
-    );
-
-    await tester.tap(find.byKey(const ValueKey('project-folder-find')));
-    await tester.pumpAndSettle();
-    expect(discoveries, 1);
-    expect(find.text('Wing'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('project-folder-/srv/wing')));
+    await tester.tap(find.byKey(const ValueKey('project-new-folder-create')));
     await tester.pump();
+    await tester.pump();
+    expect(find.bySemanticsLabel('Creating folder'), findsOneWidget);
     expect(
       tester
-          .widget<TextField>(find.byKey(const ValueKey('project-folder-path')))
-          .controller!
-          .text,
-      '/srv/wing',
+          .widget<IconButton>(
+            find.byKey(const ValueKey('project-folder-continue')),
+          )
+          .onPressed,
+      isNull,
     );
-    await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
+    gate.complete();
     await tester.pumpAndSettle();
-
-    expect(result, '/srv/wing');
+    expect(writes, ['/srv/Created']);
+    expect(find.text('/srv/Created'), findsOneWidget);
+    expect(find.byKey(const ValueKey('project-new-folder-name')), findsNothing);
+    expect(find.bySemanticsLabel('Creating folder'), findsNothing);
   });
 
-  testWidgets('folders remain usable with large text and the keyboard open', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(320, 640);
-    tester.view.devicePixelRatio = 1;
-    tester.view.viewInsets = const FakeViewPadding(bottom: 220);
-    tester.platformDispatcher.textScaleFactorTestValue = 2;
-    addTearDown(tester.view.reset);
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    String? result;
-    await showPicker(
-      tester,
-      discover: () async => const [
-        ProjectFolderSuggestion(path: '/srv/docs', label: 'Documents'),
-      ],
-      onResult: (value) => result = value,
-    );
-    expect(tester.takeException(), isNull);
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('project-folder-find')),
-    );
-    await tester.tap(find.byKey(const ValueKey('project-folder-find')));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    final folder = find.byKey(const ValueKey('project-folder-/srv/docs'));
-    await tester.ensureVisible(folder);
-    await tester.tap(folder);
-    await tester.pump();
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('project-folder-continue')),
-    );
-    await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
-    await tester.pumpAndSettle();
-    expect(result, '/srv/docs');
-  });
-
-  testWidgets('scan failure leaves manual path entry usable', (tester) async {
-    String? result;
-    await showPicker(
-      tester,
-      discover: () async => throw StateError('offline'),
-      onResult: (value) => result = value,
-    );
-
-    await tester.tap(find.byKey(const ValueKey('project-folder-find')));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Folders could not be loaded. Enter an absolute path instead.'),
-      findsOneWidget,
-    );
-
-    await tester.enterText(
-      find.byKey(const ValueKey('project-folder-path')),
-      '/srv/fallback',
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
-    await tester.pumpAndSettle();
-    expect(result, '/srv/fallback');
-  });
-
-  testWidgets('workspace create passes a discovered host path unchanged', (
+  testWidgets('workspace create uses the shared managed folder browser', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -347,12 +342,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('project-choose-folder')));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('project-folder-find')));
-    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey('project-folder-/srv/Client Work')),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
     await tester.pumpAndSettle();
 

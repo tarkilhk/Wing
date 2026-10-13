@@ -188,7 +188,10 @@ void main() {
         },
         call: (method, params) async => {},
       );
-      expect((await repository.entry('/work', folder: true)).path, '/work');
+      expect(
+        (await repository.files.entry('/work', folder: true)).path,
+        '/work',
+      );
     },
   );
 
