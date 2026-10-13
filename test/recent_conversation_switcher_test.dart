@@ -82,6 +82,7 @@ class _UiSource extends ChangeNotifier implements RecentConversationSource {
       (i) => RecentConversationEntry.chat(
         key: ProfileSessionKey(scope, '$i'),
         title: 'Chat $i',
+        unread: false,
       ),
     );
     selected = entries.first.key;
@@ -202,6 +203,7 @@ class _MountedCardState extends State<_MountedCard> {
 
 class _ScreenFixture extends ProfileBrowserFixture {
   ProfileSessionKey? failedResume;
+  final unreadSessions = <String>{};
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
@@ -232,7 +234,7 @@ class _ScreenFixture extends ProfileBrowserFixture {
         ][i],
         'profile': profile,
         'last_active': now - (i + 1) * 60,
-        'unread': false,
+        'unread': unreadSessions.contains('chat-$i'),
       },
   ];
   @override
@@ -399,7 +401,7 @@ void main() {
       fixture.repository,
       groupMessages: null,
     )).single;
-    final entry = RecentConversationEntry.group(group);
+    final entry = RecentConversationEntry.group(group, unread: false);
     await tester.pumpWidget(
       MaterialApp(
         home: ConversationPreview(
@@ -620,7 +622,7 @@ void main() {
           ..accessAvailable()
           ..liveChanged('discussion', true);
         addTearDown(status.dispose);
-        final entry = RecentConversationEntry.group(group);
+        final entry = RecentConversationEntry.group(group, unread: false);
         final frame = GlobalKey();
         tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
         tester.view.devicePixelRatio = 1;
@@ -746,7 +748,11 @@ void main() {
         );
         final bot = await owner.botForConversation(key);
         expect(fixture.commands, isEmpty);
-        final entry = RecentConversationEntry.chat(key: key, title: 'Bot Chat');
+        final entry = RecentConversationEntry.chat(
+          key: key,
+          title: 'Bot Chat',
+          unread: false,
+        );
         final frame = GlobalKey();
         tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
         tester.view.devicePixelRatio = 1;
@@ -991,6 +997,7 @@ void main() {
             name: 'Research team',
             members: const [],
           ),
+          unread: false,
         );
         source.entries[1] = room;
         source.selected = source.entries[0].key;
@@ -1227,6 +1234,102 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    for (final brightness in Brightness.values) {
+      for (final scale in [1.0, 2.0]) {
+        for (final group in [false, true]) {
+          testWidgets(
+            'unread tint preserves cached ${group ? 'group' : 'chat'} pixels in ${brightness.name} at $scale',
+            (tester) async {
+              if (group) {
+                source.entries[1] = RecentConversationEntry.group(
+                  BotGroup(
+                    observationComplete: true,
+                    scope: source.entries.first.key.chat!.workspace,
+                    instance: 'Host',
+                    id: 'room-unread',
+                    name: 'Research team',
+                    members: const [],
+                  ),
+                  unread: false,
+                );
+              }
+              var builds = 0;
+              await mount(
+                tester,
+                brightness: brightness,
+                textScale: scale,
+                buildPreview: (_) {
+                  builds++;
+                  return const Scaffold(body: Text('Saved answer'));
+                },
+              );
+              switcher.currentState!.openStack();
+              await _finishFrames(tester);
+              final entry = source.entries[1];
+              final pixels = find.byKey(ValueKey((entry.key, 'snapshot')));
+              final image = tester.widget<RawImage>(pixels).image!;
+              final bytes = source.snapshots.retainedBytes;
+              final revision = session.cardRevision(entry.key);
+              final before = (builds, source.previewReads, source.historyReads);
+              final order = session.entries.map((e) => e.key).toList();
+              final rect = tester.getRect(pixels);
+              final tint = find.byKey(ValueKey((entry.key, 'unread-tint')));
+              expect(tint, findsNothing);
+              for (final unread in [true, false, true]) {
+                source.entries[1] = group
+                    ? RecentConversationEntry.group(
+                        entry.group!,
+                        unread: unread,
+                      )
+                    : RecentConversationEntry.chat(
+                        key: entry.key.chat!,
+                        title: entry.title,
+                        unread: unread,
+                      );
+                source.notifyListeners();
+                await tester.pump();
+                await _finishFrames(tester);
+                expect(tint, unread ? findsOneWidget : findsNothing);
+                expect(tester.widget<RawImage>(pixels).image, same(image));
+                expect(image.debugDisposed, isFalse);
+                expect(source.snapshots.retainedBytes, bytes);
+                expect(session.cardRevision(entry.key), revision);
+                expect((
+                  builds,
+                  source.previewReads,
+                  source.historyReads,
+                ), before);
+                expect(session.entries.map((e) => e.key), order);
+                expect(tester.getRect(pixels), rect);
+                if (unread) {
+                  final context = tester.element(tint);
+                  final tokens = WingTokens.of(context);
+                  final decoration =
+                      tester.widget<DecoratedBox>(tint).decoration
+                          as BoxDecoration;
+                  expect(
+                    decoration.color,
+                    tokens.recentUnreadTint(
+                      Theme.of(context).colorScheme.primaryContainer,
+                    ),
+                  );
+                  expect(
+                    decoration.border!.top.color,
+                    tokens.recentUnreadBorder,
+                  );
+                }
+              }
+              expect(source.opens, isEmpty);
+              switcher.currentState!.dismissStack();
+              await _finishFrames(tester);
+              expect(tint, findsNothing);
+              expect(tester.takeException(), isNull);
+            },
+          );
+        }
+      }
+    }
+
     testWidgets('closed composer keyboard changes preserve neighbor pixels', (
       tester,
     ) async {
@@ -1357,6 +1460,7 @@ void main() {
       source.entries[1] = RecentConversationEntry.chat(
         key: entry.key.chat!,
         title: 'Bot Chat',
+        unread: false,
       );
       final pending = Completer<RecentConversationPreview>();
       source.waitingPreviews[entry.key] = pending;
@@ -1382,7 +1486,7 @@ void main() {
           fixture.repository,
           groupMessages: null,
         )).single;
-        final entry = RecentConversationEntry.group(group);
+        final entry = RecentConversationEntry.group(group, unread: false);
         source.entries[1] = entry;
         final builds = <BotGroupAppearance>[];
         await mount(
@@ -3887,7 +3991,8 @@ void main() {
           final preferences = await SharedPreferences.getInstance();
           final appPreferences = AppPreferences(preferences);
           addTearDown(appPreferences.dispose);
-          final fixture = _ScreenFixture();
+          final fixture = _ScreenFixture()
+            ..unreadSessions.addAll(['chat-1', 'chat-2']);
           Completer<void>? heldResume, resumeStarted;
           final reads = <String>[];
           final controller = ProfileWorkspaceController(
@@ -4045,6 +4150,32 @@ void main() {
             hasLength(resumes),
           );
           await _capture(tester, frame, 'stack-${brightness.name}-$scale');
+          if (_export) {
+            await tester.dragFrom(
+              Offset(tester.view.physicalSize.width * .25, 400),
+              Offset(tester.view.physicalSize.width * .6, 0),
+            );
+            await _finishFrames(tester);
+            expect(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is DecoratedBox &&
+                    widget.position == DecorationPosition.foreground &&
+                    widget.key.toString().contains('unread-tint'),
+              ),
+              findsWidgets,
+            );
+            await _capture(
+              tester,
+              frame,
+              'unread-stack-${brightness.name}-$scale',
+            );
+            await tester.dragFrom(
+              Offset(tester.view.physicalSize.width * .75, 400),
+              Offset(-tester.view.physicalSize.width * .6, 0),
+            );
+            await _finishFrames(tester);
+          }
           expect(controller.visible, isFalse);
           if (brightness == Brightness.dark && scale == 1) {
             first.reading.recordNotificationResult(

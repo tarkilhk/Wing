@@ -23,8 +23,12 @@ class WorkspaceRecentItem {
       chat?.lastActive ??
       (group?.lastMessageAt?.millisecondsSinceEpoch ?? 0) / 1000;
   RecentConversationEntry get conversation => group == null
-      ? RecentConversationEntry.chat(key: chat!.key, title: chat!.title)
-      : RecentConversationEntry.group(group!);
+      ? RecentConversationEntry.chat(
+          key: chat!.key,
+          title: chat!.title,
+          unread: unread,
+        )
+      : RecentConversationEntry.group(group!, unread: unread);
   String get identity =>
       group?.key ??
       '${chat!.key.workspace.connectionIdentity}/${chat!.key.workspace.profileName}/${chat!.key.sessionId}';
@@ -313,6 +317,7 @@ final class _WorkspaceRecentConversationSource
       entry: RecentConversationEntry.chat(
         key: entry.key.chat!,
         title: chat?.title ?? entry.title,
+        unread: entry.unread,
       ),
       reading: reading,
       draft: draft,

@@ -55,14 +55,16 @@ final class RecentConversationEntry {
   RecentConversationEntry.chat({
     required ProfileSessionKey key,
     required this.title,
+    required this.unread,
   }) : key = RecentConversationKey.chat(key),
        group = null;
-  RecentConversationEntry.group(BotGroup value)
+  RecentConversationEntry.group(BotGroup value, {required this.unread})
     : key = RecentConversationKey.group(value.key),
       title = value.name,
       group = value;
   final RecentConversationKey key;
   final String title;
+  final bool unread;
   final BotGroup? group;
 }
 

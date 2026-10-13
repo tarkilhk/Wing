@@ -597,7 +597,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           final discussion = BotAvatarScope(
             session: _bots,
             child: GroupConversationSwitcher(
-              groupKey: RecentConversationEntry.group(group).key,
+              groupKey: RecentConversationKey.group(group.key),
               onLeave: () => _leaveConversation(origin),
               onLeaveRecents: () => _leaveConversation(AppDestination.activity),
               createSession: () => controller.groupRecentConversationSession(

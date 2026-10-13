@@ -513,6 +513,7 @@ final class RecentConversationSession extends ChangeNotifier {
             (index) =>
                 canonical[index].key == entries[index].key &&
                 canonical[index].title == entries[index].title &&
+                canonical[index].unread == entries[index].unread &&
                 canonical[index].group == entries[index].group,
           );
       if (!matches) {

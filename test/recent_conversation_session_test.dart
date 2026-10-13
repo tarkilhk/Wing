@@ -17,6 +17,7 @@ final _scope = WorkspaceScope(
 RecentConversationEntry _entry(int index) => RecentConversationEntry.chat(
   key: ProfileSessionKey(_scope, '$index'),
   title: 'Chat $index',
+  unread: false,
 );
 RecentConversationPreview _preview(RecentConversationEntry entry) =>
     RecentConversationPreview(

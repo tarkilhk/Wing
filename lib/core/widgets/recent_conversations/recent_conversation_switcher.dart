@@ -1115,7 +1115,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                   ),
                   child: ExcludeSemantics(
                     child: IgnorePointer(
-                      child: _cardContent(_base + step + offset),
+                      child: _unreadCard(_base + step + offset),
                     ),
                   ),
                 ),
@@ -1123,6 +1123,29 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
             ),
           ),
       ],
+    );
+  }
+
+  Widget _unreadCard(int index) {
+    final entry = widget.session.entryAt(index);
+    final content = _cardContent(index);
+    if (!entry.unread) return content;
+    final t = WingTokens.of(context);
+    final tint = t.recentUnreadTint(
+      Theme.of(context).colorScheme.primaryContainer,
+    );
+    final lift = _motion.lift.clamp(0.0, 1.0);
+    // Paint over retained pixels; unread changes never invalidate captures or
+    // admit preview work. Direct alpha paint avoids an offscreen filter layer.
+    return DecoratedBox(
+      key: ValueKey((entry.key, 'unread-tint')),
+      position: DecorationPosition.foreground,
+      decoration: BoxDecoration(
+        color: tint.withValues(alpha: tint.a * lift),
+        borderRadius: BorderRadius.circular(24 * lift),
+        border: Border.all(color: t.recentUnreadBorder.withValues(alpha: lift)),
+      ),
+      child: content,
     );
   }
 

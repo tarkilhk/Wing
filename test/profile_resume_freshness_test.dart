@@ -53,8 +53,11 @@ void main() {
       onOpenGroup: (_) async {},
       recents: recents,
       entries: chats.map(
-        (chat) =>
-            RecentConversationEntry.chat(key: chat.key, title: chat.title),
+        (chat) => RecentConversationEntry.chat(
+          key: chat.key,
+          title: chat.title,
+          unread: false,
+        ),
       ),
       activity: activity,
     );

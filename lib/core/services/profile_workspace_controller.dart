@@ -1187,7 +1187,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     required Future<void> Function(BotGroup) onOpenGroup,
     required ValueListenable<ChatNoticeActivity?> Function() activity,
   }) => RecentConversationSession.fromChat(
-    chat: RecentConversationEntry.chat(key: chat.key, title: chat.title),
+    chat: RecentConversationEntry.chat(
+      key: chat.key,
+      title: chat.title,
+      unread: false,
+    ),
     source: _WorkspaceRecentConversationSource(
       this,
       recents,
@@ -1205,12 +1209,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
     required Future<void> Function(RecentConversationKey) onOpenChat,
     required ValueListenable<ChatNoticeActivity?> Function() activity,
   }) => RecentConversationSession.fromChat(
-    chat: RecentConversationEntry.group(group),
+    chat: RecentConversationEntry.group(group, unread: false),
     source: _WorkspaceRecentConversationSource(
       this,
       recents,
       onOpenGroup,
-      routeOrigin: RecentConversationEntry.group(group).key,
+      routeOrigin: RecentConversationKey.group(group.key),
       onOpenChat: onOpenChat,
     ),
     activity: activity,

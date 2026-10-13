@@ -79,12 +79,11 @@ class RecentIdentityCard extends StatelessWidget {
     final t = WingTokens.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final selected = Theme.of(context).colorScheme.primaryContainer;
+    final tint = t.recentUnreadTint(selected);
     final body = row.unread
-        ? Color.lerp(t.raised, dark ? t.accent : selected, dark ? 0.14 : 0.17)!
+        ? Color.lerp(t.raised, tint.withValues(alpha: 1), tint.a)!
         : t.raised;
-    final border = row.unread
-        ? Color.lerp(t.border, t.accent, dark ? 0.35 : 0.17)!
-        : t.border;
+    final border = row.unread ? t.recentUnreadBorder : t.border;
     final band = row.unread
         ? selected
         : Color.lerp(t.raised, t.surface, dark ? 0.35 : 0.7)!;

@@ -158,6 +158,15 @@ class WingTokens extends ThemeExtension<WingTokens> {
   final Color blocked;
   final WingTypography typography;
 
+  /// Shared unread treatment for Recents identity cards and cached viewports.
+  Color recentUnreadTint(Color primaryContainer) =>
+      (brightness == Brightness.dark ? accent : primaryContainer).withValues(
+        alpha: brightness == Brightness.dark ? .14 : .17,
+      );
+
+  Color get recentUnreadBorder =>
+      Color.lerp(border, accent, brightness == Brightness.dark ? .35 : .17)!;
+
   const WingTokens({
     required this.brightness,
     required this.surface,

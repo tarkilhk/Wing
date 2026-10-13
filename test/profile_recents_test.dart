@@ -543,7 +543,11 @@ void main() {
         onOpenGroup: (_) async {},
         entries: [
           for (final key in keys)
-            RecentConversationEntry.chat(key: key, title: 'Saved title'),
+            RecentConversationEntry.chat(
+              key: key,
+              title: 'Saved title',
+              unread: false,
+            ),
         ],
         recents: recentsFor(bots),
         activity: activity,
@@ -654,7 +658,9 @@ void main() {
       addTearDown(activity.dispose);
       final visit = controller.recentConversationSession(
         recents: emptyRecents(),
-        entries: [RecentConversationEntry.chat(key: key, title: 'Work')],
+        entries: [
+          RecentConversationEntry.chat(key: key, title: 'Work', unread: false),
+        ],
         onOpenGroup: (_) async {},
         activity: activity,
       );
@@ -1198,12 +1204,17 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(visit.catalogLoading, isFalse);
       expect(visit.entries.map((entry) => entry.title), expected);
+      expect(
+        visit.entries.map((entry) => entry.unread),
+        merged.items().map((item) => item.unread),
+      );
       final room = visit.entries.singleWhere((entry) => entry.group != null);
       final selected = visit.selected;
       final revision = visit.previewRevision(room.key);
       final commands = List.of(botFixture.commands);
       final chatCalls = List.of(fixture.calls);
       expect(bots.groupReads.unread(room.group!), isTrue);
+      expect(room.unread, isTrue);
       visit.prepare([room.key]);
       await Future<void>.delayed(Duration.zero);
       final index = visit.entries.indexOf(room);
@@ -1271,7 +1282,7 @@ void main() {
           activity: () => activity,
         );
         addTearDown(visit.dispose);
-        final origin = RecentConversationEntry.group(group).key;
+        final origin = RecentConversationEntry.group(group, unread: false).key;
         expect(visit.selected, origin);
         expect(visit.modeEnabled, isFalse);
         final revision = visit.previewRevision(origin);

@@ -34,8 +34,9 @@ While Hermes is working, the composer can **Steer**, **Queue** or **Stop**. The 
 
 Inside a chat or bot group, pinch inward to open the same conversations shown in **Recents**,
 including bot groups. Cards follow message freshness: left is newer, right is
-older, with the oldest and newest linked in a circle. A two-finger
-horizontal swipe switches to the adjacent conversation directly, including
+older, with the oldest and newest linked in a circle.
+Unread cards carry the same quiet tint as the Recents list.
+A two-finger horizontal swipe switches to the adjacent conversation directly, including
 before the first pinch. Icon-only controls also
 support keyboard and accessibility navigation. Opening a group shows its group
 chat. Back closes the cards first. Back from a conversation opened through
