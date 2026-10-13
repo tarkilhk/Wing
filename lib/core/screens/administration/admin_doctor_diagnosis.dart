@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/doctor_diagnostic.dart';
@@ -98,14 +97,7 @@ class AdminDoctorDiagnosis extends StatelessWidget {
                                 onAskHermes == null || openingFinding != null
                                 ? null
                                 : () => onAskHermes!(index),
-                            icon: openingFinding == index
-                                ? const SizedBox.square(
-                                    dimension: 18,
-                                    child: StudioLoading(
-                                      label: 'Running diagnostics',
-                                    ),
-                                  )
-                                : const Icon(WingIcons.newChat, size: 18),
+                            icon: const Icon(WingIcons.newChat, size: 18),
                             label: const Text('Ask Hermes'),
                           ),
                         ),

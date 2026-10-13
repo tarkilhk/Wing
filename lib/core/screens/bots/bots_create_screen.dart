@@ -599,20 +599,9 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                       ),
                       tooltip: draft.editing ? 'Save changes' : 'Create group',
                       onPressed: draft.canSave ? _saveGroup : null,
-                      icon: draft.saving
-                          ? SizedBox.square(
-                              dimension: 20,
-                              child: StudioLoading(
-                                label: draft.editing
-                                    ? 'Saving group'
-                                    : 'Creating group',
-                              ),
-                            )
-                          : Icon(
-                              draft.editing
-                                  ? Icons.check
-                                  : Icons.group_add_outlined,
-                            ),
+                      icon: Icon(
+                        draft.editing ? Icons.check : Icons.group_add_outlined,
+                      ),
                     ),
                   ],
                 ),

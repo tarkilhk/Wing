@@ -599,26 +599,14 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
             onPressed: busy
                 ? null
                 : widget.onViewReceipt ?? () => _run(share: false),
-            icon: _opening
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: StudioLoading(label: 'Opening result'),
-                  )
-                : const Icon(Icons.visibility_outlined, size: 16),
+            icon: const Icon(Icons.visibility_outlined, size: 16),
           ),
         if (output?.path != null && widget.onShare != null)
           IconButton(
             style: activityActionStyle,
             tooltip: image ? 'Share image' : 'Share file',
             onPressed: busy ? null : () => _run(share: true),
-            icon: _sharing
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: StudioLoading(label: 'Opening result'),
-                  )
-                : const Icon(Icons.share_outlined, size: 16),
+            icon: const Icon(Icons.share_outlined, size: 16),
           ),
         if (widget.copyText case final text? when text.isNotEmpty)
           ToolDetailCopyButton(label: widget.copyLabel, text: text),

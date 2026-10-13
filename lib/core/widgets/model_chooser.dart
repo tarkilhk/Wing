@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../models/model_choice.dart';
 import '../presentation/chat_model_labels.dart';
@@ -396,12 +395,7 @@ class _ModelChooserState extends State<ModelChooser> {
                     ),
                     tooltip: 'Refresh models',
                     onPressed: widget.enabled && !_refreshing ? _refresh : null,
-                    icon: _refreshing
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: StudioLoading(label: 'Loading models'),
-                          )
-                        : const Icon(Icons.refresh_rounded, size: 20),
+                    icon: const Icon(Icons.refresh_rounded, size: 20),
                   ),
               ],
             ),

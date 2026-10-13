@@ -2723,10 +2723,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                   reasoningEffort:
                                                       chat.reasoningEffort ??
                                                       'default',
-                                                  loading:
-                                                      _loadingIntelligence ==
-                                                          chat.key ||
-                                                      chat.changingIntelligence,
                                                   onPressed:
                                                       chat.runtime.opening ||
                                                           chat

@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import '../../services/administration_logs_session.dart';
 import '../../models/profile_session_key.dart';
 import 'package:flutter/material.dart';
@@ -187,12 +186,7 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
           refresh: IconButton(
             tooltip: 'Run all diagnostics',
             onPressed: canRunAll ? _runAll : null,
-            icon: running
-                ? const SizedBox.square(
-                    dimension: 24,
-                    child: StudioLoading(label: 'Running diagnostics'),
-                  )
-                : const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh),
           ),
         ),
         AdminGroup(

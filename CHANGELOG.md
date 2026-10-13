@@ -4,6 +4,9 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Keep action icons visible during pending work, including Health refresh,
+  downloads, previews, sharing, model refresh and group creation.
+
 - Use the same Wing feather pulse for confirmed active work in chats, discussions,
   Bots, Recents and Activity. Keep status text steady and replace the animated
   Chats row border with a pulse in its existing status slot.

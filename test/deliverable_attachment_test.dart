@@ -307,8 +307,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Download'));
       await tester.pump();
-      expect(find.byIcon(Icons.download_outlined), findsNothing);
-      expect(find.byType(StudioLoading), findsOneWidget);
+      expect(find.byIcon(Icons.download_outlined), findsOneWidget);
+      expect(find.byType(StudioLoading), findsNothing);
       expect(tester.getRect(find.byTooltip('Download')), downloadBefore);
       await tester.tap(find.byTooltip('Download'));
       expect(calls, 1);

@@ -214,7 +214,14 @@ void main() {
     await tester.tap(_row(_destinations.first.label));
     await tester.pump();
     expect(tester.getRect(_row(_destinations.first.label)), before);
-    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(find.byType(StudioLoading), findsNothing);
+    expect(
+      find.descendant(
+        of: _row(_destinations.first.label),
+        matching: find.byIcon(Icons.favorite_border),
+      ),
+      findsOneWidget,
+    );
     for (final destination in _destinations) {
       expect(tester.widget<ListTile>(_row(destination.label)).onTap, isNull);
       await tester.tap(_row(destination.label));

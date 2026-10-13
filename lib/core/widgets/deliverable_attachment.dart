@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -104,13 +103,7 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
                 onPressed: widget.onDownload == null || _downloading
                     ? null
                     : () => _run(download: true),
-                icon: _downloading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: StudioLoading(label: 'Preparing file'),
-                      )
-                    : const Icon(Icons.download_outlined, size: 20),
+                icon: const Icon(Icons.download_outlined, size: 20),
               ),
             ),
             if (_error != null) ...[
@@ -158,13 +151,7 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
                 onPressed: widget.onDownload == null || _downloading
                     ? null
                     : () => _run(download: true),
-                icon: _downloading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: StudioLoading(label: 'Saving file'),
-                      )
-                    : const Icon(Icons.download_outlined, size: 20),
+                icon: const Icon(Icons.download_outlined, size: 20),
               ),
               IconButton(
                 tooltip: 'Open preview',

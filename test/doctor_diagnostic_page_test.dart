@@ -17,6 +17,7 @@ import 'package:wing/core/screens/administration/admin_operations_page.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/wing_icons.dart';
 
 import 'support/administration_fixture.dart';
 import 'support/profile_browser_fixture.dart';
@@ -158,7 +159,8 @@ void main() {
         await tester.tap(find.text('Ask Hermes').last);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
-        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(find.byIcon(WingIcons.newChat), findsNWidgets(3));
         expect(
           tester
               .widgetList<TextButton>(find.byType(TextButton))

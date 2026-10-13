@@ -1453,7 +1453,8 @@ void main() {
           await tester.pump();
           await tester.drag(find.byType(ListView), const Offset(0, 1400));
           await tester.pump();
-          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.byIcon(Icons.group_add_outlined), findsOneWidget);
           expect(
             tester
                 .widget<IconButton>(find.byKey(const ValueKey('group-create')))

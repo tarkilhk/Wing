@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../models/chat_intelligence.dart';
 import '../models/model_choice.dart';
@@ -18,14 +17,12 @@ class ChatIntelligenceButton extends StatelessWidget {
     required this.onPressed,
     required this.onReasoningChanged,
     required this.onFastChanged,
-    this.loading = false,
     super.key,
   });
   final String model;
   final String reasoningEffort;
   final ChatFastMode? fastMode;
   final ModelChoice? observation;
-  final bool loading;
   final VoidCallback? onPressed;
   final ValueChanged<String>? onReasoningChanged;
   final ValueChanged<ChatFastMode>? onFastChanged;
@@ -52,13 +49,7 @@ class ChatIntelligenceButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (loading)
-              const SizedBox.square(
-                dimension: 14,
-                child: StudioLoading(label: 'Loading model settings'),
-              )
-            else
-              const Icon(Icons.memory_rounded, size: 14),
+            const Icon(Icons.memory_rounded, size: 14),
             const SizedBox(width: 4),
             Flexible(
               child: Text(

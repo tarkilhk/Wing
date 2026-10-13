@@ -505,8 +505,18 @@ void main() {
     await tester.pump();
     expect(find.text('Checking for updates…'), findsNothing);
     expect(find.text('Checking…'), findsNothing);
-    expect(find.byType(StudioLoading), findsOneWidget);
-    expect(find.bySemanticsLabel('Checking for updates'), findsOneWidget);
+    expect(find.byType(StudioLoading), findsNothing);
+    expect(find.byIcon(Icons.search), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byWidgetPredicate(
+              (w) => w is IconButton && w.tooltip == 'Check for updates',
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
     expect(find.text('Check for updates'), findsNothing);
     expect(find.byTooltip('Check for updates'), findsOneWidget);
 

@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/host_resources.dart';
@@ -318,12 +317,7 @@ class _HostHeading extends StatelessWidget {
           IconButton(
             tooltip: 'Refresh host resources',
             onPressed: state.refreshing ? null : resources.refresh,
-            icon: state.refreshing && state.stats.value == null
-                ? SizedBox.square(
-                    dimension: 24,
-                    child: StudioLoading(label: 'Reading host resources'),
-                  )
-                : const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),

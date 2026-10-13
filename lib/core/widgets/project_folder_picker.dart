@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 
@@ -75,12 +74,7 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
           OutlinedButton.icon(
             key: const ValueKey('project-folder-find'),
             onPressed: _loading ? null : _findFolders,
-            icon: _loading
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: StudioLoading(label: 'Loading folders'),
-                  )
-                : const Icon(Icons.search),
+            icon: const Icon(Icons.search),
             label: const Text('Find folders'),
           ),
           if (_failed) ...[

@@ -116,11 +116,15 @@ void main() {
           if (scenario == 'loading') {
             expect(find.text('Reading resources…'), findsNothing);
             expect(find.text('Reading machine details…'), findsNothing);
+            expect(find.byType(StudioLoading), findsNothing);
+            final refresh = find.byTooltip('Refresh host resources');
             expect(
-              find.bySemanticsLabel('Reading host resources'),
+              find.descendant(
+                of: refresh,
+                matching: find.byIcon(Icons.refresh),
+              ),
               findsOneWidget,
             );
-            expect(find.byType(StudioLoading), findsOneWidget);
             expect(
               tester
                   .widget<IconButton>(

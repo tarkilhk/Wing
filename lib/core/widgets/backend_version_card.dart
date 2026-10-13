@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import '../theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
@@ -187,12 +186,7 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                     onPressed: busy || controller.requestOutstanding
                         ? null
                         : controller.checkForUpdate,
-                    icon: controller.checking && controller.check == null
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: StudioLoading(label: 'Checking for updates'),
-                          )
-                        : const Icon(Icons.search, size: 18),
+                    icon: const Icon(Icons.search, size: 18),
                   ),
                   if (controller.canStart)
                     IconButton.filled(
@@ -207,15 +201,7 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                       onPressed: controller.statusLoading || controller.starting
                           ? null
                           : controller.refreshStatus,
-                      icon:
-                          controller.statusLoading && controller.status == null
-                          ? const SizedBox.square(
-                              dimension: 16,
-                              child: StudioLoading(
-                                label: 'Checking update progress',
-                              ),
-                            )
-                          : const Icon(Icons.refresh, size: 18),
+                      icon: const Icon(Icons.refresh, size: 18),
                     ),
                 ],
               ),

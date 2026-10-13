@@ -9,7 +9,7 @@ class StudioActionLabel extends StatelessWidget {
     : _leadingIcon = null,
       _compact = false;
 
-  /// Centers an icon and caption as a group, replacing the icon while pending.
+  /// Centers an unchanged icon and caption as a group.
   const StudioActionLabel.compact(
     this.label, {
     required this.busy,
@@ -18,7 +18,7 @@ class StudioActionLabel extends StatelessWidget {
   }) : _leadingIcon = icon,
        _compact = true;
 
-  /// A left-aligned row caption whose icon reserves the pending indicator space.
+  /// A left-aligned caption whose action icon stays visible while pending.
   const StudioActionLabel.row(
     this.label, {
     required this.busy,
@@ -42,12 +42,7 @@ class StudioActionLabel extends StatelessWidget {
               children: [
                 SizedBox.square(
                   dimension: 20,
-                  child: busy
-                      ? const Padding(
-                          padding: EdgeInsets.all(2),
-                          child: StudioLoading(label: 'Action in progress'),
-                        )
-                      : Icon(_leadingIcon, size: 20),
+                  child: Icon(_leadingIcon, size: 20),
                 ),
                 const SizedBox(width: WingSpacing.md),
                 Expanded(child: Text(label)),
@@ -65,7 +60,7 @@ class StudioActionLabel extends StatelessWidget {
                     left: 0,
                     child: SizedBox.square(
                       dimension: 16,
-                      child: busy
+                      child: _leadingIcon == null
                           ? const StudioLoading(label: 'Action in progress')
                           : Icon(_leadingIcon, size: 16),
                     ),

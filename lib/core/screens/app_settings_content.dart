@@ -342,14 +342,7 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                                           : 'Test notification',
                                     ),
                                   ),
-                            trailing: _requesting
-                                ? const SizedBox.square(
-                                    dimension: 20,
-                                    child: StudioLoading(
-                                      label: 'Saving app settings',
-                                    ),
-                                  )
-                                : const Icon(Icons.chevron_right),
+                            trailing: const Icon(Icons.chevron_right),
                             onTap: _requesting ? null : _notifications,
                           ),
                           const NotificationChannelDiagnostics(),

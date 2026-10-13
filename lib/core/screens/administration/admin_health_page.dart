@@ -98,12 +98,7 @@ class AdminHealthContent extends StatelessWidget {
               onPressed: profile == null || checkingProfile
                   ? null
                   : onCheckProfile,
-              icon: checkingProfile && profileCheckedAt == null
-                  ? const SizedBox.square(
-                      dimension: 24,
-                      child: StudioLoading(label: 'Refreshing profile status'),
-                    )
-                  : const Icon(Icons.refresh),
+              icon: const Icon(Icons.refresh),
             ),
           ),
           if (profile == null)

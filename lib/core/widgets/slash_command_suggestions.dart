@@ -323,12 +323,7 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
             tooltip: 'Refresh skills',
             constraints: const BoxConstraints.tightFor(width: 48, height: 48),
             onPressed: _refreshing ? null : _refresh,
-            icon: _refreshing
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: StudioLoading(label: 'Loading skills'),
-                  )
-                : const Icon(Icons.refresh, size: 20),
+            icon: const Icon(Icons.refresh, size: 20),
           ),
         ),
       ],
@@ -388,17 +383,10 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
                                     onPressed: _inspecting == null
                                         ? () => _inspect(item)
                                         : null,
-                                    icon: identical(_inspecting, item)
-                                        ? const SizedBox.square(
-                                            dimension: 20,
-                                            child: StudioLoading(
-                                              label: 'Loading skills',
-                                            ),
-                                          )
-                                        : const Icon(
-                                            Icons.visibility_outlined,
-                                            size: 20,
-                                          ),
+                                    icon: const Icon(
+                                      Icons.visibility_outlined,
+                                      size: 20,
+                                    ),
                                   )
                                 : null,
                             onTap: () => _select(completion, item),

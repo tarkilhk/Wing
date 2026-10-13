@@ -218,6 +218,10 @@ void main() {
         );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
+        final refresh = find.byWidgetPredicate(
+          (w) => w is IconButton && w.tooltip == 'Run all diagnostics',
+        );
+        final refreshRect = tester.getRect(refresh);
         final row = find.widgetWithText(ListTile, title);
         await tester.tap(find.descendant(of: row, matching: find.text('Run')));
         await tester.pump();
@@ -235,6 +239,13 @@ void main() {
           find.descendant(of: row, matching: find.textContaining('Running')),
           findsOneWidget,
         );
+        expect(
+          find.descendant(of: refresh, matching: find.byIcon(Icons.refresh)),
+          findsOneWidget,
+        );
+        expect(tester.getRect(refresh), refreshRect);
+        expect(tester.widget<IconButton>(refresh).onPressed, isNull);
+        expect(find.byType(StudioLoading), findsNothing);
         await tester.tap(find.text(title));
         await tester.pumpAndSettle();
         final runAgain = find.byWidgetPredicate(
