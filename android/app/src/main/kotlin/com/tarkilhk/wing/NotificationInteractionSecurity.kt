@@ -6,6 +6,20 @@ import java.util.UUID
 
 /** Strict decoding at native intent/storage boundaries; malformed data is discarded. */
 internal object NotificationInteractionSchema {
+    fun contentTap(data: Map<*, *>): JSONObject {
+        val payload = data["payload"] as String
+        val group = payload.isNotEmpty() && JSONObject(payload).has("room")
+        return action(data, "", !group)
+    }
+
+    fun opensMain(value: JSONObject, hasLiveEngine: Boolean): Boolean =
+        value.getString("choice").isEmpty() || value.getBoolean("review") || !hasLiveEngine
+
+    fun action(data: Map<*, *>, choice: String, review: Boolean): JSONObject =
+        JSONObject().put("payload", data["payload"]).put("choice", choice).put("review", review)
+            .put("command", (data["expanded"] as String).take(800))
+            .put("chat", data["chat"]).put("revision", data["revision"]).put("notification_id", data["id"])
+
     const val maxChars = 64 * 1024
     private val choices = setOf("", "once", "session", "always", "deny")
 

@@ -212,9 +212,9 @@ object ChatNotifications {
         }
     }
     private fun intent(context: Context, data: Map<*, *>, choice: String, review: Boolean): PendingIntent {
-        val value = JSONObject().put("payload", data["payload"]).put("choice", choice).put("review", review)
-            .put("command", (data["expanded"] as String).take(800))
-            .put("chat", data["chat"]).put("revision", data["revision"]).put("notification_id", data["id"])
+        return intent(context, data, NotificationInteractionSchema.action(data, choice, review))
+    }
+    private fun intent(context: Context, data: Map<*, *>, value: JSONObject): PendingIntent {
         // Immutable PendingIntent identity contains only an opaque token; trusted storage binds its target and choice.
         val token = handles(context).issue((data["id"] as Number).toInt(), NotificationHandleStore.actionPurpose, value)
             ?: throw IllegalStateException("Notification handoff could not be stored")
@@ -256,7 +256,7 @@ object ChatNotifications {
                 .setSmallIcon(icon).setContentTitle("Wing").setContentText("Open Wing to review this chat").build())
             .setCategory(if (pending.isNotEmpty()) NotificationCompat.CATEGORY_REMINDER else NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(if (data["channel"] == attentionChannel) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
-            .setContentIntent(intent(context, data, "", true)).setDeleteIntent(deleteIntent(context, data))
+            .setContentIntent(intent(context, data, NotificationInteractionSchema.contentTap(data))).setDeleteIntent(deleteIntent(context, data))
         if (data["alert"] == true) builder.setDefaults(NotificationCompat.DEFAULT_ALL)
         else builder.setSilent(true)
         if (approval) {
@@ -335,7 +335,7 @@ class NotificationActionActivity : Activity() {
         if (!resumed || sent || getSystemService(KeyguardManager::class.java).isKeyguardLocked) return
         sent = true
         val value = ChatNotifications.consumeAction(this, intent) ?: return finish()
-        if (value.optBoolean("review") || !ChatNotifications.hasLiveEngine()) openMain(value)
+        if (NotificationInteractionSchema.opensMain(value, ChatNotifications.hasLiveEngine())) openMain(value)
         else {
             // A retained engine does not give a background UID network access.
             // Keep this user-started activity resumed through recovery and the

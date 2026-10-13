@@ -6,6 +6,55 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NotificationInteractionSecurityTest {
+    @Test fun renderedGroupReplyCanIssueItsContentTapHandle() {
+        val target = JSONObject().put("connection", "host").put("connection_identity", "owner")
+            .put("room", "room-one").put("focus", JSONObject().put("kind", "answer").put("id", "17"))
+        val data = mapOf("payload" to target.toString(), "expanded" to "Shared reply",
+            "chat" to "room-one", "revision" to "answer:17", "id" to 42)
+        var persisted: String? = null
+        val store = NotificationHandleStore({ persisted }, { persisted = it; true })
+        val tap = NotificationInteractionSchema.contentTap(data)
+        val token = store.issue(42, NotificationHandleStore.actionPurpose, tap)
+        assertNotNull("Android must be able to post a group reply with its real content tap", token)
+        val delivered = store.consume(token, NotificationHandleStore.actionPurpose)!!
+        assertFalse(delivered.getBoolean("review"))
+        assertEquals("", delivered.getString("choice"))
+        assertTrue(NotificationInteractionSchema.opensMain(delivered, true))
+        assertTrue(NotificationInteractionSchema.opensMain(delivered, false))
+        val mainToken = store.issue(42, NotificationHandleStore.mainPurpose, delivered)!!
+        val reached = store.consume(mainToken, NotificationHandleStore.mainPurpose)!!
+        assertEquals("room-one", JSONObject(reached.getString("payload")).getString("room"))
+        assertNull(store.consume(token, NotificationHandleStore.actionPurpose))
+        assertNull(store.consume(mainToken, NotificationHandleStore.mainPurpose))
+    }
+
+    @Test fun contentNavigationAndDirectDecisionsChooseTheirActivityHost() {
+        val data = mapOf("payload" to action().getString("payload"), "expanded" to "echo ready",
+            "chat" to "scoped-chat", "revision" to "approval:request-one", "id" to 42)
+        val tap = NotificationInteractionSchema.contentTap(data)
+        assertNotNull(NotificationInteractionSchema.parse(tap.toString()))
+        assertTrue(tap.getBoolean("review"))
+        assertTrue(NotificationInteractionSchema.opensMain(tap, true))
+        for (choice in listOf("once", "session", "deny")) {
+            val decision = NotificationInteractionSchema.action(data, choice, false)
+            assertNotNull(NotificationInteractionSchema.parse(decision.toString()))
+            assertFalse(NotificationInteractionSchema.opensMain(decision, true))
+            assertTrue(NotificationInteractionSchema.opensMain(decision, false))
+        }
+        val permanentReview = NotificationInteractionSchema.action(data, "always", true)
+        assertTrue(NotificationInteractionSchema.opensMain(permanentReview, true))
+    }
+
+    @Test fun localTestAlertCanIssueItsUntargetedContentTapHandle() {
+        val data = mapOf("payload" to "", "expanded" to "Local alerts are working on this device.",
+            "id" to 214600)
+        var persisted: String? = null
+        val store = NotificationHandleStore({ persisted }, { persisted = it; true })
+        val tap = NotificationInteractionSchema.contentTap(data)
+        assertNotNull(store.issue(214600, NotificationHandleStore.actionPurpose, tap))
+        assertTrue(NotificationInteractionSchema.opensMain(tap, true))
+    }
+
     @Test fun groupRepliesKeepRoomIdentityWithoutGainingDecisionAuthority() {
         val target = JSONObject().put("connection", "host").put("connection_identity", "owner")
             .put("room", "room-one").put("focus", JSONObject().put("kind", "answer").put("id", "17"))
