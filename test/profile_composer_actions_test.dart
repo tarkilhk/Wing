@@ -109,6 +109,7 @@ void main() {
     List<String> queued = const [],
     List<AttachmentDraft> attachments = const [],
     bool paused = false,
+    bool disconnected = false,
   }) async {
     final chat = await controller.createChat(canDispatch: () => true);
     if (status == ChatExecution.running) {
@@ -163,6 +164,13 @@ void main() {
       ),
     );
     await pumpFrames(tester);
+    if (disconnected) {
+      controller.connectionStatus.liveChanged(
+        chat.key.workspace.profileName,
+        false,
+      );
+      await pumpFrames(tester, count: 4);
+    }
     return chat;
   }
 
@@ -352,6 +360,7 @@ void main() {
       queued: ['Keep this queued'],
       draft: 'My draft',
       paused: true,
+      disconnected: true,
     );
     expect(find.byTooltip('Message actions'), findsNothing);
     await tester.longPress(find.text('Keep this queued'));
@@ -475,17 +484,8 @@ void main() {
     );
     expect(chat.composer.observation.text, isEmpty);
     final preview = find.text('follow up after this turn');
-    expect(preview, findsOneWidget);
-    expect(tester.widget<Text>(preview).style?.fontStyle, FontStyle.italic);
-    expect(find.byIcon(Icons.keyboard_return), findsOneWidget);
-    expect(
-      tester.getBottomLeft(preview).dy,
-      lessThan(
-        tester
-            .getTopLeft(find.byKey(const ValueKey('conversation-composer')))
-            .dy,
-      ),
-    );
+    expect(preview, findsNothing);
+    expect(find.byIcon(Icons.keyboard_return), findsNothing);
   });
 
   testWidgets('accepted steer immediately shows its text in the transcript', (
@@ -548,6 +548,12 @@ void main() {
       [file.id],
     );
     expect(chat.composer.observation.attachments, isEmpty);
+    expect(find.text('report.pdf'), findsNothing);
+    controller.connectionStatus.liveChanged(
+      chat.key.workspace.profileName,
+      false,
+    );
+    await pumpFrames(tester, count: 4);
     expect(find.text('report.pdf'), findsOneWidget);
 
     await tester.tap(find.text('report.pdf'));
@@ -564,6 +570,7 @@ void main() {
       queued: ['Delete this'],
       draft: 'Separate draft',
       paused: true,
+      disconnected: true,
     );
     await tester.longPress(find.text('Delete this'));
     await pumpFrames(tester, count: 4);
@@ -579,6 +586,11 @@ void main() {
     await pumpFrames(tester, count: 4);
     expect(chat.composer.observation.queue, hasLength(1));
     expect(chat.composer.observation.displayedText, 'Delete this');
+    controller.connectionStatus.liveChanged(
+      chat.key.workspace.profileName,
+      false,
+    );
+    await pumpFrames(tester, count: 4);
     await tester.tap(find.byTooltip('Delete queued message'));
     await pumpFrames(tester, count: 4);
     await tester.tap(find.text('Delete'));
@@ -594,6 +606,7 @@ void main() {
       queued: ['Original', 'Second'],
       draft: 'Separate draft',
       paused: true,
+      disconnected: true,
     );
     final editor = find.byKey(const Key('profile-message-composer'));
     await tester.longPress(find.text('Original'));
@@ -634,13 +647,19 @@ void main() {
       status: ChatExecution.running,
       queued: ['Original', 'Second'],
       draft: 'Separate draft',
+      disconnected: true,
     );
     await tester.longPress(find.text('Original'));
     await pumpFrames(tester, count: 4);
+    controller.connectionStatus.liveChanged(
+      chat.key.workspace.profileName,
+      true,
+    );
     await tester.enterText(
       find.byKey(const Key('profile-message-composer')),
       'Changed direction',
     );
+    await pumpFrames(tester, count: 4);
     await tester.tap(find.text('Steer'));
     await pumpFrames(tester, count: 4);
     expect(chat.composer.observation.queue.map((prompt) => prompt.text), [
@@ -660,13 +679,19 @@ void main() {
       status: ChatExecution.running,
       queued: ['Original'],
       draft: 'Separate draft',
+      disconnected: true,
     );
     await tester.longPress(find.text('Original'));
     await pumpFrames(tester, count: 4);
+    controller.connectionStatus.liveChanged(
+      chat.key.workspace.profileName,
+      true,
+    );
     await tester.enterText(
       find.byKey(const Key('profile-message-composer')),
       'Try this',
     );
+    await pumpFrames(tester, count: 4);
     await tester.tap(find.text('Steer'));
     await pumpFrames(tester, count: 4);
     expect(chat.composer.observation.queue.single.text, 'Original');
@@ -686,7 +711,13 @@ void main() {
   testWidgets('queue editing fits large text with the keyboard open', (
     tester,
   ) async {
-    await show(tester, scale: 2.4, queued: ['Original'], paused: true);
+    await show(
+      tester,
+      scale: 2.4,
+      queued: ['Original'],
+      paused: true,
+      disconnected: true,
+    );
     await tester.longPress(find.text('Original'));
     await pumpFrames(tester, count: 4);
     tester.view.viewInsets = const FakeViewPadding(bottom: 280);
@@ -801,12 +832,17 @@ void main() {
   testWidgets(
     'queued rows stay bounded with large text and open queue actions',
     (tester) async {
-      await show(
+      final chat = await show(
         tester,
         scale: 2.4,
         paused: true,
         queued: ['First follow-up', 'Second follow-up', 'Third follow-up'],
       );
+      controller.connectionStatus.liveChanged(
+        chat.key.workspace.profileName,
+        false,
+      );
+      await pumpFrames(tester, count: 4);
       expect(find.text('Queue paused'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('First follow-up'));

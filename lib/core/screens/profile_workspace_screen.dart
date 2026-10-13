@@ -2489,18 +2489,21 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         key: const ValueKey('profile-activity-status'),
                         chat: chat,
                       ),
-                      ProfileQueuedMessages(
-                        key: ValueKey(('queued-messages', chat.key)),
-                        work: chat.composer.observation,
-                        onOpenActions: _hasMessageActions(chat)
-                            ? () => _showBusyActions(chat, context)
-                            : null,
-                        onEdit: !chat.composer.actions().canEditQueue
-                            ? null
-                            : (prompt) => _beginQueuedEdit(chat, prompt),
-                        onDelete: !chat.composer.actions().canEditQueue
-                            ? null
-                            : (prompt) => _deleteQueuedPrompt(chat, prompt),
+                      ListenableBuilder(
+                        listenable: controller.connectionStatus,
+                        builder: (_, _) => ProfileQueuedMessages(
+                          key: ValueKey(('queued-messages', chat.key)),
+                          work: chat.composer.observation,
+                          onOpenActions: _hasMessageActions(chat)
+                              ? () => _showBusyActions(chat, context)
+                              : null,
+                          onEdit: !chat.composer.actions().canEditQueue
+                              ? null
+                              : (prompt) => _beginQueuedEdit(chat, prompt),
+                          onDelete: !chat.composer.actions().canEditQueue
+                              ? null
+                              : (prompt) => _deleteQueuedPrompt(chat, prompt),
+                        ),
                       ),
                       SafeArea(
                         top: false,

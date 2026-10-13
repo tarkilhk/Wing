@@ -139,6 +139,61 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'queue preview follows this server connection ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          host.event('a', 'message.start');
+          await controller.queuePrompt(chat, 'First waiting message');
+          await controller.queuePrompt(chat, 'Second waiting message');
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(
+                  key: const ValueKey('work-status-review'),
+                  child: child!,
+                ),
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          );
+          for (var i = 0; i < 8; i++) {
+            await tester.pump(const Duration(milliseconds: 100));
+          }
+          expect(find.byIcon(Icons.keyboard_return), findsNothing);
+          expect(chat.composer.observation.queue, hasLength(2));
+          controller.connectionStatus.liveChanged('b', false);
+          await tester.pump();
+          expect(find.byIcon(Icons.keyboard_return), findsNothing);
+          controller.connectionStatus.liveChanged('a', false);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(find.byIcon(Icons.keyboard_return), findsNWidgets(2));
+          expect(find.text('First waiting message'), findsOneWidget);
+          await renderStatus(
+            tester,
+            'chat-queue-offline-${brightness.name}-$scale',
+          );
+          controller.connectionStatus.liveChanged('a', true);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(find.byIcon(Icons.keyboard_return), findsNothing);
+          expect(chat.composer.observation.queue, hasLength(2));
+          await renderStatus(
+            tester,
+            'chat-queue-connected-${brightness.name}-$scale',
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+
       for (final fails in [false, true]) {
         testWidgets(
           'Send preparation uses header feedback ${brightness.name} $scale failure=$fails',
@@ -201,6 +256,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             expect(chat.runtime.execution, ChatExecution.submitting);
             expect(find.text('Sending message…'), findsNothing);
             expect(find.text('Saving queue…'), findsNothing);
+            expect(find.byIcon(Icons.keyboard_return), findsNothing);
             expect(find.byType(StudioLoading), findsOneWidget);
             expect(
               tester.getSize(find.byType(ProfileActivityStatus)).height,

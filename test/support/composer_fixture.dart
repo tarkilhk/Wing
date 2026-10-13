@@ -46,6 +46,15 @@ ProfileChat composeChat({
       runtimeId: chat.runtime.runtimeId,
       working: chat.runtime.blocksTurnAdmission,
       canSteer: chat.runtime.canSteer,
+      serverDisconnected:
+          controller.connectionStatus.access ==
+              ConnectionAvailability.unavailable ||
+          (controller.connectionStatus.hasLiveObservation(
+                key.workspace.profileName,
+              ) &&
+              !controller.connectionStatus.liveAvailable(
+                key.workspace.profileName,
+              )),
       connected:
           !chat.runtime.offline &&
           !chat.runtime.opening &&
