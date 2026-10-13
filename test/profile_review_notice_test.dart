@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/tool_activity_details.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -26,6 +27,7 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_history_fixture.dart';
 
 class _ReviewFixture extends ProfileHistoryFixture {
+  int _sequence = 0;
   final gateways = <String, ProfileGateway>{};
   final runtimeOverrides = <String, String>{};
 
@@ -58,9 +60,19 @@ class _ReviewFixture extends ProfileHistoryFixture {
     return gateway;
   }
 
-  void event(String profile, String sessionId, Map<String, dynamic> data) {
+  void event(
+    String profile,
+    String sessionId,
+    Map<String, dynamic> data, {
+    int? sequence,
+  }) {
     gateways[profile]!.onEvent!(
-      StreamEvent(type: 'review.summary', data: data, sessionId: sessionId),
+      StreamEvent(
+        type: 'review.summary',
+        data: data,
+        sessionId: sessionId,
+        envelope: {'seq': sequence ?? ++_sequence},
+      ),
     );
   }
 }
@@ -121,6 +133,117 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  test('a post-reply review joins the tools of that reply', () {
+    final source = <Map<String, dynamic>>[
+      {
+        'id': 1,
+        'role': 'user',
+        'content': 'Inspect the contract',
+        'timestamp': 100,
+      },
+      {
+        'id': 2,
+        'role': 'tool',
+        'tool_name': 'read_file',
+        'content': 'Contract',
+      },
+      {
+        'id': 3,
+        'role': 'assistant',
+        'content': 'The contract is ready.',
+        'timestamp': 120,
+      },
+      {'id': 4, 'role': 'system', 'content': 'review:Memory updated'},
+      {'id': 5, 'role': 'system', 'content': 'review:Skill updated'},
+      {'id': 6, 'role': 'user', 'content': 'Next question'},
+      {'id': 7, 'role': 'tool', 'content': 'Next result'},
+    ];
+    final timeline = TranscriptTimeline.project(
+      source,
+      presentationId: (row) => row['id']!,
+    );
+    final activities = timeline.sections
+        .where((section) => section.isActivity)
+        .toList();
+    expect(activities, hasLength(2));
+    expect(activities.first.toolCount, 1);
+    expect(activities.first.reviewCount, 2);
+    expect(activities.first.messages.map((row) => row.id), [2, 4, 5]);
+    expect(activities.first.replyDuration, const Duration(seconds: 20));
+    expect(activities.last.reviewCount, 0);
+    expect(timeline.entries.map((row) => row.id), [1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  test('a review after a later prompt never claims the earlier reply', () {
+    final timeline = TranscriptTimeline.project([
+      {'id': 1, 'role': 'tool', 'content': 'Earlier result'},
+      {'id': 2, 'role': 'assistant', 'content': 'Earlier answer'},
+      {'id': 3, 'role': 'user', 'content': 'Next question'},
+      {'id': 4, 'role': 'system', 'content': 'review:Late delivery'},
+    ], presentationId: (row) => row['id']!);
+    expect(timeline.sections.first.reviewCount, 0);
+    expect(timeline.sections.last.reviewCount, 1);
+  });
+
+  test(
+    'identical summaries from different turns survive refresh and restart',
+    () async {
+      final scope = controller.current!.scope;
+      await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
+      final chat = controller.current!.chat!;
+      chat.reading.installSavedHistory([
+        {'id': 1, 'role': 'user', 'content': 'First question'},
+        {'id': 2, 'role': 'assistant', 'content': 'First answer'},
+      ]);
+      fixture.event('personal', chat.runtime.runtimeId, {
+        'text': 'Memory updated',
+      });
+      chat.reading.installSavedHistory([
+        ...chat.reading.messages,
+        {'id': 3, 'role': 'user', 'content': 'Second question'},
+        {'id': 4, 'role': 'assistant', 'content': 'Second answer'},
+      ]);
+      fixture.event('personal', chat.runtime.runtimeId, {
+        'text': 'Memory updated',
+      });
+      expect(chat.reviewNotices, hasLength(2));
+      final refreshed = retainLocalTranscriptMessages(chat.reading.messages, [
+        {'id': 1, 'role': 'user', 'content': 'First question'},
+        {'id': 2, 'role': 'assistant', 'content': 'First answer'},
+        {'id': 3, 'role': 'user', 'content': 'Second question'},
+        {'id': 4, 'role': 'assistant', 'content': 'Second answer'},
+      ]);
+      expect(refreshed.where(isLocalReviewMessage), hasLength(2));
+      chat.reading.installSavedHistory(refreshed);
+      controller.dispose();
+      await Future<void>.delayed(Duration.zero);
+      controller = await makeController();
+      await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
+      expect(controller.current!.chat!.reviewNotices, hasLength(2));
+      expect(
+        controller.current!.chat!.reading.messages.where(isLocalReviewMessage),
+        hasLength(2),
+      );
+    },
+  );
+
+  test(
+    'replaying the same native review sequence does not duplicate it',
+    () async {
+      final scope = controller.current!.scope;
+      await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
+      final chat = controller.current!.chat!;
+      fixture.event('personal', chat.runtime.runtimeId, {
+        'text': 'Memory updated',
+      }, sequence: 99);
+      fixture.event('personal', chat.runtime.runtimeId, {
+        'text': 'Memory updated',
+      }, sequence: 99);
+      expect(chat.reviewNotices, hasLength(1));
+      expect(chat.reading.messages.where(isLocalReviewMessage), hasLength(1));
+    },
+  );
 
   testWidgets('review retains supplied previews and exact raw summary', (
     tester,
@@ -199,7 +322,8 @@ void main() {
             'tool_call_id': 'retain-example',
             'content': 'Memory stored successfully.',
           },
-          {'id': 3, 'role': 'system', 'content': 'review:$generic'},
+          {'id': 3, 'role': 'assistant', 'content': 'Contract inspected.'},
+          {'id': 4, 'role': 'system', 'content': 'review:$generic'},
         ];
         Future<void> show(String state, {int? expandedMessageId}) async {
           final timeline = TranscriptTimeline.project(
@@ -222,11 +346,18 @@ void main() {
                   body: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      ProfileToolActivitySection(
-                        key: ValueKey(state),
-                        section: timeline.sections.single,
-                        expandedMessageId: expandedMessageId,
-                      ),
+                      for (final section in timeline.sections)
+                        if (section.isActivity)
+                          ProfileToolActivitySection(
+                            key: ValueKey(state),
+                            section: section,
+                            expandedMessageId: expandedMessageId,
+                          )
+                        else
+                          ProfileMessage(
+                            message:
+                                section.groups.single.messages.single.message,
+                          ),
                     ],
                   ),
                 ),
@@ -303,7 +434,7 @@ void main() {
             'review:💾 Self-improvement review: $longReview';
         source[1]['content'] =
             '{"success":false,"error":"Failed to store memory: service unavailable"}';
-        await show('detailed', expandedMessageId: 3);
+        await show('detailed', expandedMessageId: 4);
         final changes = tester
             .widgetList<ActivityDetailSection>(
               find.byType(ActivityDetailSection),
@@ -581,7 +712,7 @@ void main() {
   });
 
   test(
-    'review summaries have no durability across a runtime or controller reset',
+    'received reviews survive runtime replacement and controller restart',
     () async {
       final scope = controller.current!.scope;
       await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
@@ -596,16 +727,24 @@ void main() {
 
       fixture.runtimeOverrides['chat-0'] = 'chat-0-replaced-runtime';
       await controller.reconnect(scope);
-      expect(chat.reviewNotices, isEmpty);
-      expect(chat.reading.messages.where(isLocalReviewMessage), isEmpty);
+      expect(chat.reviewNotices.single.text, 'Transient review');
+      expect(chat.reading.messages.where(isLocalReviewMessage), hasLength(1));
 
       fixture.event('personal', chat.runtime.runtimeId, {
         'text': 'Another review',
       });
       controller.dispose();
+      await Future<void>.delayed(Duration.zero);
       controller = await makeController();
       await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
-      expect(controller.current!.chat!.reviewNotices, isEmpty);
+      expect(
+        controller.current!.chat!.reviewNotices.map((notice) => notice.text),
+        ['Transient review', 'Another review'],
+      );
+      expect(
+        controller.current!.chat!.reading.messages.where(isLocalReviewMessage),
+        hasLength(2),
+      );
     },
   );
 }

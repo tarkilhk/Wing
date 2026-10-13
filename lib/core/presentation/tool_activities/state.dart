@@ -197,6 +197,12 @@ void _skillView(_ToolProjection p) {
 
 void _skillManage(_ToolProjection p) {
   final operations = _maps(p.args['operations']);
+  final results = _maps(p.data['results']);
+  final names = (operations.isEmpty ? results : operations)
+      .map((operation) => _text(operation['name']))
+      .whereType<String>()
+      .toSet();
+  if (names.isNotEmpty) p.intent = names.join(' · ');
   for (var index = 0; index < operations.length; index++) {
     final operation = operations[index];
     final name = _text(operation['name']);
@@ -249,7 +255,43 @@ void _skillManage(_ToolProjection p) {
   }
   p.fact('Operations applied', p.data['operations_applied'], result: true);
   p.addResponse('Result', p.data['message']);
-  for (final result in _maps(p.data['results'])) {
+  for (final result in results) {
+    final name = _text(result['name']);
+    final file = _text(result['file_path']);
+    final action = _text(result['action']);
+    final confirmed =
+        p.data['success'] == true &&
+        result['success'] == true &&
+        p.data['staged'] != true;
+    final outcome = p.data['staged'] == true
+        ? 'Awaiting approval'
+        : p.data['success'] == false
+        ? 'Batch failed'
+        : result['success'] == false
+        ? 'Failed'
+        : !confirmed
+        ? 'Outcome unconfirmed'
+        : switch (action) {
+            'create' => 'Created',
+            'edit' => 'Updated',
+            'patch' => 'Patched',
+            'delete' => 'Deleted',
+            'write_file' => 'Written',
+            'remove_file' => 'Removed',
+            _ => 'Reported operation completed',
+          };
+    if (name != null || file != null || action != null) {
+      p.response.add(
+        ToolDetailBlock(
+          label: name ?? 'Skill operation',
+          text: outcome,
+          filenameTarget: file,
+          facts: [
+            if (!confirmed && action != null) 'Requested action: $action',
+          ],
+        ),
+      );
+    }
     _stateLint(
       p,
       result,

@@ -304,6 +304,12 @@ class ToolActivityDetailsView extends StatelessWidget {
                         actions: actions,
                       );
                     }
+                  : blocks[i].filenameTarget != null
+                  ? (context, actions) => _ToolResourceRow(
+                      target: blocks[i].filenameTarget,
+                      output: null,
+                      facts: [blocks[i].label, ...blocks[i].facts],
+                    )
                   : blocks[i].resourceTarget == null
                   ? null
                   : (context, actions) => _ToolResourceRow(

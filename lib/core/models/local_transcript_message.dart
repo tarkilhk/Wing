@@ -15,7 +15,9 @@ List<Map<String, dynamic>> retainLocalTranscriptMessages(
       .toList();
   int locate(Map<String, dynamic> row) => result.indexWhere((candidate) {
     if (isLocalReviewMessage(row)) {
-      return reviewMessageText(candidate) == reviewMessageText(row);
+      return isLocalReviewMessage(candidate)
+          ? candidate['_review_notice'] == row['_review_notice']
+          : reviewMessageText(candidate) == reviewMessageText(row);
     }
     if (row['id'] != null) return candidate['id'] == row['id'];
     return candidate['role'] == row['role'] &&
@@ -27,7 +29,9 @@ List<Map<String, dynamic>> retainLocalTranscriptMessages(
     if (!isLocalTranscriptMessage(local)) continue;
     if (isLocalReviewMessage(local) &&
         result.any(
-          (row) => reviewMessageText(row) == reviewMessageText(local),
+          (row) =>
+              !isLocalReviewMessage(row) &&
+              reviewMessageText(row) == reviewMessageText(local),
         )) {
       continue;
     }

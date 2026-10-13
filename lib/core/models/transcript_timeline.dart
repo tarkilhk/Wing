@@ -397,7 +397,20 @@ List<TranscriptTimelineSection> _groupSections(
 ) {
   final sections = <List<TranscriptTimelineGroup>>[];
   for (final group in groups) {
-    if (group.isActivity &&
+    // The native post-turn review arrives after the final answer. Present it
+    // with that answer's work while leaving the underlying entries untouched.
+    // A user or other notice between them is a boundary, not a guessed owner.
+    if (group.messages.last.isReview &&
+        sections.isNotEmpty &&
+        sections.last.last.messages.last.role == 'assistant' &&
+        !sections.last.last.isActivity) {
+      final answer = sections.length - 1;
+      if (answer > 0 && sections[answer - 1].last.isActivity) {
+        sections[answer - 1].add(group);
+      } else {
+        sections.insert(answer, [group]);
+      }
+    } else if (group.isActivity &&
         sections.isNotEmpty &&
         sections.last.last.isActivity) {
       sections.last.add(group);

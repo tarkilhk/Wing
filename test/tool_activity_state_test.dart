@@ -9,6 +9,64 @@ ToolActivityDetails project(
 ) => ToolActivityDetails.project(name: name, input: args, output: result);
 
 void main() {
+  test('skill receipt identifies changes without supplied inputs', () {
+    final detail = project('skill_manage', {}, {
+      'success': true,
+      'operations_applied': 1,
+      'results': [
+        {
+          'name': 'health-coaching',
+          'action': 'patch',
+          'file_path': 'references/analytics-collaboration.md',
+          'success': true,
+        },
+      ],
+    });
+    expect(detail.intent, 'health-coaching');
+    expect(detail.response.single.label, 'health-coaching');
+    expect(detail.response.single.text, 'Patched');
+    expect(detail.response.single.copyable, isFalse);
+    expect(detail.response.single.resourceTarget, isNull);
+    expect(
+      detail.response.single.filenameTarget,
+      'references/analytics-collaboration.md',
+    );
+  });
+
+  test(
+    'skill receipt preserves multiple identities and uncertain outcomes',
+    () {
+      for (final (extra, outcome) in [
+        (<String, Object?>{}, 'Outcome unconfirmed'),
+        (<String, Object?>{'success': false}, 'Batch failed'),
+        (
+          <String, Object?>{'success': true, 'staged': true},
+          'Awaiting approval',
+        ),
+      ]) {
+        final detail = project('skill_manage', {}, {
+          ...extra,
+          'results': [
+            {'name': 'first', 'action': 'patch', 'success': true},
+            {'name': 'second', 'action': 'write_file', 'success': true},
+            {'name': 'first', 'action': 'edit', 'success': true},
+            {'name': ' ', 'file_path': '', 'action': null},
+            'invalid entry',
+          ],
+        });
+        expect(detail.intent, 'first · second');
+        expect(detail.response.take(3).map((b) => b.label), [
+          'first',
+          'second',
+          'first',
+        ]);
+        expect(detail.response.take(3).every((b) => b.text == outcome), isTrue);
+        expect(detail.response.every((b) => b.resourceTarget == null), isTrue);
+        expect(detail.response.every((b) => !b.copyable), isTrue);
+      }
+    },
+  );
+
   test('Hindsight submitted memory stays distinct from its actual receipt', () {
     const fact = 'The user prefers\nicon-only action buttons.\n';
     final details = project('hindsight_retain', {
@@ -427,7 +485,7 @@ void main() {
       expect(detail.request.first.copyText, find);
       expect(detail.request.last.text, '');
       expect(detail.request.last.copyable, isFalse);
-      expect(detail.response, isEmpty);
+      expect(detail.response.single.text, 'Patched');
       expect(detail.metadata, ['Operations applied: 1']);
     },
   );

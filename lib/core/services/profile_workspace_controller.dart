@@ -49,6 +49,7 @@ import '../models/profile_live_activity.dart';
 import '../models/composer_work.dart';
 import 'composer_session.dart';
 import '../models/transcript_reading.dart';
+import '../models/review_notice.dart';
 import 'transcript_reading.dart';
 import '../models/chat_reading.dart';
 import 'chat_reading_session.dart';
@@ -119,7 +120,7 @@ class ProfileChat {
   Object? _recentRefresh;
   bool get refreshingConversation => _recentRefresh != null;
 
-  final List<GatewayNotice> _reviewNotices = [];
+  final List<({GatewayNotice notice, String identity})> _reviewNotices = [];
   List<GatewayTodo> _todos = [];
   int? _todoRevision;
   List<GatewaySubagentActivity> _subagents = [];
@@ -175,7 +176,8 @@ class ProfileChat {
   bool? get yolo => _yolo;
   bool get changingIntelligence => _changingIntelligence;
   String? get intelligenceRuntime => _intelligenceRuntime;
-  List<GatewayNotice> get reviewNotices => List.unmodifiable(_reviewNotices);
+  List<GatewayNotice> get reviewNotices =>
+      List.unmodifiable(_reviewNotices.map((receipt) => receipt.notice));
   List<GatewayTodo> get todos => List.unmodifiable(_todos);
   int? get todoRevision => _todoRevision;
   List<GatewaySubagentActivity> get subagents =>
@@ -1668,6 +1670,23 @@ class ProfileWorkspaceController extends ChangeNotifier {
                       : null,
                 ),
               );
+        final chat = resource._chats[id]!;
+        for (final message in chat.reading.messages.where(
+          isLocalReviewMessage,
+        )) {
+          final text = reviewMessageText(message);
+          if (text == null) continue;
+          final notice = GatewayNotice.fromGatewayEvent('review.summary', {
+            'text': text,
+          });
+          final identity = message['_review_notice'] as String;
+          if (notice != null &&
+              !chat._reviewNotices.any(
+                (existing) => existing.identity == identity,
+              )) {
+            chat._reviewNotices.add((notice: notice, identity: identity));
+          }
+        }
       }
       if (snapshot['selected'] == name) _current = resource;
     }
@@ -7440,16 +7459,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
       case 'reasoning.available':
         chat._runtime.observeReasoning(event.type, event.data);
       case 'review.summary':
+        final sequence = event.envelope['seq'];
         final notice = event.data['text'] is String
             ? GatewayNotice.fromGatewayEvent(event.type, event.data)
             : null;
+        final identity = '${chat.runtime.runtimeId}:$sequence';
         if (notice != null &&
+            sequence is int &&
+            sequence > 0 &&
             !chat._reviewNotices.any(
-              (existing) => existing.identity == notice.identity,
+              (existing) => existing.identity == identity,
             )) {
-          chat._reviewNotices.add(notice);
+          chat._reviewNotices.add((notice: notice, identity: identity));
           chat.reading.appendReviewNotice(
-            identity: notice.identity,
+            identity: identity,
             text: 'review:${notice.text}',
             timestamp: event.data['timestamp'] is num
                 ? event.data['timestamp'] as num
@@ -8479,8 +8502,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._contextLoading = false;
       chat._contextError = null;
       chat._runtime.finishActivity();
-      chat._reviewNotices.clear();
-      chat.reading.retireRuntimeNotices();
       chat._todos = [];
       chat._todoRevision = null;
       chat._subagents = [];

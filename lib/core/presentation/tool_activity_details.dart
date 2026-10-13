@@ -49,6 +49,7 @@ final class ToolDetailBlock {
     this.numberedLines = false,
     this.secondary = false,
     this.resourceTarget,
+    this.filenameTarget,
     this.facts = const [],
     this.copyable = false,
     this.role = ToolDetailRole.text,
@@ -68,6 +69,9 @@ final class ToolDetailBlock {
   final bool numberedLines;
   final bool secondary;
   final String? resourceTarget;
+
+  /// A reported file identity for display/path disclosure, without file I/O.
+  final String? filenameTarget;
   final List<String> facts;
   final bool copyable;
   final ToolDetailRole role;

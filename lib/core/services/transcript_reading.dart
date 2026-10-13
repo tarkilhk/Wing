@@ -7,7 +7,6 @@ import '../models/answer_versions.dart';
 import '../models/hermes_profile.dart';
 import '../models/local_transcript_message.dart';
 import '../models/reading_snapshot_message.dart';
-import '../models/review_notice.dart';
 import '../models/transcript_reading.dart';
 import '../models/user_message_content.dart';
 import 'completion_diagnostics.dart';
@@ -294,13 +293,6 @@ final class TranscriptReading implements TranscriptReader {
     if (_closed) return;
     _messages = List.unmodifiable(
       _messages.where((row) => row['_review_notice'] != identity),
-    );
-  }
-
-  void retireRuntimeNotices() {
-    if (_closed) return;
-    _messages = List.unmodifiable(
-      _messages.where((row) => !isLocalReviewMessage(row)),
     );
   }
 

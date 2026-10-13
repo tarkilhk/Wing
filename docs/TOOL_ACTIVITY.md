@@ -26,6 +26,12 @@ display encrypted reasoning.
 ## Memory and learning
 
 Background **Memory and skills review** notices appear inside Activity's Timeline.
+A review received directly after an answer joins that answer's tools, so you
+can inspect the work and its learning in one list. Separate updates with the
+same summary remain separate; replaying the same event does not duplicate it.
+Received reviews survive reopening a locally cached conversation. Hermes may
+not keep these notices in server history; Wing cannot recover notices it never
+received or that have left its local reading cache.
 They use a lightbulb icon, distinct from Hindsight's head/brain icon. Expand a
 review to read and copy the changes Hermes reported; Raw details retains the
 original summary. When Hermes only reports "Memory updated", Wing explains that

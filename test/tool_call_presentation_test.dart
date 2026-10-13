@@ -526,7 +526,9 @@ void main() {
       ),
     ]) {
       final receipt = call.activityDetails;
-      expect(receipt.response, isEmpty);
+      expect(receipt.response.single.label, 'business-trip-policy-research');
+      expect(receipt.response.single.text, 'Patched');
+      expect(call.subtitle, 'business-trip-policy-research');
       expect(receipt.metadata, ['Operations applied: 1']);
       expect(call.result, raw);
     }
@@ -550,6 +552,37 @@ void main() {
       'references/accommodation-search-quality.md',
     ]);
   });
+
+  test(
+    'live and saved skill receipts supply a subtitle without request args',
+    () {
+      final result = {
+        'success': true,
+        'operations_applied': 1,
+        'results': [
+          {
+            'name': 'health-coaching',
+            'action': 'patch',
+            'file_path': 'references/analytics-collaboration.md',
+            'success': true,
+          },
+        ],
+      };
+      for (final call in [
+        completed('skill_manage', result),
+        ToolCallPresentation.saved(
+          TranscriptToolResult.fromRow({
+            'role': 'tool',
+            'tool_name': 'skill_manage',
+            'content': jsonEncode(result),
+          }),
+        ),
+      ]) {
+        expect(call.subtitle, 'health-coaching');
+        expect(call.activityDetails.response.single.text, 'Patched');
+      }
+    },
+  );
 
   test(
     'results keep actual errors and skip blank or routine operation facts',

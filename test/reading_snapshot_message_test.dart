@@ -22,6 +22,28 @@ void main() {
             as Map,
       );
 
+  test('received review identity survives as a passive reading receipt', () {
+    final saved = roundtrip({
+      'id': 'review-runtime:12',
+      'role': 'system',
+      'content': 'review:Memory updated',
+      '_review_notice': 'runtime:12',
+      'timestamp': 101.25,
+      'pending_approval': {'command': 'never restore'},
+    });
+    expect(saved['_review_notice'], 'runtime:12');
+    expect(saved['timestamp'], 101.25);
+    expect(saved.containsKey('pending_approval'), isFalse);
+    expect(
+      roundtrip({
+        'role': 'user',
+        'content': 'review:Quoted example',
+        '_review_notice': 'untrusted',
+      }).containsKey('_review_notice'),
+      isFalse,
+    );
+  });
+
   test(
     'large prepared context retains authored text, images and reference identity',
     () {

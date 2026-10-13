@@ -80,6 +80,112 @@ void main() {
   });
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      for (final variant in ['receipt', 'long', 'failed', 'unconfirmed']) {
+        testWidgets(
+          'skill receipt without inputs ${brightness.name} $scale $variant',
+          (tester) async {
+            tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 1100);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            final path = variant == 'long'
+                ? 'references/a-very-long-supporting-file-name-for-analytics-collaboration-and-follow-up-planning.md'
+                : 'references/analytics-collaboration.md';
+            final raw = jsonEncode({
+              if (variant != 'unconfirmed') 'success': variant != 'failed',
+              if (variant == 'failed')
+                'error': 'Batch aborted; changes rolled back.',
+              if (variant == 'receipt' || variant == 'long')
+                'operations_applied': 1,
+              'results': [
+                {
+                  'name': 'health-coaching',
+                  'action': 'patch',
+                  'file_path': path,
+                  'success': true,
+                },
+              ],
+            });
+            final call = ToolCallPresentation.saved(
+              TranscriptToolResult.fromRow({
+                'role': 'tool',
+                'tool_name': 'skill_manage',
+                'content': raw,
+              }),
+            );
+            var resourceActions = 0;
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  body: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: RepaintBoundary(
+                      key: const ValueKey('skill-receipt-capture'),
+                      child: ColoredBox(
+                        color: wingTheme(brightness).scaffoldBackgroundColor,
+                        child: ProfileToolCall(
+                          call: call,
+                          initiallyExpanded: true,
+                          onOpenResource: (_) async => resourceActions++,
+                          onShareResource: (_) async => resourceActions++,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(find.textContaining('health-coaching'), findsWidgets);
+            expect(find.text(path.split('/').last), findsOneWidget);
+            expect(find.text('No input details supplied'), findsNothing);
+            expect(find.byTooltip('Preview file'), findsNothing);
+            expect(find.byTooltip('Share file'), findsNothing);
+            expect(find.byTooltip('Copy health-coaching'), findsNothing);
+            expect(resourceActions, 0);
+            final outcome = variant == 'failed'
+                ? 'Batch failed'
+                : variant == 'unconfirmed'
+                ? 'Outcome unconfirmed'
+                : 'Patched';
+            expect(find.text(outcome), findsOneWidget);
+            if (variant == 'failed' || variant == 'unconfirmed') {
+              expect(find.text('Patched'), findsNothing);
+            }
+            expect(tester.takeException(), isNull);
+            if (capture) {
+              final boundary = tester.renderObject<RenderRepaintBoundary>(
+                find.byKey(const ValueKey('skill-receipt-capture')),
+              );
+              await tester.runAsync(() async {
+                final image = await boundary.toImage();
+                final bytes = await image.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final file = File(
+                  'build/design-previews/skill-receipts/site/renders/${brightness.name}-$scale-$variant.png',
+                );
+                await file.parent.create(recursive: true);
+                await file.writeAsBytes(bytes!.buffer.asUint8List());
+                image.dispose();
+              });
+            }
+            await tester.tap(find.text(path.split('/').last));
+            await tester.pumpAndSettle();
+            expect(find.text(path), findsOneWidget);
+            expect(resourceActions, 0);
+            await tester.tapAt(const Offset(5, 5));
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
       testWidgets('read receipt is compact and formatted ${brightness.name} $scale', (
         tester,
       ) async {
@@ -1042,7 +1148,7 @@ void main() {
             await tester.tap(find.text('Managed skills'));
             await tester.pumpAndSettle();
             expect(find.text('Result'), findsNothing);
-            expect(call.activityDetails.response, isEmpty);
+            expect(call.activityDetails.response, hasLength(4));
             expect(call.activityDetails.metadata, ['Operations applied: 4']);
             expect(find.text('Operations applied: 4'), findsOneWidget);
             expect(call.activityDetails.request, hasLength(8));

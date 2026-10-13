@@ -605,6 +605,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
       StreamEvent(
         type: 'review.summary',
         sessionId: runtimeId,
+        envelope: const {'seq': 1},
         data: const {'text': 'Roadmap review needs a human check.'},
       ),
     );

@@ -18,6 +18,7 @@ Map<String, dynamic> captureReadingSnapshotMessage(Map<String, dynamic> row) =>
         'timestamp',
         'hidden',
         '_todo_snapshot_synthetic',
+        if (row['role'] == 'system') '_review_notice',
         'display_kind',
         'display_content',
         if (row['role'] == 'tool') ...[
@@ -87,6 +88,16 @@ Map<String, dynamic> projectReadingSnapshotMessage(Map row) {
     } else if (value != null) {
       result[key] = value;
     }
+  }
+  // This marker identifies a received, client-owned reading receipt. It gives
+  // no runtime authority and must survive the next authoritative history read.
+  final review = row['_review_notice'];
+  if (result['role'] == 'system' &&
+      result['content'] is String &&
+      (result['content'] as String).startsWith('review:') &&
+      review is String &&
+      review.isNotEmpty) {
+    result['_review_notice'] = review;
   }
   final metadata = answerMessageDisplayMetadata(Map<String, dynamic>.from(row));
   final displayMetadata = <String, dynamic>{};
