@@ -1,3 +1,9 @@
+import 'package:wing/core/widgets/answer_actions.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
+import 'package:wing/core/widgets/tool_activity_details.dart';
+import 'package:wing/core/widgets/profile_transcript_disclosure.dart';
+import 'package:wing/core/models/gateway_activity.dart';
+import 'package:wing/core/presentation/tool_call_presentation.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -12,6 +18,220 @@ import 'package:wing/core/widgets/studio_action_label.dart';
 import 'package:wing/core/widgets/activity/activity_detail_actions.dart';
 
 void main() {
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'category icons and answer controls survive busy settlement ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          var busy = false;
+          late StateSetter change;
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: Scaffold(
+                appBar: AppBar(
+                  title: const Text('Work status'),
+                  actions: const [StudioLoadingSlot()],
+                ),
+                body: StatefulBuilder(
+                  builder: (context, setState) {
+                    change = setState;
+                    return SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ProfileTranscriptDisclosure(
+                              label: 'Goal',
+                              icon: Icons.track_changes_outlined,
+                              children: const [Text('Goal details')],
+                            ),
+                            ProfileToolCall(
+                              call: ToolCallPresentation.live(
+                                GatewayToolActivity.fromGatewayEvent(
+                                  busy ? 'tool.start' : 'tool.complete',
+                                  {
+                                    'tool_id': 'identity-case',
+                                    'name': 'terminal',
+                                    'args': {'command': 'echo hello'},
+                                    'result': 'hello',
+                                  },
+                                )!,
+                              ),
+                            ),
+                            ActivityDetailStatus(
+                              label: busy ? 'Running' : 'Stopped',
+                              icon: Icons.terminal_rounded,
+                              working: busy,
+                            ),
+                            AnswerActions(
+                              busy: busy,
+                              onBranch: () {},
+                              onRegenerate: () {},
+                              onReadAloud: () {},
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final buttons = {
+            for (final label in [
+              'Branch in new session',
+              'Regenerate response',
+              'Read aloud',
+            ])
+              label: tester.getRect(find.byTooltip(label)),
+          };
+          final tool = find.byType(ProfileToolCall);
+          final category = find.descendant(
+            of: tool,
+            matching: find.byIcon(Icons.terminal_rounded),
+          );
+          final iconRect = tester.getRect(category);
+          change(() => busy = true);
+          await tester.pump();
+          await tester.pumpAndSettle();
+          expect(category, findsOneWidget);
+          expect(
+            find.descendant(of: tool, matching: find.byType(StudioLoading)),
+            findsOneWidget,
+          );
+          expect(tester.getRect(category), iconRect);
+          expect(find.byIcon(Icons.track_changes_outlined), findsOneWidget);
+          for (final entry in buttons.entries) {
+            expect(tester.getRect(find.byTooltip(entry.key)), entry.value);
+          }
+          expect(
+            find.ancestor(
+              of: find.bySemanticsLabel('Preparing answer'),
+              matching: find.byType(AppBar),
+            ),
+            findsOneWidget,
+          );
+          if (const bool.fromEnvironment('CAPTURE_LOADING_CORRECTIONS')) {
+            await tester.runAsync(() async {
+              final image =
+                  await (frame.currentContext!.findRenderObject()!
+                          as RenderRepaintBoundary)
+                      .toImage();
+              final bytes = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final file = File(
+                'build/design-previews/loading-corrections/site/native/${brightness.name}-$scale.png',
+              );
+              file.parent.createSync(recursive: true);
+              await file.writeAsBytes(bytes!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
+          change(() => busy = false);
+          await tester.pump();
+          await tester.pumpAndSettle();
+          for (final entry in buttons.entries) {
+            expect(tester.getRect(find.byTooltip(entry.key)), entry.value);
+          }
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets('static pulse matches the canonical notification Wing mark', (
+    tester,
+  ) async {
+    final source = File('assets/icon/wing.svg').readAsStringSync();
+    final data = RegExp(r' d="([^"]+)"').firstMatch(source)!.group(1)!;
+    expect(
+      File(
+        'android/app/src/main/res/drawable/ic_stat_wing.xml',
+      ).readAsStringSync(),
+      contains('android:pathData="$data"'),
+    );
+    final tokens = RegExp(
+      r'[MCZ]|-?\d+(?:\.\d+)?',
+    ).allMatches(data).map((m) => m.group(0)!).toList();
+    final path = Path();
+    var position = 0;
+    double number() => double.parse(tokens[position++]);
+    while (position < tokens.length) {
+      switch (tokens[position++]) {
+        case 'M':
+          path.moveTo(number(), number());
+        case 'C':
+          path.cubicTo(
+            number(),
+            number(),
+            number(),
+            number(),
+            number(),
+            number(),
+          );
+        case 'Z':
+          path.close();
+        default:
+          throw StateError('Update canonical SVG command support');
+      }
+    }
+    final frame = GlobalKey();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Center(
+            child: RepaintBoundary(
+              key: frame,
+              child: const StudioLoading(
+                label: 'Canonical Wing',
+                size: 24,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.runAsync(() async {
+      final actual =
+          await (frame.currentContext!.findRenderObject()!
+                  as RenderRepaintBoundary)
+              .toImage();
+      final recording = ui.PictureRecorder();
+      final canvas = Canvas(recording);
+      canvas.drawPath(path, Paint()..color = Colors.white);
+      final picture = recording.endRecording();
+      final expected = await picture.toImage(24, 24);
+      expect(
+        (await actual.toByteData())!.buffer.asUint8List(),
+        orderedEquals((await expected.toByteData())!.buffer.asUint8List()),
+      );
+      actual.dispose();
+      expected.dispose();
+      picture.dispose();
+    });
+  });
+
   testWidgets('modal loading cannot leak into the underlying page', (
     tester,
   ) async {
@@ -197,10 +417,14 @@ void main() {
   }
 
   setUpAll(() async {
-    if (!const bool.fromEnvironment('STUDIO_LOADING_REVIEW')) return;
+    if (!const bool.fromEnvironment('STUDIO_LOADING_REVIEW') &&
+        !const bool.fromEnvironment('CAPTURE_LOADING_CORRECTIONS')) {
+      return;
+    }
     for (final entry in {
       'Roboto': 'build/studio-roboto.ttf',
       'MaterialIcons': 'build/studio-icons.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
     }.entries) {
       await (FontLoader(entry.key)..addFont(
             File(entry.value).readAsBytes().then(ByteData.sublistView),

@@ -116,13 +116,7 @@ class ActivityDetailStatus extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  StudioActivityIndicator(
-                    active: working && !error && !warning,
-                    label: label,
-                    icon: icon,
-                    color: color,
-                    size: 16,
-                  ),
+                  Icon(icon, color: color, size: 16),
                   const SizedBox(width: WingSpacing.sm),
                   Expanded(
                     child: Wrap(
@@ -142,6 +136,12 @@ class ActivityDetailStatus extends StatelessWidget {
                           ),
                       ],
                     ),
+                  ),
+                  const SizedBox(width: WingSpacing.sm),
+                  StudioWorkProgress(
+                    active: working && !error && !warning,
+                    label: label,
+                    color: color,
                   ),
                 ],
               ),

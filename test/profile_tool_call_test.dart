@@ -811,11 +811,8 @@ void main() {
           ),
         );
         expect(
-          find.descendant(
-            of: find.byWidget(row.icon),
-            matching: find.byIcon(entry.value),
-          ),
-          findsOneWidget,
+          tester.widget<Icon>(find.byWidget(row.icon)).icon,
+          entry.value,
           reason: entry.key,
         );
       }

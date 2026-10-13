@@ -347,7 +347,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     });
   }
 
-  testWidgets('loading keeps header alignment and expansion callbacks work', (
+  testWidgets('metadata changes keep category icon and expansion callbacks', (
     tester,
   ) async {
     final changes = <bool>[];
@@ -362,8 +362,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
               return ProfileTranscriptDisclosure(
                 label: 'Subagents',
                 icon: Icons.account_tree_outlined,
-                loading: loading,
-                summary: const Text('1 active'),
+                summary: Text(loading ? '1 active' : '0 active'),
                 onExpansionChanged: changes.add,
                 children: const [Text('Agent details')],
               );
@@ -373,7 +372,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ),
     );
     final before = tester.getTopLeft(find.text('Subagents'));
-    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(find.byType(StudioLoading), findsNothing);
+    expect(find.byIcon(Icons.account_tree_outlined), findsOneWidget);
     update(() => loading = false);
     await tester.pumpAndSettle();
     expect(tester.getTopLeft(find.text('Subagents')), before);

@@ -143,7 +143,6 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
         icon: Icons.account_tree_outlined,
         label: 'Subagents',
         summary: Text(chat.subagentSummary),
-        loading: chat.subagentsLoading && !chat.subagentsAvailable,
         childrenPadding: EdgeInsets.zero,
         children: children,
       );
@@ -480,11 +479,8 @@ class _SubagentRow extends StatelessWidget {
         minTileHeight: 48,
         minLeadingWidth: 16,
         horizontalTitleGap: 8,
-        leading: StudioActivityIndicator(
-          active:
-              !unconfirmed && activity.status == GatewaySubagentStatus.running,
-          label: 'Subagent running',
-          icon: unconfirmed ? Icons.help_outline : _statusIcon(activity.status),
+        leading: Icon(
+          unconfirmed ? Icons.help_outline : _statusIcon(activity.status),
           size: 16,
           color: unconfirmed
               ? colors.muted
@@ -533,7 +529,20 @@ class _SubagentRow extends StatelessWidget {
               ),
           ],
         ),
-        trailing: Icon(Icons.chevron_right, size: 16, color: colors.muted),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            StudioWorkProgress(
+              active:
+                  !unconfirmed &&
+                  activity.status == GatewaySubagentStatus.running,
+              label: 'Subagent running',
+              color: colors.accent,
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right, size: 16, color: colors.muted),
+          ],
+        ),
         onTap: onTap,
       ),
     );

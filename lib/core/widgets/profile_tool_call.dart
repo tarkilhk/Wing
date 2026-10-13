@@ -90,23 +90,29 @@ class ProfileToolCall extends StatelessWidget {
       _ => colors.muted,
     };
     return CompactActivityRow(
-      icon: StudioActivityIndicator(
-        active: call.outcome == ToolCallOutcome.running,
-        label: call.title,
-        icon: iconFor(call.name),
-        color: colors.muted,
-        size: 16,
-      ),
+      icon: Icon(iconFor(call.name), color: colors.muted, size: 16),
       lines: [
-        Text(
-          call.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            height: 1.3,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                call.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  height: 1.3,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            StudioWorkProgress(
+              active: call.outcome == ToolCallOutcome.running,
+              label: call.title,
+              color: colors.muted,
+            ),
+          ],
         ),
         if (call.notice == null && call.filenameTarget != null)
           ResourceFilename(

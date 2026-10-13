@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/profile_supervision_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -14,6 +16,8 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
 
 class _GoalFixture extends ProfileActionsFixture {
+  Completer<void>? heldMetadata;
+
   final requests = <(String, Map<String, dynamic>)>[];
   bool hasGoal = true;
   bool failAction = false;
@@ -50,6 +54,7 @@ class _GoalFixture extends ProfileActionsFixture {
       get: base.read,
       rpc: (method, params) async {
         requests.add((method, params));
+        if (method == 'session.control.read') await heldMetadata?.future;
         if (method == 'session.control.read') return {'control': control};
         if (method == 'session.control') {
           if (failAction) throw StateError('Action rejected');
@@ -126,6 +131,44 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
   }
+
+  testWidgets('automatic metadata read keeps the usable conversation quiet', (
+    tester,
+  ) async {
+    fixture.heldMetadata = Completer<void>();
+    addTearDown(() {
+      if (!fixture.heldMetadata!.isCompleted) fixture.heldMetadata!.complete();
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              const TextField(
+                decoration: InputDecoration(hintText: 'Draft remains editable'),
+              ),
+              ProfileGoalPanel(session: supervision),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(StudioLoading), findsNothing);
+    await tester.enterText(find.byType(TextField), 'Keep writing');
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller?.text ??
+          tester
+              .widget<EditableText>(find.byType(EditableText))
+              .controller
+              .text,
+      'Keep writing',
+    );
+    fixture.heldMetadata!.complete();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('renders server goal details and sends pause action', (
     tester,

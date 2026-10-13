@@ -265,7 +265,6 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         icon: Icons.track_changes_outlined,
         label: 'Goal',
         summary: Text(_summary(goal, chat.sessionControlNotice)),
-        loading: chat.sessionControlLoading && chat.sessionControl == null,
         childrenPadding: EdgeInsets.zero,
         children: [
           if (error != null)

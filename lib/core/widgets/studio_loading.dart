@@ -46,6 +46,28 @@ class StudioActivityIndicator extends StatelessWidget {
   );
 }
 
+/// A reserved work-status compartment beside an unchanged identity glyph.
+class StudioWorkProgress extends StatelessWidget {
+  const StudioWorkProgress({
+    super.key,
+    required this.active,
+    required this.label,
+    required this.color,
+    this.size = 16,
+  });
+  final bool active;
+  final String label;
+  final Color color;
+  final double size;
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: size,
+    child: active
+        ? StudioLoading(label: label, color: color, size: size)
+        : const SizedBox.shrink(),
+  );
+}
+
 class _StudioLoadingState extends State<StudioLoading>
     with SingleTickerProviderStateMixin {
   late final _pulse = AnimationController(
@@ -107,23 +129,29 @@ class _Feathers extends CustomPainter {
   final Color color;
   final Animation<double> pulse;
   final bool animate;
+  // Canonical paths from assets/icon/wing.svg and Android ic_stat_wing.
   static final _shapes = [
     Path()
-      ..moveTo(3, 9)
-      ..cubicTo(6, 3, 16, 8, 21, 2)
-      ..cubicTo(20, 10, 8, 6, 3, 9)
+      ..moveTo(2.8, 17.8)
+      ..cubicTo(5, 9, 17, 8, 22, 2)
+      ..cubicTo(22, 9, 9, 10, 2.8, 17.8)
       ..close(),
     Path()
-      ..moveTo(3, 15)
-      ..cubicTo(6, 9, 15, 13, 20, 8)
-      ..cubicTo(19, 16, 8, 12, 3, 15)
+      ..moveTo(2.4, 20.4)
+      ..cubicTo(7, 12.6, 16, 13, 20.3, 9.4)
+      ..cubicTo(18.3, 16, 9, 14.8, 2.4, 20.4)
       ..close(),
     Path()
-      ..moveTo(3, 21)
-      ..cubicTo(6, 15, 14, 18, 18, 14)
-      ..cubicTo(17, 21, 8, 18, 3, 21)
+      ..moveTo(2, 22)
+      ..cubicTo(6, 16.8, 12.2, 18.3, 16.3, 15.6)
+      ..cubicTo(14.2, 22, 7.3, 18.8, 2, 22)
       ..close(),
   ];
+
+  static final _mark = Path()
+    ..addPath(_shapes[0], Offset.zero)
+    ..addPath(_shapes[1], Offset.zero)
+    ..addPath(_shapes[2], Offset.zero);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -134,16 +162,18 @@ class _Feathers extends CustomPainter {
       (size.height - 24 * scale) / 2,
     );
     canvas.scale(scale);
-    for (var i = 0; i < _shapes.length; i++) {
-      final opacity = animate
-          ? .70 +
-                .30 *
-                    (.5 - .5 * math.cos(2 * math.pi * (pulse.value - i * .145)))
-          : 1.0;
-      canvas.drawPath(
-        _shapes[i],
-        Paint()..color = color.withValues(alpha: opacity),
-      );
+    if (!animate) {
+      canvas.drawPath(_mark, Paint()..color = color);
+    } else {
+      for (var i = 0; i < _shapes.length; i++) {
+        final opacity =
+            .70 +
+            .30 * (.5 - .5 * math.cos(2 * math.pi * (pulse.value - i * .145)));
+        canvas.drawPath(
+          _shapes[i],
+          Paint()..color = color.withValues(alpha: opacity),
+        );
+      }
     }
     canvas.restore();
   }

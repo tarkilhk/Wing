@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import 'anchored_expansion_tile.dart';
 
@@ -12,7 +11,6 @@ class ProfileTranscriptDisclosure extends StatefulWidget {
     this.summary,
     this.trailing,
     this.initiallyExpanded = false,
-    this.loading = false,
     this.isError = false,
     this.maintainState = true,
     this.onExpansionChanged,
@@ -25,7 +23,6 @@ class ProfileTranscriptDisclosure extends StatefulWidget {
   final Widget? summary;
   final List<Widget> children;
   final bool initiallyExpanded;
-  final bool loading;
   final bool isError;
   final bool maintainState;
   final ValueChanged<bool>? onExpansionChanged;
@@ -70,15 +67,7 @@ class _ProfileTranscriptDisclosureState
           ),
           child: Row(
             children: [
-              if (widget.loading)
-                SizedBox.square(
-                  dimension: 16,
-                  child: StudioLoading(
-                    color: color,
-                    label: 'Refreshing ${widget.label}',
-                  ),
-                )
-              else if (widget.icon != null)
+              if (widget.icon != null)
                 Icon(
                   widget.icon,
                   size: 16,
@@ -86,8 +75,7 @@ class _ProfileTranscriptDisclosureState
                       ? Theme.of(context).colorScheme.error
                       : color,
                 ),
-              if (widget.loading || widget.icon != null)
-                const SizedBox(width: 8),
+              if (widget.icon != null) const SizedBox(width: 8),
               Expanded(
                 child: Wrap(
                   spacing: 8,

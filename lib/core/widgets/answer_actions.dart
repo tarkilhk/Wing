@@ -20,43 +20,39 @@ class AnswerActions extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    alignment: WrapAlignment.end,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    children: [
-      if (busy)
-        const Padding(
-          padding: EdgeInsets.all(14),
-          child: SizedBox.square(
-            dimension: 20,
-            child: StudioLoading(label: 'Preparing answer'),
-          ),
-        ),
-      StudioButtonPress(
-        child: IconButton(
-          tooltip: 'Branch in new session',
-          onPressed: onBranch,
-          icon: const Icon(WingIcons.fork, size: 18),
-        ),
-      ),
-      if (onReadAloud != null)
+  Widget build(BuildContext context) => StudioPageLoading(
+    active: busy,
+    label: 'Preparing answer',
+    child: Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
         StudioButtonPress(
           child: IconButton(
-            tooltip: readingAloud ? 'Stop reading aloud' : 'Read aloud',
-            onPressed: onReadAloud,
-            icon: Icon(
-              readingAloud ? Icons.stop : Icons.volume_up_outlined,
-              size: 18,
-            ),
+            tooltip: 'Branch in new session',
+            onPressed: onBranch,
+            icon: const Icon(WingIcons.fork, size: 18),
           ),
         ),
-      StudioButtonPress(
-        child: IconButton(
-          tooltip: 'Regenerate response',
-          onPressed: onRegenerate,
-          icon: const Icon(Icons.refresh),
+        if (onReadAloud != null)
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: readingAloud ? 'Stop reading aloud' : 'Read aloud',
+              onPressed: onReadAloud,
+              icon: Icon(
+                readingAloud ? Icons.stop : Icons.volume_up_outlined,
+                size: 18,
+              ),
+            ),
+          ),
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Regenerate response',
+            onPressed: onRegenerate,
+            icon: const Icon(Icons.refresh),
+          ),
         ),
-      ),
-    ],
+      ],
+    ),
   );
 }

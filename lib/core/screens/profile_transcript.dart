@@ -761,46 +761,52 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         },
       );
     }
-    return Column(
-      children: [
-        Expanded(
-          child: Stack(
-            key: _viewport,
-            fit: StackFit.expand,
-            children: [
-              NotificationListener<MarkdownContentWillChange>(
-                onNotification: (event) {
-                  _preserveReaderAnchor(
-                    event.source
-                        .findAncestorRenderObjectOfType<TranscriptAnchorBox>(),
-                  );
-                  if (_restoringMarkdown) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _finishMarkdownRestoration();
-                    });
-                  }
-                  return false;
-                },
-                child: transcript,
-              ),
-              if (!needsInput)
-                Positioned(bottom: 8, left: 0, right: 0, child: navigation),
-            ],
+    return StudioPageLoading(
+      active: _historyBlocksReading,
+      label: 'Loading history',
+      child: Column(
+        children: [
+          Expanded(
+            child: Stack(
+              key: _viewport,
+              fit: StackFit.expand,
+              children: [
+                NotificationListener<MarkdownContentWillChange>(
+                  onNotification: (event) {
+                    _preserveReaderAnchor(
+                      event.source
+                          .findAncestorRenderObjectOfType<
+                            TranscriptAnchorBox
+                          >(),
+                    );
+                    if (_restoringMarkdown) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _finishMarkdownRestoration();
+                      });
+                    }
+                    return false;
+                  },
+                  child: transcript,
+                ),
+                if (!needsInput)
+                  Positioned(bottom: 8, left: 0, right: 0, child: navigation),
+              ],
+            ),
           ),
-        ),
-        // A floating navigation button can intercept taps on form actions.
-        // Keep the transcript mounted while input gains its own navigation row.
-        if (needsInput)
-          ValueListenableBuilder<String?>(
-            valueListenable: _jumpLabel,
-            builder: (_, label, _) => label == null
-                ? const SizedBox.shrink()
-                : Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: navigation,
-                  ),
-          ),
-      ],
+          // A floating navigation button can intercept taps on form actions.
+          // Keep the transcript mounted while input gains its own navigation row.
+          if (needsInput)
+            ValueListenableBuilder<String?>(
+              valueListenable: _jumpLabel,
+              builder: (_, label, _) => label == null
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: navigation,
+                    ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -912,17 +918,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   Widget _historyEdge() {
     final reader = widget.reader;
     if (reader.historyUnavailable) return const SizedBox.shrink();
-    if (_historyBlocksReading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: Center(
-          child: SizedBox(
-            width: 16,
-            height: 16,
-            child: StudioLoading(label: 'Loading history'),
-          ),
-        ),
-      );
+    if (_historyBlocksReading && !reader.historyPaging) {
+      return const SizedBox.shrink();
     }
     if (reader.historyError != null) {
       return Column(

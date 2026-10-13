@@ -137,6 +137,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             child: child!,
           ),
           home: Scaffold(
+            appBar: AppBar(actions: const [StudioLoadingSlot()]),
             body: ListenableBuilder(
               listenable: controller,
               builder: (_, _) => ProfileTranscript(
@@ -304,9 +305,18 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       final scroll = tester.widget<ListView>(list).controller!;
       scroll.jumpTo(scroll.position.maxScrollExtent);
       await tester.pump();
+      await tester.pump();
       expect(chat.reading.historyPaging, isTrue);
       expect(find.bySemanticsLabel('Loading history'), findsOneWidget);
       expect(find.byType(StudioLoading), findsOneWidget);
+      expect(
+        find.ancestor(
+          of: find.byType(StudioLoading),
+          matching: find.byType(AppBar),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Load older messages'), findsOneWidget);
       gate.complete();
       await older;
       await tester.pumpAndSettle();
@@ -613,6 +623,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     host.failHistory = true;
     final loading = controller.refreshHistory(chat);
     expect(chat.reading.historyLoading, isTrue);
+    await tester.pump();
     await tester.pump();
     expect(find.byType(PlayfulPortrait), findsNothing);
     expect(find.text('Loading history…'), findsNothing);

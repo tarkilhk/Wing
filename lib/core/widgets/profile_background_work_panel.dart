@@ -113,8 +113,6 @@ class _ProfileBackgroundWorkPanelState
         icon: Icons.work_history_outlined,
         label: 'Background work',
         summary: Text(chat.backgroundSummary),
-        loading:
-            refreshing && chat.sessionControl == null && chat.processes.isEmpty,
         childrenPadding: EdgeInsets.zero,
         children: [
           if (snapshot?.loop case final loop?)
@@ -344,15 +342,28 @@ class _ProcessTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CompactActivityRow(
     key: ValueKey(('process', process.id)),
-    icon: StudioActivityIndicator(
-      active: confirmed && process.isRunning,
-      label: 'Process running',
-      icon: Icons.terminal_rounded,
+    icon: Icon(
+      Icons.terminal_rounded,
       color: WingTokens.of(context).muted,
       size: 16,
     ),
     lines: [
-      Text(process.command, style: WingTokens.of(context).typography.mono),
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              process.command,
+              style: WingTokens.of(context).typography.mono,
+            ),
+          ),
+          const SizedBox(width: 8),
+          StudioWorkProgress(
+            active: confirmed && process.isRunning,
+            label: 'Process running',
+            color: WingTokens.of(context).muted,
+          ),
+        ],
+      ),
       Text(
         _processStatus(process),
         style: WingTokens.of(context).typography.label,
