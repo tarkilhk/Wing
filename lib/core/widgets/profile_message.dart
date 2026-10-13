@@ -85,20 +85,13 @@ class ProfileMessage extends StatelessWidget {
 
   Widget _speakerHeader(BuildContext context, String name, Color color) =>
       Padding(
-        padding: const EdgeInsetsDirectional.only(start: 10, end: 2),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                name,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            copyAction(context, message),
-          ],
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+        child: Text(
+          name,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       );
 
@@ -116,15 +109,9 @@ class ProfileMessage extends StatelessWidget {
     )!;
     return LayoutBuilder(
       builder: (context, bounds) {
-        final discussion = message.kind == TranscriptMessageKind.discussion;
         final enlarged = MediaQuery.textScalerOf(context).scale(12) > 18;
         final inset = enlarged ? 20.0 : bounds.maxWidth * .17;
-        final bubbleWidth = math.max(
-          1.0,
-          discussion
-              ? bounds.maxWidth - 8 - math.max(56.0, inset)
-              : bounds.maxWidth - 44 - inset,
-        );
+        final bubbleWidth = math.max(1.0, bounds.maxWidth - 44 - inset);
         return Align(
           alignment: Alignment.centerRight,
           child: Row(
@@ -144,17 +131,11 @@ class ProfileMessage extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (discussion)
-                              _speakerHeader(
-                                context,
-                                'User',
-                                colors.onPrimaryContainer,
-                              ),
                             if (content.isNotEmpty)
                               Padding(
-                                padding: EdgeInsets.fromLTRB(
+                                padding: const EdgeInsets.fromLTRB(
                                   10,
-                                  discussion ? 0 : 10,
+                                  10,
                                   10,
                                   4,
                                 ),
@@ -212,9 +193,7 @@ class ProfileMessage extends StatelessWidget {
                   ),
                 ),
               ),
-              if (discussion)
-                const SizedBox(width: 8)
-              else if (streaming)
+              if (streaming)
                 const SizedBox(width: 44, height: 48)
               else
                 copyAction(context, message),
@@ -238,7 +217,7 @@ class ProfileMessage extends StatelessWidget {
         builder: (context, bounds) {
           final enlarged = MediaQuery.textScalerOf(context).scale(12) > 18;
           final inset = message.kind == TranscriptMessageKind.discussion
-              ? WingSpacing.xl
+              ? 0.0
               : enlarged
               ? 12.0
               : bounds.maxWidth * .12;
@@ -319,6 +298,9 @@ class ProfileMessage extends StatelessWidget {
                     ),
                   ),
                 ),
+                streaming
+                    ? const SizedBox(width: 44, height: 48)
+                    : copyAction(context, message),
               ],
             ),
           );

@@ -999,108 +999,146 @@ void main() {
           .load();
     }
   });
-  testWidgets('group replies use shared formatted sender bubbles', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final fixture = BotsFixture();
-    fixture.events.add({
-      'room_id': 'room-1',
-      'seq': 1,
-      'kind': 'message.member',
-      'actor': {'kind': 'member', 'id': 'atlas', 'profile': 'atlas'},
-      'payload': {
-        'text':
-            '**Read-only sources.**\n\n- [Mission](https://example.com/mission)\n- `verified`',
-      },
-      'created_at': 1791756000.0,
-    });
-    fixture.events.add(
-      _event(2, 'message.user', 'you', '**Literal user text** @bot_atlas'),
-    );
-    final group = (await fixture.repository.groups(groupMessages: null)).first;
-    final appearances = await fixture.repository.bots();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: BotGroupScreen(
-          stopVoicePlayback: () async {},
-          voiceInputSettings: () => const LocalVoiceInputSettings(language: ''),
-          createSession: () => BotGroupSession(
-            fixture.repository,
-            group,
-            reads: BotGroupReadState(),
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group replies use normal chat copy controls ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          fixture.events.add({
+            'room_id': 'room-1',
+            'seq': 1,
+            'kind': 'message.member',
+            'actor': {'kind': 'member', 'id': 'atlas', 'profile': 'atlas'},
+            'payload': {
+              'text':
+                  '**Read-only sources.**\n\n- [Mission](https://example.com/mission)\n- `verified`',
+            },
+            'created_at': 1791756000.0,
+          });
+          fixture.events.add(
+            _event(
+              2,
+              'message.user',
+              'you',
+              '**Literal user text** @bot_atlas',
+            ),
+          );
+          final group = (await fixture.repository.groups(
             groupMessages: null,
-            appearances: FixedGroupAppearances(appearances),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.settleMarkdown();
-    expect(find.byType(ProfileMessage), findsNWidgets(2));
-    expect(find.text('User'), findsOneWidget);
-    final userText = tester
-        .widgetList<SelectableText>(find.byType(SelectableText))
-        .firstWhere(
-          (text) =>
-              text.textSpan?.toPlainText().contains('Literal user') ?? false,
-        );
-    expect(userText.textSpan!.toPlainText(), '**Literal user text** @Atlas');
-    String? copied;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.setData') {
-          copied = (call.arguments as Map)['text'] as String;
-        }
-        return null;
-      },
-    );
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        null,
-      ),
-    );
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(
-          const ValueKey<(String, Object?)>((
-            'user-message-bubble',
-            'room-1:2',
-          )),
-        ),
-        matching: find.byTooltip('Copy message'),
-      ),
-    );
-    expect(copied, '**Literal user text** @bot_atlas');
-
-    for (final (kind, id, speaker) in [
-      ('bot-message-bubble', 'room-1:1', 'Atlas'),
-      ('user-message-bubble', 'room-1:2', 'User'),
-    ]) {
-      final bubble = find.byKey(ValueKey<(String, Object?)>((kind, id)));
-      final copy = find.descendant(
-        of: bubble,
-        matching: find.byTooltip('Copy message'),
-      );
-      final label = find.descendant(of: bubble, matching: find.text(speaker));
-      expect(copy, findsOneWidget);
-      expect(
-        tester.getCenter(copy).dy,
-        closeTo(tester.getCenter(label).dy, .1),
-      );
-      expect(
-        tester.getRect(bubble).right,
-        closeTo(kind == 'bot-message-bubble' ? 350 : 366, .1),
+          )).first;
+          final appearances = await fixture.repository.bots();
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: frame,
+                child: BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () =>
+                      const LocalVoiceInputSettings(language: ''),
+                  createSession: () => BotGroupSession(
+                    fixture.repository,
+                    group,
+                    reads: BotGroupReadState(),
+                    groupMessages: null,
+                    appearances: FixedGroupAppearances(appearances),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.settleMarkdown();
+          expect(find.byType(ProfileMessage), findsNWidgets(2));
+          expect(find.text('User'), findsNothing);
+          final userText = tester
+              .widgetList<SelectableText>(find.byType(SelectableText))
+              .firstWhere(
+                (text) =>
+                    text.textSpan?.toPlainText().contains('Literal user') ??
+                    false,
+              );
+          expect(
+            userText.textSpan!.toPlainText(),
+            '**Literal user text** @Atlas',
+          );
+          String? copied;
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            (call) async {
+              if (call.method == 'Clipboard.setData') {
+                copied = (call.arguments as Map)['text'] as String;
+              }
+              return null;
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+          for (final (kind, id, expectedText) in [
+            (
+              'user-message-bubble',
+              'room-1:2',
+              '**Literal user text** @bot_atlas',
+            ),
+            (
+              'bot-message-bubble',
+              'room-1:1',
+              '**Read-only sources.**\n\n- [Mission](https://example.com/mission)\n- `verified`',
+            ),
+          ]) {
+            final message = find.byWidgetPredicate(
+              (widget) => widget is ProfileMessage && widget.message.id == id,
+            );
+            final bubble = find.byKey(ValueKey<(String, Object?)>((kind, id)));
+            final copy = find.descendant(
+              of: message,
+              matching: find.byTooltip('Copy message'),
+            );
+            expect(copy, findsOneWidget);
+            expect(find.descendant(of: bubble, matching: copy), findsNothing);
+            await tester.ensureVisible(copy);
+            await tester.pumpAndSettle();
+            final bubbleRect = tester.getRect(bubble);
+            final copyRect = tester.getRect(copy);
+            expect(copyRect.size, const Size(44, 48));
+            expect(copyRect.left, closeTo(bubbleRect.right, .1));
+            expect(copyRect.top, closeTo(bubbleRect.top, .1));
+            expect(
+              copyRect.right,
+              closeTo(tester.view.physicalSize.width - 16, .1),
+            );
+            await tester.tapAt(Offset(copyRect.right - 2, copyRect.bottom - 2));
+            expect(copied, expectedText);
+            await tester.pumpAndSettle();
+            await tester.pump(const Duration(seconds: 5));
+            await tester.pumpAndSettle();
+            await _render(
+              tester,
+              frame,
+              'copy-$kind-${brightness.name}-$scale',
+            );
+          }
+          expect(tester.takeException(), isNull);
+          expect(find.text('Atlas'), findsWidgets);
+          expect(find.textContaining('**Read-only'), findsNothing);
+          await tester.pumpWidget(const SizedBox());
+        },
       );
     }
-    expect(find.text('Atlas'), findsWidgets);
-    expect(find.textContaining('**Read-only'), findsNothing);
-    await tester.pumpWidget(const SizedBox());
-  });
+  }
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(

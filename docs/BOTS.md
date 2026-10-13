@@ -122,9 +122,9 @@ the form fixes the room details so you can retry the same group.
 
 An unconfirmed send stays available for review/retry. Interrupted tasks ask for explicit confirmation before retrying. Approvals apply to the request shown in that discussion.
 
-Your bubbles show User and an icon-only Copy aligned in the header. Bot replies
-show the sender's saved avatar and name, formatted text, links, code and
-timestamps, with Copy in the same header. Type `@` in the composer to choose a
+Your bubbles show your message without a User label. Bot replies show the
+sender's saved avatar and name, formatted text, links, code and timestamps.
+Both use the same icon-only Copy beside the message as normal chats. Type `@` in the composer to choose a
 member; the picker inserts at the cursor. The conversation opens
 at its latest messages and renders older messages as you scroll up. Your reading
 window stays in place as replies arrive; reaching the bottom or using the down
