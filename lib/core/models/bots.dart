@@ -35,6 +35,7 @@ class BotRecord {
     this.chat,
     this.resolvedChat,
     this.workerLastActive,
+    this.lastActive,
     this.preview = '',
     this.presence = BotPresence.unknown,
     Uint8List? avatar,
@@ -60,6 +61,24 @@ class BotRecord {
 
   /// Profile-owned background work reported by stock profiles.list.
   final DateTime? workerLastActive;
+
+  /// Newest stock conversation or worker activity for this profile.
+  final DateTime? lastActive;
+
+  static int compareForRoster(BotRecord a, BotRecord b) {
+    final activity = switch ((a.lastActive, b.lastActive)) {
+      (final DateTime left, final DateTime right) => right.compareTo(left),
+      (null, final DateTime _) => 1,
+      (final DateTime _, null) => -1,
+      (null, null) => 0,
+    };
+    if (activity != 0) return activity;
+    final pin = (b.pinned ? 1 : 0).compareTo(a.pinned ? 1 : 0);
+    if (pin != 0) return pin;
+    final title = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    return title != 0 ? title : a.id.compareTo(b.id);
+  }
+
   bool describesConversation(ProfileSessionKey key) =>
       key == chat || key == resolvedChat;
   final BotPresence presence;
@@ -81,6 +100,7 @@ class BotRecord {
     chat: chat,
     resolvedChat: resolvedChat,
     workerLastActive: workerLastActive,
+    lastActive: lastActive,
     preview: preview,
     presence: value,
     avatar: avatar,
@@ -110,6 +130,7 @@ class BotRecord {
         chat: chat,
         resolvedChat: resolvedChat,
         workerLastActive: workerLastActive,
+        lastActive: lastActive,
         preview: preview,
         presence: presence,
         avatar: image,
@@ -138,6 +159,7 @@ class BotRecord {
     chat: chat,
     resolvedChat: resolvedChat,
     workerLastActive: workerLastActive,
+    lastActive: lastActive,
     preview: preview,
     presence: presence,
     avatar: avatar,

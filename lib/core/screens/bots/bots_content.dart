@@ -103,12 +103,7 @@ class _BotsContentState extends State<BotsContent> {
       '${bot.instance} · ${bot.profile.name}',
       [
         ('screen', 'View screen', Icons.desktop_windows_outlined, true),
-        (
-          'pin',
-          bot.pinned ? 'Unpin' : 'Pin to top',
-          Icons.push_pin_outlined,
-          true,
-        ),
+        ('pin', bot.pinned ? 'Unpin' : 'Pin', Icons.push_pin_outlined, true),
         (
           'hide',
           bot.hidden ? 'Show bot' : 'Hide bot',
@@ -239,12 +234,7 @@ class _BotsContentState extends State<BotsContent> {
                         .contains(query),
               )
               .toList()
-            ..sort((a, b) {
-              final pin = (b.pinned ? 1 : 0).compareTo(a.pinned ? 1 : 0);
-              return pin != 0
-                  ? pin
-                  : a.title.toLowerCase().compareTo(b.title.toLowerCase());
-            });
+            ..sort(BotRecord.compareForRoster);
       final groups =
           state.groups
               .where(

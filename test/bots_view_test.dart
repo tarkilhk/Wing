@@ -2241,6 +2241,84 @@ void main() {
       );
     }
   }
+  for (final brightness in [Brightness.dark, Brightness.light]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('latest activity orders bots ${brightness.name} $scale', (
+        tester,
+      ) async {
+        SharedPreferences.setMockInitialValues({});
+        tester.view.physicalSize = scale == 1
+            ? const Size(390, 844)
+            : const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final fixture = BotsFixture();
+        fixture.profiles[0]['canonical_session'] = <String, dynamic>{
+          ...fixture.profiles[0]['canonical_session'],
+          'last_active': 1000,
+        };
+        fixture.profiles[1]['last_session'] = <String, dynamic>{
+          ...fixture.profiles[1]['last_session'],
+          'last_active': 3000,
+        };
+        fixture.profiles[2]['worker_session'] = {
+          'id': 'forge-worker',
+          'source': 'tool',
+          'last_active': 2000,
+        };
+        final session = BotsSession((_) async => [fixture.repository]);
+        addTearDown(session.dispose);
+        await session.refresh();
+        final frame = GlobalKey();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
+                disableAnimations: true,
+              ),
+              child: child!,
+            ),
+            home: RepaintBoundary(
+              key: frame,
+              child: BotsContent(
+                instanceHeader: const ServerConnectionLabel(
+                  label: 'Home server',
+                ),
+                session: session,
+                viewState: const BotsViewState(),
+                onViewChanged: (_) {},
+                onOpenMenu: () {},
+                onOpenChat: (_) async {},
+                onOpenGroup: (_) async {},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        double top(String name) =>
+            tester.getTopLeft(find.byKey(ValueKey('bot-instance-1/$name'))).dy;
+        expect(top('mira'), lessThan(top('forge')));
+        expect(top('forge'), lessThan(top('atlas')));
+        await _capture(
+          tester,
+          frame,
+          'activity-order-${brightness.name}-$scale',
+        );
+        fixture.profiles[0]['canonical_session'] = <String, dynamic>{
+          ...fixture.profiles[0]['canonical_session'],
+          'last_active': 4000,
+        };
+        await session.refresh();
+        await tester.pumpAndSettle();
+        expect(top('atlas'), lessThan(top('mira')));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+  }
   testWidgets('search and hidden bots never write profiles', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final fixture = BotsFixture();

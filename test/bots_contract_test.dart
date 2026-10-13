@@ -1567,6 +1567,92 @@ void main() {
       reopened.dispose();
     },
   );
+  test(
+    'roster ordering uses newest stock activity and preserves it through edits',
+    () async {
+      final fixture = BotsFixture();
+      fixture.profiles[0]['canonical_session'] = <String, dynamic>{
+        ...fixture.profiles[0]['canonical_session'],
+        'last_active': 1000,
+      };
+      fixture.profiles[0]['last_session'] = <String, dynamic>{
+        ...fixture.profiles[0]['last_session'],
+        'last_active': 1500,
+      };
+      fixture.profiles[0]['worker_session'] = {
+        'id': 'atlas-worker',
+        'source': 'tool',
+        'last_active': 2000,
+      };
+      fixture.profiles[1]['canonical_session'] = <String, dynamic>{
+        ...fixture.profiles[1]['canonical_session'],
+        'last_active': 3000,
+      };
+      fixture.profiles[1]['last_session'] = <String, dynamic>{
+        ...fixture.profiles[1]['last_session'],
+        'last_active': 2500,
+      };
+      fixture.profiles[2]['canonical_session'] = <String, dynamic>{
+        ...fixture.profiles[2]['canonical_session'],
+        'last_active': 'invalid',
+      };
+      fixture.profiles[2]['last_session'] = <String, dynamic>{
+        ...fixture.profiles[2]['last_session'],
+        'last_active': -1,
+      };
+      fixture.profiles[2]['worker_session'] = {
+        'id': 'forge-worker',
+        'source': 'tool',
+        'last_active': 1e30,
+      };
+      final roster = await fixture.repository.bots();
+      expect(
+        roster[0].lastActive,
+        DateTime.fromMillisecondsSinceEpoch(2000000, isUtc: true),
+      );
+      expect(
+        roster[1].lastActive,
+        DateTime.fromMillisecondsSinceEpoch(3000000, isUtc: true),
+      );
+      expect(roster[2].lastActive, isNull);
+      final enriched = await fixture.repository.enrich(
+        roster[0],
+        presence: BotPresence.idle,
+      );
+      for (final copy in [
+        enriched,
+        enriched.withPresence(BotPresence.working),
+        enriched.withObservedAvatar(null),
+        enriched.withAvatar(null),
+        enriched.withMetadata(
+          metadata: enriched.metadata,
+          revision: 3,
+          title: 'Renamed',
+        ),
+      ]) {
+        expect(copy.lastActive, roster[0].lastActive);
+      }
+      final ordered = [...roster]..sort(BotRecord.compareForRoster);
+      expect(ordered.map((bot) => bot.profile.name), [
+        'mira',
+        'atlas',
+        'forge',
+      ]);
+      fixture.profiles[0]['last_session'] = <String, dynamic>{
+        ...fixture.profiles[0]['last_session'],
+        'last_active': 3000,
+      };
+      fixture.profiles[2]['canonical_session'] = <String, dynamic>{
+        ...fixture.profiles[2]['canonical_session'],
+        'last_active': 3000,
+      };
+      final tied = [...await fixture.repository.bots()]
+        ..sort(BotRecord.compareForRoster);
+      expect(tied.map((bot) => bot.profile.name), ['atlas', 'forge', 'mira']);
+      expect(fixture.commands, isEmpty);
+    },
+  );
+
   test('roster activity includes stock background worker heartbeats', () async {
     final now = DateTime.utc(2026, 10, 12, 12);
     final fixture = BotsFixture(now: () => now);

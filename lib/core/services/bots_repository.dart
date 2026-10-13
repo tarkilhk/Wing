@@ -233,6 +233,16 @@ class BotsRepository {
                 ),
           preview: canonical == null ? '' : _text(canonical['preview']),
           workerLastActive: _workerLastActive(row['worker_session']),
+          lastActive:
+              [
+                _sessionLastActive(canonical),
+                _sessionLastActive(row['last_session']),
+                _workerLastActive(row['worker_session']),
+              ].whereType<DateTime>().fold<DateTime?>(
+                null,
+                (latest, value) =>
+                    latest == null || value.isAfter(latest) ? value : latest,
+              ),
         );
       }),
     );
@@ -313,6 +323,15 @@ class BotsRepository {
         (value['source'] as String).isEmpty) {
       return null;
     }
+    return _sessionLastActive(value);
+  }
+
+  DateTime? _sessionLastActive(Object? value) {
+    if (value is! Map ||
+        value['id'] is! String ||
+        (value['id'] as String).isEmpty) {
+      return null;
+    }
     final timestamp = value['last_active'];
     if (timestamp is! num || !timestamp.isFinite || timestamp <= 0) return null;
     final milliseconds = timestamp * 1000;
@@ -357,6 +376,7 @@ class BotsRepository {
       chat: bot.chat,
       resolvedChat: bot.resolvedChat,
       workerLastActive: bot.workerLastActive,
+      lastActive: bot.lastActive,
       preview: bot.preview,
       presence: presence,
       avatar: avatar,

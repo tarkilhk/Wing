@@ -1,6 +1,6 @@
 # Bots
 
-Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Pinned entries lead the list. Names and message previews sit on the left, with saved artwork on the right. The floating + creates a bot or group for the selected tab. Lists refresh automatically while visible. Usable lists refresh quietly.
+Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Bots show the most recent activity first, including conversation and background-worker activity. Bots without an activity timestamp appear last; pins break timestamp ties. Pinned groups lead their list. Names and message previews sit on the left, with saved artwork on the right. The floating + creates a bot or group for the selected tab. Lists refresh automatically while visible. Usable lists refresh quietly.
 Wing's feather pulse appears when initial loading prevents you from using the
 list. It sits at the right of the instance row, without covering or moving the cards
 when loading finishes.
@@ -34,7 +34,7 @@ the existing filters.
 
 ## Profile options
 
-The row menu offers View screen, Pin to top/Unpin, Hide bot/Show bot and **Bot settings**. The roster menu offers Show hidden bots. Bot pins and appearance synchronize through Hermes; group pins are saved on this device.
+The row menu offers View screen, Pin/Unpin, Hide bot/Show bot and **Bot settings**. The roster menu offers Show hidden bots. Bot pins and appearance synchronize through Hermes; group pins are saved on this device.
 
 Bot settings contains appearance, configuration editors, MCP connectors, Duplicate bot and profile management. MCP connectors opens the selected bot's connector inventory, authentication and access controls. The display name is separate from the underlying profile name. The default profile can change its display name but cannot be deleted or have its underlying identity renamed.
 
