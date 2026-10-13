@@ -1481,6 +1481,8 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
+    await tester.ensureVisible(find.text('Activity · 1 tool').first);
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('Activity · 1 tool').first);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
@@ -1502,7 +1504,7 @@ void main() {
       tester.getTopLeft(find.text('Compare the results.')).dy,
       lessThan(tester.getTopLeft(second).dy),
     );
-    expect(find.text('Timeline'), findsNothing);
+    expect(find.text('Timeline'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 

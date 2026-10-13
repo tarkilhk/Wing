@@ -5,6 +5,7 @@ import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/services/chat_runtime.dart' as execution;
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
@@ -61,6 +62,13 @@ void main() {
       await tester.tap(activity.first);
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
+      expect(find.text('Timeline'), findsNWidgets(2));
+      expect(find.byType(ProfileActivityGuide), findsNWidgets(2));
+      for (final tabs in tester.widgetList<ProfileActivityTabs>(
+        find.byType(ProfileActivityTabs),
+      )) {
+        expect(tabs.tabs.single.id, 'timeline');
+      }
       final firstCard = find.byWidgetPredicate(
         (w) => w is ProfileToolCall && w.call.callId == 'first',
       );

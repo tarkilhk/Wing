@@ -8,6 +8,7 @@ import '../theme/wing_theme.dart';
 import 'chat_model_controls.dart';
 import 'markdown_message_content.dart';
 import 'profile_execution_activity.dart';
+import 'profile_activity_tabs.dart';
 import 'profile_tool_activity.dart';
 
 /// Live layout only. Tool payloads and saved reasoning keep their shared owners.
@@ -137,11 +138,19 @@ class _LiveToolRunState extends State<_LiveToolRun> {
     initiallyExpanded: !widget.sealed,
     detailsBuilder: (context) {
       _expansion = ExpansibleController.of(context);
-      return ProfileExecutionActivity(
-        entries: widget.entries,
-        loadImage: widget.loadImage,
-        onOpenResource: widget.onOpenResource,
-        onShareResource: widget.onShareResource,
+      return ProfileActivityTabs(
+        tabs: [
+          ProfileActivityTab(
+            id: 'timeline',
+            label: 'Timeline',
+            child: ProfileExecutionActivity(
+              entries: widget.entries,
+              loadImage: widget.loadImage,
+              onOpenResource: widget.onOpenResource,
+              onShareResource: widget.onShareResource,
+            ),
+          ),
+        ],
       );
     },
   );
