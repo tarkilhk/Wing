@@ -56,6 +56,7 @@ class ProfilesRepository {
         dashboardOAuth: access.dashboardOAuth,
         requiresOAuth: connection.isCloud,
         gatewayHeaders: connection.gatewayHeaders,
+        authentication: access.dashboardAuthentication,
       ),
     );
   }

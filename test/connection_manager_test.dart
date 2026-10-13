@@ -10,6 +10,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/services/dashboard_authentication.dart';
 import 'package:wing/core/services/ws_client.dart';
 
 /// Case-insensitive request header lookup — package:http normalises header
@@ -304,6 +306,108 @@ void main() {
   });
 
   group('DashboardClient', () {
+    for (final passwordAuth in [false, true]) {
+      test(
+        'closing a ${passwordAuth ? 'password' : 'token'} requester does not strand another reader',
+        () async {
+          final authentication = DashboardAuthentication();
+          final entered = Completer<void>();
+          final release = Completer<void>();
+          var logins = 0;
+          final apiReaders = <String>[];
+          DashboardClient reader(String name) => DashboardClient(
+            host: 'fixture.local',
+            username: passwordAuth ? 'fixture' : null,
+            password: passwordAuth ? 'fixture' : null,
+            authentication: authentication,
+            httpClient: MockClient((request) async {
+              if (request.url.path ==
+                  (passwordAuth ? '/auth/password-login' : '/')) {
+                logins++;
+                if (logins == 1) {
+                  entered.complete();
+                  await release.future;
+                }
+                return http.Response(
+                  passwordAuth
+                      ? '{}'
+                      : 'window.__HERMES_SESSION_TOKEN__="fixture";',
+                  200,
+                  headers: {'set-cookie': 'hermes_session_at=fixture; Path=/'},
+                );
+              }
+              apiReaders.add(name);
+              return http.Response('{}', 200);
+            }),
+          );
+          final departing = reader('departing');
+          final remaining = reader('remaining');
+          addTearDown(departing.close);
+          addTearDown(remaining.close);
+          final departed = expectLater(
+            departing.apiGet('health'),
+            throwsA(isA<http.RequestAbortedException>()),
+          );
+          await entered.future;
+          final active = remaining.apiGet('health');
+          departing.close();
+          release.complete();
+          await departed;
+          expect(await active, isEmpty);
+          expect(logins, 2);
+          expect(apiReaders, ['remaining']);
+        },
+      );
+    }
+
+    test(
+      'shared sign-in never forwards a cookie to a different origin',
+      () async {
+        final authentication = DashboardAuthentication();
+        final logins = <String, int>{};
+        DashboardClient client(String host, String prefix) => DashboardClient(
+          host: host,
+          pathPrefix: prefix,
+          username: 'fixture',
+          password: 'fixture',
+          authentication: authentication,
+          httpClient: MockClient((request) async {
+            final origin =
+                '${request.url.host}${request.url.path.split('/api/').first}';
+            if (request.url.path.endsWith('/auth/password-login')) {
+              logins[origin] = (logins[origin] ?? 0) + 1;
+              return http.Response(
+                '{}',
+                200,
+                headers: {
+                  'set-cookie':
+                      'hermes_session_at=${request.url.host}${prefix.replaceAll('/', '_')}; Path=/',
+                },
+              );
+            }
+            expect(
+              _header(request, 'cookie'),
+              'hermes_session_at=$host${prefix.replaceAll('/', '_')}',
+            );
+            return http.Response('{}', 200);
+          }),
+        );
+        final readers = [
+          client('a.example', ''),
+          client('b.example', ''),
+          client('a.example', '/other'),
+        ];
+        addTearDown(() {
+          for (final reader in readers) {
+            reader.close();
+          }
+        });
+        await Future.wait(readers.map((reader) => reader.apiGet('health')));
+        expect(logins.values, everyElement(1));
+        expect(logins, hasLength(3));
+      },
+    );
+
     test(
       'logs in and authenticates /api calls with the session cookie',
       () async {
@@ -412,51 +516,59 @@ void main() {
       client.close();
     });
 
-    test('late stale-cookie failures reuse the refreshed sign-in', () async {
-      var logins = 0;
-      final staleRequests = Completer<void>();
-      final releaseLateFailure = Completer<void>();
-      var requests = 0;
-      final client = DashboardClient(
-        host: 'hermes.local',
-        port: 30433,
-        username: 'fixture',
-        password: 'fixture',
-        httpClient: MockClient((request) async {
-          if (request.url.path == '/auth/password-login') {
-            logins++;
-            return http.Response(
-              '{}',
-              200,
-              headers: {
-                'set-cookie': 'hermes_session_at=session$logins; Path=/',
-              },
-            );
-          }
-          if (_header(request, 'cookie') == 'hermes_session_at=session1') {
-            requests++;
-            if (requests == 2) staleRequests.complete();
-            await staleRequests.future;
-            if (request.url.path.endsWith('/late')) {
-              await releaseLateFailure.future;
+    test(
+      'late stale-cookie failures across readers reuse the refreshed sign-in',
+      () async {
+        var logins = 0;
+        final staleRequests = Completer<void>();
+        final releaseLateFailure = Completer<void>();
+        var requests = 0;
+        final authentication = DashboardAuthentication();
+        DashboardClient reader() => DashboardClient(
+          host: 'hermes.local',
+          port: 30433,
+          username: 'fixture',
+          password: 'fixture',
+          authentication: authentication,
+          httpClient: MockClient((request) async {
+            if (request.url.path == '/auth/password-login') {
+              logins++;
+              return http.Response(
+                '{}',
+                200,
+                headers: {
+                  'set-cookie': 'hermes_session_at=session$logins; Path=/',
+                },
+              );
             }
-            return http.Response('', 401);
-          }
-          return http.Response('{}', 200);
-        }),
-      );
-      addTearDown(client.close);
-      final first = client.apiGet('first');
-      final late = client.apiGet('late');
-      await first;
-      releaseLateFailure.complete();
-      await late;
-      expect(
-        logins,
-        2,
-        reason: 'a delayed 401 must not discard fresh authentication',
-      );
-    });
+            if (_header(request, 'cookie') == 'hermes_session_at=session1') {
+              requests++;
+              if (requests == 2) staleRequests.complete();
+              await staleRequests.future;
+              if (request.url.path.endsWith('/late')) {
+                await releaseLateFailure.future;
+              }
+              return http.Response('', 401);
+            }
+            return http.Response('{}', 200);
+          }),
+        );
+        final client = reader();
+        final other = reader();
+        addTearDown(client.close);
+        addTearDown(other.close);
+        final first = client.apiGet('first');
+        final late = other.apiGet('late');
+        await first;
+        releaseLateFailure.complete();
+        await late;
+        expect(
+          logins,
+          2,
+          reason: 'a delayed 401 must not discard fresh authentication',
+        );
+      },
+    );
 
     test('surfaces invalid dashboard credentials', () async {
       final client = DashboardClient(
@@ -512,6 +624,115 @@ void main() {
   });
 
   group('ConnectionManager', () {
+    test(
+      'password sign-in survives route closure and replaces changed credentials',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final store = _MemoryCredentialStore();
+        final manager = await ConnectionManager.create(
+          prefs,
+          credentialStore: store,
+        );
+        final saved = await manager.saveConnection(
+          'Fixture',
+          'hermes.local',
+          9119,
+          '',
+          dashboardUsername: 'fixture',
+          dashboardPassword: 'first',
+        );
+        var logins = 0;
+        final loginEntered = Completer<void>();
+        final releaseLogin = Completer<void>();
+        DashboardClient reader(ConnectionAccess access) => DashboardClient(
+          host: access.connection.host,
+          port: access.connection.dashboardPort,
+          username: access.connection.dashboardUsername,
+          password: access.connection.dashboardPassword,
+          authentication: access.dashboardAuthentication,
+          httpClient: MockClient((request) async {
+            if (request.url.path == '/auth/password-login') {
+              logins++;
+              if (logins == 1) {
+                loginEntered.complete();
+                await releaseLogin.future;
+              }
+              final body = jsonDecode(request.body) as Map;
+              return http.Response(
+                '{}',
+                200,
+                headers: {
+                  'set-cookie': 'hermes_session_at=${body['password']}; Path=/',
+                },
+              );
+            }
+            expect(
+              _header(request, 'cookie'),
+              'hermes_session_at=${access.connection.dashboardPassword}',
+            );
+            return http.Response('{}', 200);
+          }),
+        );
+        final first = reader(manager.accessFor(saved));
+        final concurrent = reader(manager.accessFor(saved));
+        addTearDown(first.close);
+        addTearDown(concurrent.close);
+        final reads = [first.apiGet('health'), concurrent.apiGet('health')];
+        await loginEntered.future;
+        expect(logins, 1);
+        releaseLogin.complete();
+        await Future.wait(reads);
+        first.close();
+        concurrent.close();
+        await manager.updateConnection(
+          saved.id,
+          'Renamed',
+          'hermes.local',
+          9119,
+          '',
+          dashboardUsername: 'fixture',
+          dashboardPassword: 'first',
+        );
+        final anotherManager = await ConnectionManager.create(
+          prefs,
+          credentialStore: store,
+        );
+        final renamed = reader(
+          anotherManager.accessFor(anotherManager.getConnections().single),
+        );
+        addTearDown(renamed.close);
+        await renamed.apiGet('health');
+        expect(
+          logins,
+          1,
+          reason: 'Routes and label edits retain the saved sign-in.',
+        );
+        await manager.updateConnection(
+          saved.id,
+          'Renamed',
+          'hermes.local',
+          9119,
+          '',
+          dashboardUsername: 'fixture',
+          dashboardPassword: 'second',
+        );
+        expect(() => manager.accessFor(saved), throwsStateError);
+        final changed = reader(
+          manager.accessFor(manager.getConnections().single),
+        );
+        addTearDown(changed.close);
+        await changed.apiGet('health');
+        expect(
+          logins,
+          2,
+          reason: 'Replaced credentials need their own sign-in.',
+        );
+        await manager.deleteConnection(saved.id);
+        expect(() => manager.accessFor(saved), throwsStateError);
+      },
+    );
+
     setUp(() {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues({});

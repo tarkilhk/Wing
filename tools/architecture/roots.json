@@ -8874,6 +8874,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/services/dashboard_authentication.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/dashboard_oauth_session.dart",
       "area": "lib",
       "provenance": "intentional-untracked"

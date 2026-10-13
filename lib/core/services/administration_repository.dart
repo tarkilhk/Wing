@@ -137,6 +137,7 @@ class AdministrationRepository {
       dashboardOAuth: access.dashboardOAuth,
       requiresOAuth: connection.isCloud,
       gatewayHeaders: connection.gatewayHeaders,
+      authentication: access.dashboardAuthentication,
     );
     final gateways = <String, ProfileGateway>{};
     final console = ProviderConsole.dashboard(

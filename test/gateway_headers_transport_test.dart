@@ -4,11 +4,110 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/connection_manager.dart';
+import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/server_connection_status.dart';
+import 'package:wing/core/services/versions_controller.dart';
+import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test('profile and Versions readers reuse one password sign-in', () async {
+    var logins = 0;
+    final host = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    host.listen((request) async {
+      await request.drain<void>();
+      final response = request.response;
+      response.headers.contentType = ContentType.json;
+      if (request.uri.path == '/auth/password-login') {
+        logins++;
+        if (logins > 10) {
+          response.statusCode = HttpStatus.tooManyRequests;
+          response.write(jsonEncode({'detail': 'Too many login attempts.'}));
+        } else {
+          response.headers.add(
+            'set-cookie',
+            'hermes_session_at=fixture; Path=/',
+          );
+          response.write(jsonEncode({'ok': true}));
+        }
+      } else {
+        expect(request.headers.value('cookie'), 'hermes_session_at=fixture');
+        response.write(
+          jsonEncode(
+            request.uri.path == '/api/health'
+                ? {'ok': true, 'version': '1.2.3'}
+                : {
+                    'current_version': '1.2.3',
+                    'update_available': false,
+                    'behind': 0,
+                  },
+          ),
+        );
+      }
+      await response.close();
+    });
+    addTearDown(() => host.close(force: true));
+    final access = ConnectionAccess(
+      connection: SavedConnection(
+        id: 'phone-sign-in',
+        label: 'Fixture',
+        host: '127.0.0.1',
+        port: host.port,
+        dashboardPortOverride: host.port,
+        apiKey: '',
+        dashboardUsername: 'fixture',
+        dashboardPassword: 'fixture',
+      ),
+      dashboardOAuth: null,
+    );
+    final workspace = ProfileGatewayConnection(access);
+    addTearDown(workspace.close);
+    final chatGateway = workspace.create(
+      WorkspaceScope(
+        connectionId: access.connection.id,
+        profileName: 'default',
+      ),
+    );
+    addTearDown(chatGateway.close);
+    await chatGateway.read('health');
+    final administration = AdministrationRepository.forConnection(
+      access,
+      'fixture',
+      connectionStatus: ServerConnectionStatus('Fixture'),
+    );
+    addTearDown(administration.close);
+    await administration.read('health');
+    for (final profile in [
+      'default',
+      'butler',
+      'client-work',
+      'memory-eval',
+      'pace',
+      'reminder-inbox',
+      'sluice-processing',
+    ]) {
+      await administration.gateway(profile).read('health');
+    }
+    for (var opening = 0; opening < 3; opening++) {
+      final versions = VersionsController.forConnection(access);
+      try {
+        await versions.refresh();
+        expect(
+          versions.server!.check,
+          isNotNull,
+          reason: 'Opening Versions must not exhaust the sign-in budget.',
+        );
+      } finally {
+        versions.dispose();
+      }
+    }
+    expect(logins, 1);
+  });
+
   test(
     'dashboard sends headers through login with managed auth precedence',
     () async {

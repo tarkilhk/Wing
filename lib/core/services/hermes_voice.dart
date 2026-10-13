@@ -40,6 +40,7 @@ class HermesVoice implements RemoteVoice {
       dashboardOAuth: access.dashboardOAuth,
       requiresOAuth: connection.isCloud,
       gatewayHeaders: connection.gatewayHeaders,
+      authentication: access.dashboardAuthentication,
     );
     return HermesVoice(
       profile: profile,

@@ -14,6 +14,7 @@ import '../models/connection_import_result.dart';
 import '../models/dashboard_oauth_grant.dart';
 import 'connection_access.dart';
 import 'dashboard_oauth_session.dart';
+import 'dashboard_authentication.dart';
 import 'dashboard_read_transport.dart';
 
 // Re-export for convenience
@@ -204,6 +205,7 @@ class _ConnectionCredentials {
 /// managers. Readers see only a fully hydrated, committed connection snapshot.
 class _ConnectionPersistenceState {
   final sessions = <String, DashboardOAuthSession>{};
+  final dashboardAuthentications = <String, DashboardAuthentication>{};
   List<SavedConnection>? snapshot;
   bool blocked = false;
 }
@@ -378,6 +380,10 @@ class ConnectionManager {
     return ConnectionAccess(
       connection: connection,
       dashboardOAuth: _sessions[connection.id],
+      dashboardAuthentication: _state.dashboardAuthentications.putIfAbsent(
+        connection.id,
+        DashboardAuthentication.new,
+      ),
     );
   }
 
@@ -447,12 +453,17 @@ class ConnectionManager {
       final previous = prior[connection.id];
       if (previous != null && _authority(previous) != _authority(connection)) {
         _sessions.remove(connection.id)?.retire();
+        _state.dashboardAuthentications.remove(connection.id);
       }
     }
     for (final id in replaced) {
       _sessions.remove(id)?.retire();
+      _state.dashboardAuthentications.remove(id);
     }
     final present = connections.map((connection) => connection.id).toSet();
+    _state.dashboardAuthentications.removeWhere(
+      (id, _) => !present.contains(id),
+    );
     for (final id
         in _sessions.keys.where((id) => !present.contains(id)).toList()) {
       _sessions.remove(id)?.retire();
@@ -954,15 +965,6 @@ class _NoRedirectClient extends http.BaseClient {
   void close() => _inner.close();
 }
 
-// Authentication survives short-lived read transports. The connection client
-// performs sign-in so retiring one image reader cannot cancel another's login.
-class _DashboardAuthentication {
-  String? cookie;
-  String? token;
-  Future<String>? cookieInFlight;
-  Future<String>? tokenInFlight;
-}
-
 class DashboardClient {
   bool _closed = false;
   final http.Client _http;
@@ -975,7 +977,7 @@ class DashboardClient {
   final bool _requiresOAuth;
   final Duration readTimeout;
   late final _reads = DashboardReadTransport(_http, timeout: readTimeout);
-  final _DashboardAuthentication _authentication;
+  final DashboardAuthentication _authentication;
   final DashboardClient? _authenticationOwner;
 
   String get baseUrl => _baseUrl;
@@ -995,8 +997,9 @@ class DashboardClient {
     bool requiresOAuth = false,
     Map<String, String> gatewayHeaders = const <String, String>{},
     http.Client? httpClient,
+    DashboardAuthentication? authentication,
     this.readTimeout = const Duration(seconds: 45),
-  }) : _authentication = _DashboardAuthentication(),
+  }) : _authentication = authentication ?? DashboardAuthentication(),
        _authenticationOwner = null,
        _oauth = dashboardOAuth,
        _requiresOAuth = requiresOAuth || dashboardOAuth != null,
@@ -1055,96 +1058,78 @@ class DashboardClient {
     // renewed the session. Only invalidate the credentials actually rejected;
     // retain any newer credentials and the shared in-flight renewal.
     _oauth?.invalidateRejectedBearer(header('authorization'));
-    if (header('cookie') == _authentication.cookie) {
-      _authentication.cookie = null;
-    }
-    if (header('x-hermes-session-token') == _authentication.token) {
-      _authentication.token = null;
-    }
+    _authentication.reject(
+      _baseUrl,
+      DashboardCredentialKind.cookie,
+      header('cookie'),
+    );
+    _authentication.reject(
+      _baseUrl,
+      DashboardCredentialKind.token,
+      header('x-hermes-session-token'),
+    );
   }
 
-  /// Returns the session cookie, reusing a cached value or an in-flight login.
-  Future<String> _getCookie() {
-    final cached = _authentication.cookie;
-    if (cached != null) {
-      return Future.value(cached);
-    }
-    return _authentication.cookieInFlight ??= (_authenticationOwner ?? this)
-        ._login();
-  }
+  /// Cached and concurrent sign-in belongs to the captured connection access.
+  Future<String> _getCookie() => _authentication.credential(
+    baseUrl: _baseUrl,
+    kind: DashboardCredentialKind.cookie,
+    authenticate: (_authenticationOwner ?? this)._login,
+    isActive: () => !_closed && _authenticationOwner?._closed != true,
+  );
 
-  /// Logs in against the `basic` password provider and caches the session
-  /// cookie. Throws on failure (bad credentials → 401, etc.).
+  /// Logs in against the `basic` password provider. The shared authentication
+  /// owner caches the returned cookie. Rejected credentials propagate.
   Future<String> _login() async {
-    try {
-      final res = await _reads.request(
-        'POST',
-        Uri.parse('$_baseUrl/auth/password-login'),
-        headers: _jsonHeaders,
-        body: jsonEncode({
-          'provider': 'basic',
-          'username': _username,
-          'password': _password,
-        }),
-      );
-      if (res.statusCode == 401) {
-        throw const DashboardHttpException(401, 'auth/password-login');
-      }
-      if (res.statusCode != 200) {
-        throw DashboardHttpException(res.statusCode, 'auth/password-login');
-      }
-      final setCookie = res.headers['set-cookie'] ?? '';
-      // The `http` package folds multiple Set-Cookie headers into one
-      // comma-joined string; cookie expiry dates also contain commas, so match
-      // the access-token cookie by name and take its value up to the first
-      // delimiter. Handles the bare name plus the __Host-/__Secure- prefixes
-      // Hermes uses on HTTPS binds.
-      final match = RegExp(
-        r'((?:__Host-|__Secure-)?hermes_session_at)=([^;,\s]+)',
-      ).firstMatch(setCookie);
-      if (match == null) {
-        throw Exception(
-          'Dashboard login succeeded but no session cookie found',
-        );
-      }
-      _authentication.cookie = '${match.group(1)}=${match.group(2)}';
-      return _authentication.cookie!;
-    } finally {
-      _authentication.cookieInFlight = null;
+    final res = await _reads.request(
+      'POST',
+      Uri.parse('$_baseUrl/auth/password-login'),
+      headers: _jsonHeaders,
+      body: jsonEncode({
+        'provider': 'basic',
+        'username': _username,
+        'password': _password,
+      }),
+    );
+    if (res.statusCode == 401) {
+      throw const DashboardHttpException(401, 'auth/password-login');
     }
+    if (res.statusCode != 200) {
+      throw DashboardHttpException(res.statusCode, 'auth/password-login');
+    }
+    final setCookie = res.headers['set-cookie'] ?? '';
+    // The HTTP package folds Set-Cookie headers, whose expiry dates can also
+    // contain commas. Match the access cookie rather than splitting on commas.
+    final match = RegExp(
+      r'((?:__Host-|__Secure-)?hermes_session_at)=([^;,\s]+)',
+    ).firstMatch(setCookie);
+    if (match == null) {
+      throw Exception('Dashboard login succeeded but no session cookie found');
+    }
+    return '${match.group(1)}=${match.group(2)}';
   }
 
-  /// Returns the SPA session token, reusing a cached value or an in-flight fetch.
-  Future<String> _getToken() {
-    final cached = _authentication.token;
-    if (cached != null) {
-      return Future.value(cached);
-    }
-    return _authentication.tokenInFlight ??= (_authenticationOwner ?? this)
-        ._fetchToken();
-  }
+  Future<String> _getToken() => _authentication.credential(
+    baseUrl: _baseUrl,
+    kind: DashboardCredentialKind.token,
+    authenticate: (_authenticationOwner ?? this)._fetchToken,
+    isActive: () => !_closed && _authenticationOwner?._closed != true,
+  );
 
   Future<String> _fetchToken() async {
-    try {
-      final res = await _reads.request(
-        'GET',
-        Uri.parse('$_baseUrl/'),
-        headers: _gatewayHeaders,
-      );
-      if (res.statusCode != 200) {
-        throw DashboardHttpException(res.statusCode, '/');
-      }
-      final match = RegExp(
-        r'window\.__HERMES_SESSION_TOKEN__="([^"]+)";',
-      ).firstMatch(res.body);
-      if (match == null) {
-        throw Exception('Session token not found');
-      }
-      _authentication.token = match.group(1)!;
-      return _authentication.token!;
-    } finally {
-      _authentication.tokenInFlight = null;
+    final res = await _reads.request(
+      'GET',
+      Uri.parse('$_baseUrl/'),
+      headers: _gatewayHeaders,
+    );
+    if (res.statusCode != 200) {
+      throw DashboardHttpException(res.statusCode, '/');
     }
+    final match = RegExp(
+      r'window\.__HERMES_SESSION_TOKEN__="([^"]+)";',
+    ).firstMatch(res.body);
+    if (match == null) throw Exception('Session token not found');
+    return match.group(1)!;
   }
 
   void _requireCurrentAccess() {

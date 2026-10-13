@@ -1246,6 +1246,11 @@
       "feature": "connections",
       "library": "lib/core/services/connection_setup_session.dart"
     },
+    "lib/core/services/dashboard_authentication.dart": {
+      "role": "application",
+      "feature": "connection-authentication",
+      "library": "lib/core/services/dashboard_authentication.dart"
+    },
     "lib/core/services/dashboard_oauth_session.dart": {
       "role": "application",
       "feature": "connection-authentication",

@@ -8,6 +8,9 @@ Wing attempts to restore the visible workspace connection when you return to the
 
 Changing a connection's address or credentials replaces its access configuration. Check that you are opening the intended saved instance before sending work.
 
+Moving between chats, Bots, administration and Versions reuses the dashboard
+sign-in for that saved connection. Closing a screen preserves the sign-in.
+
 The Wing pulses in the header during reconnection, without a status text row.
 If recovery fails, tap the connection status icon and choose **Retry connection**.
 
