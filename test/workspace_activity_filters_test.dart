@@ -309,7 +309,34 @@ void main() {
           of: botRow,
           matching: find.byType(BotAvatar),
         );
-        expect(tester.getSize(avatar), const Size(32, 32));
+        expect(tester.getSize(avatar), const Size(46, 46));
+        final projectRow = find.byKey(
+          const ValueKey('activity-main-needs-input'),
+        );
+        final unassignedRow = find.byKey(
+          const ValueKey('activity-main-side-work'),
+        );
+        final groupRow = find.byKey(
+          const ValueKey('recent-group-activity-filter-test/room-1'),
+        );
+        expect(
+          find.descendant(of: unassignedRow, matching: find.text('No project')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: botRow, matching: find.text('No project')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(of: groupRow, matching: find.text('No project')),
+          findsNothing,
+        );
+        if (scale == 1) {
+          final height = tester.getSize(projectRow).height;
+          for (final card in [botRow, unassignedRow, groupRow]) {
+            expect(tester.getSize(card).height, closeTo(height, .01));
+          }
+        }
         final botName = find.descendant(
           of: botRow,
           matching: find.text('Scout'),
@@ -354,7 +381,11 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(openedRoom, 'room-1');
-        await tester.ensureVisible(botRow);
+        await tester.scrollUntilVisible(
+          botRow,
+          -120,
+          scrollable: find.byType(Scrollable),
+        );
         await tester.pumpAndSettle();
         await tester.tap(botName);
         await tester.pumpAndSettle();

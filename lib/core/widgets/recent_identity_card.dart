@@ -71,6 +71,11 @@ class RecentIdentityCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final row = item;
     final large = MediaQuery.textScalerOf(context).scale(16) >= 24;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final bodyHeight =
+        textScaler.scale(20) +
+        6 +
+        textScaler.scale(14.4).clamp(20.0, double.infinity);
     final t = WingTokens.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final selected = Theme.of(context).colorScheme.primaryContainer;
@@ -177,7 +182,9 @@ class RecentIdentityCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
+              Container(
+                constraints: BoxConstraints(minHeight: bodyHeight + 16),
+                alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 8,
@@ -215,27 +222,32 @@ class RecentIdentityCard extends StatelessWidget {
                               ),
                             ),
                           ],
-                          if (row.bot == null && row.chat?.project != null) ...[
+                          if (row.bot == null && row.group == null) ...[
                             const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                projectAvatar(
-                                  context,
-                                  row.chat!.project!,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    row.chat!.project!.name,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      height: 1.2,
-                                      color: t.muted,
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 20),
+                              child: Row(
+                                children: [
+                                  if (row.chat!.project != null) ...[
+                                    projectAvatar(
+                                      context,
+                                      row.chat!.project!,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 6),
+                                  ],
+                                  Flexible(
+                                    child: Text(
+                                      row.chat!.project?.name ?? 'No project',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        height: 1.2,
+                                        color: t.muted,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ],
                         ],
@@ -248,10 +260,10 @@ class RecentIdentityCard extends StatelessWidget {
                         shape: row.bot!.shape,
                         color: row.bot!.color,
                         image: row.bot!.avatar,
-                        size: 32,
+                        size: 46,
                       )
                     else if (row.group != null)
-                      BotGroupIdentity(group: row.group!, bots: bots, size: 32)
+                      BotGroupIdentity(group: row.group!, bots: bots, size: 46)
                     else
                       _profileMarker(
                         context,
