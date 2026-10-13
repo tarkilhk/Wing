@@ -51,6 +51,16 @@ class ScheduledTask {
   bool get needsAttention => error.isNotEmpty || state == 'error';
   DateTime? get nextRun => DateTime.tryParse(text('next_run_at'));
   DateTime? get lastRun => DateTime.tryParse(text('last_run_at'));
+  String get failureInvestigationPrompt {
+    final recordedTime = lastRun?.toIso8601String();
+    final when = recordedTime == null
+        ? 'whose run time was not recorded'
+        : 'that ran at $recordedTime';
+    return 'The last run of scheduled task "$title" (task ID: $id) in '
+        'profile "$profileName", $when, failed with this error:\n\n'
+        '$error\n\nPlease investigate the failure and explain what went wrong.';
+  }
+
   Map<String, dynamic> get schedule =>
       Map<String, dynamic>.from(data['schedule'] as Map);
   String get scheduleLabel => text('schedule_display');

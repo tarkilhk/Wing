@@ -402,6 +402,7 @@ class _HermesAdministrationContentState
                 p,
                 (context, profile) => AdminScheduledTasksPage(
                   profile: profile,
+                  chatController: widget.controller,
                   acquireController: () => ScheduledTasksController.acquire(
                     profile,
                     widget.controller.preferences,

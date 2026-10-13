@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../services/doctor_diagnostic.dart';
 import '../../theme/wing_theme.dart';
-import '../../theme/wing_icons.dart';
 import 'admin_widgets.dart';
 
 /// Findings are the main content; process completion is secondary metadata.
@@ -92,15 +91,12 @@ class AdminDoctorDiagnosis extends StatelessWidget {
                         const SizedBox(height: WingSpacing.xs),
                         Align(
                           alignment: Alignment.centerRight,
-                          child: StudioButtonPress(
-                            child: TextButton.icon(
-                              onPressed:
-                                  onAskHermes == null || openingFinding != null
-                                  ? null
-                                  : () => onAskHermes!(index),
-                              icon: const Icon(WingIcons.newChat, size: 18),
-                              label: const Text('Ask Hermes'),
-                            ),
+                          child: AdminAskHermesButton(
+                            label: 'Ask Hermes',
+                            onPressed:
+                                onAskHermes == null || openingFinding != null
+                                ? null
+                                : () => onAskHermes!(index),
                           ),
                         ),
                       ],

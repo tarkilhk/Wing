@@ -2,6 +2,7 @@ import '../../widgets/wing_app_bar.dart';
 import 'dart:async';
 export 'admin_navigation.dart';
 import '../../theme/wing_theme.dart';
+import '../../theme/wing_icons.dart';
 import '../../widgets/server_connection_label.dart';
 import '../../widgets/workspace_picker.dart';
 import 'package:flutter/material.dart';
@@ -344,3 +345,23 @@ void adminMessage(
 }) => ScaffoldMessenger.of(context).showSnackBar(
   SnackBar(content: isError ? StudioError(message) : Text(message)),
 );
+
+/// Shared diagnostic chat action for Doctor findings and failed schedules.
+class AdminAskHermesButton extends StatelessWidget {
+  const AdminAskHermesButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+  });
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => StudioButtonPress(
+    child: TextButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(WingIcons.newChat, size: 18),
+      label: Text(label),
+    ),
+  );
+}

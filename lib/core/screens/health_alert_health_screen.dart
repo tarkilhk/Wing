@@ -69,6 +69,7 @@ class _HealthAlertHealthScreenState extends State<HealthAlertHealthScreen> {
         case 'Scheduled tasks':
           return AdminScheduledTasksPage(
             profile: profile,
+            chatController: widget.controller,
             acquireController: () => ScheduledTasksController.acquire(
               profile,
               widget.controller.preferences,

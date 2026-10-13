@@ -3585,6 +3585,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<ProfileChat> createBrowserChat({
     required String profileName,
     required bool Function() canDispatch,
+    String? initialDraft,
   }) {
     if (_closed || !canDispatch()) {
       throw StateError('Chat creation was cancelled.');
@@ -3599,6 +3600,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _pendingProfile = null;
     return _createChat(
       resource,
+      initialDraft: initialDraft,
       browserGeneration: generation,
       canDispatch: canDispatch,
     );

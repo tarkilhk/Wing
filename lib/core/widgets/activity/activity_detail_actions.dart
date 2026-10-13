@@ -52,6 +52,7 @@ class ToolDetailCopyButton extends StatefulWidget {
 
 class _ToolDetailCopyButtonState extends State<ToolDetailCopyButton> {
   bool _copied = false;
+  bool _copying = false;
   Timer? _reset;
   @override
   void didUpdateWidget(ToolDetailCopyButton oldWidget) {
@@ -72,29 +73,45 @@ class _ToolDetailCopyButtonState extends State<ToolDetailCopyButton> {
   Widget build(BuildContext context) => StudioButtonPress(
     child: IconButton(
       style: activityActionStyle,
-      tooltip: _copied ? '${widget.label}: copied' : widget.label,
-      icon: Icon(_copied ? Icons.check : Icons.copy_outlined, size: 16),
-      onPressed: () async {
-        final text = widget.text;
-        try {
-          await Clipboard.setData(ClipboardData(text: text));
-        } catch (_) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: StudioError('Could not copy this text. Try again.'),
-              ),
-            );
-          }
-          return;
-        }
-        if (!mounted || widget.text != text) return;
-        _reset?.cancel();
-        setState(() => _copied = true);
-        _reset = Timer(const Duration(seconds: 2), () {
-          if (mounted) setState(() => _copied = false);
-        });
-      },
+      tooltip: _copying
+          ? '${widget.label}: copying'
+          : _copied
+          ? '${widget.label}: copied'
+          : widget.label,
+      icon: _copying
+          ? const SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(_copied ? Icons.check : Icons.copy_outlined, size: 16),
+      onPressed: _copying
+          ? null
+          : () async {
+              final text = widget.text;
+              setState(() => _copying = true);
+              try {
+                await Clipboard.setData(ClipboardData(text: text));
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: StudioError(
+                        'Could not copy this text. Try again.',
+                      ),
+                    ),
+                  );
+                }
+                return;
+              } finally {
+                if (mounted) setState(() => _copying = false);
+              }
+              if (!mounted || widget.text != text) return;
+              _reset?.cancel();
+              setState(() => _copied = true);
+              _reset = Timer(const Duration(seconds: 2), () {
+                if (mounted) setState(() => _copied = false);
+              });
+            },
     ),
   );
 }
