@@ -13,6 +13,9 @@ conversation's **Activity** entry.
 until the refresh finishes. Your conversation and draft remain available;
 the menu item is disabled while that refresh is pending.
 
+While a chat opens, the Wing pulse in the header shows loading progress and you
+can continue writing your draft.
+
 **View screen** opens the remote desktop for the conversation's connection and
 profile, including ordinary chats. Chats in the same profile share that screen.
 Opening it does not start the desktop or create a canonical Bot Chat. Back returns

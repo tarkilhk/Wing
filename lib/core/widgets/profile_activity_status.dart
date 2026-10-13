@@ -19,7 +19,7 @@ class ProfileActivityStatus extends StatelessWidget {
       return 'Chat unavailable · Your draft is kept';
     }
     if (chat.runtime.opening || chat.runtime.offline) {
-      return 'You can keep writing';
+      return null;
     }
     if (chat.runtime.reconnecting) {
       return 'Reconnecting… · checking current activity';

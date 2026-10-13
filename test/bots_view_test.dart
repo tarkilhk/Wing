@@ -2775,6 +2775,7 @@ void main() {
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(find.byType(ProfileMessage), findsNothing);
           expect(find.byTooltip('Back'), findsOneWidget);
+          expect(find.text('You can keep writing'), findsNothing);
           final backRect = tester.getRect(find.byTooltip('Back'));
           await _capture(
             tester,
@@ -2803,6 +2804,7 @@ void main() {
           await tester.pump(const Duration(seconds: 25));
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(find.byType(BotsContent), findsNothing);
+          expect(find.text('You can keep writing'), findsNothing);
           expect(tester.getRect(find.byTooltip('Back')), backRect);
           history.complete();
           await tester.pumpAndSettle();

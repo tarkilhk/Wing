@@ -106,8 +106,75 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
 
   String? label() => ProfileActivityStatus(chat: chat).label;
 
+  testWidgets('opening and offline reading omit the composer status', (
+    tester,
+  ) async {
+    host.event('a', 'message.start');
+    runtime.beginOpening();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfileActivityStatus(chat: chat)),
+      ),
+    );
+    expect(label(), isNull);
+    expect(tester.getSize(find.byType(ProfileActivityStatus)).height, 0);
+    expect(find.byIcon(Icons.pending_outlined), findsNothing);
+
+    runtime.installOfflineReading();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfileActivityStatus(chat: chat)),
+      ),
+    );
+    expect(label(), isNull);
+    expect(tester.getSize(find.byType(ProfileActivityStatus)).height, 0);
+
+    runtime.finishOpening(error: 'Could not open conversation');
+    expect(label(), 'Chat unavailable · Your draft is kept');
+    runtime.recovered();
+    expect(label(), 'Hermes is working…');
+  });
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'opening uses only the header pulse ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          host.event('a', 'message.start');
+          runtime.beginOpening();
+          controller.connectionStatus.beginRecovery('opening-status-test');
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(
+                  key: const ValueKey('work-status-review'),
+                  child: child!,
+                ),
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          );
+          for (var i = 0; i < 8; i++) {
+            await tester.pump(const Duration(milliseconds: 100));
+          }
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(tester.getSize(find.byType(ProfileActivityStatus)).height, 0);
+          final composer = find.byKey(const ValueKey('conversation-composer'));
+          await tester.enterText(composer, 'Draft while opening');
+          expect(chat.composer.observation.text, 'Draft while opening');
+          await renderStatus(tester, 'chat-opening-${brightness.name}-$scale');
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+
       testWidgets(
         'work pulse settles for input without moving the composer ${brightness.name} $scale',
         (tester) async {
