@@ -39,6 +39,13 @@ class HealthAlertsCoordinator extends ChangeNotifier {
     return List.unmodifiable(result);
   }
 
+  /// Unresolved occurrences that currently need the user's attention, in the
+  /// same severity order as [alerts]. Silenced issues remain available to review.
+  List<HealthAlert> get attentionAlerts {
+    final time = now;
+    return List.unmodifiable(alerts.where((alert) => alert.remindsAt(time)));
+  }
+
   void setForeground(bool value) {
     _foreground = value;
     _reconcile();

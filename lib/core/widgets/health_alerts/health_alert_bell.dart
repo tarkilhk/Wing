@@ -59,14 +59,14 @@ class _HealthAlertBellState extends State<HealthAlertBell>
     if (!mounted || scope == null) return;
     final current = <String, int>{};
     var arrived = false;
-    for (final a in scope.alerts.alerts) {
-      if (!a.remindsAt(scope.alerts.now)) continue;
+    for (final a in scope.alerts.attentionAlerts) {
       current[a.id] = a.occurrence;
       if (_seen[a.id] != a.occurrence) arrived = true;
     }
     _seen
       ..clear()
       ..addAll(current);
+    if (current.isEmpty) _motion.stop();
     if (arrived &&
         scope.alerts.settings.settings.animateBell &&
         !MediaQuery.disableAnimationsOf(context)) {
@@ -78,7 +78,7 @@ class _HealthAlertBellState extends State<HealthAlertBell>
   @override
   Widget build(BuildContext context) {
     final scope = _scope;
-    final alerts = scope?.alerts.alerts ?? <HealthAlert>[];
+    final alerts = scope?.alerts.attentionAlerts ?? <HealthAlert>[];
     // Keep the title-row slot stable when an issue arrives.
     if (scope == null || alerts.isEmpty) {
       return const SizedBox(width: 48, height: 48);
@@ -91,7 +91,7 @@ class _HealthAlertBellState extends State<HealthAlertBell>
       child: IconButton(
         key: const ValueKey('health-alert-bell'),
         tooltip:
-            'Health alerts: ${alerts.length} current ${alerts.length == 1 ? 'issue' : 'issues'}',
+            'Health alerts: ${alerts.length} ${alerts.length == 1 ? 'issue needs' : 'issues need'} attention',
         onPressed: () => showHealthAlerts(context, scope),
         icon: AnimatedBuilder(
           animation: _motion,

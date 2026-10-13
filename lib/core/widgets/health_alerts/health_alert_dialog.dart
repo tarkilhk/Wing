@@ -4,28 +4,47 @@ import '../../presentation/health_alert_presentation.dart';
 import '../../theme/wing_theme.dart';
 import 'health_alerts_scope.dart';
 
-Future<void> showHealthAlerts(BuildContext context, HealthAlertsScope scope) =>
-    showDialog<void>(
-      context: context,
-      animationStyle: MediaQuery.disableAnimationsOf(context)
-          ? AnimationStyle.noAnimation
-          : const AnimationStyle(
-              duration: Duration(milliseconds: 210),
-              reverseDuration: Duration(milliseconds: 150),
-              curve: Curves.easeOutCubic,
-            ),
-      builder: (_) => _HealthAlertDialog(scope: scope),
-    );
+Future<void> showHealthAlerts(
+  BuildContext context,
+  HealthAlertsScope scope, {
+  bool includeSilenced = false,
+}) => showDialog<void>(
+  context: context,
+  animationStyle: MediaQuery.disableAnimationsOf(context)
+      ? AnimationStyle.noAnimation
+      : const AnimationStyle(
+          duration: Duration(milliseconds: 210),
+          reverseDuration: Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+        ),
+  builder: (_) =>
+      _HealthAlertDialog(scope: scope, includeSilenced: includeSilenced),
+);
 
 class _HealthAlertDialog extends StatefulWidget {
-  const _HealthAlertDialog({required this.scope});
+  const _HealthAlertDialog({
+    required this.scope,
+    required this.includeSilenced,
+  });
   final HealthAlertsScope scope;
+  final bool includeSilenced;
   @override
   State<_HealthAlertDialog> createState() => _HealthAlertDialogState();
 }
 
 class _HealthAlertDialogState extends State<_HealthAlertDialog> {
   String? _selected;
+  @override
+  void initState() {
+    super.initState();
+    _selected =
+        (widget.includeSilenced
+                ? widget.scope.alerts.alerts
+                : widget.scope.alerts.attentionAlerts)
+            .firstOrNull
+            ?.id;
+  }
+
   void _open(HealthAlert alert) {
     Navigator.pop(context);
     widget.scope.openAlert(alert);
@@ -35,7 +54,16 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.scope.alerts,
     builder: (context, _) {
-      final alerts = widget.scope.alerts.alerts;
+      // Keep the issue being acted on visible for immediate acknowledgement or
+      // snooze feedback. Other silenced issues are reviewed from Hermes health.
+      final alerts = widget.scope.alerts.alerts
+          .where(
+            (alert) =>
+                widget.includeSilenced ||
+                alert.id == _selected ||
+                alert.remindsAt(widget.scope.alerts.now),
+          )
+          .toList();
       var index = alerts.indexWhere((a) => a.id == _selected);
       if (index < 0) index = 0;
       final alert = alerts.isEmpty ? null : alerts[index];

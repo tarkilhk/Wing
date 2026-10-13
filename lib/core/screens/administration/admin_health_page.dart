@@ -80,6 +80,7 @@ class AdminHealthContent extends StatelessWidget {
         children: [
           if (persistenceError case final message?) AdminNotice.error(message),
           const HealthAlertSettingsEntry(),
+          const HealthAlertsEntry(),
           AdminHostHealth(resources: hostResources),
           const SizedBox(height: 16),
           AdminRuntimeHealth(

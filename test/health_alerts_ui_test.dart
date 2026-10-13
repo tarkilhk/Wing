@@ -250,6 +250,93 @@ void main() {
       fixture.dispose();
     },
   );
+  Widget healthContent(HealthAlertsFixture fixture) => AdminHealthContent(
+    health: fixture.owner.healthSession().health,
+    hostResources: fixture.owner.hostResources(),
+    profile: null,
+    onRefresh: fixture.owner.hostResources().refresh,
+    onOpenDestination: (_) async {},
+    accessChecks: () => null,
+    onReviewAccess: null,
+  );
+
+  testWidgets('header counts only issues that need attention', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final fixture = HealthAlertsFixture(await SharedPreferences.getInstance());
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        builder: (context, child) => HealthAlertsScope(
+          alerts: fixture.coordinator,
+          openAlert: (_) async {},
+          child: child!,
+        ),
+        home: Builder(
+          builder: (context) => Scaffold(
+            appBar: WingAppBar(context: context, title: const Text('Chats')),
+          ),
+        ),
+      ),
+    );
+    final titlePosition = tester.getCenter(find.text('Chats'));
+    await fixture.critical();
+    await fixture.critical(metric: 'disk');
+    await tester.pumpAndSettle();
+    expect(fixture.coordinator.alerts, hasLength(2));
+    expect(find.text('2'), findsOneWidget);
+    final acknowledged = fixture.coordinator.alerts.first;
+    fixture.coordinator.acknowledge(acknowledged);
+    await tester.pumpAndSettle();
+    expect(fixture.coordinator.attentionAlerts, hasLength(1));
+    expect(find.text('1'), findsOneWidget);
+    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+    expect(
+      find.byTooltip('Health alerts: 1 issue needs attention'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('health-alert-bell')));
+    await tester.pumpAndSettle();
+    expect(find.text(acknowledged.title), findsNothing);
+    expect(find.byTooltip('Next issue'), findsNothing);
+    await tester.tap(find.byTooltip('Close alerts'));
+    await tester.pumpAndSettle();
+    final remaining = fixture.coordinator.attentionAlerts.single;
+    fixture.coordinator.snooze(remaining);
+    await tester.pumpAndSettle();
+    expect(fixture.coordinator.attentionAlerts, isEmpty);
+    expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+    expect(find.byKey(const ValueKey('health-alert-bell')), findsNothing);
+    expect(find.byType(Badge), findsNothing);
+    await fixture.owner.hostResources().refresh();
+    await tester.pumpAndSettle();
+    expect(fixture.coordinator.alerts, hasLength(2));
+    expect(fixture.coordinator.attentionAlerts, isEmpty);
+    expect(tester.getCenter(find.text('Chats')), titlePosition);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        builder: (context, child) => HealthAlertsScope(
+          alerts: fixture.coordinator,
+          openAlert: (_) async {},
+          child: child!,
+        ),
+        home: Scaffold(body: healthContent(fixture)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('2 current issues · 1 acknowledged · 1 snoozed'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('health-alerts-entry')));
+    await tester.pumpAndSettle();
+    expect(find.text('Acknowledged.'), findsOneWidget);
+    await tester.tap(find.byTooltip('Next issue'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Snoozed until'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    fixture.dispose();
+  });
   testWidgets(
     'snooze expiry reminds once; acknowledge cancels reminders across resume',
     (tester) async {
@@ -292,6 +379,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byTooltip('Dismiss health notice'), findsNothing);
       expect(find.textContaining('Snoozed until'), findsOneWidget);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+      expect(find.byKey(const ValueKey('health-alert-bell')), findsNothing);
       // Stop collection so the reminder must fire without a new host observation.
       fixture.owner.mountedRoute = false;
       fixture.owner.publishActivity();
@@ -303,6 +392,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byTooltip('Dismiss health notice'), findsOneWidget);
       expect(find.textContaining('Snoozed until'), findsNothing);
+      expect(find.byKey(const ValueKey('health-alert-bell')), findsOneWidget);
       await tester.pump(const Duration(seconds: 6));
       expect(find.byTooltip('Dismiss health notice'), findsNothing);
       // Further publications of this occurrence must not repeat the notice.
@@ -340,7 +430,8 @@ void main() {
       expect(coordinator.alerts.single.acknowledged, isTrue);
       await tester.tap(find.byTooltip('Close alerts'));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('health-alert-bell')), findsOneWidget);
+      expect(find.byKey(const ValueKey('health-alert-bell')), findsNothing);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
       await tester.pumpWidget(const SizedBox());
       coordinator.dispose();
       fixture.dispose();
@@ -731,6 +822,13 @@ void main() {
               tester,
               'connector-dialog-$failedCount-${brightness.name}-$scale',
             );
+            await tester.tap(find.byTooltip('Acknowledge issue'));
+            await tester.pumpAndSettle();
+            expect(find.text('Acknowledged.'), findsOneWidget);
+            expect(
+              find.byKey(const ValueKey('health-alert-bell')),
+              findsNothing,
+            );
             await tester.tap(find.text('Connector settings'));
             await tester.pumpAndSettle();
             expect(opened.single.profileName, 'work');
@@ -1108,21 +1206,22 @@ void main() {
           expect(fixture.coordinator.alerts, hasLength(1));
           expect(tester.takeException(), isNull);
           await shot(tester, '${brightness.name}-$scale-acknowledged');
+          await tester.tap(find.byTooltip('Close alerts'));
+          await tester.pumpAndSettle();
+          expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+          expect(find.byKey(const ValueKey('health-alert-bell')), findsNothing);
+          expect(find.byType(Badge), findsNothing);
+          await shot(tester, '${brightness.name}-$scale-acknowledged-header');
+          await pump('Hermes health', body: healthContent(fixture));
+          expect(find.text('1 current issue · 1 acknowledged'), findsOneWidget);
+          await shot(tester, '${brightness.name}-$scale-retained-health');
+          await tester.tap(find.byKey(const ValueKey('health-alerts-entry')));
+          await tester.pumpAndSettle();
+          expect(find.textContaining('Acknowledged.'), findsOneWidget);
           await tester.tap(find.text('Critical memory pressure'));
           await tester.pumpAndSettle();
           expect(opened, 1);
-          await pump(
-            'Hermes health',
-            body: AdminHealthContent(
-              health: fixture.owner.healthSession().health,
-              hostResources: fixture.owner.hostResources(),
-              profile: null,
-              onRefresh: fixture.owner.hostResources().refresh,
-              onOpenDestination: (_) async {},
-              accessChecks: () => null,
-              onReviewAccess: null,
-            ),
-          );
+          await pump('Hermes health', body: healthContent(fixture));
           expect(
             find.byKey(const ValueKey('health-alert-settings-entry')),
             findsOneWidget,

@@ -77,9 +77,11 @@ above 90% for two minutes and clear below 85% for two minutes. Valid settings
 save automatically. Separate native-pressure toggles admit Hermes's critical
 memory and disk reports immediately. [Health alerts](ADMINISTRATION.md#health-alerts)
 explains recovery and investigation. Closing the alert dialog leaves unresolved
-issues visible in the alert icon. Use the checkmark to acknowledge an occurrence
-or the snooze icon to pause its cues for 30 minutes. Escalation or recurrence
-alerts you again.
+issues visible in the alert icon until you acknowledge or snooze them. Use the
+checkmark to acknowledge an occurrence or the snooze icon to pause its cues for
+30 minutes. Acknowledged and snoozed issues are available under **Hermes health
+→ Health alerts**; they do not appear in the header icon or its count. Snooze
+expiry, escalation or recurrence alerts you again.
 
 ## Make it yours
 

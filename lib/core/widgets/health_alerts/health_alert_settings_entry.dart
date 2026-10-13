@@ -4,6 +4,47 @@ import '../../models/host_thresholds.dart';
 import '../../presentation/health_alert_presentation.dart';
 import '../../screens/health_alert_settings_screen.dart';
 import 'health_alerts_scope.dart';
+import 'health_alert_dialog.dart';
+
+/// Health-screen access to every unresolved issue, including silenced ones.
+class HealthAlertsEntry extends StatelessWidget {
+  const HealthAlertsEntry({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final scope = HealthAlertsScope.maybeOf(context);
+    if (scope == null) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: scope.alerts,
+      builder: (context, _) {
+        final alerts = scope.alerts.alerts;
+        if (alerts.isEmpty) return const SizedBox.shrink();
+        final now = scope.alerts.now;
+        final acknowledged = alerts.where((a) => a.acknowledged).length;
+        final snoozed = alerts
+            .where((a) => !a.acknowledged && !a.remindsAt(now))
+            .length;
+        final summary = [
+          '${alerts.length} current ${alerts.length == 1 ? 'issue' : 'issues'}',
+          if (acknowledged > 0) '$acknowledged acknowledged',
+          if (snoozed > 0) '$snoozed snoozed',
+        ].join(' · ');
+        return StudioButtonPress(
+          child: ListTile(
+            key: const ValueKey('health-alerts-entry'),
+            contentPadding: EdgeInsets.zero,
+            minVerticalPadding: 4,
+            leading: const Icon(Icons.health_and_safety_outlined),
+            title: const Text('Health alerts'),
+            subtitle: Text(summary),
+            trailing: const Icon(Icons.chevron_right, size: 20),
+            onTap: () =>
+                showHealthAlerts(context, scope, includeSilenced: true),
+          ),
+        );
+      },
+    );
+  }
+}
 
 class HealthAlertSettingsEntry extends StatelessWidget {
   const HealthAlertSettingsEntry({super.key});
