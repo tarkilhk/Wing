@@ -510,7 +510,10 @@ void main() {
           for (final tab in ['Bots', 'Groups']) {
             await tester.tap(find.widgetWithText(Tab, tab));
             await tester.pump(const Duration(milliseconds: 300));
-            final progress = find.byType(StudioLoading);
+            final progress = find.byWidgetPredicate(
+              (widget) =>
+                  widget is StudioLoading && widget.label.startsWith('Loading'),
+            );
             expect(progress, findsNothing);
             expect(
               tester.getTopLeft(find.byKey(const ValueKey('bots-search'))),
@@ -537,8 +540,14 @@ void main() {
           fixture.room['name'] = 'Updated research team';
           held.complete(null);
           await refresh;
-          await tester.pumpAndSettle();
-          expect(find.byType(StudioLoading), findsNothing);
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is StudioLoading && widget.label.startsWith('Loading'),
+            ),
+            findsNothing,
+          );
           expect(find.text('Updated research team'), findsOneWidget);
           expect(
             tester.getTopLeft(find.byKey(const ValueKey('bots-search'))),
@@ -1852,9 +1861,10 @@ void main() {
               debugShowCheckedModeBanner: false,
               theme: wingTheme(brightness),
               builder: (context, child) => MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(textScaler: TextScaler.linear(scale)),
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
                 child: RepaintBoundary(key: frame, child: child!),
               ),
               home: StatefulBuilder(
@@ -2243,6 +2253,10 @@ void main() {
     var view = const BotsViewState();
     await tester.pumpWidget(
       MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
         theme: wingTheme(Brightness.dark),
         home: StatefulBuilder(
           builder: (context, setState) => BotsContent(

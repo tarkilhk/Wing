@@ -1,3 +1,9 @@
+import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'helpers/pump_markdown_widget.dart';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/chat_runtime.dart';
 import 'support/composer_fixture.dart';
@@ -18,6 +24,38 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
 
 void main({Future<void> Function(WidgetTester, String)? capture}) {
+  const review = bool.fromEnvironment('STUDIO_WORK_REVIEW');
+  setUpAll(() async {
+    if (!review) return;
+    for (final entry in {
+      'Roboto': 'build/studio-roboto.ttf',
+      'MaterialIcons': 'build/studio-icons.otf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            File(entry.value).readAsBytes().then(ByteData.sublistView),
+          ))
+          .load();
+    }
+  });
+  Future<void> renderStatus(WidgetTester tester, String name) async {
+    if (!review) return;
+    await tester.settleMarkdown();
+    await tester.runAsync(() async {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(const ValueKey('work-status-review')),
+      );
+      final picture = await boundary.toImage();
+      final bytes = await picture.toByteData(format: ui.ImageByteFormat.png);
+      final folder = Directory(
+        'build/design-previews/loading-family/site/work-renders',
+      )..createSync(recursive: true);
+      await File(
+        '${folder.path}/$name.png',
+      ).writeAsBytes(bytes!.buffer.asUint8List());
+      picture.dispose();
+    });
+  }
+
   late Host host;
   late ProfileWorkspaceController controller;
   late WorkspaceRuntimeFixture runtimes;
@@ -59,6 +97,117 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
 
   String? label() => ProfileActivityStatus(chat: chat).label;
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'work pulse settles for input without moving the composer ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          host.event('a', 'message.start');
+          host.event('a', 'message.delta', {
+            'text':
+                'I am checking the current work and will keep the results here.',
+          });
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(
+                  key: const ValueKey('work-status-review'),
+                  child: child!,
+                ),
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          );
+          for (var i = 0; i < 8; i++) {
+            await tester.pump(const Duration(milliseconds: 100));
+          }
+          final row = find.byType(ProfileActivityStatus);
+          final composer = find.byKey(const ValueKey('conversation-composer'));
+          final bounds = tester.getRect(composer);
+          expect(
+            find.descendant(of: row, matching: find.byType(StudioLoading)),
+            findsOneWidget,
+          );
+          expect(find.byType(ShaderMask), findsNothing);
+          await renderStatus(tester, 'chat-working-${brightness.name}-$scale');
+          host.event('a', 'clarify', {
+            'request_id': 'choice',
+            'question': 'Which result should I use?',
+          });
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(find.text('Waiting for your reply'), findsOneWidget);
+          expect(
+            find.descendant(of: row, matching: find.byType(StudioLoading)),
+            findsNothing,
+          );
+          expect(tester.getRect(composer), bounds);
+          await renderStatus(tester, 'chat-input-${brightness.name}-$scale');
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+  testWidgets('current task work becomes static during recovery', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    host.event('a', 'message.start');
+    host.event('a', 'todo.updated', {
+      'revision': 3,
+      'todos': [
+        {
+          'id': 'current',
+          'content': 'Inspect the active result',
+          'status': 'in_progress',
+        },
+      ],
+    });
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(ValueKey(('activity', chat.key))),
+        matching: find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey(('activity-tab', 'tasks'))),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey(('activity-tab', 'tasks'))));
+    await tester.pump(const Duration(milliseconds: 300));
+    final tasks = find.byType(ProfileTodoPanel);
+    expect(tasks, findsOneWidget);
+    expect(
+      find.descendant(of: tasks, matching: find.byType(StudioLoading)),
+      findsOneWidget,
+    );
+    runtime.beginRecovery();
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Inspect the active result'), findsOneWidget);
+    expect(
+      find.descendant(of: tasks, matching: find.byType(StudioLoading)),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
   test('stock automatic and manual compression show their own activity', () {
     host.event('a', 'message.start');
     host.event('a', 'message.delta', {'text': 'Earlier response'});
@@ -172,7 +321,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         }
         final text = find.text('Summarizing conversation… · 1 subagent active');
         expect(text, findsOneWidget);
-        expect(find.byIcon(Icons.compress_rounded), findsOneWidget);
+        expect(find.byType(StudioLoading), findsOneWidget);
         expect(tester.widget<Text>(text).maxLines, isNull);
         final composer = find.byKey(const ValueKey('conversation-composer'));
         expect(
@@ -202,9 +351,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ),
     );
     expect(find.text('Summarizing conversation…'), findsOneWidget);
-    expect(find.byIcon(Icons.compress_rounded), findsOneWidget);
+    expect(find.byType(StudioLoading), findsOneWidget);
     expect(find.byType(ShaderMask), findsNothing);
-    expect(find.byType(StudioLoading), findsNothing);
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(tester.binding.transientCallbackCount, 0);
   });
 
   test(
@@ -311,7 +461,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     runtime.beginTurn(submitting: false);
     await render(reducedMotion: true);
     expect(tester.getSize(row).height, expanded);
-    expect(find.byType(StudioLoading), findsNothing);
+    expect(find.byType(StudioLoading), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -476,8 +626,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     host.event('a', 'reasoning.delta', {'text': 'Planning'});
     await tester.pump();
     expect(find.text('Thinking…'), findsOneWidget);
-    expect(find.byType(StudioLoading), findsNothing);
-    expect(find.byType(ShaderMask), findsOneWidget);
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(find.byType(ShaderMask), findsNothing);
     host.event('a', 'clarify', {
       'request_id': 'city',
       'question': 'Which city?',
@@ -560,7 +710,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         ),
       ),
     );
-    expect(find.byType(StudioLoading), findsNothing);
+    expect(find.byType(StudioLoading), findsOneWidget);
     expect(find.byTooltip(label()!), findsOneWidget);
     expect(find.byType(ShaderMask), findsNothing);
     expect(tester.takeException(), isNull);

@@ -4,6 +4,10 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Use the same Wing feather pulse for confirmed active work in chats, discussions,
+  Bots, Recents and Activity. Keep status text steady and replace the animated
+  Chats row border with a pulse in its existing status slot.
+
 - Keep usable screens quiet during background refresh. Use one Wing feather
   loading style for blocked actions, without shifting Recents, Bots or other
   content when loading finishes.

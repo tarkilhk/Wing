@@ -154,7 +154,13 @@ class _AdminScheduledTaskDetailPageState
                 ),
               ),
               const SizedBox(height: 12),
-              TaskStatus(task),
+              TaskStatus(
+                task,
+                confirmed:
+                    !missing &&
+                    controller.checkedAt != null &&
+                    controller.error == null,
+              ),
               const SizedBox(height: 24),
               if (missing)
                 const TaskMessage(

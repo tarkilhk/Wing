@@ -26,6 +26,33 @@ class StudioLoading extends StatefulWidget {
   State<StudioLoading> createState() => _StudioLoadingState();
 }
 
+/// Confirmed active work shares the loading pulse; other states stay static.
+/// Callers supply activity evidence, never refresh/freshness flags.
+class StudioActivityIndicator extends StatelessWidget {
+  const StudioActivityIndicator({
+    super.key,
+    required this.active,
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.size = 18,
+  });
+
+  final bool active;
+  final String label;
+  final IconData icon;
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: size,
+    child: active
+        ? StudioLoading(label: label, color: color, size: size)
+        : Icon(icon, size: size, color: color),
+  );
+}
+
 class _StudioLoadingState extends State<StudioLoading>
     with SingleTickerProviderStateMixin {
   late final _pulse = AnimationController(

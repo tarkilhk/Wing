@@ -27,7 +27,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/chat_profile_bar.dart';
-import 'package:wing/core/widgets/chat_working_border.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'support/profile_browser_fixture.dart';
 
 class TargetFixture extends ProfileBrowserFixture {
@@ -205,7 +205,7 @@ void main() {
           home: workspace
               ? ProfileWorkspaceScreen(controller: controller)
               : ProfileWorkspaceBrowser(
-                onOpenBotChat: (_) {},
+                  onOpenBotChat: (_) {},
                   createData: () => ChatBrowserData(
                     controller,
                     readBotAppearances: fixture.botAppearances,
@@ -725,10 +725,8 @@ void main() {
     );
     await tester.pump();
     expect(
-      tester.widget<ChatWorkingBorder>(
-        find.ancestor(of: affected, matching: find.byType(ChatWorkingBorder)),
-      ),
-      isA<ChatWorkingBorder>().having((w) => w.working, 'working', isTrue),
+      find.descendant(of: affected, matching: find.byType(StudioLoading)),
+      findsOneWidget,
     );
     expect(tester.widget(unaffected), same(originalRow));
     expect(tester.widget(list), same(originalList));
@@ -803,9 +801,9 @@ void main() {
     final list = find.byKey(const ValueKey('chat-list-false'));
     final originalList = tester.widget(list);
     final affected = find.byKey(const ValueKey('chat-personal-session-1'));
-    final border = find.ancestor(
+    final pulse = find.descendant(
       of: affected,
-      matching: find.byType(ChatWorkingBorder),
+      matching: find.byType(StudioLoading),
     );
     controller.activityProjectionReads = 0;
     fixture.liveSessions['personal'] = [
@@ -818,11 +816,11 @@ void main() {
     ];
     await controller.refreshActivity();
     await tester.pumpAndSettle();
-    expect(tester.widget<ChatWorkingBorder>(border).working, isTrue);
+    expect(pulse, findsOneWidget);
     fixture.liveSessions.clear();
     await controller.refreshActivity();
     await tester.pumpAndSettle();
-    expect(tester.widget<ChatWorkingBorder>(border).working, isFalse);
+    expect(pulse, findsNothing);
     expect(tester.widget(list), same(originalList));
     expect(
       controller.activityProjectionReads,
@@ -845,11 +843,11 @@ void main() {
     await show(tester, workspace: true, reducedMotion: true);
     await select(tester, 'profile', 'personal');
     final affected = find.byKey(const ValueKey('chat-personal-session-1'));
-    final border = find.ancestor(
+    final pulse = find.descendant(
       of: affected,
-      matching: find.byType(ChatWorkingBorder),
+      matching: find.byType(StudioLoading),
     );
-    expect(tester.widget<ChatWorkingBorder>(border).working, isTrue);
+    expect(pulse, findsOneWidget);
     final owner = controller.browserResource('personal');
     final list = find.byKey(const ValueKey('chat-list-false'));
     final originalList = tester.widget(list);
@@ -872,7 +870,7 @@ void main() {
       }
     });
     await tester.pumpAndSettle();
-    expect(tester.widget<ChatWorkingBorder>(border).working, isFalse);
+    expect(pulse, findsNothing);
     expect(tester.widget(list), same(originalList));
     expect(controller.activityProjectionReads, 0);
   });
@@ -1259,11 +1257,11 @@ void main() {
         await controller.refreshActivity();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
-        final border = find.ancestor(
+        final pulse = find.descendant(
           of: row,
-          matching: find.byType(ChatWorkingBorder),
+          matching: find.byType(StudioLoading),
         );
-        expect(tester.widget<ChatWorkingBorder>(border).working, isTrue);
+        expect(pulse, findsOneWidget);
         expect(tester.getRect(row), initialBounds);
         await screenshot(tester, '${brightness.name}-$scale-working');
         await tester.pump(const Duration(milliseconds: 600));
@@ -1273,18 +1271,18 @@ void main() {
         fixture.liveSessions['personal']!.single['status'] = 'waiting';
         await controller.refreshActivity();
         await tester.pumpAndSettle();
-        expect(tester.widget<ChatWorkingBorder>(border).working, isFalse);
+        expect(pulse, findsNothing);
         expect(tester.binding.hasScheduledFrame, isFalse);
 
         fixture.liveSessions['personal']!.single['status'] = 'working';
         await controller.refreshActivity();
         await tester.pump();
-        expect(tester.widget<ChatWorkingBorder>(border).working, isTrue);
+        expect(pulse, findsOneWidget);
 
         fixture.liveSessions.clear();
         await controller.refreshActivity();
         await tester.pumpAndSettle();
-        expect(tester.widget<ChatWorkingBorder>(border).working, isFalse);
+        expect(pulse, findsNothing);
         expect(tester.getRect(row), initialBounds);
         expect(tester.binding.hasScheduledFrame, isFalse);
       });

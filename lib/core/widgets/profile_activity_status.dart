@@ -1,3 +1,4 @@
+import 'studio_loading.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:flutter/material.dart';
 
@@ -37,7 +38,13 @@ class ProfileActivityStatus extends StatelessWidget {
       default:
         break;
     }
-    final children = chat.subagents.where((item) => !item.isTerminal).length;
+    final children = chat.subagents
+        .where(
+          (item) =>
+              !item.isTerminal &&
+              !chat.unconfirmedSubagentIds.contains(item.id),
+        )
+        .length;
     final childLabel = '$children subagent${children == 1 ? '' : 's'}';
     if (chat.runtime.compacting) {
       const summary = 'Summarizing conversation…';
@@ -83,7 +90,9 @@ class ProfileActivityStatus extends StatelessWidget {
         (chat.runtime.commandRunning ||
             chat.runtime.activity(
                   backgroundWorking: chat.subagents.any(
-                    (item) => !item.isTerminal,
+                    (item) =>
+                        !item.isTerminal &&
+                        !chat.unconfirmedSubagentIds.contains(item.id),
                   ),
                 ) ==
                 ProfileLiveActivityState.running);
@@ -91,24 +100,28 @@ class ProfileActivityStatus extends StatelessWidget {
     if (chat.runtime.compacting &&
         !chat.runtime.needsInput &&
         !chat.runtime.reconnecting) {
-      leading = Icon(
-        Icons.compress_rounded,
-        size: 18,
+      leading = StudioActivityIndicator(
+        active: active,
+        label: 'Summarizing conversation',
+        icon: Icons.compress_rounded,
         color: WingTokens.of(context).running,
       );
     } else if (chat.runtime.commandRunning &&
         !chat.runtime.needsInput &&
         !chat.runtime.reconnecting) {
-      leading = ConversationStatusIndicator(
-        blocked: true,
+      leading = StudioActivityIndicator(
+        active: true,
         label: 'Running command',
-        running: true,
         icon: Icons.pending_outlined,
         color: color,
       );
     } else if (chat.runtime.execution == ChatExecution.idle &&
         chat.runtime.activity(
-              backgroundWorking: chat.subagents.any((item) => !item.isTerminal),
+              backgroundWorking: chat.subagents.any(
+                (item) =>
+                    !item.isTerminal &&
+                    !chat.unconfirmedSubagentIds.contains(item.id),
+              ),
             ) ==
             null) {
       leading = Icon(Icons.chat_bubble_outline, size: 18, color: color);
@@ -118,7 +131,6 @@ class ProfileActivityStatus extends StatelessWidget {
     return ConversationActivityStatus(
       label: text,
       leading: leading,
-      active: active,
       wrap: chat.runtime.compacting,
     );
   }

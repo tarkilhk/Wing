@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'studio_loading.dart';
-import 'activity_shimmer.dart';
 import 'status_transition.dart';
 
 /// Shared chat status presentation; each conversation supplies its own facts.
@@ -9,12 +7,11 @@ class ConversationActivityStatus extends StatelessWidget {
     super.key,
     required this.label,
     required this.leading,
-    required this.active,
     required this.wrap,
   });
   final String? label;
   final Widget leading;
-  final bool active, wrap;
+  final bool wrap;
   @override
   Widget build(BuildContext context) {
     final text = label;
@@ -38,21 +35,18 @@ class ConversationActivityStatus extends StatelessWidget {
                         leading,
                         const SizedBox(width: 8),
                         Expanded(
-                          child: ActivityShimmer(
-                            active: active,
-                            child: Text(
-                              text,
-                              maxLines: wrap ? null : 1,
-                              overflow: wrap
-                                  ? TextOverflow.visible
-                                  : TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelMedium
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
+                          child: Text(
+                            text,
+                            maxLines: wrap ? null : 1,
+                            overflow: wrap
+                                ? TextOverflow.visible
+                                : TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
                           ),
                         ),
                       ],
@@ -63,28 +57,4 @@ class ConversationActivityStatus extends StatelessWidget {
             ),
     );
   }
-}
-
-/// The normal chat glyph, including Wing's reduced-motion presentation.
-class ConversationStatusIndicator extends StatelessWidget {
-  const ConversationStatusIndicator({
-    super.key,
-    required this.running,
-    required this.blocked,
-    required this.label,
-    required this.icon,
-    required this.color,
-  });
-  final bool running;
-  final bool blocked;
-  final String label;
-  final IconData icon;
-  final Color color;
-  @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: 18,
-    child: blocked
-        ? StudioLoading(label: label, color: color, size: 18)
-        : Icon(running ? Icons.sync : icon, size: 18, color: color),
-  );
 }

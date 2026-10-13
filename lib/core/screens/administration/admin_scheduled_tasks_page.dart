@@ -278,7 +278,11 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 10),
-                TaskStatus(task),
+                TaskStatus(
+                  task,
+                  confirmed:
+                      controller.checkedAt != null && controller.error == null,
+                ),
                 if (controller.busy.contains(task.id))
                   const Padding(
                     padding: EdgeInsets.only(top: 8),

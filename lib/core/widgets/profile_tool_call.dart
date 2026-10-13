@@ -1,3 +1,4 @@
+import 'studio_loading.dart';
 import '../models/chat_output.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -89,7 +90,13 @@ class ProfileToolCall extends StatelessWidget {
       _ => colors.muted,
     };
     return CompactActivityRow(
-      icon: Icon(iconFor(call.name)),
+      icon: StudioActivityIndicator(
+        active: call.outcome == ToolCallOutcome.running,
+        label: call.title,
+        icon: iconFor(call.name),
+        color: colors.muted,
+        size: 16,
+      ),
       lines: [
         Text(
           call.title,

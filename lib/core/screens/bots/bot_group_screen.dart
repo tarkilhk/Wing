@@ -404,12 +404,10 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     final tokens = WingTokens.of(context);
     return ConversationActivityStatus(
       label: label,
-      active: active,
       wrap: true,
-      leading: ConversationStatusIndicator(
-        blocked: _session.sending,
-        label: 'Sending message',
-        running: active,
+      leading: StudioActivityIndicator(
+        active: active,
+        label: label ?? 'Group status',
         icon: icon,
         color: active
             ? tokens.running

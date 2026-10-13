@@ -2130,15 +2130,6 @@
       "status": "supported"
     },
     {
-      "id": "host-test-test/activity_shimmer_test.dart",
-      "kind": "host-test",
-      "path": "test/activity_shimmer_test.dart",
-      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
-      "source": "internal/docs/TESTING.md; test/activity_shimmer_test.dart",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
       "id": "host-test-test/admin_provider_status_test.dart",
       "kind": "host-test",
       "path": "test/admin_provider_status_test.dart",
@@ -2790,15 +2781,6 @@
       "path": "test/chat_profile_bar_test.dart",
       "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
       "source": "internal/docs/TESTING.md; test/chat_profile_bar_test.dart",
-      "status": "supported",
-      "selector": "main"
-    },
-    {
-      "id": "host-test-test/chat_working_border_test.dart",
-      "kind": "host-test",
-      "path": "test/chat_working_border_test.dart",
-      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
-      "source": "internal/docs/TESTING.md; test/chat_working_border_test.dart",
       "status": "supported",
       "selector": "main"
     },
@@ -9400,11 +9382,6 @@
       "provenance": "intentional-untracked"
     },
     {
-      "path": "lib/core/widgets/activity_shimmer.dart",
-      "area": "lib",
-      "provenance": "tracked"
-    },
-    {
       "path": "lib/core/widgets/activity_time.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -9526,11 +9503,6 @@
     },
     {
       "path": "lib/core/widgets/chat_status_dot.dart",
-      "area": "lib",
-      "provenance": "tracked"
-    },
-    {
-      "path": "lib/core/widgets/chat_working_border.dart",
       "area": "lib",
       "provenance": "tracked"
     },
@@ -10185,11 +10157,6 @@
       "provenance": "intentional-untracked"
     },
     {
-      "path": "test/activity_shimmer_test.dart",
-      "area": "test",
-      "provenance": "tracked"
-    },
-    {
       "path": "test/admin_provider_status_test.dart",
       "area": "test",
       "provenance": "tracked"
@@ -10798,11 +10765,6 @@
       "path": "test/chat_runtime_observation_guard_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/chat_working_border_test.dart",
-      "area": "test",
-      "provenance": "tracked"
     },
     {
       "path": "test/clarify_server_request_test.dart",
@@ -14748,7 +14710,6 @@
         "lib/core/theme/wing_icons.dart",
         "lib/core/theme/wing_theme.dart",
         "lib/core/utils/expansion_scroll_controller.dart",
-        "lib/core/widgets/activity_shimmer.dart",
         "lib/core/widgets/admin_model_picker.dart",
         "lib/core/widgets/anchored_expansion_tile.dart",
         "lib/core/widgets/answer_actions.dart",
@@ -14765,7 +14726,6 @@
         "lib/core/widgets/chat_notice_activity_scope.dart",
         "lib/core/widgets/chat_profile_bar.dart",
         "lib/core/widgets/chat_status_dot.dart",
-        "lib/core/widgets/chat_working_border.dart",
         "lib/core/widgets/compact_switch.dart",
         "lib/core/widgets/composer_action_button.dart",
         "lib/core/widgets/composer_action_settings.dart",
@@ -14844,7 +14804,6 @@
         "lib/core/widgets/workspace_profile_navigation.dart",
         "lib/main.dart",
         "test/activity_family_test.dart",
-        "test/activity_shimmer_test.dart",
         "test/admin_provider_status_test.dart",
         "test/admin_tool_models_test.dart",
         "test/administration_comparison_test.dart",
@@ -14896,7 +14855,6 @@
         "test/chat_notification_test.dart",
         "test/chat_outputs_screen_test.dart",
         "test/chat_profile_bar_test.dart",
-        "test/chat_working_border_test.dart",
         "test/cloud_connection_journey_test.dart",
         "test/command_feedback_test.dart",
         "test/compact_switch_test.dart",
@@ -15706,7 +15664,6 @@
         "integration_test/voice_native_test.dart",
         "integration_test/voice_permission_native_test.dart",
         "test/activity_family_test.dart",
-        "test/activity_shimmer_test.dart",
         "test/admin_provider_status_test.dart",
         "test/admin_tool_models_test.dart",
         "test/administration_comparison_test.dart",
@@ -15811,7 +15768,6 @@
         "test/chat_outputs_session_test.dart",
         "test/chat_profile_bar_test.dart",
         "test/chat_runtime_observation_guard_test.dart",
-        "test/chat_working_border_test.dart",
         "test/clarify_server_request_test.dart",
         "test/cloud_connection_journey_test.dart",
         "test/command_feedback_test.dart",

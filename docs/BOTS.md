@@ -160,7 +160,8 @@ refreshes this state automatically. Recognized bot mentions display as bold,
 colored `@Name` text. Copy preserves the original message.
 While work is active, the empty composer offers Stop; entering a draft offers
 Send. A compact status above the composer shows sending, group updates, work or
-approval needs. Background refresh does not show a loading animation. Hermes
+approval needs. Active work uses Wing's feather pulse beside steady text.
+Background refresh does not show a loading animation. Hermes
 currently exposes group activity rather than individual bots typing, so Wing
 displays “Bots are working…”.
 

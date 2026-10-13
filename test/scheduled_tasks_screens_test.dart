@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -72,6 +73,7 @@ void main() {
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(scale),
+            disableAnimations: true,
             viewInsets: EdgeInsets.only(bottom: keyboard),
           ),
           child: RepaintBoundary(
@@ -159,6 +161,41 @@ void main() {
     });
   }
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'running schedule shares work pulse ${brightness.name} $scale',
+        (tester) async {
+          fixture.jobs['morning']!['state'] = 'running';
+          await show(
+            tester,
+            list(),
+            brightness: brightness,
+            width: scale == 1 ? 390 : 320,
+            scale: scale,
+          );
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.text('Working on it now'), findsOneWidget);
+          await screenshot(tester, 'working-list-${brightness.name}-$scale');
+          final c = await controller();
+          await show(
+            tester,
+            AdminScheduledTaskDetailPage(
+              controller: c,
+              initial: c.task('morning')!,
+              onOpenSession: (_) async {},
+            ),
+            brightness: brightness,
+            width: scale == 1 ? 390 : 320,
+            scale: scale,
+          );
+          expect(find.byType(StudioLoading), findsOneWidget);
+          await screenshot(tester, 'working-detail-${brightness.name}-$scale');
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
   testWidgets('search filters tasks and opens a scoped run conversation', (
     tester,
   ) async {

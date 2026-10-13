@@ -131,7 +131,8 @@ class TaskSurface extends StatelessWidget {
 }
 
 class TaskStatus extends StatelessWidget {
-  const TaskStatus(this.task, {super.key});
+  const TaskStatus(this.task, {super.key, required this.confirmed});
+  final bool confirmed;
   final ScheduledTask task;
   @override
   Widget build(BuildContext context) {
@@ -144,8 +145,10 @@ class TaskStatus extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          task.running
+        StudioActivityIndicator(
+          active: confirmed && task.running,
+          label: 'Scheduled task running',
+          icon: task.running
               ? Icons.play_arrow_rounded
               : task.paused
               ? Icons.pause_rounded

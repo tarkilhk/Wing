@@ -383,6 +383,7 @@ void main() {
         ).agents;
         final specimens = <String, Widget>{
           'tasks': const ProfileTodoPanel(
+            live: false,
             embedded: true,
             todos: [
               GatewayTodo(

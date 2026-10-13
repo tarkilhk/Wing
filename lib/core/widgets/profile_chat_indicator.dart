@@ -1,9 +1,9 @@
+import 'studio_loading.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:flutter/material.dart';
 import '../models/profile_live_activity.dart';
 import '../services/profile_workspace_controller.dart';
 import '../theme/wing_theme.dart';
-import 'conversation_activity_status.dart';
 
 /// Precise state comes from the owned runtime and its active children.
 class ProfileChatIndicator extends StatelessWidget {
@@ -16,7 +16,11 @@ class ProfileChatIndicator extends StatelessWidget {
     final runtime = chat.runtime;
     final status =
         runtime.activity(
-              backgroundWorking: chat.subagents.any((item) => !item.isTerminal),
+              backgroundWorking: chat.subagents.any(
+                (item) =>
+                    !item.isTerminal &&
+                    !chat.unconfirmedSubagentIds.contains(item.id),
+              ),
             ) ==
             ProfileLiveActivityState.running
         ? ChatExecution.running
@@ -57,10 +61,9 @@ class ProfileChatIndicator extends StatelessWidget {
       message: label,
       child: Semantics(
         label: label,
-        child: ConversationStatusIndicator(
-          blocked: false,
+        child: StudioActivityIndicator(
           label: 'Working',
-          running: spinning,
+          active: spinning && !runtime.opening && !runtime.offline,
           icon: icon,
           color: color,
         ),

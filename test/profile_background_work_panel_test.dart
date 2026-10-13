@@ -163,9 +163,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+            disableAnimations: true,
+          ),
           child: child!,
         ),
         home: Scaffold(
@@ -336,7 +337,13 @@ void main() {
   ) async {
     await supervision.refreshWork();
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: ProfileWorkspaceScreen(controller: controller),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Activity'));

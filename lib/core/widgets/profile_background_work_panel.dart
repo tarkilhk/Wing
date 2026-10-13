@@ -1,3 +1,4 @@
+import 'studio_loading.dart';
 import 'activity/activity_detail_actions.dart';
 import '../theme/wing_theme.dart';
 import 'studio_error.dart';
@@ -162,6 +163,7 @@ class _ProfileBackgroundWorkPanelState
           for (final process in chat.processes)
             _ProcessTile(
               process: process,
+              confirmed: widget.session.active && chat.processesError == null,
               stopping: chat.stopping.contains(process.id),
               error: chat.processErrors[process.id],
               onStop: () => _stopProcess(process),
@@ -321,12 +323,14 @@ class _WorkSection extends StatelessWidget {
 class _ProcessTile extends StatelessWidget {
   final GatewayProcessActivity process;
   final bool stopping;
+  final bool confirmed;
   final String? error;
   final Future<void> Function() onStop;
   final VoidCallback onDismiss;
 
   const _ProcessTile({
     required this.process,
+    required this.confirmed,
     required this.stopping,
     required this.error,
     required this.onStop,
@@ -336,7 +340,13 @@ class _ProcessTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CompactActivityRow(
     key: ValueKey(('process', process.id)),
-    icon: const Icon(Icons.terminal_rounded),
+    icon: StudioActivityIndicator(
+      active: confirmed && process.isRunning,
+      label: 'Process running',
+      icon: Icons.terminal_rounded,
+      color: WingTokens.of(context).muted,
+      size: 16,
+    ),
     lines: [
       Text(process.command, style: WingTokens.of(context).typography.mono),
       Text(
@@ -414,7 +424,7 @@ class _ProcessTile extends StatelessWidget {
                 process.exitCode != null &&
                 process.exitCode != 0,
             icon: process.isRunning
-                ? Icons.timelapse_outlined
+                ? Icons.terminal_rounded
                 : process.exitCode != null && process.exitCode != 0
                 ? Icons.error_outline
                 : Icons.check_circle_outline,

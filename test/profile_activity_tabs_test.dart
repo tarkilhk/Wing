@@ -26,9 +26,10 @@ void main() {
             builder: (context, setState) {
               update = setState;
               return MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(textScaler: TextScaler.linear(scale)),
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
                 child: Scaffold(
                   body: SingleChildScrollView(
                     padding: const EdgeInsets.all(16),

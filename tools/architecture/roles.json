@@ -1786,11 +1786,6 @@
       "feature": "chat-activity",
       "library": "lib/core/widgets/activity/skill_document_viewer.dart"
     },
-    "lib/core/widgets/activity_shimmer.dart": {
-      "role": "view",
-      "feature": "chat-activity",
-      "library": "lib/core/widgets/activity_shimmer.dart"
-    },
     "lib/core/widgets/activity_time.dart": {
       "role": "view",
       "feature": "chat-activity",
@@ -1915,11 +1910,6 @@
       "role": "view",
       "feature": "chat-activity",
       "library": "lib/core/widgets/chat_status_dot.dart"
-    },
-    "lib/core/widgets/chat_working_border.dart": {
-      "role": "view",
-      "feature": "chat-activity",
-      "library": "lib/core/widgets/chat_working_border.dart"
     },
     "lib/core/widgets/compact_activity_row.dart": {
       "role": "view",

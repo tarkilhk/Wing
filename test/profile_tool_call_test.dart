@@ -811,8 +811,11 @@ void main() {
           ),
         );
         expect(
-          tester.widget<Icon>(find.byWidget(row.icon)).icon,
-          entry.value,
+          find.descendant(
+            of: find.byWidget(row.icon),
+            matching: find.byIcon(entry.value),
+          ),
+          findsOneWidget,
           reason: entry.key,
         );
       }
@@ -1235,6 +1238,10 @@ void main() {
       late StateSetter update;
       await tester.pumpWidget(
         MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
           home: StatefulBuilder(
             builder: (context, setState) {
               update = setState;

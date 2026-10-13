@@ -298,6 +298,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                         child: Column(
                           children: [
                             const ProfileTodoPanel(
+                              live: false,
                               todos: [
                                 GatewayTodo(
                                   content:

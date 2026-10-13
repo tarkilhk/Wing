@@ -22,6 +22,75 @@ void main() {
           .load();
     }
   });
+  for (final reduced in [false, true]) {
+    testWidgets(
+      'active work uses the pulse in one fixed status slot reduced=$reduced',
+      (tester) async {
+        var active = true;
+        var visible = true;
+        var taps = 0;
+        late StateSetter change;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: StatefulBuilder(
+              builder: (context, setState) {
+                change = setState;
+                return MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(disableAnimations: reduced),
+                  child: TickerMode(
+                    enabled: visible,
+                    child: Scaffold(
+                      body: Row(
+                        children: [
+                          StudioActivityIndicator(
+                            active: active,
+                            label: 'Hermes is working',
+                            icon: Icons.help_outline,
+                            color: Colors.teal,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('Work status'),
+                          IconButton(
+                            tooltip: 'Stop work',
+                            onPressed: () => taps++,
+                            icon: const Icon(Icons.stop),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+        final statusRect = tester.getRect(find.text('Work status'));
+        final actionRect = tester.getRect(find.byTooltip('Stop work'));
+        expect(find.byType(StudioLoading), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(tester.binding.transientCallbackCount, reduced ? 0 : 1);
+        expect(tester.getRect(find.text('Work status')), statusRect);
+        await tester.tap(find.byTooltip('Stop work'));
+        expect(taps, 1);
+        change(() => visible = false);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(tester.binding.transientCallbackCount, 0);
+        change(() {
+          visible = true;
+          active = false;
+        });
+        await tester.pump();
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(find.byIcon(Icons.help_outline), findsOneWidget);
+        expect(tester.getRect(find.text('Work status')), statusRect);
+        expect(tester.getRect(find.byTooltip('Stop work')), actionRect);
+        expect(find.byType(ShaderMask), findsNothing);
+      },
+    );
+  }
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('loading family render ${brightness.name} $scale', (

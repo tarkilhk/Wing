@@ -132,9 +132,10 @@ void main() {
       MaterialApp(
         theme: wingTheme(brightness),
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(scale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            disableAnimations: true,
+          ),
           child: child!,
         ),
         home: Scaffold(

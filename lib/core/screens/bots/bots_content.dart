@@ -397,8 +397,10 @@ class _BotsContentState extends State<BotsContent> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (active) ...[
-          Icon(
-            running ? Icons.autorenew : Icons.chat_bubble_outline,
+          StudioActivityIndicator(
+            active: running,
+            label: label,
+            icon: Icons.chat_bubble_outline,
             size: 14,
             color: c,
           ),

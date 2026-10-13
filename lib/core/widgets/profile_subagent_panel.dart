@@ -296,6 +296,9 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                       _tailBody(current),
                       ActivityDetailStatus(
                         label: _statusLabel(current, unconfirmed),
+                        working:
+                            !unconfirmed &&
+                            current.status == GatewaySubagentStatus.running,
                         icon: unconfirmed
                             ? Icons.help_outline
                             : _statusIcon(current.status),
@@ -476,8 +479,11 @@ class _SubagentRow extends StatelessWidget {
       minTileHeight: 48,
       minLeadingWidth: 16,
       horizontalTitleGap: 8,
-      leading: Icon(
-        unconfirmed ? Icons.help_outline : _statusIcon(activity.status),
+      leading: StudioActivityIndicator(
+        active:
+            !unconfirmed && activity.status == GatewaySubagentStatus.running,
+        label: 'Subagent running',
+        icon: unconfirmed ? Icons.help_outline : _statusIcon(activity.status),
         size: 16,
         color: unconfirmed
             ? colors.muted
@@ -600,7 +606,7 @@ String _goal(GatewaySubagentActivity activity) =>
 
 IconData _statusIcon(GatewaySubagentStatus status) => switch (status) {
   GatewaySubagentStatus.queued => Icons.schedule_outlined,
-  GatewaySubagentStatus.running => Icons.sync,
+  GatewaySubagentStatus.running => Icons.account_tree_outlined,
   GatewaySubagentStatus.completed => Icons.check_circle_outline,
   GatewaySubagentStatus.failed => Icons.error_outline,
   GatewaySubagentStatus.interrupted => Icons.stop_circle_outlined,

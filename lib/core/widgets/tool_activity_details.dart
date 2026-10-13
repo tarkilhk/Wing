@@ -80,6 +80,7 @@ class ActivityDetailStatus extends StatelessWidget {
     super.key,
     required this.label,
     this.icon = Icons.check_circle_outline,
+    this.working = false,
     this.error = false,
     this.warning = false,
     this.contextFacts = const [],
@@ -87,6 +88,7 @@ class ActivityDetailStatus extends StatelessWidget {
   });
   final String label;
   final IconData icon;
+  final bool working;
   final bool error;
   final bool warning;
   final List<String> contextFacts;
@@ -114,7 +116,13 @@ class ActivityDetailStatus extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(icon, size: 16, color: color),
+                  StudioActivityIndicator(
+                    active: working && !error && !warning,
+                    label: label,
+                    icon: icon,
+                    color: color,
+                    size: 16,
+                  ),
                   const SizedBox(width: WingSpacing.sm),
                   Expanded(
                     child: Wrap(

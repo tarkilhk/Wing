@@ -26,7 +26,6 @@ import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/mention_suggestions.dart';
 import 'support/bots_fixture.dart';
 import 'package:wing/core/widgets/conversation_activity_status.dart';
-import 'package:wing/core/widgets/activity_shimmer.dart';
 import 'package:wing/core/widgets/composer_icon_button.dart';
 import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/widgets/voice_input_activity.dart';
@@ -1082,10 +1081,7 @@ void main() {
         await _settleGroupMarkdown(tester);
         expect(find.text('Bots are working…'), findsOneWidget);
         expect(find.byType(ConversationActivityStatus), findsOneWidget);
-        expect(
-          tester.widget<ActivityShimmer>(find.byType(ActivityShimmer)).active,
-          isTrue,
-        );
+        expect(find.byType(StudioLoading), findsOneWidget);
         expect(find.byTooltip('Refresh group'), findsNothing);
         expect(find.byTooltip('Stop group work'), findsOneWidget);
         expect(find.byType(ComposerIconButton), findsOneWidget);
@@ -1142,10 +1138,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         expect(transcript.offset, readingOffset);
         expect(find.text('Waiting for your approval'), findsOneWidget);
-        expect(
-          tester.widget<ActivityShimmer>(find.byType(ActivityShimmer)).active,
-          isFalse,
-        );
+        expect(find.byType(ShaderMask), findsNothing);
         expect(find.byType(StudioLoading), findsNothing);
         await _render(tester, frame, 'approval-${brightness.name}-$scale');
         approval = false;
@@ -1153,7 +1146,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         reduced.value = true;
         await tester.pump();
-        expect(find.byType(StudioLoading), findsNothing);
+        expect(find.byType(StudioLoading), findsOneWidget);
         expect(find.text('Bots are working…'), findsOneWidget);
         reduced.value = false;
         await tester.pump();
@@ -1233,7 +1226,7 @@ void main() {
         await session.refresh();
         await tester.pumpAndSettle();
         expect(find.text('Bots are working…'), findsNothing);
-        expect(find.byType(ActivityShimmer), findsNothing);
+        expect(find.byType(StudioLoading), findsNothing);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
       });

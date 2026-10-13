@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'dart:async';
@@ -1087,6 +1088,7 @@ void main() {
             home: const Scaffold(
               body: SingleChildScrollView(
                 child: ProfileTodoPanel(
+                  live: false,
                   embedded: true,
                   todos: [
                     GatewayTodo(
@@ -1154,6 +1156,7 @@ void main() {
             children: [
               ProfileLiveToolActivity(activities: [tool]),
               const ProfileTodoPanel(
+                live: false,
                 todos: [
                   GatewayTodo(
                     content: 'Inspect contract',
@@ -1242,7 +1245,7 @@ void main() {
       expect(find.text('Raw details'), findsNothing);
 
       await tester.tap(find.text('Searching files'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Raw details'), findsOneWidget);
 
       await tester.enterText(
@@ -1544,9 +1547,10 @@ void main() {
           MaterialApp(
             theme: wingTheme(brightness),
             builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: TextScaler.linear(scale)),
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
+                disableAnimations: true,
+              ),
               child: child!,
             ),
             home: RepaintBoundary(
@@ -1589,7 +1593,11 @@ void main() {
           final row = find.byType(ProfileReasoningDisclosure).at(i);
           expect(
             find.descendant(of: row, matching: find.byType(CircuitBrainIcon)),
-            findsOneWidget,
+            i < 2 ? findsOneWidget : findsNothing,
+          );
+          expect(
+            find.descendant(of: row, matching: find.byType(StudioLoading)),
+            i < 2 ? findsNothing : findsOneWidget,
           );
           expect(
             find.descendant(of: row, matching: find.byIcon(memoryIcon)),

@@ -12,7 +12,7 @@ import 'package:flutter/foundation.dart';
 import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:flutter/material.dart';
 import 'package:wing/core/theme/wing_theme.dart';
-import 'package:wing/core/widgets/activity_shimmer.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
 import 'package:wing/core/widgets/markdown_code_block.dart';
@@ -311,7 +311,7 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
     finalPublication.stop();
     // Timeline.now and raw build/raster timestamps use the VM's monotonic clock.
     // A vsync target timestamp is not an actual build-start boundary. Bounded
-    // draining does not guarantee all callbacks arrived. ActivityShimmer supplies
+    // draining does not guarantee all callbacks arrived. StudioLoading supplies
     // continuous frames while honoring OS reduced motion.
     await _wait(const Duration(milliseconds: 1500));
     final frames = _frames.where((frame) {
@@ -409,9 +409,12 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const ActivityShimmer(
-        active: true,
-        child: Text('Streaming replay'),
+      title: const Row(
+        children: [
+          StudioLoading(label: 'Streaming replay', size: 18),
+          SizedBox(width: 8),
+          Text('Streaming replay'),
+        ],
       ),
     ),
     body: SafeArea(

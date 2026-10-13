@@ -1,3 +1,4 @@
+import 'studio_loading.dart';
 import '../models/chat_output.dart';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -94,9 +95,11 @@ class ProfileTodoPanel extends StatelessWidget {
   const ProfileTodoPanel({
     super.key,
     required this.todos,
+    required this.live,
     this.embedded = false,
   });
   final bool embedded;
+  final bool live;
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +134,7 @@ class ProfileTodoPanel extends StatelessWidget {
               child: ActivityDetailSection(
                 copyable: false,
                 viewable: false,
-                leading: _TodoStatusIcon(status: todo.status),
+                leading: _TodoStatusIcon(status: todo.status, live: live),
                 block: ToolDetailBlock(
                   label:
                       '${todo.parent == null ? '' : 'Subtask · '}${switch (todo.status) {
@@ -163,7 +166,9 @@ class ProfileTodoPanel extends StatelessWidget {
 }
 
 class _TodoStatusIcon extends StatelessWidget {
-  const _TodoStatusIcon({required this.status});
+  const _TodoStatusIcon({required this.status, required this.live});
+
+  final bool live;
 
   final GatewayTodoStatus status;
 
@@ -186,8 +191,10 @@ class _TodoStatusIcon extends StatelessWidget {
             GatewayTodoStatus.pending => CustomPaint(
               painter: _PendingTaskPainter(tokens.muted),
             ),
-            GatewayTodoStatus.inProgress => Icon(
-              Icons.timelapse,
+            GatewayTodoStatus.inProgress => StudioActivityIndicator(
+              active: live,
+              label: label,
+              icon: Icons.timelapse,
               size: 16,
               color: tokens.accent,
             ),
@@ -250,7 +257,9 @@ class ProfileReasoningDisclosure extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CompactActivityRow(
     key: const ValueKey('reasoning-disclosure'),
-    icon: CircuitBrainIcon(color: WingTokens.of(context).muted),
+    icon: running
+        ? StudioLoading(label: 'Thinking', size: 16)
+        : CircuitBrainIcon(color: WingTokens.of(context).muted),
     initiallyExpanded: initiallyExpanded,
     time: const ActivityTime(),
     lines: [

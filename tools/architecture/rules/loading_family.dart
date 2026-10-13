@@ -20,7 +20,7 @@ List<Finding> check(Snapshot snapshot) {
           source.path,
           source.lineAt(offset),
           'shared-owner',
-          'Use StudioLoading for local work, StudioLoadingRegion for content, or StudioRefresh for pull refresh.',
+          'Use StudioActivityIndicator for confirmed active work, StudioLoading for blocked work, StudioLoadingRegion for content, or StudioRefresh for pull refresh.',
         ),
       );
     }
@@ -37,6 +37,8 @@ class _LoadingCalls extends RecursiveAstVisitor<void> {
     'CircularProgressIndicator',
     'CupertinoActivityIndicator',
     'RefreshIndicator',
+    'ActivityShimmer',
+    'ChatWorkingBorder',
   };
   @override
   void visitInstanceCreationExpression(InstanceCreationExpression node) {

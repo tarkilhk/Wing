@@ -93,7 +93,7 @@ void main() {
     expect(find.text('Delegated research'), findsOneWidget);
   });
 
-  testWidgets('idle parent with active child has a menu spinner', (
+  testWidgets('idle parent with active child uses the Wing pulse', (
     tester,
   ) async {
     startChild();
@@ -102,7 +102,7 @@ void main() {
         home: Scaffold(body: ProfileChatIndicator(chat: chat)),
       ),
     );
-    expect(find.byType(StudioLoading), findsNothing);
+    expect(find.byType(StudioLoading), findsOneWidget);
   });
 
   for (final terminalStatus in [
@@ -143,7 +143,13 @@ void main() {
         ),
       );
       expect(find.text('Delegated research'), findsOneWidget);
-      expect(find.byType(StudioLoading), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(ProfileChatIndicator),
+          matching: find.byType(StudioLoading),
+        ),
+        findsOneWidget,
+      );
       expect(chat.runtime.blocksTurnAdmission, isFalse);
 
       host.event('a', 'subagent.complete', {

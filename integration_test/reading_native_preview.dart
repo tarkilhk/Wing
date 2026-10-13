@@ -236,6 +236,7 @@ Widget _contentExecutionScreen() {
         const Divider(height: 32),
         ProfileLiveToolActivity(activities: [tool]),
         const ProfileTodoPanel(
+          live: false,
           todos: [
             GatewayTodo(
               content: 'Inspect the wide table and code controls',

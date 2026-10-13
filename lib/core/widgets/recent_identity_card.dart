@@ -1,3 +1,4 @@
+import 'studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../models/bots.dart';
 import '../models/profile_live_activity.dart';
@@ -128,10 +129,10 @@ class RecentIdentityCard extends StatelessWidget {
     final status = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          statusLabel == 'Running'
-              ? Icons.autorenew
-              : Icons.chat_bubble_outline,
+        StudioActivityIndicator(
+          active: statusLabel == 'Running',
+          label: statusLabel,
+          icon: Icons.chat_bubble_outline,
           size: 14,
           color: t.accent,
         ),

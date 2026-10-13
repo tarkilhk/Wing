@@ -199,7 +199,13 @@ void main() {
       'tool_id': 'live',
     });
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: ProfileWorkspaceScreen(controller: controller),
+      ),
     );
     await tester.pumpAndSettle();
     expect(

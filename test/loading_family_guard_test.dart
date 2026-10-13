@@ -7,6 +7,10 @@ void main() {
   final cases = <String, bool>{
     'const CircularProgressIndicator()': false,
     'LinearProgressIndicator()': false,
+    'ActivityShimmer(active: true, child: Text())': false,
+    'ChatWorkingBorder(working: true, child: Text())': false,
+    "StudioActivityIndicator(active: true, label: 'Working', icon: Icons.pending, color: Colors.blue)":
+        true,
     'material.CircularProgressIndicator()': false,
     'const cupertino.CupertinoActivityIndicator.partiallyRevealed()': false,
     'RefreshIndicator.noSpinner(child: Widget())': false,
