@@ -22,6 +22,7 @@ class ProfileMessage extends StatelessWidget {
   final bool streaming;
   final bool showCopyHeader;
   final BotRecord? senderAppearance;
+  final void Function(BuildContext anchor)? onSenderTap;
 
   /// Passive snapshots render resource labels without acquiring image bytes.
   final bool loadImages;
@@ -43,6 +44,7 @@ class ProfileMessage extends StatelessWidget {
     this.streaming = false,
     this.showCopyHeader = true,
     this.senderAppearance,
+    this.onSenderTap,
     this.loadImages = true,
     this.attachmentImagesAvailable = true,
     this.onOpenRemoteFile,
@@ -226,28 +228,51 @@ class ProfileMessage extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Semantics(
-                    label: '$name avatar',
-                    image: true,
-                    child: appearance == null
-                        ? SizedBox.square(
-                            dimension: 28,
-                            child: Icon(
-                              Icons.smart_toy_outlined,
-                              size: 24,
-                              color: colors.onSurfaceVariant,
+                Builder(
+                  builder: (anchor) {
+                    final avatar = Semantics(
+                      label: '$name avatar',
+                      image: true,
+                      child: appearance == null
+                          ? SizedBox.square(
+                              dimension: 28,
+                              child: Icon(
+                                Icons.smart_toy_outlined,
+                                size: 24,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            )
+                          : BotAvatar(
+                              name: name,
+                              shape: appearance.shape,
+                              color: appearance.color,
+                              image: appearance.avatar,
+                              size: 28,
                             ),
-                          )
-                        : BotAvatar(
-                            name: name,
-                            shape: appearance.shape,
-                            color: appearance.color,
-                            image: appearance.avatar,
-                            size: 28,
-                          ),
-                  ),
+                    );
+                    final tap = onSenderTap;
+                    return tap == null
+                        ? message.kind == TranscriptMessageKind.discussion
+                              ? SizedBox.square(
+                                  dimension: 48,
+                                  child: Center(child: avatar),
+                                )
+                              : Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: avatar,
+                                )
+                        : StudioButtonPress(
+                            child: IconButton(
+                              tooltip: 'Options for $name',
+                              constraints: const BoxConstraints.tightFor(
+                                width: 48,
+                                height: 48,
+                              ),
+                              onPressed: () => tap(anchor),
+                              icon: ExcludeSemantics(child: avatar),
+                            ),
+                          );
+                  },
                 ),
                 const SizedBox(width: 8),
                 Flexible(

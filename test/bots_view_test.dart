@@ -1,3 +1,5 @@
+import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
+import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
@@ -825,9 +827,7 @@ void main() {
       await tester.tap(find.text('Research team').first);
       await tester.pumpAndSettle();
       expect(find.byType(BotGroupScreen), findsOneWidget);
-      await tester.tap(find.byTooltip('Group options'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Edit group'));
+      await tester.tap(find.byTooltip('Edit group'));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const ValueKey('group-name')),
@@ -3038,6 +3038,138 @@ void main() {
       );
     }
   }
+
+  testWidgets(
+    'group popup reaches captured bot settings and canonical private chat',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
+      final activity = ValueNotifier<ChatNoticeActivity?>(null);
+      addTearDown(activity.dispose);
+      final administration = AdministrationFixture('Home server');
+      final browser = _BotConversationBrowser();
+      final controller = ProfileWorkspaceController(
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Home server',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
+        ),
+        connectionIdentity: 'instance-1',
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: (scope) {
+          final base = browser.gateway(scope);
+          return ProfileGateway(
+            scope: scope,
+            discover: base.discover,
+            get: (path, query) => path == 'model/options'
+                ? administration.server
+                      .profile(scope.profileName)
+                      .gateway
+                      .read(path, query)
+                : base.read(path, query),
+            rpc: base.call,
+          );
+        },
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final bots = BotsFixture(server: administration.server);
+      bots.profiles
+        ..clear()
+        ..addAll([
+          BotsFixture.profile('personal', 'Atlas'),
+          BotsFixture.profile('work', 'Mira'),
+        ]);
+      bots.profiles.last['canonical_session'] = {
+        'id': 'canonical-root',
+        'resolved_id': 'canonical-tip',
+      };
+      bots.room['members'][0]['profile'] = 'personal';
+      bots.room['members'][1]['profile'] = 'work';
+      bots.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'actor': {'kind': 'member', 'id': 'mira', 'profile': 'work'},
+        'payload': {'text': 'Mira shared answer'},
+        'created_at': 1791756000.0,
+      });
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpMarkdownWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          builder: (context, child) =>
+              ChatNoticeActivityScope(activity: activity, child: child!),
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            initialDestination: AppDestination.bots,
+            createBotsSession: () =>
+                BotsSession((_) async => [bots.repository]),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(Tab, 'Groups'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Research team'));
+      await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      expect(find.byType(BotGroupScreen), findsOneWidget);
+      final input = find.byKey(const ValueKey('group-message-composer'));
+      await tester.enterText(input, 'Keep my group draft');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Options for Mira'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bot settings'));
+      await tester.pumpAndSettle();
+      final settings = tester.widget<BotSettingsScreen>(
+        find.byType(BotSettingsScreen),
+      );
+      expect(settings.profile.name, 'work');
+      expect(settings.bot.scope.connectionIdentity, 'instance-1');
+      expect(find.text('Role & instructions'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(input).controller!.text,
+        'Keep my group draft',
+      );
+      await tester.tap(find.byTooltip('Options for Mira'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Chat directly'));
+      await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      expect(controller.current!.chat!.key.workspace.profileName, 'work');
+      expect(controller.current!.chat!.key.sessionId, 'canonical-root');
+      expect(find.byType(BotGroupScreen), findsNothing);
+      expect(find.text('Mira'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(BotGroupScreen, skipOffstage: false), findsNothing);
+      expect(controller.current!.chat, isNull);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('bots-search')))
+            .decoration!
+            .hintText,
+        'Search groups',
+      );
+      expect(find.byType(BotsContent), findsOneWidget);
+      expect(find.byType(BotGroupScreen), findsNothing);
+      expect(bots.commands, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('saved and streaming replies omit repeated author headers', (
     tester,

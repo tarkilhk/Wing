@@ -23,6 +23,7 @@ class BotGroupConversation extends StatelessWidget {
     this.beforeComposer = const [],
     this.membersAnchor,
     this.onMembers,
+    this.onEdit,
     this.showMembers = true,
   });
   final BotGroup group;
@@ -31,7 +32,7 @@ class BotGroupConversation extends StatelessWidget {
   final Widget transcript, composer;
   final List<Widget> actions, beforeComposer;
   final GlobalKey? membersAnchor;
-  final VoidCallback? onMembers;
+  final VoidCallback? onMembers, onEdit;
   final VoidCallback onBack;
   final bool showMembers;
 
@@ -40,9 +41,30 @@ class BotGroupConversation extends StatelessWidget {
     appBar: WingAppBar(
       context: context,
       leading: StudioButtonPress(child: BackButton(onPressed: onBack)),
-      title: WingConversationTitle(
-        title: group.name,
-        avatar: BotGroupIdentity(group: group, bots: appearances, size: 32),
+      title: Builder(
+        builder: (context) {
+          final title = WingConversationTitle(
+            title: group.name,
+            avatar: BotGroupIdentity(group: group, bots: appearances, size: 32),
+          );
+          return onEdit == null
+              ? title
+              : Tooltip(
+                  message: 'Edit group',
+                  child: Semantics(
+                    button: true,
+                    child: StudioButtonPress(
+                      child: InkWell(
+                        onTap: onEdit,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: title,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+        },
       ),
       actions: actions,
       contextRow: instanceHeader,
@@ -81,11 +103,13 @@ class BotGroupMessage extends StatelessWidget {
     required this.message,
     required this.appearance,
     this.loadImages = true,
+    this.onSenderTap,
   });
   final BotGroup group;
   final TranscriptMessage message;
   final BotRecord? appearance;
   final bool loadImages;
+  final void Function(BuildContext anchor)? onSenderTap;
 
   @override
   Widget build(BuildContext context) => BotMentionScope(
@@ -93,6 +117,7 @@ class BotGroupMessage extends StatelessWidget {
     child: ProfileMessage(
       message: message,
       senderAppearance: appearance,
+      onSenderTap: onSenderTap,
       loadImages: loadImages,
     ),
   );

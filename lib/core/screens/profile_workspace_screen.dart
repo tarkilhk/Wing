@@ -472,6 +472,62 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     );
   }
 
+  Future<void> _openGroupChatWindow(
+    BuildContext groupContext, {
+    required AppDestination origin,
+  }) => Navigator.of(groupContext).push<void>(
+    MaterialPageRoute(
+      builder: (_) => RecentConversationRouteScope(
+        recents: _recents,
+        origin: origin,
+        onLeave: _leaveConversation,
+        child: ProfileWorkspaceScreen(
+          controller: controller,
+          enableNotifications: widget.enableNotifications,
+          backgroundMonitoringState: widget.backgroundMonitoringState,
+          openMonitoringBatterySettings: widget.openMonitoringBatterySettings,
+          onConnections: widget.onConnections,
+          configurationActions: widget.configurationActions,
+          savedConnections: widget.savedConnections,
+          onSelectConnection: widget.onSelectConnection,
+          onPreferencesChanged: widget.onPreferencesChanged,
+          onCapturePhoto: widget.onCapturePhoto,
+          voiceDevice: widget.voiceDevice,
+          createBotsSession: widget.createBotsSession,
+          onOpenBotChat: widget.onOpenBotChat,
+        ),
+      ),
+    ),
+  );
+
+  Future<void> _openGroupBotChat(
+    BuildContext groupContext,
+    BotRecord bot,
+  ) async {
+    bool current() =>
+        mounted &&
+        groupContext.mounted &&
+        ModalRoute.isCurrentOf(groupContext) == true;
+    final key = await _bots.openProfile(bot.scope, canUse: current);
+    if (!current() || key == null) return;
+    if (!controller.owns(key)) {
+      final open = widget.onOpenBotChat;
+      if (open == null) {
+        throw StateError('Open this bot from its saved instance');
+      }
+      await open(key, current);
+      return;
+    }
+    final chat = await controller.openSession(
+      key,
+      propagateHistoryFailure: true,
+      isCurrentRequest: current,
+    );
+    if (current() && groupContext.mounted && chat != null) {
+      await _openGroupChatWindow(groupContext, origin: AppDestination.bots);
+    }
+  }
+
   Future<void> _openRecentGroup(
     BotGroup group, {
     AppDestination origin = AppDestination.activity,
@@ -490,31 +546,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               recents: _recents,
               onOpenGroup: _openRecentGroup,
               activity: () => ChatNoticeActivityScope.of(groupContext),
-              onOpenChat: (_) => Navigator.of(groupContext).push<void>(
-                MaterialPageRoute(
-                  builder: (chatContext) => RecentConversationRouteScope(
-                    recents: _recents,
-                    origin: AppDestination.activity,
-                    onLeave: _leaveConversation,
-                    child: ProfileWorkspaceScreen(
-                      controller: controller,
-                      enableNotifications: widget.enableNotifications,
-                      backgroundMonitoringState:
-                          widget.backgroundMonitoringState,
-                      openMonitoringBatterySettings:
-                          widget.openMonitoringBatterySettings,
-                      onConnections: widget.onConnections,
-                      configurationActions: widget.configurationActions,
-                      savedConnections: widget.savedConnections,
-                      onSelectConnection: widget.onSelectConnection,
-                      onPreferencesChanged: widget.onPreferencesChanged,
-                      onCapturePhoto: widget.onCapturePhoto,
-                      voiceDevice: widget.voiceDevice,
-                      createBotsSession: widget.createBotsSession,
-                      onOpenBotChat: widget.onOpenBotChat,
-                    ),
-                  ),
-                ),
+              onOpenChat: (_) => _openGroupChatWindow(
+                groupContext,
+                origin: AppDestination.activity,
               ),
             ),
             previewBuilder: _recentPreview,
@@ -525,6 +559,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               stopVoicePlayback: _voiceOutput.stop,
               createSession: () => _bots.openGroup(group),
               onEdit: (group) => openGroupEditor(groupContext, _bots, group),
+              onOpenBotChat: (bot) => _openGroupBotChat(groupContext, bot),
+              onOpenBotSettings: (bot) =>
+                  _openBotSettings(bot, routeContext: groupContext),
             ),
           );
           return status == null
@@ -1003,13 +1040,19 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     },
   );
 
-  Future<void> _openBotSettings(BotRecord bot) async {
-    if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+  Future<void> _openBotSettings(
+    BotRecord bot, {
+    BuildContext? routeContext,
+  }) async {
+    final target = routeContext ?? context;
+    if (!mounted || !target.mounted || ModalRoute.isCurrentOf(target) != true) {
+      return;
+    }
     final bots = _bots;
     final server = bots.repository(bot.scope.connectionIdentity).server;
     if (server == null) return;
     await Navigator.push<void>(
-      context,
+      target,
       MaterialPageRoute(
         builder: (_) => BotSettingsScreen(
           profile: server.profile(bot.profile.name),

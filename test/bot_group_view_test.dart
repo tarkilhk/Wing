@@ -1,3 +1,6 @@
+import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/screens/bots/bot_group_history_screen.dart';
+import 'package:wing/core/models/profile_colors.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/models/connection.dart';
@@ -933,6 +936,415 @@ void main() {
     },
   );
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group header opens editor from name and icon ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          fixture.events.add(
+            _event(1, 'message.member', 'atlas', 'Keep this reply'),
+          );
+          final group = (await fixture.repository.groups(
+            groupMessages: null,
+          )).first;
+          final appearances = await fixture.repository.bots();
+          final navigator = GlobalKey<NavigatorState>();
+          final frame = GlobalKey();
+          var edits = 0;
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: frame,
+              child: MaterialApp(
+                navigatorKey: navigator,
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () =>
+                      const LocalVoiceInputSettings(language: ''),
+                  createSession: () => BotGroupSession(
+                    fixture.repository,
+                    group,
+                    reads: BotGroupReadState(),
+                    groupMessages: null,
+                    appearances: FixedGroupAppearances(appearances),
+                  ),
+                  onEdit: (selected) async {
+                    expect(selected.id, group.id);
+                    edits++;
+                    await navigator.currentState!.push<void>(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const Scaffold(body: Text('Group editor')),
+                      ),
+                    );
+                    return selected.withDetails(
+                      name: 'Renamed group',
+                      color: ProfileColorChoice.blue,
+                      picture: selected.picture,
+                      revision: 1,
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await _settleGroupMarkdown(tester);
+          final input = find.byKey(const ValueKey('group-message-composer'));
+          await tester.enterText(input, 'Keep this draft');
+          await tester.pumpAndSettle();
+          final title = find.byTooltip('Edit group');
+          expect(title, findsOneWidget);
+          expect(tester.getSize(title).height, greaterThanOrEqualTo(48));
+          await _render(
+            tester,
+            frame,
+            'editable-header-${brightness.name}-$scale',
+          );
+          await tester.tap(find.text(group.name));
+          await tester.pumpAndSettle();
+          expect(find.text('Group editor'), findsOneWidget);
+          expect(edits, 1);
+          navigator.currentState!.pop();
+          await tester.pumpAndSettle();
+          expect(find.text('Renamed group'), findsOneWidget);
+          expect(
+            tester.widget<TextField>(input).controller!.text,
+            'Keep this draft',
+          );
+          expect(find.text('Keep this reply'), findsOneWidget);
+          await tester.tap(
+            find.descendant(of: title, matching: find.byType(BotGroupIdentity)),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Group editor'), findsOneWidget);
+          expect(edits, 2);
+          navigator.currentState!.pop();
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Group options'));
+          await tester.pumpAndSettle();
+          expect(find.text('Edit group'), findsNothing);
+          expect(find.text('Bot working histories'), findsOneWidget);
+          expect(find.text('Refresh group'), findsOneWidget);
+          await _render(
+            tester,
+            frame,
+            'group-options-${brightness.name}-$scale',
+          );
+          navigator.currentState!.pop();
+          await tester.pumpAndSettle();
+          expect(fixture.commands, isEmpty);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'bot avatar popup has only three scoped actions ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final semantics = tester.ensureSemantics();
+          final fixture = BotsFixture();
+          fixture.events.addAll([
+            _event(1, 'message.member', 'atlas', 'Atlas room reply'),
+            _event(2, 'message.member', 'mira', 'Mira room reply'),
+          ]);
+          fixture.workerRows['mira'] = [
+            {
+              'id': 'mira-root',
+              'resolved_id': 'mira-tip',
+              'title': 'Group: room-1',
+              'source': 'bot_room',
+            },
+          ];
+          fixture.workerMessages['mira'] = [
+            {'id': 1, 'role': 'assistant', 'content': 'Mira internal work'},
+          ];
+          final group = (await fixture.repository.groups(
+            groupMessages: null,
+          )).first;
+          final appearances = await fixture.repository.bots();
+          var reads = 0;
+          fixture.readHook = (_, method, _) async {
+            if (method == 'groups.state') reads++;
+            return null;
+          };
+          final navigator = GlobalKey<NavigatorState>();
+          final frame = GlobalKey();
+          final actions = <(String, String, String)>[];
+          Future<void> open(BotRecord bot, String action) async {
+            actions.add((
+              action,
+              bot.scope.connectionIdentity,
+              bot.profile.name,
+            ));
+            await navigator.currentState!.push<void>(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(body: Text('${bot.title} $action')),
+              ),
+            );
+          }
+
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: frame,
+              child: MaterialApp(
+                navigatorKey: navigator,
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () =>
+                      const LocalVoiceInputSettings(language: ''),
+                  createSession: () => BotGroupSession(
+                    fixture.repository,
+                    group,
+                    reads: BotGroupReadState(),
+                    groupMessages: null,
+                    appearances: FixedGroupAppearances(appearances),
+                  ),
+                  onOpenBotChat: (bot) => open(bot, 'private chat'),
+                  onOpenBotSettings: (bot) => open(bot, 'settings'),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await _settleGroupMarkdown(tester);
+          final input = find.byKey(const ValueKey('group-message-composer'));
+          await tester.enterText(input, 'Keep my room draft');
+          await tester.pumpAndSettle();
+          final avatar = find.byTooltip('Options for Mira');
+          expect(tester.getSize(avatar), const Size(48, 48));
+          final anchor = tester.getRect(avatar);
+          final avatarBounds = tester.getRect(
+            find.descendant(of: avatar, matching: find.byType(BotAvatar)),
+          );
+          await tester.tap(avatar);
+          await tester.pumpAndSettle();
+          final buttons = [
+            for (final action in ['history', 'chat', 'settings'])
+              find.byKey(ValueKey(('group-bot-action', action))),
+          ];
+          for (final button in buttons) {
+            expect(button, findsOneWidget);
+            expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
+            expect(tester.widget<PopupMenuItem>(button).enabled, isTrue);
+            expect(
+              tester
+                  .getSemantics(
+                    find
+                        .descendant(of: button, matching: find.byType(Text))
+                        .first,
+                  )
+                  .getSemanticsData()
+                  .hasAction(ui.SemanticsAction.tap),
+              isTrue,
+            );
+          }
+          if (_capture) {
+            expect(
+              tester.getSize(buttons.first).height,
+              lessThanOrEqualTo(scale == 1 ? 48 : 96),
+            );
+          }
+          expect(find.text('View working history'), findsOneWidget);
+          expect(find.text('Chat directly'), findsOneWidget);
+          expect(find.text('Bot settings'), findsOneWidget);
+          final panel = find
+              .ancestor(
+                of: buttons.first,
+                matching: find.byWidgetPredicate(
+                  (widget) =>
+                      widget is Material &&
+                      widget.elevation == 4 &&
+                      widget.shape is RoundedRectangleBorder,
+                ),
+              )
+              .first;
+          final panelRect = tester.getRect(panel);
+          expect(panelRect.left, greaterThanOrEqualTo(8));
+          expect(
+            panelRect.right,
+            lessThanOrEqualTo(tester.view.physicalSize.width - 8),
+          );
+          expect(panelRect.bottom, lessThanOrEqualTo(844 - 8));
+          expect(panelRect.left, closeTo(avatarBounds.left, 1));
+          expect(panelRect.contains(anchor.center), isTrue);
+          expect(panelRect.top, lessThanOrEqualTo(avatarBounds.top));
+          expect(panelRect.bottom, greaterThanOrEqualTo(anchor.top));
+          final identity = find.byKey(
+            const ValueKey('group-bot-card-identity'),
+          );
+          final face = tester.widget<BotAvatar>(
+            find.descendant(of: identity, matching: find.byType(BotAvatar)),
+          );
+          expect(face.name, 'Mira');
+          expect(face.size, 32);
+          expect(
+            find.descendant(of: identity, matching: find.text('Mira')),
+            findsOneWidget,
+          );
+          await _render(tester, frame, 'bot-popup-${brightness.name}-$scale');
+          final pausedReads = reads;
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+          await tester.pump(const Duration(seconds: 5));
+          expect(reads, pausedReads);
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pumpAndSettle();
+          expect(find.text('Chat directly'), findsNothing);
+          expect(reads, greaterThan(pausedReads));
+          expect(actions, isEmpty);
+          for (final (label, page, action) in [
+            ('Chat directly', 'Mira private chat', 'private chat'),
+            ('Bot settings', 'Mira settings', 'settings'),
+          ]) {
+            await tester.tap(avatar);
+            await tester.pumpAndSettle();
+            await tester.tap(find.text(label));
+            await tester.pumpAndSettle();
+            expect(find.text(page), findsOneWidget);
+            expect(actions.last, (
+              action,
+              group.scope.connectionIdentity,
+              'mira',
+            ));
+            final coveredReads = reads;
+            tester.binding.handleAppLifecycleStateChanged(
+              AppLifecycleState.inactive,
+            );
+            tester.binding.handleAppLifecycleStateChanged(
+              AppLifecycleState.resumed,
+            );
+            await tester.pump(const Duration(seconds: 5));
+            expect(reads, coveredReads);
+            navigator.currentState!.pop();
+            await tester.pumpAndSettle();
+            expect(
+              tester.widget<TextField>(input).controller!.text,
+              'Keep my room draft',
+            );
+            expect(find.text('Mira room reply'), findsOneWidget);
+          }
+          await tester.tap(avatar);
+          await tester.pumpAndSettle();
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          await tester.pumpAndSettle();
+          await _settleGroupMarkdown(tester);
+          expect(find.byType(BotGroupHistoryScreen), findsOneWidget);
+          expect(fixture.historyReads.single, ('mira', 'mira-tip', 0));
+          expect(
+            tester
+                .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Mira'))
+                .selected,
+            isTrue,
+          );
+          expect(find.text('Mira internal work'), findsOneWidget);
+          navigator.currentState!.pop();
+          await tester.pumpAndSettle();
+          await tester.tap(avatar);
+          await tester.pumpAndSettle();
+          await tester.tapAt(const Offset(280, 100));
+          await tester.pumpAndSettle();
+          expect(find.text('Chat directly'), findsNothing);
+          expect(
+            tester.widget<TextField>(input).controller!.text,
+            'Keep my room draft',
+          );
+          expect(fixture.commands, isEmpty);
+          expect(tester.takeException(), isNull);
+          semantics.dispose();
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
+  testWidgets('missing bot keeps room history but disables profile shortcuts', (
+    tester,
+  ) async {
+    final fixture = BotsFixture();
+    fixture.events.add(_event(1, 'message.member', 'mira', 'Saved Mira reply'));
+    final group = (await fixture.repository.groups(groupMessages: null)).first;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BotGroupScreen(
+          stopVoicePlayback: () async {},
+          voiceInputSettings: () => const LocalVoiceInputSettings(language: ''),
+          createSession: () => BotGroupSession(
+            fixture.repository,
+            group,
+            reads: BotGroupReadState(),
+            groupMessages: null,
+            appearances: FixedGroupAppearances([]),
+          ),
+          onOpenBotChat: (_) async => fail('Unavailable bot must not open'),
+          onOpenBotSettings: (_) async => fail('Unavailable bot must not open'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Options for Mira'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<PopupMenuItem>(
+            find.byKey(const ValueKey(('group-bot-action', 'history'))),
+          )
+          .enabled,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<PopupMenuItem>(
+            find.byKey(const ValueKey(('group-bot-action', 'chat'))),
+          )
+          .enabled,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<PopupMenuItem>(
+            find.byKey(const ValueKey(('group-bot-action', 'settings'))),
+          )
+          .enabled,
+      isFalse,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('covered group editor stays paused across app resume', (
     tester,
   ) async {
@@ -970,9 +1382,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Group options'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit group'));
+    await tester.tap(find.byTooltip('Edit group'));
     await tester.pumpAndSettle();
     expect(find.text('Group editor'), findsOneWidget);
     final coveredReads = reads;

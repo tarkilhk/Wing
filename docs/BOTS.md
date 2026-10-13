@@ -73,7 +73,7 @@ Recognized text replaces the selected text or inserts at the cursor. Review it
 before sending. Finish or cancel recording before pinching into Recents.
 Leaving the discussion or backgrounding Wing cancels recording.
 
-Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Type `@` anywhere in your message to choose a frozen room member or `@everyone`. Search by the bot's name or Hermes handle; selecting Pace inserts `@Pace`, while Wing retains its canonical Hermes identity. Members show their saved bot avatars when available; Everyone uses a group icon. Tap a group’s icon in the Groups roster to open its editor directly; tap its name or message area to open the discussion. Open **Edit group** from a group’s roster actions or the discussion’s options menu, including discussions opened from Recents, to change its name, icon color or picture. Upload, generate or remove the picture, then use the checkmark to save to Hermes. Membership and the Hermes instance are fixed when created. Rooms also offer stop and disband.
+Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Type `@` anywhere in your message to choose a frozen room member or `@everyone`. Search by the bot's name or Hermes handle; selecting Pace inserts `@Pace`, while Wing retains its canonical Hermes identity. Members show their saved bot avatars when available; Everyone uses a group icon. Tap a group’s icon in the Groups roster to open its editor directly; tap its name or message area to open the discussion. Tap the group’s icon or name in the discussion header, including discussions opened from Recents, or choose **Edit group** from its roster actions to change its name, icon color or picture. Upload, generate or remove the picture, then use the checkmark to save to Hermes. Membership and the Hermes instance are fixed when created. Rooms also offer stop and disband.
 
 In an ordinary chat, `@` anywhere in your message offers agents from the same Hermes server with their
 saved bot avatars when available. Search also matches saved bot titles; selection
@@ -124,6 +124,15 @@ An unconfirmed send stays available for review/retry. Interrupted tasks ask for 
 
 Your bubbles show your message without a User label. Bot replies show the
 sender's saved avatar and name, formatted text, links, code and timestamps.
+Tap a bot's avatar in the discussion to open a compact card over it, with the
+bot's saved avatar and name above three icon-and-text actions: **View working
+history**, **Chat directly** and **Bot settings**.
+Working history opens with that member selected. Direct chat opens the bot's
+continuing private conversation; settings apply to its profile across chats.
+Working history and settings return to the discussion with your draft and
+reading position intact. Direct chat follows the normal Bot Chat navigation;
+Back returns to Bots. A direct chat on another saved instance uses Wing's usual
+instance-switching flow.
 Both use the same icon-only Copy beside the message as normal chats. Type `@` in the composer to choose a
 member; the picker inserts at the cursor. The conversation opens
 at its latest messages and renders older messages as you scroll up. Your reading
@@ -156,7 +165,7 @@ Tap the people icon under the title for a compact member list anchored beneath
 that button, with saved names and avatars. Tap outside or use Back
 to dismiss it. Without a saved room picture, the conversation shows its
 member-avatar collage.
-The ellipsis menu contains Edit group, working histories, Refresh and Stop.
+The ellipsis menu contains working histories, Refresh and Stop.
 Stop group work is also available when interrupted work is waiting for Retry,
 even if the bots are no longer running. Stop cancels that pending work and keeps
 the conversation history; send a follow-up in the same group to continue.

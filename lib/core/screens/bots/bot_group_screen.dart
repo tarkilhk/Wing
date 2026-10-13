@@ -27,6 +27,8 @@ import '../../models/voice_processing_settings.dart';
 import '../../services/android_voice.dart';
 import '../../widgets/voice_input_activity.dart';
 
+enum _GroupBotAction { history, chat, settings }
+
 class BotGroupScreen extends StatefulWidget {
   const BotGroupScreen({
     super.key,
@@ -35,12 +37,15 @@ class BotGroupScreen extends StatefulWidget {
     required this.stopVoicePlayback,
     this.voiceDevice,
     this.onEdit,
+    this.onOpenBotChat,
+    this.onOpenBotSettings,
   });
   final BotGroupSession Function() createSession;
   final VoiceInputSettings? Function() voiceInputSettings;
   final Future<void> Function() stopVoicePlayback;
   final VoiceDevice? voiceDevice;
   final Future<BotGroup?> Function(BotGroup)? onEdit;
+  final Future<void> Function(BotRecord)? onOpenBotChat, onOpenBotSettings;
   @override
   State<BotGroupScreen> createState() => _BotGroupScreenState();
 }
@@ -253,6 +258,9 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       appearance: user || member == null
           ? null
           : _session.appearance(member.profile),
+      onSenderTap: user || member == null
+          ? null
+          : (anchor) => unawaited(_showBotActions(anchor, member)),
     );
   }
 
@@ -335,7 +343,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           : const AnimationStyle(duration: Duration(milliseconds: 160)),
       items: [
         for (final member in _session.group.members)
-          _MemberEntry(
+          _GroupMenuEntry<void>(
             key: ValueKey(('group-member', member.id)),
             child: Builder(
               builder: (context) {
@@ -488,16 +496,200 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     if (mounted && confirmed == true) await _session.resolve(action);
   }
 
-  Future<void> _openWorkingHistories() async {
+  Future<void> _showBotActions(
+    BuildContext anchor,
+    BotGroupMember member,
+  ) async {
+    if (!_visible) return;
+    final bot = _session.appearance(member.profile);
+    final name = bot?.title ?? member.name;
+    final tokens = WingTokens.of(context);
+    final overlay =
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final box = anchor.findRenderObject()! as RenderBox;
+    RelativeRect position() {
+      final rect = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
+      return RelativeRect.fromRect(
+        Rect.fromLTWH(
+          rect.center.dx - 14,
+          rect.center.dy - 14 - WingSpacing.xs,
+          0,
+          0,
+        ),
+        Offset.zero & overlay.size,
+      );
+    }
+
+    var lastPosition = position();
+    _inspectingDetails = true;
+    _syncVisibility();
+    try {
+      final action = await showMenu<_GroupBotAction>(
+        context: context,
+        semanticLabel: 'Options for $name',
+        requestFocus: true,
+        positionBuilder: (_, _) {
+          if (box.attached &&
+              overlay.attached &&
+              box.hasSize &&
+              overlay.hasSize) {
+            lastPosition = position();
+          }
+          return lastPosition;
+        },
+        constraints: const BoxConstraints.tightFor(width: 240),
+        color: tokens.raised,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: WingRadius.card,
+          side: BorderSide(color: tokens.border),
+        ),
+        elevation: 4,
+        menuPadding: const EdgeInsets.symmetric(vertical: WingSpacing.xs),
+        popUpAnimationStyle: MediaQuery.disableAnimationsOf(context)
+            ? AnimationStyle.noAnimation
+            : const AnimationStyle(duration: Duration(milliseconds: 160)),
+        items: [
+          _GroupMenuEntry<_GroupBotAction>(
+            child: Row(
+              key: const ValueKey('group-bot-card-identity'),
+              children: [
+                ExcludeSemantics(
+                  child: BotAvatar(
+                    name: name,
+                    shape: bot?.shape ?? 'circle',
+                    color: bot?.color ?? '',
+                    image: bot?.avatar,
+                    size: 32,
+                  ),
+                ),
+                const SizedBox(width: WingSpacing.sm),
+                Expanded(
+                  child: Text(
+                    name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const PopupMenuDivider(height: 9),
+          for (final (action, label, icon, enabled) in [
+            (
+              _GroupBotAction.history,
+              'View working history',
+              Icons.history_outlined,
+              true,
+            ),
+            (
+              _GroupBotAction.chat,
+              'Chat directly',
+              Icons.chat_bubble_outline,
+              bot != null && widget.onOpenBotChat != null,
+            ),
+            (
+              _GroupBotAction.settings,
+              'Bot settings',
+              Icons.tune_outlined,
+              bot != null && widget.onOpenBotSettings != null,
+            ),
+          ])
+            StudioPopupMenuItem<_GroupBotAction>(
+              key: ValueKey(('group-bot-action', action.name)),
+              value: action,
+              enabled: enabled,
+              height: 48,
+              padding: const EdgeInsets.symmetric(
+                horizontal: WingSpacing.md,
+                vertical: WingSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: enabled
+                        ? Theme.of(context).colorScheme.onSurfaceVariant
+                        : Theme.of(context).disabledColor,
+                  ),
+                  const SizedBox(width: WingSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontSize: 14,
+                        height: 1.3,
+                        color: enabled
+                            ? Theme.of(context).colorScheme.onSurface
+                            : Theme.of(context).disabledColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      );
+      if (!mounted || ModalRoute.isCurrentOf(context) != true) return;
+      final currentBot = _session.appearance(member.profile);
+      switch (action) {
+        case _GroupBotAction.history:
+          await _openWorkingHistories(member);
+        case _GroupBotAction.chat:
+          if (currentBot != null) await widget.onOpenBotChat?.call(currentBot);
+        case _GroupBotAction.settings:
+          if (currentBot != null) {
+            await widget.onOpenBotSettings?.call(currentBot);
+          }
+        case null:
+          break;
+      }
+    } catch (error) {
+      if (mounted) showStudioError(context, error.toString());
+    } finally {
+      _inspectingDetails = false;
+      if (mounted) {
+        _syncVisibility();
+        _acknowledgeLatest();
+      }
+    }
+  }
+
+  Future<void> _editGroup() async {
+    _focus.unfocus();
+    _inspectingDetails = true;
+    _syncVisibility();
+    try {
+      final updated = await widget.onEdit!(_session.group);
+      if (mounted && updated != null) {
+        _session.updateDetails(updated);
+      }
+    } finally {
+      _inspectingDetails = false;
+      if (mounted) _syncVisibility();
+    }
+  }
+
+  Future<void> _openWorkingHistories([BotGroupMember? member]) async {
     _focus.unfocus();
     _inspectingDetails = true;
     _syncVisibility();
     try {
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
-          builder: (_) => BotGroupHistoryScreen(
-            createSession: () =>
-                BotGroupHistorySession(_session.repository, _session.group),
+          builder: (_) => InheritedTheme.captureAll(
+            context,
+            BotGroupHistoryScreen(
+              initialMemberId: member?.id,
+              createSession: () =>
+                  BotGroupHistorySession(_session.repository, _session.group),
+            ),
           ),
         ),
       );
@@ -542,6 +734,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       onBack: () => Navigator.of(context).maybePop(),
       membersAnchor: _membersAnchor,
       onMembers: _showMembers,
+      onEdit: widget.onEdit == null ? null : _editGroup,
       showMembers: !_showReferences && (!keyboardOpen || !enlargedText),
       actions: [
         StudioButtonPress(
@@ -556,29 +749,9 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                   await _refreshGroup();
                 case 'stop':
                   await _session.stop();
-                case 'edit':
-                  _focus.unfocus();
-                  _inspectingDetails = true;
-                  _syncVisibility();
-                  try {
-                    final updated = await widget.onEdit!(_session.group);
-                    if (mounted && updated != null) {
-                      _session.updateDetails(updated);
-                    }
-                  } finally {
-                    _inspectingDetails = false;
-                    if (mounted) {
-                      _syncVisibility();
-                    }
-                  }
               }
             },
             itemBuilder: (_) => [
-              if (widget.onEdit != null)
-                const StudioPopupMenuItem(
-                  value: 'edit',
-                  child: Text('Edit group'),
-                ),
               const StudioPopupMenuItem(
                 value: 'histories',
                 child: Text('Bot working histories'),
@@ -818,19 +991,19 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   }
 }
 
-// Roster observations have text semantics, rather than disabled action semantics.
-class _MemberEntry extends PopupMenuEntry<void> {
-  const _MemberEntry({super.key, required this.child});
+// Roster text and bot identity retain text semantics inside the native popup.
+class _GroupMenuEntry<T> extends PopupMenuEntry<T> {
+  const _GroupMenuEntry({super.key, required this.child});
   final Widget child;
   @override
   double get height => 0;
   @override
-  bool represents(void value) => false;
+  bool represents(T? value) => false;
   @override
-  State<_MemberEntry> createState() => _MemberEntryState();
+  State<_GroupMenuEntry<T>> createState() => _GroupMenuEntryState<T>();
 }
 
-class _MemberEntryState extends State<_MemberEntry> {
+class _GroupMenuEntryState<T> extends State<_GroupMenuEntry<T>> {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(

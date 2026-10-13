@@ -9,7 +9,12 @@ import '../../widgets/profile_message.dart';
 import '../../widgets/wing_app_bar.dart';
 
 class BotGroupHistoryScreen extends StatefulWidget {
-  const BotGroupHistoryScreen({super.key, required this.createSession});
+  const BotGroupHistoryScreen({
+    super.key,
+    required this.createSession,
+    this.initialMemberId,
+  });
+  final String? initialMemberId;
   final BotGroupHistorySession Function() createSession;
 
   @override
@@ -23,7 +28,11 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
   void initState() {
     super.initState();
     _session.addListener(_changed);
-    final first = _session.group.members.firstOrNull;
+    final first = widget.initialMemberId == null
+        ? _session.group.members.firstOrNull
+        : _session.group.members
+              .where((member) => member.id == widget.initialMemberId)
+              .firstOrNull;
     if (first != null) unawaited(_session.select(first));
   }
 
