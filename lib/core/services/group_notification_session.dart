@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/group_notification.dart';
 import '../models/hermes_profile.dart';
 import 'bot_group_read_state.dart';
+import 'bots_repository.dart';
 
 typedef GroupNotificationRead =
     Future<Map<String, dynamic>> Function(
@@ -17,8 +18,10 @@ final class _WatchedGroup {
   String title;
   int cursor;
   int sending = 0;
+  final awaiting = <String>{};
+  final discarding = <String>{};
   bool working = false, blocked = false, uncertain = false, pending = false;
-  bool get active => working || sending > 0 || pending;
+  bool get active => working || sending > 0 || pending || awaiting.isNotEmpty;
 }
 
 /// Owns room work, replay cursors and delivery ordering for one connection.
@@ -46,6 +49,23 @@ class GroupNotificationSession extends ChangeNotifier {
         /* Unusable local cursors establish a fresh baseline. */
       }
     }
+    final pending = preferences.getString(_pendingStorageKey);
+    if (pending != null) {
+      final values = _map(jsonDecode(pending));
+      for (final entry in values.entries) {
+        final value = _map(entry.value);
+        final title = value['title'], events = value['events'];
+        if (entry.key.isEmpty ||
+            title is! String ||
+            events is! List ||
+            events.any((event) => event is! String || event.isEmpty)) {
+          throw const FormatException('Invalid pending group send');
+        }
+        _groups[entry.key] = _WatchedGroup(title, _cursors[entry.key] ?? -1)
+          ..awaiting.addAll(events.cast<String>())
+          ..uncertain = true;
+      }
+    }
   }
   final WorkspaceScope scope;
   final String instance;
@@ -58,6 +78,9 @@ class GroupNotificationSession extends ChangeNotifier {
   final _cursors = <String, int>{};
   String get _storageKey =>
       'group_notification_sequences/${scope.connectionIdentity}';
+  String get _pendingStorageKey =>
+      'group_notification_pending_sends/${scope.connectionIdentity}';
+  Future<void> _writes = Future.value();
   bool _closed = false, _activated = false, _foreground = true, _again = false;
   Future<void>? _refreshing;
   Timer? _timer;
@@ -100,7 +123,7 @@ class GroupNotificationSession extends ChangeNotifier {
     return refresh();
   }
 
-  void beginSend(String roomId, String title) {
+  Future<void> beginSend(String roomId, String title, String eventId) async {
     if (_closed) return;
     _activated = true;
     final group = _groups.putIfAbsent(
@@ -108,20 +131,57 @@ class GroupNotificationSession extends ChangeNotifier {
       () => _WatchedGroup(title, _cursors[roomId] ?? -1),
     );
     group.sending++;
+    final wireId = BotsRepository.groupUserEventId(eventId);
+    final remember = group.cursor < 0 && group.awaiting.add(wireId);
     _changed();
+    if (remember) {
+      try {
+        await _savePending();
+      } catch (_) {
+        group.awaiting.remove(wireId);
+        group.sending--;
+        _changed();
+        rethrow;
+      }
+    }
   }
 
-  Future<void> endSend(String roomId, {required bool dispatched}) async {
-    if (_closed) return;
-    // Keep the send lease until the room's accepted state has been observed.
-    await refresh();
+  Future<void> endSend(
+    String roomId,
+    String eventId, {
+    required bool dispatched,
+    int? sequence,
+  }) async {
     if (_closed) return;
     final group = _groups[roomId];
-    if (group != null && group.sending > 0) {
-      group.sending--;
-      if (dispatched && group.uncertain) group.pending = true;
+    if (group == null) return;
+    if (sequence != null && (!dispatched || sequence < 1)) {
+      throw const FormatException('Invalid accepted group send sequence');
     }
-    _changed();
+    try {
+      if (sequence != null && group.cursor < 0) {
+        final saved = await _saveCursor(roomId, sequence);
+        if (saved > group.cursor) group.cursor = saved;
+      }
+      if (!dispatched || sequence != null) {
+        final wireId = BotsRepository.groupUserEventId(eventId);
+        if (!dispatched) group.discarding.add(wireId);
+        await _removePending(roomId, {wireId});
+        group.discarding.remove(wireId);
+      }
+      // A lost acknowledgement keeps the exact durable send identity until its
+      // accepted stock event is found, including after an engine restart.
+      await refresh();
+    } catch (_) {
+      // Notification persistence failure cannot revoke a confirmed chat send.
+      // Its durable identity and active lease retain replay/cleanup for retry.
+      group.uncertain = true;
+      group.pending = true;
+    } finally {
+      if (group.sending > 0) group.sending--;
+      if (dispatched && group.uncertain) group.pending = true;
+      _changed();
+    }
   }
 
   Future<void> acknowledge(String roomId, int sequence) =>
@@ -157,12 +217,48 @@ class GroupNotificationSession extends ChangeNotifier {
     return value;
   }
 
-  Future<void> _saveCursor(String roomId, int sequence) async {
+  Future<T> _write<T>(Future<T> Function() run) {
+    final result = _writes.then((_) => run());
+    _writes = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return result;
+  }
+
+  Future<int> _saveCursor(String roomId, int sequence) => _write(() async {
+    final saved = _cursors[roomId] ?? -1;
+    if (sequence <= saved) return saved;
     final next = {..._cursors, roomId: sequence};
     if (!await preferences.setString(_storageKey, jsonEncode(next))) {
       throw StateError('Group notification cursor could not be saved');
     }
     _cursors.addAll(next);
+    return sequence;
+  });
+
+  Future<void> _savePending() => _write(() async {
+    final next = {
+      for (final entry in _groups.entries)
+        if (entry.value.awaiting.isNotEmpty)
+          entry.key: {
+            'title': entry.value.title,
+            'events': entry.value.awaiting.toList()..sort(),
+          },
+    };
+    if (!await preferences.setString(_pendingStorageKey, jsonEncode(next))) {
+      throw StateError('Pending group sends could not be saved');
+    }
+  });
+
+  Future<void> _removePending(String id, Set<String> events) async {
+    final group = _groups[id]!;
+    final removed = group.awaiting.intersection(events);
+    if (removed.isEmpty) return;
+    group.awaiting.removeAll(removed);
+    try {
+      await _savePending();
+    } catch (_) {
+      group.awaiting.addAll(removed);
+      rethrow;
+    }
   }
 
   Future<void> _refresh() async {
@@ -229,6 +325,10 @@ class GroupNotificationSession extends ChangeNotifier {
   }
 
   Future<void> _refreshRoom(String id, _WatchedGroup group) async {
+    if (group.discarding.isNotEmpty) {
+      await _removePending(id, Set.of(group.discarding));
+      group.discarding.clear();
+    }
     final state = await read('groups.state', {
       'room_id': id,
       'include_disbanded': true,
@@ -245,6 +345,7 @@ class GroupNotificationSession extends ChangeNotifier {
       }
       group.working = false;
       group.pending = false;
+      await _removePending(id, Set.of(group.awaiting));
       group.uncertain = false;
       return;
     }
@@ -264,15 +365,17 @@ class GroupNotificationSession extends ChangeNotifier {
       group.uncertain = false;
       _changed();
     }
-    if (group.cursor < 0) {
+    if (group.cursor < 0 && group.awaiting.isEmpty) {
       // First discovery is a quiet history baseline, including an active room.
-      await _saveCursor(id, latest);
+      final saved = await _saveCursor(id, latest);
       if (_closed) return;
-      group.cursor = latest;
-    } else if (latest > group.cursor) {
+      if (saved > group.cursor) group.cursor = saved;
+    } else if (latest > group.cursor || group.awaiting.isNotEmpty) {
       group.pending = true;
       _changed();
-      var cursor = group.cursor;
+      final awaiting = Set.of(group.awaiting);
+      final accepted = <String, int>{};
+      var cursor = awaiting.isNotEmpty || group.cursor < 0 ? 0 : group.cursor;
       Map<String, dynamic>? answer;
       do {
         final page = await read('groups.log', {
@@ -308,6 +411,12 @@ class GroupNotificationSession extends ChangeNotifier {
             throw const FormatException('Invalid group event owner');
           }
           previous = seq;
+          if (awaiting.contains(event['event_id'])) {
+            if (event['kind'] != 'message.user') {
+              throw const FormatException('Invalid accepted group send event');
+            }
+            accepted[event['event_id'] as String] = seq;
+          }
           if (event['kind'] == 'message.member') {
             final payload = _map(event['payload']);
             if (payload['text'] is! String) {
@@ -319,6 +428,18 @@ class GroupNotificationSession extends ChangeNotifier {
         cursor = next;
         if (page['has_more'] != true) break;
       } while (!_closed);
+      if (_closed) return;
+      if (group.awaiting.any((event) => !accepted.containsKey(event))) {
+        throw StateError('Group send acceptance is still uncertain');
+      }
+      if (cursor < group.cursor) {
+        throw const FormatException('Group log does not cover accepted send');
+      }
+      final baseline = group.cursor >= 0
+          ? group.cursor
+          : accepted.isEmpty
+          ? cursor
+          : accepted.values.reduce((a, b) => a < b ? a : b);
       if (answer != null) {
         final sequence = answer['seq'] as int;
         // Actual viewport receipts, not opening a route, suppress read replies.
@@ -327,7 +448,7 @@ class GroupNotificationSession extends ChangeNotifier {
           preferences,
           target.key,
         );
-        if (sequence > readSequence) {
+        if (sequence > baseline && sequence > readSequence) {
           await publish(
             GroupAnswerNotification(
               target: target,
@@ -345,9 +466,10 @@ class GroupNotificationSession extends ChangeNotifier {
         if (sequence <= reached) await clearRead(target, reached);
       }
       if (_closed) return;
-      await _saveCursor(id, cursor);
+      final saved = await _saveCursor(id, cursor);
       if (_closed) return;
-      group.cursor = cursor;
+      if (saved > group.cursor) group.cursor = saved;
+      await _removePending(id, accepted.keys.toSet());
       group.pending = false;
     }
     group.working = working;

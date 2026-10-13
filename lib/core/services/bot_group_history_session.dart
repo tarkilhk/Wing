@@ -15,6 +15,7 @@ class BotGroupHistorySession extends ChangeNotifier {
   BotGroupMember? get member => _member;
   _BotGroupHistoryReading _reading = _BotGroupHistoryReading(null);
   TranscriptReader get reader => _reading;
+  bool get historyAvailable => _reading._available;
   bool _closed = false;
   int _generation = 0;
 
@@ -40,6 +41,7 @@ class BotGroupHistorySession extends ChangeNotifier {
     final reading = _reading;
     final generation = ++_generation;
     reading._loading = true;
+    reading._paging = !refresh;
     reading._error = null;
     notifyListeners();
     repository.retain();
@@ -52,6 +54,7 @@ class BotGroupHistorySession extends ChangeNotifier {
         reading._session = null;
         reading._older = null;
         reading._rows.clear();
+        reading._available = true;
         return;
       }
       final page = await repository.groupMemberHistory(
@@ -74,6 +77,7 @@ class BotGroupHistorySession extends ChangeNotifier {
       reading._rows.addAll(rows);
       reading._session = session;
       reading._older = page.nextOffset;
+      reading._available = true;
     } catch (_) {
       if (!_closed && generation == _generation) {
         reading._error =
@@ -83,6 +87,7 @@ class BotGroupHistorySession extends ChangeNotifier {
       repository.release();
       if (!_closed && generation == _generation) {
         reading._loading = false;
+        reading._paging = false;
         notifyListeners();
       }
     }
@@ -106,10 +111,14 @@ final class _BotGroupHistoryReading implements TranscriptReader {
   int? _older;
   final _rows = <int, Map<String, dynamic>>{};
   bool _loading = false;
+  bool _paging = false;
+  bool _available = false;
   String? _error;
   double _scrollOffset = 0;
   @override
   bool get historyLoading => _loading;
+  @override
+  bool get historyPaging => _loading && _paging;
   @override
   int? get nextHistoryOffset => _older;
   @override

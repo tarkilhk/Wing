@@ -504,7 +504,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final showWelcome =
         !(widget.openingContent != null) &&
         reader.messages.isEmpty &&
-        !reader.historyLoading &&
+        !_historyBlocksReading &&
         reader.historyError == null &&
         reader.nextHistoryOffset == null &&
         reader.streaming.isEmpty &&
@@ -896,10 +896,19 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     ),
   );
 
+  bool get _historyBlocksReading {
+    final reader = widget.reader;
+    return reader.historyLoading &&
+        (reader.historyPaging ||
+            reader.historySessionId == null &&
+                reader.messages.isEmpty &&
+                reader.streaming.isEmpty);
+  }
+
   Widget _historyEdge() {
     final reader = widget.reader;
     if (reader.historyUnavailable) return const SizedBox.shrink();
-    if (reader.historyLoading) {
+    if (_historyBlocksReading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
         child: Center(
@@ -941,7 +950,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             ),
           )
         : TextButton(
-            onPressed: () => widget.onLoadOlder(),
+            onPressed: reader.historyLoading ? null : widget.onLoadOlder,
             child: const Text('Load older messages'),
           );
   }

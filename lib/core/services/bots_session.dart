@@ -30,8 +30,8 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   final groupReads = BotGroupReadState();
   final BotsSources _sources;
   final Future<void> Function(BotGroup, int)? onGroupRead;
-  final Future<void> Function(BotGroup)? beforeGroupSend;
-  final Future<void> Function(BotGroup, bool)? afterGroupSend;
+  final Future<void> Function(BotGroup, String)? beforeGroupSend;
+  final Future<void> Function(BotGroup, BotGroupSendOutcome)? afterGroupSend;
   final Future<BotsPreferences> Function() _loadPreferences;
   BotsPreferences? _preferences;
   Set<String> _groupPins = const {};
@@ -47,6 +47,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   int _readGeneration = 0;
   Timer? _poll;
   Future<void>? _refreshOperation;
+  bool _refreshRequested = false;
   RecentGroupMessages? _groupMessages;
   RecentGroupMessages? get groupMessages => _groupMessages;
 
@@ -547,7 +548,10 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     _refreshOperation = completion.future;
     unawaited(() async {
       try {
-        await _refresh();
+        do {
+          _refreshRequested = false;
+          await _refresh();
+        } while (_refreshRequested && !_closed && !_busy);
         completion.complete();
       } catch (error, stack) {
         completion.completeError(error, stack);
@@ -706,6 +710,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   }) async {
     if (_closed || _busy || !canUse()) return null;
     _readGeneration++;
+    _refreshRequested = true;
     _loading = false;
     _busy = true;
     _operationError = null;

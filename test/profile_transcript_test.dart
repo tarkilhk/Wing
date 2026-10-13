@@ -4,13 +4,17 @@ import 'package:wing/core/services/chat_runtime.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:wing/core/models/transcript_reading.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/gateway_sensitive_prompt.dart';
@@ -28,6 +32,24 @@ import 'helpers/pump_markdown_widget.dart';
 import 'support/profile_history_fixture.dart';
 
 void main({Future<void> Function(WidgetTester, String)? capture}) {
+  const historyCapture = bool.fromEnvironment('CAPTURE_TRANSCRIPT_HISTORY');
+  const captureKey = ValueKey('retained-history-capture');
+  setUpAll(() async {
+    if (!historyCapture) return;
+    const fontDirectory = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final entry in {
+      'Roboto': '$fontDirectory/Roboto-Regular.ttf',
+      'MaterialIcons': '$fontDirectory/MaterialIcons-Regular.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            Future.value(
+              ByteData.sublistView(await File(entry.value).readAsBytes()),
+            ),
+          ))
+          .load();
+    }
+  });
   late ProfileWorkspaceController controller;
   late WorkspaceRuntimeFixture runtimes;
   late AppPreferences appPreferences;
@@ -95,63 +117,67 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     WidgetTester tester, {
     Brightness brightness = Brightness.light,
     double scale = 1,
+    Size? surfaceSize,
   }) async {
     if (tester.binding is AutomatedTestWidgetsFlutterBinding) {
-      tester.view.physicalSize = const Size(360, 760);
+      tester.view.physicalSize = surfaceSize ?? const Size(360, 760);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
     }
     await tester.pumpWidget(
-      MaterialApp(
-        theme: profileWorkspaceTheme(wingTheme(brightness)),
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            disableAnimations: reducedMotion,
-            textScaler: TextScaler.linear(scale),
+      RepaintBoundary(
+        key: captureKey,
+        child: MaterialApp(
+          theme: profileWorkspaceTheme(wingTheme(brightness)),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              disableAnimations: reducedMotion,
+              textScaler: TextScaler.linear(scale),
+            ),
+            child: child!,
           ),
-          child: child!,
-        ),
-        home: Scaffold(
-          body: ListenableBuilder(
-            listenable: controller,
-            builder: (_, _) => ProfileTranscript(
-              key: ValueKey(chat.key),
-              reader: chat.reading,
-              identity: chat.key,
-              needsInput: chat.runtime.needsInput,
-              turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
-              openingContent: chat.runtime.opening
-                  ? ProfileTranscriptOpening(
-                      status: controller.connectionStatus,
-                      error: chat.runtime.openingError,
-                      onRetry: controller.resumeConnection,
-                    )
-                  : null,
-              notificationReading: chat.reading,
-              onAnswerVisible: (target) =>
-                  controller.notificationAnswerVisible(chat, target),
-              onRefreshHistory: () => controller.refreshHistory(chat),
-              onLoadOlder:
-                  loadOlder ?? () => controller.loadOlderMessages(chat),
-              timeline: TranscriptTimeline.project(
-                [...chat.reading.messages, ?chat.reading.streamingMessage],
-                presentationId: chat.reading.messagePresentationId,
-                liveMessageIndex: chat.reading.streamingMessage == null
-                    ? null
-                    : chat.reading.messages.length,
+          home: Scaffold(
+            body: ListenableBuilder(
+              listenable: controller,
+              builder: (_, _) => ProfileTranscript(
+                key: ValueKey(chat.key),
+                reader: chat.reading,
+                identity: chat.key,
+                needsInput: chat.runtime.needsInput,
+                turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                openingContent: chat.runtime.opening
+                    ? ProfileTranscriptOpening(
+                        status: controller.connectionStatus,
+                        error: chat.runtime.openingError,
+                        onRetry: controller.resumeConnection,
+                      )
+                    : null,
+                notificationReading: chat.reading,
+                onAnswerVisible: (target) =>
+                    controller.notificationAnswerVisible(chat, target),
+                onRefreshHistory: () => controller.refreshHistory(chat),
+                onLoadOlder:
+                    loadOlder ?? () => controller.loadOlderMessages(chat),
+                timeline: TranscriptTimeline.project(
+                  [...chat.reading.messages, ?chat.reading.streamingMessage],
+                  presentationId: chat.reading.messagePresentationId,
+                  liveMessageIndex: chat.reading.streamingMessage == null
+                      ? null
+                      : chat.reading.messages.length,
+                ),
+                messageBuilder: (m) => realisticMessages
+                    ? ProfileMessage(message: m.message, streaming: m.streaming)
+                    : SizedBox(
+                        key: ValueKey('body-${m.message.id}'),
+                        height: 60 + ((m.message.id as int?) ?? 0) % 3 * 20,
+                        child: Text(m.message.text),
+                      ),
+                currentActivity: currentActivity,
+                tail: [
+                  if (tailHeight > 0) SizedBox(height: tailHeight),
+                  ...extraTail,
+                ],
               ),
-              messageBuilder: (m) => realisticMessages
-                  ? ProfileMessage(message: m.message, streaming: m.streaming)
-                  : SizedBox(
-                      key: ValueKey('body-${m.message.id}'),
-                      height: 60 + ((m.message.id as int?) ?? 0) % 3 * 20,
-                      child: Text(m.message.text),
-                    ),
-              currentActivity: currentActivity,
-              tail: [
-                if (tailHeight > 0) SizedBox(height: tailHeight),
-                ...extraTail,
-              ],
             ),
           ),
         ),
@@ -159,6 +185,171 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     );
     await tester.pumpAndSettle();
   }
+
+  Future<void> captureHistory(WidgetTester tester, String name) async {
+    if (capture != null) await capture(tester, name);
+    if (!historyCapture) return;
+    await tester.runAsync(() async {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(captureKey),
+      );
+      final image = await boundary.toImage(pixelRatio: 2);
+      try {
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        final target = File(
+          'build/design-previews/retained-history/site/renders/$name.png',
+        );
+        target.parent.createSync(recursive: true);
+        target.writeAsBytesSync(bytes!.buffer.asUint8List());
+      } finally {
+        image.dispose();
+      }
+    });
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('confirmed empty history refresh keeps its greeting '
+          '${brightness.name} $scale', (tester) async {
+        host.messageCount = 0;
+        await controller.refreshHistory(chat);
+        expect(chat.reading.historySessionId, isNotNull);
+        await show(tester, brightness: brightness, scale: scale);
+        final greeting = find.byType(PlayfulPortrait);
+        final greetingRect = tester.getRect(greeting);
+        final gate = Completer<void>();
+        addTearDown(() {
+          if (!gate.isCompleted) gate.complete();
+        });
+        host.messageCount = 1;
+        host.historyDelays[('chat-0', 0)] = gate;
+        final refreshing = controller.refreshHistory(chat);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(chat.reading.historyLoading, isTrue);
+        expect(chat.reading.messages, isEmpty);
+        expect(greeting, findsOneWidget);
+        expect(tester.getRect(greeting), greetingRect);
+        expect(find.text('Start a conversation'), findsOneWidget);
+        expect(find.byType(StudioLoading), findsNothing);
+        await captureHistory(tester, 'empty-${brightness.name}-$scale');
+        gate.complete();
+        await refreshing;
+        await tester.pumpAndSettle();
+        expect(greeting, findsNothing);
+        expect(find.text('personal message 1'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+
+      testWidgets('retained history refresh stays quiet and interactive '
+          '${brightness.name} $scale', (tester) async {
+        host.messageCount = 2;
+        await controller.refreshHistory(chat);
+        var taps = 0;
+        extraTail = [
+          TextButton(
+            onPressed: () => taps++,
+            child: const Text('Transcript action'),
+          ),
+        ];
+        await show(tester, brightness: brightness, scale: scale);
+        final viewport = tester.getRect(list);
+        final second = find.byKey(const ValueKey('body-2'));
+        final messageRect = tester.getRect(second);
+        final edgeRect = tester.getRect(find.text('Start of loaded history'));
+        expect(viewport.contains(edgeRect.center), isTrue);
+        final gate = Completer<void>();
+        addTearDown(() {
+          if (!gate.isCompleted) gate.complete();
+        });
+        host.messageCount = 3;
+        host.historyDelays[('chat-0', 0)] = gate;
+        final refreshing = controller.refreshHistory(chat);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(chat.reading.historyLoading, isTrue);
+        expect(chat.reading.historyPaging, isFalse);
+        expect(chat.reading.messages, hasLength(2));
+        expect(tester.getRect(second), messageRect);
+        expect(tester.getRect(find.text('Start of loaded history')), edgeRect);
+        expect(find.byType(StudioLoading), findsNothing);
+        await tester.tap(find.text('Transcript action'));
+        await tester.pump();
+        expect(taps, 1);
+        await captureHistory(tester, 'retained-${brightness.name}-$scale');
+        gate.complete();
+        await refreshing;
+        await tester.pumpAndSettle();
+        expect(chat.reading.historyLoading, isFalse);
+        expect(find.text('personal message 3'), findsOneWidget);
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
+  testWidgets(
+    'older history keeps its blocked-action pulse and accessible name',
+    (tester) async {
+      await show(tester);
+      final offset = chat.reading.nextHistoryOffset!;
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      host.historyDelays[('chat-0', offset)] = gate;
+      final older = controller.loadOlderMessages(chat);
+      final scroll = tester.widget<ListView>(list).controller!;
+      scroll.jumpTo(scroll.position.maxScrollExtent);
+      await tester.pump();
+      expect(chat.reading.historyPaging, isTrue);
+      expect(find.bySemanticsLabel('Loading history'), findsOneWidget);
+      expect(find.byType(StudioLoading), findsOneWidget);
+      gate.complete();
+      await older;
+      await tester.pumpAndSettle();
+      expect(chat.reading.historyPaging, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'a fresh retained-history refresh supersedes blocked paging feedback',
+    (tester) async {
+      host.messageCount = 2;
+      await controller.refreshHistory(chat);
+      await show(tester);
+      host.messageCount = 620;
+      await controller.refreshHistory(chat);
+      final olderGate = Completer<void>();
+      final refreshGate = Completer<void>();
+      addTearDown(() {
+        if (!olderGate.isCompleted) olderGate.complete();
+        if (!refreshGate.isCompleted) refreshGate.complete();
+      });
+      host.historyDelays[('chat-0', chat.reading.nextHistoryOffset!)] =
+          olderGate;
+      final older = controller.loadOlderMessages(chat);
+      expect(chat.reading.historyPaging, isTrue);
+      host.historyDelays[('chat-0', 0)] = refreshGate;
+      final refreshed = controller.refreshHistory(chat);
+      await tester.pump();
+      expect(chat.reading.historyLoading, isTrue);
+      expect(chat.reading.historyPaging, isFalse);
+      expect(find.byType(StudioLoading), findsNothing);
+      olderGate.complete();
+      await older;
+      expect(chat.reading.historyLoading, isTrue);
+      expect(chat.reading.historyPaging, isFalse);
+      refreshGate.complete();
+      await refreshed;
+      await tester.pumpAndSettle();
+      expect(chat.reading.historyLoading, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'older reads coalesce after layout without rebuilding during frame',
@@ -407,7 +598,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     chat.reading.installSnapshot(
       TranscriptReadingSnapshot(
         messages: chat.reading.messages,
-        historySessionId: chat.reading.historySessionId,
+        historySessionId: null,
       ),
     );
     await show(tester);
@@ -951,7 +1142,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
               ),
             ];
           }
-          await show(tester, brightness: brightness, scale: scale);
+          await show(
+            tester,
+            brightness: brightness,
+            scale: scale,
+            surfaceSize: Size(scale == 1 ? 390 : 320, 844),
+          );
           await tester.settleMarkdown();
           final activity = find.textContaining(
             RegExp(r'^Activity(?: · \d+ tools?)?$'),

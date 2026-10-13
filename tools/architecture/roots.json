@@ -6323,6 +6323,15 @@
       "purpose": "Shared group monitoring, latest-answer notification replay and read-receipt regressions",
       "source": "internal/docs/TESTING.md; internal/docs/BACKGROUND_NOTIFICATIONS.md",
       "status": "supported"
+    },
+    {
+      "id": "host-test-composer-steering-delivery",
+      "kind": "host-test",
+      "path": "test/composer_steering_delivery_test.dart",
+      "selector": "main",
+      "purpose": "Queued steering durable uncertainty, acknowledgement and restart regressions",
+      "source": "internal/docs/DRAFTS_OUTBOX.md; internal/docs/SUPERVISION_AND_QUEUES.md",
+      "status": "supported"
     }
   ],
   "files": [
@@ -6518,6 +6527,11 @@
     },
     {
       "path": "android/app/src/main/kotlin/com/tarkilhk/wing/ImageClipboardReader.kt",
+      "area": "android",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "android/app/src/main/kotlin/com/tarkilhk/wing/IntakeMethodReplies.kt",
       "area": "android",
       "provenance": "intentional-untracked"
     },
@@ -6793,6 +6807,11 @@
     },
     {
       "path": "android/app/src/test/kotlin/com/tarkilhk/wing/ImageClipboardReaderTest.kt",
+      "area": "android",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "android/app/src/test/kotlin/com/tarkilhk/wing/IntakeMethodRepliesTest.kt",
       "area": "android",
       "provenance": "intentional-untracked"
     },
@@ -10823,6 +10842,11 @@
     },
     {
       "path": "test/composer_references_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/composer_steering_delivery_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },

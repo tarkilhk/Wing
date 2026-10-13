@@ -138,8 +138,10 @@ void main() {
   test(
     'absent, wrong-source and contradictory history stay distinct',
     () async {
+      expect(session.historyAvailable, isFalse);
       fixture.workerRows['atlas'] = [];
       await session.select(group.members.first);
+      expect(session.historyAvailable, isTrue);
       expect(session.reader.historyError, isNull);
       expect(fixture.historyReads, isEmpty);
       fixture.workerRows['atlas'] = [
@@ -147,6 +149,7 @@ void main() {
       ];
       await session.refresh();
       expect(session.reader.historyError, isNotNull);
+      expect(session.historyAvailable, isTrue);
       expect(fixture.historyReads, isEmpty);
       fixture.workerRows['atlas'] = [_worker('atlas')];
       fixture.historyHook = (_, _, _) async => ProfileHistoryPage(
@@ -179,9 +182,11 @@ void main() {
           : ProfileHistoryPage(id, [_message(2, 'Mira only')], offset, 100);
       final first = session.select(group.members.first);
       await Future<void>.delayed(Duration.zero);
+      expect(session.historyAvailable, isFalse);
       final retiredReader = session.reader;
       retiredReader.recordScrollOffset(180);
       await session.select(group.members.last);
+      expect(session.historyAvailable, isTrue);
       retiredReader.recordScrollOffset(420);
       expect(session.reader.historyScrollOffset, 0);
       expect(session.reader, isNot(same(retiredReader)));

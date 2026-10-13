@@ -5,6 +5,9 @@ abstract interface class TranscriptReader {
   String? get historySessionId;
   int? get nextHistoryOffset;
   bool get historyLoading;
+
+  /// Loading requested older rows, rather than refreshing retained history.
+  bool get historyPaging;
   String? get historyError;
   bool get historyUnavailable;
   double get historyScrollOffset;

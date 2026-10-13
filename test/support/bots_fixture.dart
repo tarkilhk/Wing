@@ -150,6 +150,33 @@ class BotsFixture {
   ) async {
     final custom = await readHook?.call(profile, method, params);
     if (custom != null) return custom;
+    if (method == 'groups.log') {
+      final since = params['since_seq'] as int;
+      final page = <Map<String, dynamic>>[];
+      final latest = events.isEmpty ? 0 : events.last['seq'] as int;
+      Map<String, dynamic> response() {
+        final cursor = page.isEmpty ? since : page.last['seq'] as int;
+        return {
+          'events': page,
+          'cursor': cursor,
+          'latest_seq': latest,
+          'has_more': cursor < latest,
+          'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+        };
+      }
+
+      for (final event
+          in events
+              .where((event) => event['seq'] > since)
+              .take(params['limit'] as int)) {
+        page.add(event);
+        if (utf8.encode(jsonEncode(response())).length > 2 * 1024 * 1024) {
+          page.removeLast();
+          break;
+        }
+      }
+      return response();
+    }
     return switch (method) {
       'session.list' => {'sessions': workerRows[profile] ?? []},
       'profiles.list' => {
@@ -185,15 +212,6 @@ class BotsFixture {
           'blocked': pending.isNotEmpty,
           'pending_actions': pending,
         },
-      },
-      'groups.log' => {
-        'events': events
-            .where((event) => event['seq'] > params['since_seq'])
-            .toList(),
-        'cursor': events.isEmpty ? params['since_seq'] : events.last['seq'],
-        'latest_seq': events.length,
-        'has_more': false,
-        'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
       },
       'display.status' => {
         'supported': true,
@@ -271,11 +289,14 @@ class BotsFixture {
         );
         return {'ok': true};
       case 'groups.send':
-        if (!events.any((event) => event['event_id'] == params['event_id'])) {
+        final wireId = BotsRepository.groupUserEventId(
+          params['event_id'] as String,
+        );
+        if (!events.any((event) => event['event_id'] == wireId)) {
           events.add({
             'room_id': params['room_id'],
             'seq': events.length + 1,
-            'event_id': params['event_id'],
+            'event_id': wireId,
             'kind': 'message.user',
             'created_at': 1791756000.0 + events.length,
             'actor': {'kind': 'user', 'id': 'you'},
@@ -290,6 +311,7 @@ class BotsFixture {
           'accepted': true,
           'client_event_id': params['event_id'],
           'driver_started': true,
+          'event': events.singleWhere((event) => event['event_id'] == wireId),
         };
       case 'groups.create':
         return {

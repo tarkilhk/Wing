@@ -51,6 +51,7 @@ class MainActivity : FlutterActivity() {
     private var imageClipboardChannel: ImageClipboardChannel? = null
     private var botScreenChannel: BotScreenChannel? = null
     private var scrollCaptureChannel: ScrollCaptureChannel? = null
+    private var intakeReplies = IntakeMethodReplies { action -> runOnUiThread(action) }
     @Volatile private var shareAuthority = Any()
     @Volatile private var shareAuthorityActive = true
     private var initialShareIntent: Intent? = null
@@ -82,6 +83,8 @@ class MainActivity : FlutterActivity() {
         scrollCaptureChannel = ScrollCaptureChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         botScreenChannel?.close()
         botScreenChannel = BotScreenChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        intakeReplies.retire()
+        intakeReplies = IntakeMethodReplies { action -> runOnUiThread(action) }
         shareAuthority = Any()
         shareAuthorityActive = true
         MonitoringRuntime.attach(this, flutterEngine)
@@ -108,7 +111,8 @@ class MainActivity : FlutterActivity() {
             MermaidDiagramViewFactory(),
         )
         shareChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, shareChannelName).apply {
-            setMethodCallHandler { call, result ->
+            setMethodCallHandler { call, rawResult ->
+                val result = IntakeResult(rawResult)
                 when (call.method) {
                     "getPendingShare" -> {
                         val pendingIntent = initialShareIntent
@@ -117,13 +121,16 @@ class MainActivity : FlutterActivity() {
                             try {
                                 recoverPendingCamera()
                                 if (pendingIntent != null) {
-                                    importShareIntent(pendingIntent) { postResult(result, oldestPendingPayloadSafely()) }
+                                    importShareIntent(pendingIntent) {
+                                        if (result.isActive) result.success(oldestPendingPayloadSafely())
+                                        else result.error("intake_cancelled", intakeCancelledError, null)
+                                    }
                                 } else {
-                                    postResult(result, oldestPendingPayload())
+                                    result.success(oldestPendingPayload())
                                 }
                             } catch (error: Exception) {
                                 postShareError(safeImportMessage(error))
-                                postResult(result, oldestPendingPayloadSafely())
+                                result.success(oldestPendingPayloadSafely())
                             } finally {
                                 if (pendingIntent != null) clearConsumedShareIntent(pendingIntent)
                             }
@@ -133,9 +140,9 @@ class MainActivity : FlutterActivity() {
                         val id = (call.argument<String>("id") ?: "").trim()
                         enqueueIntake(result) {
                             try {
-                                postResult(result, acknowledgeShare(id))
+                                result.success(acknowledgeShare(id))
                             } catch (_: Exception) {
-                                postError(result, "share_ack_failed", genericAcknowledgeError)
+                                result.error("share_ack_failed", genericAcknowledgeError, null)
                             }
                         }
                     }
@@ -150,9 +157,9 @@ class MainActivity : FlutterActivity() {
                                     else abandonCameraLaunch(descriptor, null, result)
                                 }
                             } catch (error: CameraCaptureException) {
-                                postError(result, error.code, error.safeMessage)
+                                result.error(error.code, error.safeMessage, null)
                             } catch (_: Exception) {
-                                postError(result, "camera_unavailable", genericCameraError)
+                                result.error("camera_unavailable", genericCameraError, null)
                             }
                         }
                     }
@@ -176,7 +183,8 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             fileDeliveryChannelName,
         ).apply {
-            setMethodCallHandler { call, result ->
+            setMethodCallHandler { call, rawResult ->
+                val result = IntakeResult(rawResult)
                 when (call.method) {
                     "openInApp" -> openDownloadedFile(
                         call.argument<String>("filename"),
@@ -244,7 +252,7 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             } catch (_: Exception) {
-                postError(result, "file_open_failed", genericFileOpenError)
+                result.error("file_open_failed", genericFileOpenError, null)
             }
         }
     }
@@ -281,6 +289,7 @@ class MainActivity : FlutterActivity() {
         botScreenChannel?.close()
         botScreenChannel = null
         shareAuthorityActive = false
+        intakeReplies.retire()
         providerWork.cancel(shareAuthority)
         activityResumed = false
         hermesCloud?.close()
@@ -465,10 +474,14 @@ class MainActivity : FlutterActivity() {
         result: MethodChannel.Result,
     ) {
         if (outputUri != null) revokeCameraGrant(outputUri)
-        enqueueIntake(result) {
+        // This is cleanup of the admitted camera attempt, not a second method
+        // admission. Its captured reply still settles if the actor retires.
+        enqueueIntake(onRejected = {
+            result.error("camera_unavailable", genericCameraError, null)
+        }) {
             if (readCameraDescriptor()?.id == descriptor.id) writeCameraDescriptor(null)
             if (!queueContains(readQueue(), descriptor.id)) deleteIntakeDirectory(descriptor.id)
-            postError(result, "camera_unavailable", genericCameraError)
+            result.error("camera_unavailable", genericCameraError, null)
         }
     }
 
@@ -656,7 +669,8 @@ class MainActivity : FlutterActivity() {
                 enqueueIntake(onRejected = {
                     lease.retire()
                     lease.finish()
-                    if (active()) { postShareError(queueFullError); completed() }
+                    if (active()) postShareError(queueFullError)
+                    completed()
                 }) {
                     try {
                         if (!active()) return@enqueueIntake
@@ -671,7 +685,7 @@ class MainActivity : FlutterActivity() {
                         }
                     } finally {
                         lease.finish()
-                        if (active()) completed()
+                        completed()
                     }
                 }
             },
@@ -1034,26 +1048,26 @@ class MainActivity : FlutterActivity() {
     ) {
         val authority = shareAuthority
         if (intakeExecutor.submit {
-                if (shareAuthorityActive && shareAuthority === authority) action()
-                else onRejected?.invoke()
+                if (shareAuthorityActive && shareAuthority === authority &&
+                    ((result as? IntakeResult)?.admit() != false)) action()
+                else if (onRejected != null) onRejected()
+                else result?.error("intake_cancelled", intakeCancelledError, null)
             }) return
         if (onRejected != null) onRejected()
-        else if (result != null) postError(result, "intake_busy", queueFullError)
+        else if (result != null) result.error("intake_busy", queueFullError, null)
         else postShareError(queueFullError)
     }
 
-    private fun postResult(result: MethodChannel.Result, value: Any?) {
-        val authority = shareAuthority
-        runOnUiThread {
-            if (shareAuthorityActive && shareAuthority === authority) result.success(value)
+    private inner class IntakeResult(private val result: MethodChannel.Result) : MethodChannel.Result {
+        private val reply = intakeReplies.register {
+            result.error("intake_cancelled", intakeCancelledError, null)
         }
-    }
-
-    private fun postError(result: MethodChannel.Result, code: String, message: String) {
-        val authority = shareAuthority
-        runOnUiThread {
-            if (shareAuthorityActive && shareAuthority === authority) result.error(code, message, null)
-        }
+        val isActive: Boolean get() = reply.isActive
+        fun admit(): Boolean = reply.admit()
+        override fun success(value: Any?) = reply.complete { result.success(value) }
+        override fun error(code: String, message: String?, details: Any?) =
+            reply.complete { result.error(code, message, details) }
+        override fun notImplemented() = reply.complete { result.notImplemented() }
     }
 
     private fun postSharePayload(payload: Map<String, Any?>?) {
@@ -1135,6 +1149,8 @@ class MainActivity : FlutterActivity() {
             "Shared content could not be imported. Try sharing it again."
         private const val genericAcknowledgeError =
             "The pending share could not be cleared. Try again."
+        private const val intakeCancelledError =
+            "This operation was cancelled because Wing's screen changed. Try again."
         private const val cameraBusyError = "A camera capture is already in progress."
         private const val invalidCameraTargetError =
             "The destination chat is no longer available for this photo."

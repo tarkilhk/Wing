@@ -45,21 +45,26 @@ BotsSession savedBotsSession(
         .firstOrNull;
     await owner?.acknowledgeGroupAnswer(group, sequence);
   },
-  beforeGroupSend: (group) async {
+  beforeGroupSend: (group, eventId) async {
     final owner = registry.controllers
         .where(
           (owner) => owner.connectionIdentity == group.scope.connectionIdentity,
         )
         .firstOrNull;
     if (owner == null) throw StateError('Group connection is unavailable');
-    await owner.beginGroupSend(group);
+    await owner.beginGroupSend(group, eventId);
   },
-  afterGroupSend: (group, dispatched) async {
+  afterGroupSend: (group, outcome) async {
     final owner = registry.controllers
         .where(
           (owner) => owner.connectionIdentity == group.scope.connectionIdentity,
         )
         .firstOrNull;
-    await owner?.finishGroupSend(group, dispatched);
+    await owner?.finishGroupSend(
+      group,
+      outcome.eventId,
+      dispatched: outcome.dispatched,
+      sequence: outcome.sequence,
+    );
   },
 );

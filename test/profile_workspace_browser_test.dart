@@ -17,9 +17,12 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/screens/profile_workspace_browser.dart';
+import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/widgets/context_ring.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/profile_browser_fixture.dart';
+import 'support/browser_mutations_fixture.dart';
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_CHAT_PROJECT');
@@ -80,6 +83,309 @@ void main() {
       ),
     );
   }
+
+  Future<BrowserMutationsFixture> useMutationHost() async {
+    controller.dispose();
+    appPreferences.dispose();
+    final host = BrowserMutationsFixture();
+    final preferences = await SharedPreferences.getInstance();
+    appPreferences = AppPreferences(preferences);
+    controller = ProfileWorkspaceController(
+      access: ConnectionAccess(
+        connection: SavedConnection(
+          id: 'host',
+          label: 'Prestige',
+          host: 'localhost',
+          port: 1,
+          apiKey: '',
+        ),
+        dashboardOAuth: null,
+      ),
+      connectionIdentity: 'production-browser-actions',
+      preferences: preferences,
+      appPreferences: appPreferences,
+      gatewayFactory: host.gateway,
+    );
+    await controller.initialize();
+    return host;
+  }
+
+  Future<void> showActions(
+    WidgetTester tester, {
+    Brightness brightness = Brightness.light,
+    double scale = 1,
+  }) async {
+    await tester.binding.setSurfaceSize(Size(scale == 1 ? 390 : 320, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: captureKey,
+        child: MaterialApp(
+          theme: wingTheme(brightness),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              disableAnimations: true,
+              textScaler: TextScaler.linear(scale),
+            ),
+            child: child!,
+          ),
+          home: ProfileWorkspaceScreen(controller: controller),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> actionCapture(WidgetTester tester, String name) async {
+    if (!capture) return;
+    await tester.runAsync(() async {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(captureKey),
+      );
+      final image = await boundary.toImage(pixelRatio: 2);
+      try {
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        final target = File(
+          'build/design-previews/browser-lifetime/site/renders/$name.png',
+        );
+        target.parent.createSync(recursive: true);
+        target.writeAsBytesSync(bytes!.buffer.asUint8List());
+      } finally {
+        image.dispose();
+      }
+    });
+  }
+
+  Future<void> openWorkActions(WidgetTester tester) async {
+    final row = find.byKey(const ValueKey('chat-work-newest'));
+    await tester.scrollUntilVisible(
+      row,
+      200,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('chat-list-false')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(of: row, matching: find.byTooltip('Chat actions')),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('cross-profile chat actions retain the workspace browser '
+          '${brightness.name} $scale', (tester) async {
+        final host = await useMutationHost();
+        final work = controller.browserResource('work').scope;
+        final retained = await controller.openSession(
+          ProfileSessionKey(work, 'newest'),
+        );
+        expect(retained, isNotNull);
+        await controller.updateDraft(retained!, 'Keep this work draft');
+        await controller.switchProfile('personal', resetNavigation: true);
+        host.updates.clear();
+        await showActions(tester, brightness: brightness, scale: scale);
+        final browser = tester.state(find.byType(ProfileWorkspaceBrowser));
+        await tester.enterText(
+          find.byKey(const ValueKey('workspace-search')),
+          'work',
+        );
+        await tester.pumpAndSettle();
+        await openWorkActions(tester);
+        expect(controller.current!.scope, work);
+        expect(controller.current!.chat, isNull);
+        expect(
+          tester.state(find.byType(ProfileWorkspaceBrowser)),
+          same(browser),
+        );
+        expect(find.byKey(const ValueKey('action-pin')), findsOneWidget);
+        await actionCapture(tester, 'chat-menu-${brightness.name}-$scale');
+        await tester.tap(find.byKey(const ValueKey('action-pin')));
+        await tester.pumpAndSettle();
+        expect(
+          host.updates.where((update) => update.$1 == 'work'),
+          hasLength(1),
+        );
+        expect(
+          host.updates.where((update) => update.$1 == 'personal'),
+          isEmpty,
+        );
+        expect(retained.composer.observation.text, 'Keep this work draft');
+        expect(
+          tester
+              .widget<TextField>(find.byKey(const ValueKey('workspace-search')))
+              .controller!
+              .text,
+          'work',
+        );
+        expect(
+          tester.state(find.byType(ProfileWorkspaceBrowser)),
+          same(browser),
+        );
+        expect(
+          find.byKey(const ValueKey('chat-personal-newest')),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
+  testWidgets(
+    'a superseded production chat menu cannot mutate its old profile',
+    (tester) async {
+      final host = await useMutationHost();
+      await showActions(tester);
+      await openWorkActions(tester);
+      await controller.switchProfile('personal', resetNavigation: true);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('action-pin')));
+      await tester.pumpAndSettle();
+      expect(host.updates, isEmpty);
+      expect(
+        find.text('Profile changed. Open the menu again.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'cross-profile project rename uses its captured production menu',
+    (tester) async {
+      final host = await useMutationHost();
+      await showActions(tester);
+      final project = find.byKey(const ValueKey('project-work-work-project'));
+      await tester.ensureVisible(project);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: project,
+          matching: find.byTooltip('Project actions'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('project-action-rename')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('project-name-field')),
+        'Renamed work project',
+      );
+      await tester.tap(find.byKey(const ValueKey('project-rename-save')));
+      await tester.pumpAndSettle();
+      expect(
+        host.projectChanges['work/work-project']?['label'],
+        'Renamed work project',
+      );
+      expect(host.projectChanges.keys, ['work/work-project']);
+      expect(find.text('Renamed work project'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('cross-profile saved draft can be discarded from the workspace', (
+    tester,
+  ) async {
+    final host = await useMutationHost();
+    final drafts = ComposerDraftStore(
+      controller.preferences,
+      connectionIdentity: controller.connectionIdentity,
+    );
+    await drafts.write(
+      profileName: 'work',
+      sessionId: 'missing-work-draft',
+      text: 'Saved work draft',
+      attachments: const [],
+    );
+    await drafts.write(
+      profileName: 'personal',
+      sessionId: 'missing-personal-draft',
+      text: 'Saved personal draft',
+      attachments: const [],
+    );
+    await showActions(tester);
+    expect(controller.current!.scope.profileName, 'personal');
+    final draft = find.byKey(const ValueKey('saved-draft-missing-work-draft'));
+    expect(draft, findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('saved-draft-missing-personal-draft')),
+      findsNothing,
+    );
+    await tester.ensureVisible(draft);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(of: draft, matching: find.byTooltip('Draft actions')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('action-delete')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Discard'));
+    await tester.pumpAndSettle();
+    expect(
+      await drafts.read(profileName: 'work', sessionId: 'missing-work-draft'),
+      isNull,
+    );
+    expect(
+      (await drafts.read(
+        profileName: 'personal',
+        sessionId: 'missing-personal-draft',
+      ))?.text,
+      'Saved personal draft',
+    );
+    expect(host.deletes, isEmpty);
+    expect(host.updates, isEmpty);
+    expect(
+      find.byKey(const ValueKey('saved-draft-missing-work-draft')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('New project retains its captured profile through both dialogs', (
+    tester,
+  ) async {
+    final host = await useMutationHost();
+    await showActions(tester);
+    final browser = tester.state(find.byType(ProfileWorkspaceBrowser));
+    await tester.tap(find.byTooltip('Chat list options'));
+    await tester.pumpAndSettle();
+    final choice = find.byKey(const ValueKey('chat-menu-new-project'));
+    await tester.ensureVisible(choice);
+    await tester.pumpAndSettle();
+    await tester.tap(choice);
+    await tester.pumpAndSettle();
+    expect(controller.current!.scope.profileName, 'work');
+    expect(tester.state(find.byType(ProfileWorkspaceBrowser)), same(browser));
+    expect(find.text('New project'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).last, 'Created work project');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('project-folder-path')),
+      '/work/new',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
+    await tester.pumpAndSettle();
+    expect(
+      host.projectChanges['work/created']?['label'],
+      'Created work project',
+    );
+    expect(host.projectChanges['work/created']?['path'], '/work/new');
+    expect(host.projectChanges.keys, ['work/created']);
+    expect(find.text('Created work project'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   for (final failAfterResume in [false, true]) {
     testWidgets('background chat read is retired when its failure arrives '

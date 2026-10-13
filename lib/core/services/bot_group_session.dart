@@ -14,6 +14,12 @@ abstract interface class BotGroupAppearanceSource implements Listenable {
   BotGroupAppearance appearanceForGroup(BotGroup group);
 }
 
+typedef BotGroupSendOutcome = ({
+  String eventId,
+  bool dispatched,
+  int? sequence,
+});
+
 /// Exact group visit and text revision captured before microphone admission.
 final class BotGroupVoiceDraft {
   const BotGroupVoiceDraft._(this._owner, this._revision, this.text);
@@ -66,8 +72,8 @@ class BotGroupSession extends ChangeNotifier {
 
   final BotGroupReadState reads;
   final Future<void> Function(BotGroup, int)? onRead;
-  final Future<void> Function(BotGroup)? beforeSend;
-  final Future<void> Function(BotGroup, bool)? afterSend;
+  final Future<void> Function(BotGroup, String)? beforeSend;
+  final Future<void> Function(BotGroup, BotGroupSendOutcome)? afterSend;
   final RecentGroupMessages? groupMessages;
   Future<void> acknowledgeVisibleMessages(int sequence) async {
     if (_closed ||
@@ -288,12 +294,14 @@ class BotGroupSession extends ChangeNotifier {
     while (end > 0 && messages.length < limit) {
       if (_closed || !canRead()) throw StateError('Group preview retired');
       final start = (end - 100).clamp(0, end);
-      final page = await repository.groupLog(group, since: start);
-      if (_closed || !canRead()) throw StateError('Group preview retired');
-      messages.insertAll(
-        0,
-        page.events.where((event) => event.sequence <= end && event.isMessage),
+      final events = await repository.groupLogWindow(
+        group,
+        start: start,
+        end: end,
+        canRead: () => !_closed && canRead(),
       );
+      if (_closed || !canRead()) throw StateError('Group preview retired');
+      messages.insertAll(0, events.where((event) => event.isMessage));
       end = start;
     }
     return List.unmodifiable(
@@ -350,8 +358,9 @@ class BotGroupSession extends ChangeNotifier {
     repository.retain();
     notifyListeners();
     var dispatched = false;
+    int? sequence;
     try {
-      await beforeSend?.call(group);
+      await beforeSend?.call(group, attempt.$1);
       if (isNew) {
         final references = retainComposerReferences(attempt.$2, _references);
         if (references.isNotEmpty) {
@@ -379,7 +388,7 @@ class BotGroupSession extends ChangeNotifier {
         }
         _pendingWireText = _canonicalText(attempt.$2, references);
       }
-      await repository.sendGroup(
+      sequence = await repository.sendGroup(
         group,
         attempt.$1,
         _pendingWireText!,
@@ -405,11 +414,18 @@ class BotGroupSession extends ChangeNotifier {
       }
       return false;
     } finally {
-      await afterSend?.call(group, dispatched);
-      repository.release();
-      if (!_closed) {
-        _sending = false;
-        notifyListeners();
+      try {
+        await afterSend?.call(group, (
+          eventId: attempt.$1,
+          dispatched: dispatched,
+          sequence: sequence,
+        ));
+      } finally {
+        repository.release();
+        if (!_closed) {
+          _sending = false;
+          notifyListeners();
+        }
       }
     }
   }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 
 import '../models/bots.dart';
 import '../models/profile_colors.dart';
@@ -743,16 +744,15 @@ class BotsRepository {
           var end = latest;
           while (end > 0 && (message == null || answer == null)) {
             final start = (end - 100).clamp(0, end);
-            final page = await groupLog(base, since: start);
-            recentMessages.insertAll(
-              0,
-              page.events.where((e) => e.sequence <= end && e.isMessage),
+            final events = await groupLogWindow(
+              base,
+              start: start,
+              end: end,
+              canRead: () => true,
             );
+            recentMessages.insertAll(0, events.where((e) => e.isMessage));
             for (final event
-                in page.events
-                    .where((e) => e.sequence <= end && e.isMessage)
-                    .toList()
-                    .reversed) {
+                in events.where((e) => e.isMessage).toList().reversed) {
               message ??= event;
               if (event.kind == 'message.member') answer ??= event;
             }
@@ -1005,6 +1005,33 @@ class BotsRepository {
     );
   }
 
+  /// Cover one captured sequence window, including byte-shortened stock pages.
+  /// New arrivals beyond its end belong to a later observation.
+  Future<List<BotGroupEvent>> groupLogWindow(
+    BotGroup group, {
+    required int start,
+    required int end,
+    required bool Function() canRead,
+  }) async {
+    _ownsGroup(group);
+    if (start < 0 || end <= start || end - start > 100) {
+      throw ArgumentError('Invalid group log window');
+    }
+    final events = <BotGroupEvent>[];
+    var cursor = start;
+    while (cursor < end) {
+      if (!canRead()) throw StateError('Group read retired');
+      final page = await groupLog(group, since: cursor);
+      if (!canRead()) throw StateError('Group read retired');
+      if (page.cursor <= cursor || (!page.hasMore && page.cursor < end)) {
+        throw const FormatException('Group log window is incomplete');
+      }
+      events.addAll(page.events.where((event) => event.sequence <= end));
+      cursor = page.cursor;
+    }
+    return List.unmodifiable(events);
+  }
+
   Future<void> createGroup(
     String id,
     String name,
@@ -1043,7 +1070,11 @@ class BotsRepository {
     }
   }
 
-  Future<void> sendGroup(
+  /// Stock hashes the immutable client retry key into its user-event namespace.
+  static String groupUserEventId(String event) =>
+      'user:${sha256.convert(utf8.encode(event))}';
+
+  Future<int> sendGroup(
     BotGroup group,
     String event,
     String text,
@@ -1065,6 +1096,16 @@ class BotsRepository {
     if (result['accepted'] != true || result['client_event_id'] != event) {
       throw StateError('Group message was not confirmed');
     }
+    final saved = _map(result['event']);
+    final sequence = saved['seq'];
+    if (saved['room_id'] != group.id ||
+        saved['event_id'] != groupUserEventId(event) ||
+        saved['kind'] != 'message.user' ||
+        sequence is! int ||
+        sequence < 1) {
+      throw const FormatException('Invalid group send receipt');
+    }
+    return sequence;
   }
 
   Future<BotGroupRuntime> groupRuntime(BotGroup group) async {

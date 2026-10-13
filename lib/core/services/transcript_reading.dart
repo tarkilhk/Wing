@@ -28,6 +28,7 @@ final class TranscriptReading implements TranscriptReader {
   int? _nextHistoryOffset;
   int _historyGeneration = 0;
   bool _historyLoading = false;
+  bool _historyPaging = false;
   String? _historyError;
   bool _historyUnavailable = false;
   double _historyScrollOffset = 0;
@@ -186,6 +187,8 @@ final class TranscriptReading implements TranscriptReader {
   @override
   bool get historyLoading => _historyLoading;
   @override
+  bool get historyPaging => _historyLoading && _historyPaging;
+  @override
   String? get historyError => _historyError;
   @override
   bool get historyUnavailable => _historyUnavailable;
@@ -207,6 +210,7 @@ final class TranscriptReading implements TranscriptReader {
   void cancelReads() {
     _historyGeneration++;
     _historyLoading = false;
+    _historyPaging = false;
   }
 
   void dispose() {
@@ -585,13 +589,17 @@ final class TranscriptReading implements TranscriptReader {
         : 0;
     final generation = ++_historyGeneration;
     _historyLoading = true;
+    _historyPaging = false;
     _historyError = null;
     _historyUnavailable = false;
     onChanged();
     bool valid() =>
         !_closed && _historyGeneration == generation && canPublish();
     if (!valid()) {
-      if (!_closed && _historyGeneration == generation) _historyLoading = false;
+      if (!_closed && _historyGeneration == generation) {
+        _historyLoading = false;
+        _historyPaging = false;
+      }
       return false;
     }
     try {
@@ -670,6 +678,7 @@ final class TranscriptReading implements TranscriptReader {
     } finally {
       if (!_closed && _historyGeneration == generation) {
         _historyLoading = false;
+        _historyPaging = false;
         if (canPublish()) onChanged();
       }
     }
@@ -722,12 +731,16 @@ final class TranscriptReading implements TranscriptReader {
     final generation = _historyGeneration;
     final offset = _nextHistoryOffset!;
     _historyLoading = true;
+    _historyPaging = true;
     _historyError = null;
     onChanged();
     bool valid() =>
         !_closed && _historyGeneration == generation && canPublish();
     if (!valid()) {
-      if (!_closed && _historyGeneration == generation) _historyLoading = false;
+      if (!_closed && _historyGeneration == generation) {
+        _historyLoading = false;
+        _historyPaging = false;
+      }
       return;
     }
     try {
@@ -756,6 +769,7 @@ final class TranscriptReading implements TranscriptReader {
     } finally {
       if (!_closed && _historyGeneration == generation) {
         _historyLoading = false;
+        _historyPaging = false;
         if (canPublish()) onChanged();
       }
     }

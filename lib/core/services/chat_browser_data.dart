@@ -484,7 +484,10 @@ final class ChatBrowserData extends ChangeNotifier {
   Future<bool> _select(WorkspaceScope scope) async {
     if (_disposed) return false;
     if (_controller.current?.scope != scope &&
-        !await _controller.switchProfile(scope.profileName)) {
+        !await _controller.switchProfile(
+          scope.profileName,
+          resetNavigation: true,
+        )) {
       return false;
     }
     return !_disposed &&
@@ -623,7 +626,7 @@ final class ChatBrowserData extends ChangeNotifier {
       return false;
     }
     if (_controller.current?.scope.profileName != name &&
-        !await _controller.switchProfile(name)) {
+        !await _controller.switchProfile(name, resetNavigation: true)) {
       return false;
     }
     if (_disposed || _controller.current?.scope.profileName != name) {

@@ -30,6 +30,245 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test(
+    'byte-shortened group logs retain the latest discovery and passive tail',
+    () async {
+      final fixture = BotsFixture();
+      final text = List.filled(65000, 'x').join();
+      for (var seq = 1; seq <= 40; seq++) {
+        fixture.events.add({
+          'room_id': 'room-1',
+          'seq': seq,
+          'kind': 'message.member',
+          'created_at': 1700000000 + seq,
+          'actor': {'kind': 'member', 'id': 'atlas'},
+          'payload': {'text': 'Answer $seq ${seq <= 35 ? text : ''}'},
+        });
+      }
+      final reads = <int>[];
+      fixture.readHook = (_, method, params) async {
+        if (method == 'groups.log') reads.add(params['since_seq'] as int);
+        return null;
+      };
+      final cache = RecentGroupMessages();
+      addTearDown(cache.dispose);
+      final group = (await fixture.repository.groups(
+        groupMessages: cache,
+      )).single;
+      expect(reads.length, greaterThan(1));
+      expect(group.observationComplete, true);
+      expect(group.lastMessageSequence, 40);
+      expect(group.lastAnswerSequence, 40);
+      expect(group.preview.startsWith('Answer 40 '), true);
+      expect(
+        cache.retainedBytes,
+        lessThanOrEqualTo(RecentGroupMessages.byteLimit),
+      );
+      expect(cache.borrow(group, limit: 6)!.map((event) => event.sequence), [
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+      ]);
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: FixedGroupAppearances(const []),
+        reads: BotGroupReadState(),
+        groupMessages: null,
+      );
+      addTearDown(session.dispose);
+      expect(
+        (await session.readRecentMessages(
+          limit: 6,
+          canRead: () => true,
+        )).map((event) => event.sequence),
+        [35, 36, 37, 38, 39, 40],
+      );
+    },
+  );
+
+  test(
+    'group windows exclude arrivals beyond their captured end and stop on retirement',
+    () async {
+      final fixture = BotsFixture();
+      for (var seq = 1; seq <= 120; seq++) {
+        fixture.events.add({
+          'room_id': 'room-1',
+          'seq': seq,
+          'kind': 'message.member',
+          'created_at': 1700000000 + seq,
+          'actor': {'kind': 'member', 'id': 'atlas'},
+          'payload': {'text': 'Answer $seq'},
+        });
+      }
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
+      expect(
+        (await fixture.repository.groupLogWindow(
+          group,
+          start: 0,
+          end: 40,
+          canRead: () => true,
+        )).map((event) => event.sequence),
+        List.generate(40, (i) => i + 1),
+      );
+      var allowed = true, logReads = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method == 'groups.log') {
+          logReads++;
+          allowed = false;
+        }
+        return null;
+      };
+      await expectLater(
+        fixture.repository.groupLogWindow(
+          group,
+          start: 0,
+          end: 40,
+          canRead: () => allowed,
+        ),
+        throwsStateError,
+      );
+      expect(logReads, 1);
+    },
+  );
+
+  test(
+    'incomplete group windows remain uncertain instead of publishing a partial tail',
+    () async {
+      final fixture = BotsFixture();
+      fixture.events.add({'seq': 1});
+      fixture.readHook = (_, method, params) async => method == 'groups.log'
+          ? {
+              'events': <Map<String, dynamic>>[],
+              'cursor': params['since_seq'],
+              'latest_seq': 1,
+              'has_more': true,
+              'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+            }
+          : null;
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
+      expect(group.observationComplete, false);
+      expect(group.lastMessageSequence, 0);
+    },
+  );
+
+  for (final oldReadFinishesFirst in [false, true]) {
+    test(
+      'confirmed mutation replaces a retired roster read oldFirst=$oldReadFinishesFirst',
+      () async {
+        final fixture = BotsFixture();
+        final owner = BotsSession((_) async => [fixture.repository]);
+        addTearDown(owner.dispose);
+        await owner.refresh();
+        final readStarted = Completer<void>(), releaseRead = Completer<void>();
+        final commandStarted = Completer<void>(),
+            releaseCommand = Completer<void>();
+        var held = false;
+        fixture.readHook = (_, method, _) async {
+          if (method == 'session.active_list' && !held) {
+            held = true;
+            readStarted.complete();
+            await releaseRead.future;
+          }
+          return null;
+        };
+        fixture.beforeCommand = () async {
+          commandStarted.complete();
+          await releaseCommand.future;
+        };
+        final refresh = owner.refresh();
+        await readStarted.future;
+        final mutation = owner.createBot(
+          'instance-1',
+          'newbot',
+          canUse: () => true,
+        );
+        await commandStarted.future;
+        if (oldReadFinishesFirst) {
+          releaseRead.complete();
+          await refresh;
+          releaseCommand.complete();
+          expect(await mutation, true);
+        } else {
+          releaseCommand.complete();
+          expect(await mutation, true);
+          releaseRead.complete();
+          await refresh;
+        }
+        for (var i = 0; i < 50 && owner.state.loading; i++) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(owner.state.loading, false);
+        expect(
+          owner.state.bots.any((bot) => bot.profile.name == 'newbot'),
+          true,
+        );
+      },
+    );
+  }
+
+  test(
+    'group sends publish their exact acknowledged stock sequence and reject a wrong receipt',
+    () async {
+      final fixture = BotsFixture();
+      final group = (await fixture.repository.groups(
+        groupMessages: null,
+      )).single;
+      expect(
+        await fixture.repository.sendGroup(
+          group,
+          'first-send',
+          'Hello',
+          () => true,
+          () {},
+        ),
+        1,
+      );
+      expect(
+        await fixture.repository.sendGroup(
+          group,
+          'first-send',
+          'Hello',
+          () => true,
+          () {},
+        ),
+        1,
+      );
+      expect(fixture.events, hasLength(1));
+      fixture.commandHook = (_, method, params) async => method == 'groups.send'
+          ? {
+              'accepted': true,
+              'client_event_id': params['event_id'],
+              'event': {
+                'room_id': 'other-room',
+                'kind': 'message.user',
+                'seq': 2,
+                'event_id': BotsRepository.groupUserEventId(
+                  params['event_id'] as String,
+                ),
+              },
+            }
+          : null;
+      await expectLater(
+        fixture.repository.sendGroup(
+          group,
+          'second-send',
+          'Hello',
+          () => true,
+          () {},
+        ),
+        throwsFormatException,
+      );
+    },
+  );
+
+  test(
     'profile chat entry resolves the exact profile and creates only if absent',
     () async {
       final fixture = BotsFixture();

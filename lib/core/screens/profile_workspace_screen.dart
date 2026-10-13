@@ -960,12 +960,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       if (chat == null) {
         _disposeRecentVisit();
         // Transcript notifications must not recreate the Chats subtree.
-        // Leaving the list or changing its owner starts a fresh visit.
-        if (_browser?.key != ValueKey(current?.scope) ||
-            _browserOwner != controller) {
+        // The list spans profiles. Capturing a menu's target profile keeps the
+        // same visit alive; leaving the list or changing its connection does not.
+        if (_browser == null || _browserOwner != controller) {
           _browserOwner = controller;
           _browser = ProfileWorkspaceBrowser(
-            key: ValueKey(current?.scope),
+            key: ValueKey(controller),
             createData: () => ChatBrowserData(controller),
             connectionLabel: controller.connection.label,
             connectionIcon: controller.connection.icon,

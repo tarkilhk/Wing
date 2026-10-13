@@ -172,10 +172,7 @@ class ComposerSession {
     _ensure();
     _textRevision++;
     _text = value;
-    _references = retainComposerReferences(value, [
-      ..._references,
-      ?reference,
-    ]);
+    _references = retainComposerReferences(value, [..._references, ?reference]);
     _uncertain = false;
     _revision++;
     _changed(ComposerChange.text);
@@ -1484,11 +1481,23 @@ class ComposerSession {
       return false;
     }
     _entry(item.id);
+    final original = item.value;
     _saving = true;
     var accepted = false, attempted = false;
+    // Queue recovery must retain the exact text offered to steering, including
+    // edits not yet saved into the original entry. Persist uncertainty before
+    // handing it to the runtime; a lost receipt cannot make it ordinary unsent
+    // work on the next launch.
+    item.value = QueuedPromptDraft(
+      text: text,
+      references: retainComposerReferences(text, _editReferences),
+      attachments: original.attachments,
+      submissionUncertain: true,
+    );
     _changed();
     try {
       await _persistMutation();
+      _ensure();
       attempted = true;
       _steering = true;
       accepted = await send(text);
@@ -1496,9 +1505,17 @@ class ComposerSession {
         _queue.remove(item);
         _editing = null;
         _editText = '';
+      } else {
+        // False is the runtime's positive rejection, not a missing receipt.
+        item.value = original;
       }
     } catch (_) {
-      if (attempted) _paused = true;
+      if (attempted) {
+        _paused = true;
+      } else {
+        // Persistence/admission failed before the runtime was called.
+        item.value = original;
+      }
       rethrow;
     } finally {
       _steering = false;

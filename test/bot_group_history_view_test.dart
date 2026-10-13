@@ -11,6 +11,9 @@ import 'package:wing/core/screens/bots/bot_group_history_screen.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/services/bot_group_session.dart';
+import 'package:wing/core/services/bot_group_history_session.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
+import 'dart:async';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'support/bots_fixture.dart';
@@ -68,6 +71,109 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      for (final absentWorker in [true, false]) {
+        testWidgets('empty working history refresh stays quiet '
+            '${absentWorker ? 'absent worker' : 'empty page'} '
+            '${brightness.name} $scale', (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          final group = (await fixture.repository.groups(
+            groupMessages: null,
+          )).single;
+          final worker = {
+            'id': 'atlas-root',
+            'resolved_id': 'atlas-tip',
+            'title': 'Group: room-1',
+            'source': 'bot_room',
+          };
+          if (!absentWorker) fixture.workerRows['atlas'] = [worker];
+          final initial = Completer<void>();
+          final refreshed = Completer<void>();
+          addTearDown(() {
+            if (!initial.isCompleted) initial.complete();
+            if (!refreshed.isCompleted) refreshed.complete();
+          });
+          var reads = 0;
+          fixture.readHook = (profile, method, _) async {
+            if (profile == 'atlas' && method == 'session.list') {
+              reads++;
+              await (reads == 1 ? initial.future : refreshed.future);
+            }
+            return null;
+          };
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              debugShowCheckedModeBanner: false,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: BotGroupHistoryScreen(
+                createSession: () =>
+                    BotGroupHistorySession(fixture.repository, group),
+              ),
+            ),
+          );
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(
+            find.bySemanticsLabel('Loading working history'),
+            findsOneWidget,
+          );
+          initial.complete();
+          await _settle(tester);
+          final empty = find.text('No working history is available for Atlas.');
+          expect(empty, findsOneWidget);
+          final emptyBounds = tester.getRect(empty);
+          final memberBounds = tester.getRect(
+            find.widgetWithText(ChoiceChip, 'Mira'),
+          );
+          fixture.workerRows['atlas'] = [worker];
+          fixture.workerMessages['atlas'] = [
+            {
+              'id': 1,
+              'role': 'assistant',
+              'content': 'Refresh loaded new working history.',
+              'timestamp': 1791756000.0,
+            },
+          ];
+          await tester.tap(find.byTooltip('Refresh working history'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 50));
+          expect(reads, 2);
+          expect(empty, findsOneWidget);
+          expect(tester.getRect(empty), emptyBounds);
+          expect(find.byType(StudioLoading), findsNothing);
+          final member = find.widgetWithText(ChoiceChip, 'Mira');
+          expect(tester.widget<ChoiceChip>(member).onSelected, isNotNull);
+          expect(tester.getRect(member), memberBounds);
+          await _render(
+            tester,
+            frame,
+            'history-empty-refresh-${absentWorker ? 'absent' : 'page'}-'
+            '${brightness.name}-$scale',
+          );
+          refreshed.complete();
+          await _settle(tester);
+          expect(empty, findsNothing);
+          expect(
+            find.textContaining(
+              'Refresh loaded new working history.',
+              findRichText: true,
+            ),
+            findsWidgets,
+          );
+          expect(fixture.commands, isEmpty);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        });
+      }
+
       testWidgets(
         'group overflow opens passive history ${brightness.name} $scale',
         (tester) async {

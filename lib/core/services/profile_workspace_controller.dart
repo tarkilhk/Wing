@@ -759,17 +759,27 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  Future<void> beginGroupSend(BotGroup group) {
+  Future<void> beginGroupSend(BotGroup group, String eventId) async {
     _requireGroupOwner(group);
-    if (!_groupNotificationsEnabled || _closed) return Future.value();
-    _groupNotifications.beginSend(group.id, group.name);
-    return _groupNotifications.activate();
+    if (!_groupNotificationsEnabled || _closed) return;
+    await _groupNotifications.beginSend(group.id, group.name, eventId);
+    await _groupNotifications.activate();
   }
 
-  Future<void> finishGroupSend(BotGroup group, bool dispatched) {
+  Future<void> finishGroupSend(
+    BotGroup group,
+    String eventId, {
+    required bool dispatched,
+    int? sequence,
+  }) {
     _requireGroupOwner(group);
     if (!_groupNotificationsEnabled || _closed) return Future.value();
-    return _groupNotifications.endSend(group.id, dispatched: dispatched);
+    return _groupNotifications.endSend(
+      group.id,
+      eventId,
+      dispatched: dispatched,
+      sequence: sequence,
+    );
   }
 
   Future<void> acknowledgeGroupAnswer(BotGroup group, int sequence) {
@@ -1377,7 +1387,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (!owns(ProfileSessionKey(owner, 'draft'))) {
       throw ArgumentError('Wrong connection settings or host');
     }
-    if (_current?.scope != owner) return const [];
     return _drafts
         .summaries(profileName: owner.profileName)
         .where(
