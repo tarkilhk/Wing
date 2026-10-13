@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -837,8 +836,12 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
             SizedBox(
               width: 24,
               height: 24,
-              child: pending
-                  ? StudioLoading(color: color, label: 'Checking connection')
+              child: pending && !MediaQuery.disableAnimationsOf(context)
+                  ? CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: color,
+                      semanticsLabel: 'Checking connection',
+                    )
                   : Icon(
                       failed
                           ? Icons.error_outline

@@ -206,11 +206,7 @@ class ProfileToolActivitySection extends StatelessWidget {
           ProfileActivityTab(
             id: 'tasks',
             label: 'Tasks ${saved.todos.length}',
-            child: ProfileTodoPanel(
-              todos: saved.todos,
-              live: false,
-              embedded: true,
-            ),
+            child: ProfileTodoPanel(todos: saved.todos, embedded: true),
           ),
         if (saved.agents.isNotEmpty && !supplied.contains('agents'))
           ProfileActivityTab(

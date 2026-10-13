@@ -74,8 +74,7 @@ class _FamilyFixture extends ProfileActionsFixture {
               'session_id': 'process',
               'command': 'python  report.py',
               'cwd': '/workspace',
-              'status': 'exited',
-              'exit_code': 0,
+              'status': 'running',
               'output_tail': 'Checked 7 records\nReport saved\n',
               'uptime_seconds': 4,
             },
@@ -383,7 +382,6 @@ void main() {
         ).agents;
         final specimens = <String, Widget>{
           'tasks': const ProfileTodoPanel(
-            live: false,
             embedded: true,
             todos: [
               GatewayTodo(
@@ -740,6 +738,29 @@ void main() {
               );
               await file.parent.create(recursive: true);
               await file.writeAsBytes(bytes!.buffer.asUint8List());
+              picture.dispose();
+            });
+          }
+          if (_capture &&
+              scale == 2 &&
+              (entry.key == 'agents' || entry.key == 'work')) {
+            final status = find.byWidgetPredicate(
+              (widget) => widget is ActivityDetailStatus && widget.working,
+            );
+            expect(status, findsOneWidget);
+            await tester.ensureVisible(status);
+            await tester.pumpAndSettle();
+            await tester.runAsync(() async {
+              final render =
+                  boundary.currentContext!.findRenderObject()!
+                      as RenderRepaintBoundary;
+              final picture = await render.toImage();
+              final bytes = await picture.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              await File(
+                'build/activity-family/${entry.key}-status-${brightness.name}-2.png',
+              ).writeAsBytes(bytes!.buffer.asUint8List());
               picture.dispose();
             });
           }

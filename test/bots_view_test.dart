@@ -1791,12 +1791,12 @@ void main() {
       final chat = controller.current!.chat!;
       emitChatEvent(controller, chat, 'message.start');
       await tester.pump();
-      expect(mood(), BotAvatarMood.work);
+      expect(mood(), BotAvatarMood.idle);
       emitChatEvent(controller, chat, 'reasoning.delta', {
         'text': 'Considering the plan.',
       });
       await tester.pump();
-      expect(mood(), BotAvatarMood.think);
+      expect(mood(), BotAvatarMood.idle);
       await tester.pump(const Duration(milliseconds: 450));
       await tester.settleMarkdown();
       await _capture(tester, frame, 'animated-canonical-header', motion: true);

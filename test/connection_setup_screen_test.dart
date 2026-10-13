@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_setup_session.dart';
 import 'package:wing/core/services/hermes_cloud.dart';
@@ -323,7 +322,7 @@ void main() {
     await _tap(tester, 'Check connection');
     await tester.pump();
     expect(find.text('Checking…'), findsNothing);
-    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(
       find.bySemanticsLabel('Profiles & access, Checking…'),
       findsOneWidget,

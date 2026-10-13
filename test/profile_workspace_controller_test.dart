@@ -161,6 +161,7 @@ class PhotoPickerFixture extends FilePickerPlatform {
 class _SocketHttpOverrides extends HttpOverrides {}
 
 class Host {
+  ScopedOwnedPost? ownedPatch;
   final gateways = <String, ProfileGateway>{};
   final calls = <(String, String, Map<String, dynamic>)>[];
   final reads = <(String, Map<String, String>)>[];
@@ -246,6 +247,7 @@ class Host {
     final name = scope.profileName;
     late final ProfileGateway gateway;
     gateway = ProfileGateway(
+      ownedPatch: ownedPatch,
       scope: scope,
       discover: () async {
         if (name == 'default' && defaultDiscoveryDelay != null) {

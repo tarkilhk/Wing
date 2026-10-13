@@ -104,7 +104,8 @@ void main() {
       await tester.tap(find.text('Test'));
       await tester.pump();
       expect(find.text('Testing connection…'), findsNothing);
-      expect(find.byType(StudioLoading), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(StudioLoading), findsNothing);
       expect(find.bySemanticsLabel('Testing connection'), findsOneWidget);
       gate.complete({'ok': true, 'tools': []});
       await tester.pumpAndSettle();

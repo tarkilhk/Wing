@@ -1,4 +1,3 @@
-import 'studio_loading.dart';
 import 'package:flutter/material.dart';
 
 import '../models/side_question_delivery.dart';
@@ -6,12 +5,7 @@ import '../models/side_question_delivery.dart';
 class SideQuestionDeliveryCard extends StatelessWidget {
   final SideQuestionDelivery delivery;
 
-  const SideQuestionDeliveryCard({
-    super.key,
-    required this.delivery,
-    required this.confirmed,
-  });
-  final bool confirmed;
+  const SideQuestionDeliveryCard({super.key, required this.delivery});
 
   @override
   Widget build(BuildContext context) {
@@ -35,10 +29,8 @@ class SideQuestionDeliveryCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                StudioActivityIndicator(
-                  active: confirmed && pending,
-                  label: label,
-                  icon: failed
+                Icon(
+                  failed
                       ? Icons.error_outline
                       : pending
                       ? Icons.schedule

@@ -557,7 +557,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('profile-model-save')));
     await tester.pump();
-    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(StudioLoading), findsNothing);
 
     await tester.binding.handlePopRoute();
     await tester.pump();

@@ -120,6 +120,8 @@ class _ActivityTimeState extends State<ActivityTime>
         child: ExcludeSemantics(
           child: Text(
             text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 12,
               color: WingTokens.of(context).muted,

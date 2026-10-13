@@ -1185,10 +1185,16 @@ void main() {
           );
         }
         await tester.pumpWidget(
-          MaterialApp(home: ProfileChatIndicator(chat: chat)),
+          MaterialApp(
+            home: Scaffold(body: ProfileChatIndicator(chat: chat)),
+          ),
         );
         await tester.pump();
         expect(find.byTooltip(label), findsOneWidget);
+        expect(
+          find.byType(StudioLoading),
+          status == ChatExecution.running ? findsOneWidget : findsNothing,
+        );
       }
       await tester.pumpWidget(
         MaterialApp(home: ChatStatusDot(chatListStatus({'unread': true}))),

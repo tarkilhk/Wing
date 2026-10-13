@@ -1088,7 +1088,6 @@ void main() {
             home: const Scaffold(
               body: SingleChildScrollView(
                 child: ProfileTodoPanel(
-                  live: false,
                   embedded: true,
                   todos: [
                     GatewayTodo(
@@ -1156,7 +1155,6 @@ void main() {
             children: [
               ProfileLiveToolActivity(activities: [tool]),
               const ProfileTodoPanel(
-                live: false,
                 todos: [
                   GatewayTodo(
                     content: 'Inspect contract',
@@ -1593,11 +1591,11 @@ void main() {
           final row = find.byType(ProfileReasoningDisclosure).at(i);
           expect(
             find.descendant(of: row, matching: find.byType(CircuitBrainIcon)),
-            i < 2 ? findsOneWidget : findsNothing,
+            findsOneWidget,
           );
           expect(
             find.descendant(of: row, matching: find.byType(StudioLoading)),
-            i < 2 ? findsNothing : findsOneWidget,
+            findsNothing,
           );
           expect(
             find.descendant(of: row, matching: find.byIcon(memoryIcon)),

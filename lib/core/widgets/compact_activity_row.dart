@@ -10,7 +10,8 @@ class CompactActivityRow extends StatelessWidget {
   const CompactActivityRow({
     super.key,
     required this.icon,
-    required this.lines,
+    required this.title,
+    this.lines = const [],
     required this.time,
     this.details = const [],
     this.initiallyExpanded = false,
@@ -18,6 +19,7 @@ class CompactActivityRow extends StatelessWidget {
   });
 
   final Widget icon;
+  final Text title;
   final List<Widget> lines;
   final ActivityTime time;
   final List<Widget> details;
@@ -26,27 +28,45 @@ class CompactActivityRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final header = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox.square(
-          dimension: 16,
-          child: IconTheme(
-            data: IconThemeData(size: 16, color: WingTokens.of(context).muted),
-            child: icon,
+    final titleStyle = DefaultTextStyle.of(context).style.merge(title.style);
+    final firstLineHeight =
+        MediaQuery.textScalerOf(context).scale(titleStyle.fontSize!) *
+        (titleStyle.height ?? 1);
+    final header = LayoutBuilder(
+      builder: (context, constraints) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 16,
+            height: firstLineHeight,
+            child: Center(
+              child: IconTheme(
+                data: IconThemeData(
+                  size: 16,
+                  color: WingTokens.of(context).muted,
+                ),
+                child: icon,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: lines,
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [title, ...lines],
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        time,
-      ],
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: constraints.maxWidth * .35),
+            child: SizedBox(
+              height: firstLineHeight,
+              child: Center(widthFactor: 1, child: time),
+            ),
+          ),
+        ],
+      ),
     );
     if (details.isEmpty) return header;
     return IconTheme.merge(

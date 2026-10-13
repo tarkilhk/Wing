@@ -50,39 +50,31 @@ void main() {
     }
   });
 
-  testWidgets(
-    'current task pulses while historical in-progress tasks stay static',
-    (tester) async {
-      for (final live in [false, true]) {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: ProfileTodoPanel(
-                live: live,
-                embedded: true,
-                todos: const [
-                  GatewayTodo(
-                    content: 'Inspect the current result',
-                    status: GatewayTodoStatus.inProgress,
-                  ),
-                ],
-              ),
+  testWidgets('in-progress tasks retain their static semantic glyph', (
+    tester,
+  ) async {
+    {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ProfileTodoPanel(
+              embedded: true,
+              todos: const [
+                GatewayTodo(
+                  content: 'Inspect the current result',
+                  status: GatewayTodoStatus.inProgress,
+                ),
+              ],
             ),
           ),
-        );
-        await tester.pump(const Duration(milliseconds: 100));
-        expect(find.text('Inspect the current result'), findsOneWidget);
-        expect(
-          find.byType(StudioLoading),
-          live ? findsOneWidget : findsNothing,
-        );
-        expect(
-          find.byIcon(Icons.timelapse),
-          live ? findsNothing : findsOneWidget,
-        );
-      }
-    },
-  );
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Inspect the current result'), findsOneWidget);
+      expect(find.byType(StudioLoading), findsNothing);
+      expect(find.byIcon(Icons.timelapse), findsOneWidget);
+    }
+  });
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
@@ -120,7 +112,6 @@ void main() {
                             id: 'tasks',
                             label: 'Tasks 1/4',
                             child: ProfileTodoPanel(
-                              live: false,
                               todos: _todos,
                               embedded: true,
                             ),
@@ -182,7 +173,6 @@ void main() {
             builder: (context, setState) {
               update = setState;
               return ProfileTodoPanel(
-                live: false,
                 todos: [GatewayTodo(content: 'Review', status: status)],
               );
             },

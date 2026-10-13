@@ -27,13 +27,13 @@ class ProfileSavedAgents extends StatelessWidget {
         hasError && agent.summary?.trim() == agent.error?.trim();
     return CompactActivityRow(
       icon: const Icon(Icons.account_tree_outlined),
+      title: Text(
+        agentTaskHeading(agent.goal),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 14, height: 1.4),
+      ),
       lines: [
-        Text(
-          agentTaskHeading(agent.goal),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 14, height: 1.4),
-        ),
         Text(
           agent.statusLabel,
           style: colors.typography.label.copyWith(

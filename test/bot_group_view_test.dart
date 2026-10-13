@@ -320,14 +320,31 @@ void main() {
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
           final fixture = BotsFixture();
+          fixture.readHook = (_, method, _) async => method == 'groups.state'
+              ? {
+                  'room': {
+                    ...fixture.room,
+                    'latest_seq': fixture.events.length,
+                  },
+                  'driver_status': {
+                    'working': true,
+                    'blocked': false,
+                    'pending_actions': <Object>[],
+                  },
+                }
+              : null;
           fixture.events.add(
             _event(1, 'message.member', 'atlas', 'Saved group reply'),
           );
           final group = (await fixture.repository.groups(
             groupMessages: null,
           )).first;
+          final appearances = FixedGroupAppearances(
+            await fixture.repository.bots(),
+          );
+          addTearDown(appearances.dispose);
           final frame = GlobalKey();
-          final reduced = ValueNotifier(false);
+          final reduced = ValueNotifier(true);
           addTearDown(reduced.dispose);
           late BotGroupSession session;
           await tester.pumpWidget(
@@ -355,7 +372,7 @@ void main() {
                     group,
                     reads: BotGroupReadState(),
                     groupMessages: null,
-                    appearances: FixedGroupAppearances(const []),
+                    appearances: appearances,
                   ),
                 ),
               ),
@@ -380,6 +397,14 @@ void main() {
               stateReads++;
               if (!stateStarted.isCompleted) stateStarted.complete();
               await stateGate.future;
+              return {
+                'room': {...fixture.room, 'latest_seq': fixture.events.length},
+                'driver_status': {
+                  'working': true,
+                  'blocked': false,
+                  'pending_actions': <Object>[],
+                },
+              };
             }
             if (method == 'groups.log') {
               if (!logStarted.isCompleted) logStarted.complete();
@@ -387,9 +412,12 @@ void main() {
             }
             return null;
           };
+          reduced.value = false;
+          await tester.pump();
           final automatic = session.refresh();
           await tester.pump();
-          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.text('Bots are working…'), findsOneWidget);
           await tester.tap(find.byTooltip('Group options'));
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
@@ -401,16 +429,17 @@ void main() {
           // Wait for the dismissed popup to release its semantics scope.
           for (
             var frame = 0;
-            frame < 10 &&
-                find.bySemanticsLabel('Refreshing group').evaluate().isEmpty;
+            frame < 10 && find.byTooltip('Refreshing group').evaluate().isEmpty;
             frame++
           ) {
             await tester.pump(const Duration(milliseconds: 50));
           }
-          expect(find.bySemanticsLabel('Refreshing group'), findsOneWidget);
+          expect(find.byTooltip('Refreshing group'), findsOneWidget);
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(find.text('Refreshing group'), findsNothing);
-          final pulse = find.byType(StudioLoading);
+          expect(find.text('Bots are working…'), findsOneWidget);
+          expect(find.byIcon(Icons.pending_outlined), findsNothing);
+          final pulse = find.byTooltip('Refreshing group');
           expect(
             find.ancestor(of: pulse, matching: find.byType(WingAppBar)),
             findsOneWidget,
@@ -445,13 +474,14 @@ void main() {
           stateGate.complete();
           await tester.pump();
           expect(logStarted.isCompleted, isTrue);
-          expect(find.bySemanticsLabel('Refreshing group'), findsOneWidget);
+          expect(find.byTooltip('Refreshing group'), findsOneWidget);
           logGate.complete();
           await automatic;
           await tester.pump();
           await _settleGroupMarkdown(tester);
           await tester.pumpAndSettle();
-          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.text('Bots are working…'), findsOneWidget);
           expect(find.text('Fresh group reply'), findsOneWidget);
           expect(
             tester.widget<TextField>(input).controller!.text,
@@ -676,6 +706,7 @@ void main() {
         await _settleGroupMarkdown(tester);
         expect(tester.getRect(viewport), before);
         expect(tester.getRect(reply).bottom, closeTo(bottom, .01));
+        await tester.pump();
         expect(find.text('Loading conversation…'), findsNothing);
         expect(find.byType(StudioLoading), findsNothing);
         expect(find.bySemanticsLabel('Loading conversation'), findsNothing);
@@ -1474,6 +1505,7 @@ void main() {
     for (final entry in {
       'Roboto': 'build/studio-roboto.ttf',
       'MaterialIcons': 'build/studio-icons.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
       'monospace': 'build/studio-mono.ttf',
     }.entries) {
       await (FontLoader(entry.key)..addFont(
@@ -1909,6 +1941,7 @@ void main() {
           ),
         );
         await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump();
         expect(find.text('Loading conversation…'), findsNothing);
         expect(find.byType(StudioLoading), findsOneWidget);
         expect(find.bySemanticsLabel('Loading conversation'), findsOneWidget);
@@ -1983,6 +2016,7 @@ void main() {
         await session.refresh();
         await tester.pump(const Duration(milliseconds: 300));
         reduced.value = true;
+        await tester.pump();
         await tester.pump();
         expect(find.byType(StudioLoading), findsOneWidget);
         expect(find.text('Bots are working…'), findsOneWidget);

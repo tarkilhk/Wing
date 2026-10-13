@@ -388,11 +388,11 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     final IconData icon;
     if (_session.sending) {
       label = 'Sending message…';
-      active = true;
+      active = runtime?.working == true && !interrupted;
       icon = Icons.pending_outlined;
     } else if (_session.acting) {
       label = 'Updating group work…';
-      active = true;
+      active = runtime?.working == true && !interrupted;
       icon = Icons.pending_outlined;
     } else if (_session.pendingText != null) {
       label = 'Message not confirmed · Retry the same message';
@@ -423,7 +423,8 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     return ConversationActivityStatus(
       label: label,
       wrap: true,
-      leading: StudioActivityIndicator(
+      leading: StudioWorkingIndicator(
+        conversation: true,
         active: active,
         label: label ?? 'Group status',
         icon: icon,

@@ -1,4 +1,3 @@
-import '../models/profile_live_activity.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'bots/bot_group_screen.dart';
 import '../models/group_notification.dart';
@@ -1074,15 +1073,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final title = BotConversationTitle(
       title: chat.title,
       bot: bot,
-      mood:
-          chat.runtime.recovery == ChatRecovery.ready &&
-              chat.runtime.liveSessionConfirmed &&
-              !chat.runtime.needsInput &&
-              (chat.runtime.executionActive || chat.runtime.compacting)
-          ? chat.runtime.mainActivity == ChatMainActivity.thinking
-                ? BotAvatarMood.think
-                : BotAvatarMood.work
-          : BotAvatarMood.idle,
+      // The conversation status owns work feedback; retain the face's identity motion.
+      mood: BotAvatarMood.idle,
     );
     final canOpenBotSettings =
         bot != null &&
@@ -1988,12 +1980,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         label:
                             'Tasks ${chat.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${chat.todos.length}',
                         child: ProfileTodoPanel(
-                          live:
-                              !chat.runtime.opening &&
-                              !chat.runtime.offline &&
-                              !chat.runtime.reconnecting &&
-                              chat.runtime.activity(backgroundWorking: false) ==
-                                  ProfileLiveActivityState.running,
                           todos: chat.todos,
                           embedded: true,
                         ),
@@ -2129,10 +2115,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                             delivery.state,
                           )),
                           delivery: delivery,
-                          confirmed:
-                              !chat.runtime.opening &&
-                              !chat.runtime.offline &&
-                              !chat.runtime.reconnecting,
                         ),
                       ),
                     if (chat.runtime.pendingQuestion != null)

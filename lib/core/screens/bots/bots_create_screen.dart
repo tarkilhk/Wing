@@ -291,7 +291,10 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
         if (draft.pictureBusy)
           const SizedBox.square(
             dimension: 24,
-            child: StudioLoading(label: 'Preparing room picture'),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              semanticsLabel: 'Preparing room picture',
+            ),
           ),
       ],
     );

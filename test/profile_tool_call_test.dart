@@ -910,9 +910,9 @@ void main() {
             expect(rows, hasLength(4));
             final heights = <double>[];
             for (final row in rows) {
-              expect(row.lines, hasLength(2));
-              final title = find.byWidget(row.lines.first);
-              final subtitle = find.byWidget(row.lines.last);
+              expect(row.lines, hasLength(1));
+              final title = find.byWidget(row.title);
+              final subtitle = find.byWidget(row.lines.single);
               expect(tester.getSize(subtitle).height, greaterThan(0));
               expect(
                 tester.getTopLeft(subtitle).dy,

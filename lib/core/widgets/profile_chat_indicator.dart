@@ -1,7 +1,6 @@
 import 'studio_loading.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:flutter/material.dart';
-import '../models/profile_live_activity.dart';
 import '../services/profile_workspace_controller.dart';
 import '../theme/wing_theme.dart';
 
@@ -14,15 +13,12 @@ class ProfileChatIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = WingTokens.of(context);
     final runtime = chat.runtime;
+    final confirmedChildWork = chat.subagents.any(
+      (item) =>
+          !item.isTerminal && !chat.unconfirmedSubagentIds.contains(item.id),
+    );
     final status =
-        runtime.activity(
-              backgroundWorking: chat.subagents.any(
-                (item) =>
-                    !item.isTerminal &&
-                    !chat.unconfirmedSubagentIds.contains(item.id),
-              ),
-            ) ==
-            ProfileLiveActivityState.running
+        runtime.execution == ChatExecution.running || confirmedChildWork
         ? ChatExecution.running
         : runtime.execution;
     final (label, color, icon, spinning) = runtime.reconnecting
@@ -30,7 +26,13 @@ class ProfileChatIndicator extends StatelessWidget {
         : runtime.needsInput
         ? ('Input needed', tokens.blocked, Icons.help_rounded, false)
         : switch (status) {
-            ChatExecution.submitting || ChatExecution.running => (
+            ChatExecution.submitting => (
+              'Sending',
+              tokens.muted,
+              Icons.pending_outlined,
+              false,
+            ),
+            ChatExecution.running => (
               'Working',
               tokens.running,
               Icons.pending_outlined,
@@ -61,7 +63,8 @@ class ProfileChatIndicator extends StatelessWidget {
       message: label,
       child: Semantics(
         label: label,
-        child: StudioActivityIndicator(
+        child: StudioWorkingIndicator(
+          conversation: true,
           label: 'Working',
           active: spinning && !runtime.opening && !runtime.offline,
           icon: icon,

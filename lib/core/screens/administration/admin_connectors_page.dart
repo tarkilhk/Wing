@@ -360,7 +360,10 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
                       const SizedBox(
                         width: 16,
                         height: 16,
-                        child: StudioLoading(label: 'Testing connection'),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          semanticsLabel: 'Testing connection',
+                        ),
                       )
                     else
                       Icon(

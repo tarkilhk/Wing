@@ -145,7 +145,7 @@ class TaskStatus extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        StudioActivityIndicator(
+        StudioWorkingIndicator.independent(
           active: confirmed && task.running,
           label: 'Scheduled task running',
           icon: task.running

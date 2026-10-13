@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -268,8 +267,11 @@ void main() {
         expect(find.bySemanticsLabel('Adding 2 photos…'), findsOneWidget);
         expect(find.text('Adding'), findsOneWidget);
         expect(
-          find.descendant(of: pending, matching: find.byType(StudioLoading)),
-          findsOneWidget,
+          find.descendant(
+            of: pending,
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          configuration.reduced ? findsNothing : findsOneWidget,
         );
         expect(chat.composer.observation.attachmentPreparation!.imageCount, 2);
         expect(chat.composer.observation.attachments.single.id, originalId);

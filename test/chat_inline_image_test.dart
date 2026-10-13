@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'dart:async';
 import 'dart:io';
@@ -209,7 +208,7 @@ void main() {
     await tester.tap(find.byTooltip('Retry image'));
     await tester.pump();
     expect(calls, 2);
-    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
     await tester.pumpMarkdownWidget(
       message('MEDIA:/srv/second.jpg', load: load),
     );

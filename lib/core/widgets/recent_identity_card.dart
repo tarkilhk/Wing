@@ -134,7 +134,7 @@ class RecentIdentityCard extends StatelessWidget {
     final status = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        StudioActivityIndicator(
+        StudioWorkingIndicator.independent(
           active: statusLabel == 'Running',
           label: statusLabel,
           icon: Icons.chat_bubble_outline,

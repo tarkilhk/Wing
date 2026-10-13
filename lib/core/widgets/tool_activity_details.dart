@@ -1,4 +1,4 @@
-import 'package:wing/core/widgets/studio_loading.dart';
+import 'studio_loading.dart';
 import 'activity/activity_detail_actions.dart';
 import '../models/chat_output.dart';
 import 'dart:async';
@@ -116,7 +116,25 @@ class ActivityDetailStatus extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(icon, color: color, size: 16),
+                  SizedBox(
+                    width: 16,
+                    height:
+                        MediaQuery.textScalerOf(
+                          context,
+                        ).scale(colors.typography.label.fontSize!) *
+                        colors.typography.label.height!,
+                    child: Center(
+                      child: working && !error && !warning
+                          ? StudioWorkingIndicator(
+                              active: true,
+                              label: label,
+                              icon: icon,
+                              color: color,
+                              size: 16,
+                            )
+                          : Icon(icon, color: color, size: 16),
+                    ),
+                  ),
                   const SizedBox(width: WingSpacing.sm),
                   Expanded(
                     child: Wrap(
@@ -136,12 +154,6 @@ class ActivityDetailStatus extends StatelessWidget {
                           ),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: WingSpacing.sm),
-                  StudioWorkProgress(
-                    active: working && !error && !warning,
-                    label: label,
-                    color: color,
                   ),
                 ],
               ),
@@ -321,6 +333,7 @@ class ToolActivityDetailsView extends StatelessWidget {
         if (!queuedExchange)
           ActivityDetailStatus(
             label: call.status,
+            working: call.outcome == ToolCallOutcome.running,
             icon: statusIcon,
             error: call.outcome == ToolCallOutcome.error,
             warning: call.outcome == ToolCallOutcome.warning,

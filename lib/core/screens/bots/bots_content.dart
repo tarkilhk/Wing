@@ -401,7 +401,7 @@ class _BotsContentState extends State<BotsContent> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (active) ...[
-          StudioActivityIndicator(
+          StudioWorkingIndicator.independent(
             active: running,
             label: label,
             icon: Icons.chat_bubble_outline,
@@ -536,11 +536,8 @@ class _BotsContentState extends State<BotsContent> {
                     bot: bot,
                     name: bot.profile.name,
                     size: 48,
-                    mood:
-                        bot.presence == BotPresence.working ||
-                            bot.presence == BotPresence.groupWorking
-                        ? BotAvatarMood.work
-                        : bot.presence == BotPresence.needsInput
+                    // The footer owns work feedback; the face keeps identity motion.
+                    mood: bot.presence == BotPresence.needsInput
                         ? BotAvatarMood.think
                         : BotAvatarMood.idle,
                   ),

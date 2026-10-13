@@ -241,6 +241,22 @@ void main() {
           await showPanel(tester, brightness: brightness, scale: scale);
           final title = tester.widget<Text>(find.text(heading));
           expect(title.maxLines, 2);
+          final tile = tester.widget<ListTile>(
+            find.ancestor(
+              of: find.text(heading),
+              matching: find.byType(ListTile),
+            ),
+          );
+          final firstLineCenter =
+              tester.getTopLeft(find.text(heading)).dy + 14 * scale * 1.3 / 2;
+          expect(
+            tester.getRect(find.byWidget(tile.leading!)).center.dy,
+            closeTo(firstLineCenter, .1),
+          );
+          expect(
+            tester.getRect(find.byWidget(tile.trailing!)).center.dy,
+            closeTo(firstLineCenter, .1),
+          );
           expect(title.overflow, TextOverflow.ellipsis);
           expect(find.text(longGoal), findsNothing);
           expect(

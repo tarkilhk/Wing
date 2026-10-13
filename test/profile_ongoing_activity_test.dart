@@ -102,6 +102,7 @@ void main() {
         home: Scaffold(body: ProfileChatIndicator(chat: chat)),
       ),
     );
+    await tester.pump();
     expect(find.byType(StudioLoading), findsOneWidget);
   });
 
@@ -142,6 +143,7 @@ void main() {
           ),
         ),
       );
+      await tester.pump();
       expect(find.text('Delegated research'), findsOneWidget);
       expect(
         find.descendant(
@@ -156,6 +158,7 @@ void main() {
         'subagent_id': 'child',
         'status': terminalStatus,
       });
+      await tester.pump();
       await tester.pump();
       expect(find.text('Delegated research'), findsOneWidget);
       expect(find.text('Last 24 hours'), findsNothing);

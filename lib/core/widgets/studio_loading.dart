@@ -19,53 +19,99 @@ class StudioLoading extends StatefulWidget {
   State<StudioLoading> createState() => _StudioLoadingState();
 }
 
-/// Confirmed active work shares the loading pulse; other states stay static.
-/// Callers supply activity evidence, never refresh/freshness flags.
-class StudioActivityIndicator extends StatelessWidget {
-  const StudioActivityIndicator({
+/// Confirmed work pulses in its semantic status position, never a category slot.
+/// The conversation status takes priority over nested work and header refresh.
+class StudioWorkingIndicator extends StatefulWidget {
+  const StudioWorkingIndicator({
     super.key,
     required this.active,
     required this.label,
     required this.icon,
     required this.color,
     this.size = 18,
-  });
+    this.conversation = false,
+  }) : _independent = false;
 
+  /// Separate roster/card work has its own status, not a nested conversation cue.
+  const StudioWorkingIndicator.independent({
+    super.key,
+    required this.active,
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.size = 18,
+  }) : conversation = false,
+       _independent = true;
+  final bool _independent;
   final bool active;
+  final bool conversation;
   final String label;
   final IconData icon;
   final Color color;
   final double size;
-
   @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: size,
-    child: active
-        ? StudioLoading(label: label, color: color, size: size)
-        : Icon(icon, size: size, color: color),
-  );
+  State<StudioWorkingIndicator> createState() => _StudioWorkingIndicatorState();
 }
 
-/// A reserved work-status compartment beside an unchanged identity glyph.
-class StudioWorkProgress extends StatelessWidget {
-  const StudioWorkProgress({
-    super.key,
-    required this.active,
-    required this.label,
-    required this.color,
-    this.size = 16,
-  });
-  final bool active;
-  final String label;
-  final Color color;
-  final double size;
+class _StudioWorkingIndicatorState extends State<StudioWorkingIndicator> {
+  final _identity = Object();
+  _LoadingPresentation? _presentation;
+  void _report() {
+    if (widget._independent) {
+      _presentation?.work(_identity, false);
+      _presentation = null;
+      return;
+    }
+    final next = _LoadingPresentation.of(context);
+    if (!identical(next, _presentation)) {
+      _presentation?.work(_identity, false);
+      _presentation = next;
+    }
+    next.work(
+      _identity,
+      widget.active &&
+          (ModalRoute.isCurrentOf(context) ?? true) &&
+          TickerMode.valuesOf(context).enabled,
+      conversation: widget.conversation,
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: size,
-    child: active
-        ? StudioLoading(label: label, color: color, size: size)
-        : const SizedBox.shrink(),
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _report();
+  }
+
+  @override
+  void didUpdateWidget(StudioWorkingIndicator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _report();
+  }
+
+  @override
+  void dispose() {
+    _presentation?.work(_identity, false);
+    super.dispose();
+  }
+
+  Widget _glyph(bool selected) => SizedBox.square(
+    dimension: widget.size,
+    child:
+        widget.active && selected && (ModalRoute.isCurrentOf(context) ?? true)
+        ? StudioLoading(
+            label: widget.label,
+            color: widget.color,
+            size: widget.size,
+          )
+        : Icon(widget.icon, size: widget.size, color: widget.color),
   );
+  @override
+  Widget build(BuildContext context) => widget._independent
+      ? _glyph(true)
+      : ValueListenableBuilder<_LoadingState>(
+          valueListenable: _presentation!,
+          builder: (_, state, _) => _glyph(identical(state.work, _identity)),
+        );
 }
 
 class _StudioLoadingState extends State<StudioLoading>
@@ -81,6 +127,7 @@ class _StudioLoadingState extends State<StudioLoading>
     super.didChangeDependencies();
     _animate =
         !MediaQuery.disableAnimationsOf(context) &&
+        (ModalRoute.isCurrentOf(context) ?? true) &&
         TickerMode.valuesOf(context).enabled;
     if (_animate) {
       if (!_pulse.isAnimating) _pulse.repeat();
@@ -187,9 +234,17 @@ class _Feathers extends CustomPainter {
 /// Weak Scaffold keys keep independent pages isolated without an app-wide ledger.
 final _pagePresentations = Expando<_LoadingPresentation>();
 
-class _LoadingPresentation extends ValueNotifier<String?> {
-  _LoadingPresentation() : super(null);
+class _LoadingState {
+  const _LoadingState({this.headerLabel, this.slot, this.work});
+  final String? headerLabel;
+  final Object? slot, work;
+}
+
+class _LoadingPresentation extends ValueNotifier<_LoadingState> {
+  _LoadingPresentation() : super(const _LoadingState());
   final _operations = <Object, String>{};
+  final _slots = <Object>{};
+  final _works = <Object, bool>{};
   bool _queued = false, _disposed = false;
 
   static _LoadingPresentation of(BuildContext context) {
@@ -201,18 +256,47 @@ class _LoadingPresentation extends ValueNotifier<String?> {
   }
 
   void report(Object operation, String? label) {
-    if (_disposed) return;
+    if (_disposed || _operations[operation] == label) return;
     if (label == null) {
       _operations.remove(operation);
     } else {
       _operations[operation] = label;
     }
+    _publish();
+  }
+
+  void slot(Object identity, bool present) =>
+      _register(_slots, identity, present);
+  void work(Object identity, bool present, {bool conversation = false}) {
+    if (_disposed) return;
+    if (!present) {
+      if (_works.remove(identity) != null) _publish();
+    } else if (_works[identity] != conversation) {
+      _works[identity] = conversation;
+      _publish();
+    }
+  }
+
+  void _register(Set<Object> entries, Object identity, bool present) {
+    if (_disposed) return;
+    if (present ? entries.add(identity) : entries.remove(identity)) _publish();
+  }
+
+  void _publish() {
     if (_queued) return;
     _queued = true;
-    // Body and header are siblings; never rebuild the header during body build.
+    // Sibling header/body changes are published together after build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _queued = false;
-      if (!_disposed) value = _operations.values.firstOrNull;
+      if (!_disposed) {
+        value = _LoadingState(
+          headerLabel: _operations.values.firstOrNull,
+          slot: _slots.firstOrNull,
+          work:
+              _works.entries.where((entry) => entry.value).firstOrNull?.key ??
+              _works.keys.firstOrNull,
+        );
+      }
     });
   }
 
@@ -220,6 +304,8 @@ class _LoadingPresentation extends ValueNotifier<String?> {
   void dispose() {
     _disposed = true;
     _operations.clear();
+    _slots.clear();
+    _works.clear();
     super.dispose();
   }
 }
@@ -256,20 +342,62 @@ class _LoadingFrameScope extends InheritedWidget {
 }
 
 /// A fixed header compartment; its width stays reserved when the page is ready.
-class StudioLoadingSlot extends StatelessWidget {
+class StudioLoadingSlot extends StatefulWidget {
   const StudioLoadingSlot({super.key, this.height = 48});
   final double height;
+  @override
+  State<StudioLoadingSlot> createState() => _StudioLoadingSlotState();
+}
+
+class _StudioLoadingSlotState extends State<StudioLoadingSlot> {
+  final _identity = Object();
+  _LoadingPresentation? _presentation;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = _LoadingPresentation.of(context);
+    if (!identical(next, _presentation)) {
+      _presentation?.slot(_identity, false);
+      _presentation = next;
+    }
+    next.slot(
+      _identity,
+      (ModalRoute.isCurrentOf(context) ?? true) &&
+          TickerMode.valuesOf(context).enabled,
+    );
+  }
+
+  @override
+  void dispose() {
+    _presentation?.slot(_identity, false);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => SizedBox(
     key: const ValueKey('studio-loading-slot'),
     width: 32,
-    height: height,
+    height: widget.height,
     child: Center(
-      child: ValueListenableBuilder<String?>(
-        valueListenable: _LoadingPresentation.of(context),
-        builder: (_, label, _) => label == null
+      child: ValueListenableBuilder<_LoadingState>(
+        valueListenable: _presentation!,
+        builder: (_, state, _) =>
+            state.headerLabel == null ||
+                !identical(state.slot, _identity) ||
+                !(ModalRoute.isCurrentOf(context) ?? true)
             ? const SizedBox.shrink()
-            : StudioLoading(label: label, size: 18),
+            : state.work == null
+            ? StudioLoading(label: state.headerLabel!, size: 18)
+            : Tooltip(
+                message: state.headerLabel!,
+                child: Semantics(
+                  liveRegion: true,
+                  label: state.headerLabel!,
+                  child: const ExcludeSemantics(
+                    child: Icon(Icons.refresh, size: 18),
+                  ),
+                ),
+              ),
       ),
     ),
   );

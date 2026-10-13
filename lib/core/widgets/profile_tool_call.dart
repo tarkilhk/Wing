@@ -1,4 +1,3 @@
-import 'studio_loading.dart';
 import '../models/chat_output.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -91,29 +90,17 @@ class ProfileToolCall extends StatelessWidget {
     };
     return CompactActivityRow(
       icon: Icon(iconFor(call.name), color: colors.muted, size: 16),
-      lines: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                call.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  height: 1.3,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            StudioWorkProgress(
-              active: call.outcome == ToolCallOutcome.running,
-              label: call.title,
-              color: colors.muted,
-            ),
-          ],
+      title: Text(
+        call.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          height: 1.3,
         ),
+      ),
+      lines: [
         if (call.notice == null && call.filenameTarget != null)
           ResourceFilename(
             target: call.filenameTarget!,

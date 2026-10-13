@@ -158,9 +158,20 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         );
         expect(headers, hasLength(rows.length));
         for (final header in headers) {
-          expect(header.lines, hasLength(2));
+          expect(header.lines, hasLength(1));
+          expect(
+            tester.getRect(find.byWidget(header.icon)).center.dy,
+            closeTo(tester.getRect(find.byWidget(header.title)).center.dy, 0.5),
+          );
+          expect(
+            find.descendant(
+              of: find.byWidget(header),
+              matching: find.byType(StudioLoading),
+            ),
+            findsNothing,
+          );
           final texts = [
-            for (final line in header.lines)
+            for (final line in [header.title, ...header.lines])
               tester.widget<Text>(
                 find.descendant(
                   of: find.byWidget(line),
@@ -298,7 +309,6 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                         child: Column(
                           children: [
                             const ProfileTodoPanel(
-                              live: false,
                               todos: [
                                 GatewayTodo(
                                   content:
@@ -429,7 +439,18 @@ void _expectDenseRows(WidgetTester tester, List<Finder> rows, String page) {
       reason: 'Duration labels have zero vertical padding',
     );
     if (timingText.evaluate().isNotEmpty) {
-      expect(tester.getRect(timingText.first).top, closeTo(rect.top, 0.1));
+      expect(
+        tester.getRect(timingText.first).center.dy,
+        closeTo(
+          tester.getRect(find.byWidget(mainText.first.widget)).top +
+              MediaQuery.textScalerOf(
+                    mainText.first,
+                  ).scale((mainText.first.widget as Text).style!.fontSize!) *
+                  (mainText.first.widget as Text).style!.height! /
+                  2,
+          0.5,
+        ),
+      );
     }
     final contentHeight = math.max(
       16.0,

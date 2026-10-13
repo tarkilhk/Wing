@@ -152,7 +152,7 @@ void main() {
             find.text('Group running'),
             scale == 1 ? findsNWidgets(2) : findsWidgets,
           );
-          expect(tester.widget<LiveBotAvatar>(atlas).mood, BotAvatarMood.work);
+          expect(tester.widget<LiveBotAvatar>(atlas).mood, BotAvatarMood.idle);
           Future<Uint8List> pixels() async => (await tester.runAsync(() async {
             final boundary = tester.renderObject<RenderRepaintBoundary>(
               find.descendant(
@@ -507,7 +507,7 @@ void main() {
           );
           expect(
             tester.widget<LiveBotAvatar>(workerAvatar).mood,
-            BotAvatarMood.work,
+            BotAvatarMood.idle,
           );
           expect(find.text('Running'), findsNWidgets(2));
           Future<Uint8List> workerPixels() async =>
@@ -555,7 +555,7 @@ void main() {
                   ),
                 )
                 .mood,
-            BotAvatarMood.work,
+            BotAvatarMood.idle,
           );
           final avatarAction = find.byTooltip(
             'Edit name & appearance for Atlas',

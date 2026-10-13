@@ -3,7 +3,6 @@ import 'package:wing/core/models/chat_runtime.dart';
 import 'package:flutter/material.dart';
 
 import '../models/gateway_activity.dart';
-import '../models/profile_live_activity.dart';
 import '../theme/wing_theme.dart';
 import '../services/profile_workspace_controller.dart';
 import 'conversation_activity_status.dart';
@@ -83,25 +82,16 @@ class ProfileActivityStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = label;
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
-    final active =
-        !chat.runtime.needsInput &&
-        !chat.runtime.reconnecting &&
-        chat.runtime.execution != ChatExecution.failed &&
-        (chat.runtime.commandRunning ||
-            chat.runtime.activity(
-                  backgroundWorking: chat.subagents.any(
-                    (item) =>
-                        !item.isTerminal &&
-                        !chat.unconfirmedSubagentIds.contains(item.id),
-                  ),
-                ) ==
-                ProfileLiveActivityState.running);
     final Widget leading;
     if (chat.runtime.compacting &&
         !chat.runtime.needsInput &&
         !chat.runtime.reconnecting) {
-      leading = StudioActivityIndicator(
-        active: active,
+      leading = StudioWorkingIndicator(
+        conversation: true,
+        active:
+            !chat.runtime.opening &&
+            !chat.runtime.offline &&
+            chat.runtime.execution != ChatExecution.failed,
         label: 'Summarizing conversation',
         icon: Icons.compress_rounded,
         color: WingTokens.of(context).running,
@@ -109,8 +99,12 @@ class ProfileActivityStatus extends StatelessWidget {
     } else if (chat.runtime.commandRunning &&
         !chat.runtime.needsInput &&
         !chat.runtime.reconnecting) {
-      leading = StudioActivityIndicator(
-        active: true,
+      leading = StudioWorkingIndicator(
+        conversation: true,
+        active:
+            !chat.runtime.opening &&
+            !chat.runtime.offline &&
+            chat.runtime.execution != ChatExecution.failed,
         label: 'Running command',
         icon: Icons.pending_outlined,
         color: color,

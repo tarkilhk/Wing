@@ -1,4 +1,5 @@
 import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'helpers/pump_markdown_widget.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -30,6 +31,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     for (final entry in {
       'Roboto': 'build/studio-roboto.ttf',
       'MaterialIcons': 'build/studio-icons.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
     }.entries) {
       await (FontLoader(entry.key)..addFont(
             File(entry.value).readAsBytes().then(ByteData.sublistView),
@@ -67,6 +69,13 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     SharedPreferences.setMockInitialValues({});
     runtimes = WorkspaceRuntimeFixture();
     host = Host()..running = false;
+    host.ownedPatch = (endpoint, body, canDispatch, onDispatched) async {
+      expect(endpoint, 'sessions/same');
+      expect(body, {'unread': false, 'profile': 'a'});
+      expect(canDispatch(), isTrue);
+      onDispatched();
+      return {'ok': true};
+    };
     final preferences = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
@@ -136,6 +145,25 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             findsOneWidget,
           );
           expect(find.byType(ShaderMask), findsNothing);
+          host.event('a', 'tool.start', {
+            'tool_id': 'working-command',
+            'name': 'terminal',
+            'args': {'command': 'python report.py'},
+          });
+          await tester.pump(const Duration(milliseconds: 300));
+          final activity = find.descendant(
+            of: find.byKey(ValueKey(('activity', chat.key))),
+            matching: find.textContaining(
+              RegExp(r'^Activity(?: · \d+ tools?)?$'),
+            ),
+          );
+          await tester.ensureVisible(activity);
+          await tester.tap(activity);
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byIcon(Icons.terminal_rounded), findsWidgets);
+          await tester.ensureVisible(find.byType(ProfileToolCall));
+          await tester.pump(const Duration(milliseconds: 300));
           await renderStatus(tester, 'chat-working-${brightness.name}-$scale');
           host.event('a', 'clarify', {
             'request_id': 'choice',
@@ -154,7 +182,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       );
     }
   }
-  testWidgets('current task work becomes static during recovery', (
+  testWidgets('current task keeps its status glyph through recovery', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -194,7 +222,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(tasks, findsOneWidget);
     expect(
       find.descendant(of: tasks, matching: find.byType(StudioLoading)),
-      findsOneWidget,
+      findsNothing,
     );
     runtime.beginRecovery();
     await tester.pumpWidget(
@@ -321,6 +349,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         }
         final text = find.text('Summarizing conversation… · 1 subagent active');
         expect(text, findsOneWidget);
+        await tester.pump();
         expect(find.byType(StudioLoading), findsOneWidget);
         expect(tester.widget<Text>(text).maxLines, isNull);
         final composer = find.byKey(const ValueKey('conversation-composer'));
@@ -351,8 +380,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ),
     );
     expect(find.text('Summarizing conversation…'), findsOneWidget);
+    await tester.pump();
     expect(find.byType(StudioLoading), findsOneWidget);
     expect(find.byType(ShaderMask), findsNothing);
+    await tester.pump();
     expect(find.byType(StudioLoading), findsOneWidget);
     expect(tester.binding.transientCallbackCount, 0);
   });
@@ -461,6 +492,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     runtime.beginTurn(submitting: false);
     await render(reducedMotion: true);
     expect(tester.getSize(row).height, expanded);
+    await tester.pump();
     expect(find.byType(StudioLoading), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -626,6 +658,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     host.event('a', 'reasoning.delta', {'text': 'Planning'});
     await tester.pump();
     expect(find.text('Thinking…'), findsOneWidget);
+    await tester.pump();
     expect(find.byType(StudioLoading), findsOneWidget);
     expect(find.byType(ShaderMask), findsNothing);
     host.event('a', 'clarify', {
@@ -710,6 +743,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         ),
       ),
     );
+    await tester.pump();
     expect(find.byType(StudioLoading), findsOneWidget);
     expect(find.byTooltip(label()!), findsOneWidget);
     expect(find.byType(ShaderMask), findsNothing);

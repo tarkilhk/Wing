@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -77,7 +76,9 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
   Widget _loading(double width) => SizedBox(
     width: width,
     height: math.min(320, width * 3 / 4),
-    child: const Center(child: StudioLoading(label: 'Loading image')),
+    child: const Center(
+      child: CircularProgressIndicator(semanticsLabel: 'Loading image'),
+    ),
   );
 
   Widget _unavailable() => Padding(

@@ -164,7 +164,7 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
-        'running schedule shares work pulse ${brightness.name} $scale',
+        'running schedule pulses in its existing status position ${brightness.name} $scale',
         (tester) async {
           fixture.jobs['morning']!['state'] = 'running';
           await show(

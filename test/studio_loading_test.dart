@@ -1,9 +1,3 @@
-import 'package:wing/core/widgets/answer_actions.dart';
-import 'package:wing/core/widgets/profile_tool_call.dart';
-import 'package:wing/core/widgets/tool_activity_details.dart';
-import 'package:wing/core/widgets/profile_transcript_disclosure.dart';
-import 'package:wing/core/models/gateway_activity.dart';
-import 'package:wing/core/presentation/tool_call_presentation.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -18,145 +12,6 @@ import 'package:wing/core/widgets/studio_action_label.dart';
 import 'package:wing/core/widgets/activity/activity_detail_actions.dart';
 
 void main() {
-  for (final brightness in Brightness.values) {
-    for (final scale in [1.0, 2.0]) {
-      testWidgets(
-        'category icons and answer controls survive busy settlement ${brightness.name} $scale',
-        (tester) async {
-          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
-          tester.view.devicePixelRatio = 1;
-          addTearDown(tester.view.reset);
-          var busy = false;
-          late StateSetter change;
-          final frame = GlobalKey();
-          await tester.pumpWidget(
-            MaterialApp(
-              debugShowCheckedModeBanner: false,
-              theme: wingTheme(brightness),
-              builder: (context, child) => MediaQuery(
-                data: MediaQuery.of(context).copyWith(
-                  textScaler: TextScaler.linear(scale),
-                  disableAnimations: true,
-                ),
-                child: RepaintBoundary(key: frame, child: child!),
-              ),
-              home: Scaffold(
-                appBar: AppBar(
-                  title: const Text('Work status'),
-                  actions: const [StudioLoadingSlot()],
-                ),
-                body: StatefulBuilder(
-                  builder: (context, setState) {
-                    change = setState;
-                    return SingleChildScrollView(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            ProfileTranscriptDisclosure(
-                              label: 'Goal',
-                              icon: Icons.track_changes_outlined,
-                              children: const [Text('Goal details')],
-                            ),
-                            ProfileToolCall(
-                              call: ToolCallPresentation.live(
-                                GatewayToolActivity.fromGatewayEvent(
-                                  busy ? 'tool.start' : 'tool.complete',
-                                  {
-                                    'tool_id': 'identity-case',
-                                    'name': 'terminal',
-                                    'args': {'command': 'echo hello'},
-                                    'result': 'hello',
-                                  },
-                                )!,
-                              ),
-                            ),
-                            ActivityDetailStatus(
-                              label: busy ? 'Running' : 'Stopped',
-                              icon: Icons.terminal_rounded,
-                              working: busy,
-                            ),
-                            AnswerActions(
-                              busy: busy,
-                              onBranch: () {},
-                              onRegenerate: () {},
-                              onReadAloud: () {},
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          );
-          await tester.pumpAndSettle();
-          final buttons = {
-            for (final label in [
-              'Branch in new session',
-              'Regenerate response',
-              'Read aloud',
-            ])
-              label: tester.getRect(find.byTooltip(label)),
-          };
-          final tool = find.byType(ProfileToolCall);
-          final category = find.descendant(
-            of: tool,
-            matching: find.byIcon(Icons.terminal_rounded),
-          );
-          final iconRect = tester.getRect(category);
-          change(() => busy = true);
-          await tester.pump();
-          await tester.pumpAndSettle();
-          expect(category, findsOneWidget);
-          expect(
-            find.descendant(of: tool, matching: find.byType(StudioLoading)),
-            findsOneWidget,
-          );
-          expect(tester.getRect(category), iconRect);
-          expect(find.byIcon(Icons.track_changes_outlined), findsOneWidget);
-          for (final entry in buttons.entries) {
-            expect(tester.getRect(find.byTooltip(entry.key)), entry.value);
-          }
-          expect(
-            find.ancestor(
-              of: find.bySemanticsLabel('Preparing answer'),
-              matching: find.byType(AppBar),
-            ),
-            findsOneWidget,
-          );
-          if (const bool.fromEnvironment('CAPTURE_LOADING_CORRECTIONS')) {
-            await tester.runAsync(() async {
-              final image =
-                  await (frame.currentContext!.findRenderObject()!
-                          as RenderRepaintBoundary)
-                      .toImage();
-              final bytes = await image.toByteData(
-                format: ui.ImageByteFormat.png,
-              );
-              final file = File(
-                'build/design-previews/loading-corrections/site/native/${brightness.name}-$scale.png',
-              );
-              file.parent.createSync(recursive: true);
-              await file.writeAsBytes(bytes!.buffer.asUint8List());
-              image.dispose();
-            });
-          }
-          change(() => busy = false);
-          await tester.pump();
-          await tester.pumpAndSettle();
-          for (final entry in buttons.entries) {
-            expect(tester.getRect(find.byTooltip(entry.key)), entry.value);
-          }
-          expect(find.byType(StudioLoading), findsNothing);
-          expect(tester.takeException(), isNull);
-        },
-      );
-    }
-  }
-
   testWidgets('static pulse matches the canonical notification Wing mark', (
     tester,
   ) async {
@@ -232,39 +87,180 @@ void main() {
     });
   });
 
-  testWidgets('modal loading cannot leak into the underlying page', (
+  testWidgets(
+    'conversation work keeps priority while header refresh stays visible',
+    (tester) async {
+      var refreshing = false;
+      late StateSetter change;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            appBar: AppBar(
+              actions: const [StudioLoadingSlot(), StudioLoadingSlot()],
+            ),
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                change = setState;
+                return StudioPageLoading(
+                  active: refreshing,
+                  label: 'Refreshing group',
+                  child: const Row(
+                    children: [
+                      StudioWorkingIndicator(
+                        active: true,
+                        label: 'Nested tool work',
+                        icon: Icons.pending_outlined,
+                        color: Colors.teal,
+                      ),
+                      StudioWorkingIndicator(
+                        conversation: true,
+                        active: true,
+                        label: 'Bots are working',
+                        icon: Icons.pending_outlined,
+                        color: Colors.teal,
+                      ),
+                      Text('Bots are working'),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.byType(StudioLoading), findsOneWidget);
+      final before = tester.getRect(find.text('Bots are working'));
+      change(() => refreshing = true);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(StudioLoading), findsOneWidget);
+      expect(
+        tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
+        'Bots are working',
+      );
+      expect(find.byTooltip('Refreshing group'), findsOneWidget);
+      expect(find.byIcon(Icons.refresh), findsOneWidget);
+      expect(find.byIcon(Icons.pending_outlined), findsOneWidget);
+      expect(tester.getRect(find.text('Bots are working')), before);
+      change(() => refreshing = false);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(StudioLoading), findsOneWidget);
+      expect(
+        tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
+        'Bots are working',
+      );
+    },
+  );
+
+  testWidgets('independent working items each retain their pulse', (
     tester,
   ) async {
-    var first = true, second = true, modal = true;
-    late StateSetter change;
     await tester.pumpWidget(
-      MaterialApp(
-        home: StudioLoadingFrame(
-          child: StatefulBuilder(
-            builder: (context, setState) {
-              change = setState;
-              return Column(
-                children: [
-                  const StudioLoadingSlot(),
-                  StudioPageLoading(
-                    active: first,
-                    label: 'First read',
-                    child: const SizedBox(),
-                  ),
-                  StudioPageLoading(
-                    active: second,
-                    label: 'Second read',
-                    child: const SizedBox(),
-                  ),
-                  if (modal)
-                    const StudioLoadingFrame(
-                      child: Column(
-                        children: [
-                          StudioLoadingSlot(),
-                          StudioPageLoading.waiting(label: 'Modal read'),
-                        ],
+      const MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              StudioWorkingIndicator.independent(
+                active: true,
+                label: 'Atlas running',
+                icon: Icons.autorenew,
+                color: Colors.teal,
+              ),
+              StudioWorkingIndicator.independent(
+                active: true,
+                label: 'Mira running',
+                icon: Icons.autorenew,
+                color: Colors.teal,
+              ),
+              StudioWorkingIndicator.independent(
+                active: false,
+                label: 'Idle',
+                icon: Icons.chat_bubble_outline,
+                color: Colors.teal,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(StudioLoading), findsNWidgets(2));
+    expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
+  });
+
+  testWidgets(
+    'hidden work and header slots cannot retain the visible placement',
+    (tester) async {
+      var hidden = false;
+      late StateSetter change;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                change = setState;
+                return Column(
+                  children: [
+                    TickerMode(
+                      enabled: !hidden,
+                      child: const StudioWorkingIndicator(
+                        active: true,
+                        label: 'First',
+                        icon: Icons.pending_outlined,
+                        color: Colors.teal,
                       ),
                     ),
+                    const StudioWorkingIndicator(
+                      active: true,
+                      label: 'Visible work',
+                      icon: Icons.pending_outlined,
+                      color: Colors.teal,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
+        'First',
+      );
+      change(() => hidden = true);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
+        'Visible work',
+      );
+      expect(tester.binding.transientCallbackCount, 1);
+    },
+  );
+
+  testWidgets('modal header pauses underlying conversation work', (
+    tester,
+  ) async {
+    late BuildContext page;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(actions: const [StudioLoadingSlot()]),
+          body: Builder(
+            builder: (context) {
+              page = context;
+              return const Row(
+                children: [
+                  StudioWorkingIndicator(
+                    active: true,
+                    label: 'Hermes is working',
+                    icon: Icons.pending_outlined,
+                    color: Colors.teal,
+                  ),
+                  Text('Hermes is working'),
                 ],
               );
             },
@@ -273,23 +269,41 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byType(StudioLoading), findsNWidgets(2));
-    change(() {
-      first = false;
-      modal = false;
-    });
+    expect(find.byType(StudioLoading), findsOneWidget);
+    unawaited(
+      showModalBottomSheet<void>(
+        context: page,
+        builder: (_) => const StudioLoadingFrame(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              StudioLoadingSlot(),
+              StudioPageLoading.waiting(label: 'Modal read'),
+              Text('Models'),
+            ],
+          ),
+        ),
+      ),
+    );
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
     expect(find.byType(StudioLoading), findsOneWidget);
     expect(
       tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
-      'Second read',
+      'Modal read',
     );
-    change(() => second = false);
+    expect(find.text('Hermes is working'), findsOneWidget);
+    expect(find.byIcon(Icons.pending_outlined), findsOneWidget);
+    Navigator.of(page).pop();
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
-    expect(find.byType(StudioLoading), findsNothing);
-    expect(tester.takeException(), isNull);
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(
+      tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
+      'Hermes is working',
+    );
   });
 
   for (final brightness in Brightness.values) {
@@ -455,7 +469,7 @@ void main() {
                       appBar: AppBar(actions: const [StudioLoadingSlot()]),
                       body: Row(
                         children: [
-                          StudioActivityIndicator(
+                          StudioWorkingIndicator(
                             active: active,
                             label: 'Hermes is working',
                             icon: Icons.help_outline,
@@ -477,6 +491,7 @@ void main() {
             ),
           ),
         );
+        await tester.pump();
         final statusRect = tester.getRect(find.text('Work status'));
         final actionRect = tester.getRect(find.byTooltip('Stop work'));
         expect(find.byType(StudioLoading), findsOneWidget);
@@ -551,9 +566,11 @@ void main() {
                         const SizedBox(height: 24),
                         ListTile(
                           title: const Text('Saving changes'),
-                          trailing: const StudioLoading(
-                            label: 'Saving changes',
-                            size: 20,
+                          trailing: const SizedBox.square(
+                            dimension: 20,
+                            child: CircularProgressIndicator(
+                              semanticsLabel: 'Saving changes',
+                            ),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -576,7 +593,7 @@ void main() {
           await tester.pump();
           expect(
             find.byType(StudioLoading),
-            available ? findsOneWidget : findsNWidgets(2),
+            available ? findsNothing : findsOneWidget,
           );
           expect(tester.takeException(), isNull);
           if (const bool.fromEnvironment('STUDIO_LOADING_REVIEW')) {
@@ -721,7 +738,12 @@ void main() {
               label: 'Loading chats',
               available: false,
               child: Center(
-                child: StudioLoading(label: 'Saving file', size: 16),
+                child: SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(
+                    semanticsLabel: 'Saving file',
+                  ),
+                ),
               ),
             ),
           ),
@@ -729,7 +751,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byType(StudioLoading), findsNWidgets(2));
+    expect(find.byType(StudioLoading), findsOneWidget);
     expect(find.bySemanticsLabel('Loading workspace'), findsOneWidget);
     expect(find.bySemanticsLabel('Loading chats'), findsNothing);
     expect(find.bySemanticsLabel('Saving file'), findsOneWidget);

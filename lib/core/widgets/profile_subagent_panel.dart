@@ -68,7 +68,8 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
         context: context,
         isScrollControlled: true,
         showDragHandle: true,
-        builder: (_) => _SubagentDetailSheet(session: detail),
+        builder: (_) =>
+            StudioLoadingFrame(child: _SubagentDetailSheet(session: detail)),
       );
     } finally {
       detail.dispose();
@@ -294,10 +295,11 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                         ),
                       _tailBody(current),
                       ActivityDetailStatus(
-                        label: _statusLabel(current, unconfirmed),
                         working:
                             !unconfirmed &&
                             current.status == GatewaySubagentStatus.running,
+                        label: _statusLabel(current, unconfirmed),
+
                         icon: unconfirmed
                             ? Icons.help_outline
                             : _statusIcon(current.status),
@@ -474,21 +476,28 @@ class _SubagentRow extends StatelessWidget {
     ].join(' · ');
     return StudioButtonPress(
       child: ListTile(
+        titleAlignment: ListTileTitleAlignment.top,
         contentPadding: const EdgeInsets.all(WingSpacing.sm),
         minVerticalPadding: 0,
         minTileHeight: 48,
         minLeadingWidth: 16,
         horizontalTitleGap: 8,
-        leading: Icon(
-          unconfirmed ? Icons.help_outline : _statusIcon(activity.status),
-          size: 16,
-          color: unconfirmed
-              ? colors.muted
-              : activity.status == GatewaySubagentStatus.failed
-              ? colors.danger
-              : activity.status == GatewaySubagentStatus.running
-              ? colors.accent
-              : colors.muted,
+        leading: SizedBox(
+          height: MediaQuery.textScalerOf(context).scale(14) * 1.3,
+          child: Center(
+            widthFactor: 1,
+            child: Icon(
+              unconfirmed ? Icons.help_outline : _statusIcon(activity.status),
+              size: 16,
+              color: unconfirmed
+                  ? colors.muted
+                  : activity.status == GatewaySubagentStatus.failed
+                  ? colors.danger
+                  : activity.status == GatewaySubagentStatus.running
+                  ? colors.accent
+                  : colors.muted,
+            ),
+          ),
         ),
         title: Text(
           agentTaskHeading(_goal(activity)),
@@ -529,19 +538,12 @@ class _SubagentRow extends StatelessWidget {
               ),
           ],
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            StudioWorkProgress(
-              active:
-                  !unconfirmed &&
-                  activity.status == GatewaySubagentStatus.running,
-              label: 'Subagent running',
-              color: colors.accent,
-            ),
-            const SizedBox(width: 8),
-            Icon(Icons.chevron_right, size: 16, color: colors.muted),
-          ],
+        trailing: SizedBox(
+          height: MediaQuery.textScalerOf(context).scale(14) * 1.3,
+          child: Center(
+            widthFactor: 1,
+            child: Icon(Icons.chevron_right, size: 16, color: colors.muted),
+          ),
         ),
         onTap: onTap,
       ),

@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/studio_error.dart';
 import '../theme/wing_theme.dart';
 import 'profile_project_actions.dart';
@@ -423,9 +422,12 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                                             ? const SizedBox(
                                                 width: 20,
                                                 height: 20,
-                                                child: StudioLoading(
-                                                  label: 'Moving chat',
-                                                ),
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      semanticsLabel:
+                                                          'Moving chat',
+                                                    ),
                                               )
                                             : null,
                                         onTap: _moving == null

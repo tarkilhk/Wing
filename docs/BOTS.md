@@ -8,7 +8,7 @@ when loading finishes.
 Tap a bot's avatar to edit its appearance. Tap its name or message preview to open its continuing **Bot Chat**. Back returns to the same tab and search. Bot Chats use the usual conversation screen, showing its saved avatar to the left of its display name when available. Tap that avatar or name in the chat header to open Bot settings. Back returns to your conversation with its draft intact.
 
 Explicitly selected classic shapes blink and move in the Bots roster and the
-open Bot Chat header, with stronger motion and dots while working. Pictures
+open Bot Chat header. The status Wing pulses while work continues. Pictures
 and avatars without an explicit saved shape choice stay still. Select a shape
 in the appearance editor—even the currently displayed shape—to save that
 choice in Hermes and enable its animation. Motion respects reduced motion and
@@ -16,12 +16,11 @@ pauses when hidden or backgrounded. Recents previews and message avatars stay
 static.
 
 The roster shows **Running** for live chat turns and background workers with
-recent Hermes heartbeats. Worker activity drives the same shape animation and
+recent Hermes heartbeats. The Running status keeps its Wing pulse and
 expires after 150 seconds without a heartbeat. **Needs input** takes precedence
 when a live chat is waiting for you.
 
-Members of a running discussion show **Group running** and use the active
-shape animation. This identifies participation in an active room; Hermes does
+Members of a running discussion show **Group running** with a work Wing. This identifies participation in an active room; Hermes does
 not report which member is currently writing. Individual Running and Needs
 input states keep their priority. A completed or unavailable room clears the
 group indication.
@@ -174,12 +173,12 @@ resends that same message without stopping again. Your draft and conversation
 history are kept.
 Stop group work in the menu also cancels paused work without sending a message.
 Refresh rereads messages, activity and approval state; it does not restart the bots.
-A separate Wing pulse appears while your refresh is running, without changing
+The header Wing pulse appears while your refresh is running, without changing
 action icons or moving the messages. Wing also refreshes this state automatically. Recognized bot mentions display as bold,
 colored `@Name` text. Copy preserves the original message.
 While work is active, the empty composer offers Stop; entering a draft offers
 Send. A compact status above the composer shows sending, group updates, work or
-approval needs. Active work uses Wing's feather pulse beside steady text.
+approval needs. The conversation working status uses Wing's feather pulse beside steady text. During a manual refresh, ongoing work keeps pulsing and the header shows a refresh symbol until the read settles.
 Automatic background refresh does not show a loading animation. Hermes
 currently exposes group activity rather than individual bots typing, so Wing
 displays “Bots are working…”.
