@@ -63,7 +63,7 @@
       "id": "android-NotificationActionActivity",
       "kind": "manifest-component",
       "path": "android/app/src/main/kotlin/com/tarkilhk/wing/ChatNotifications.kt",
-      "purpose": "Notification decision activity including cold start",
+      "purpose": "Notification decision activity including cold start, isolated from the visible app task",
       "source": "android/app/src/main/AndroidManifest.xml",
       "status": "supported",
       "selector": "NotificationActionActivity"

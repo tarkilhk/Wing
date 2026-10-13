@@ -16,8 +16,10 @@
         android:fullBackupContent="false"
         android:usesCleartextTraffic="true">
         <receiver android:name=".NotificationDismissReceiver" android:exported="false" />
+        <!-- Keep the hidden notification host out of MainActivity's task. -->
         <activity android:name=".NotificationActionActivity" android:exported="false"
-            android:excludeFromRecents="true" android:theme="@style/NotificationActionTheme" />
+            android:taskAffinity="" android:excludeFromRecents="true"
+            android:theme="@style/NotificationActionTheme" />
         <service
             android:name=".BackgroundMonitoringService"
             android:exported="false"

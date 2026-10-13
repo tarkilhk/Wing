@@ -279,14 +279,104 @@ def check_cold_action(output):
     print('PASS: cold Once submits the exact request and returns to the previous screen', flush=True)
 
 
+def check_recents_visibility(output):
+    """Exercise real notification PendingIntents with absent and existing app tasks."""
+    assert SERIAL.startswith('emulator-'), 'Use a disposable emulator, never a phone'
+    assert adb('shell', 'getprop', 'ro.kernel.qemu').strip() == '1', 'Requires an emulator'
+    adb('forward', 'tcp:18766', 'tcp:18766')
+    adb('shell', 'am', 'force-stop', PACKAGE)
+    adb('shell', 'pm', 'clear', PACKAGE)
+    adb('shell', 'pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS')
+    component = PACKAGE + '/com.tarkilhk.wing.MainActivity'
+    adb('shell', 'am', 'start', '-n', component)
+    until(lambda: state()['ready'], 'Notification fixture did not start')
+
+    def main_tasks():
+        dump = adb('shell', 'dumpsys', 'activity', 'recents')
+        tasks = []
+        for block in re.split(r'(?=  \* Recent #\d+:)', dump)[1:]:
+            activity = re.search(
+                r'^    Activities=\[[^\n]*' + re.escape(component) + r' t(\d+)',
+                block, re.M,
+            )
+            if activity:
+                intent = re.search(r'^    intent=\{([^\n]*)\}', block, re.M)
+                assert intent, 'Missing task base intent'
+                flags = re.search(r'\bflg=0x([0-9a-f]+)', intent.group(1))
+                tasks.append((activity.group(1), int(flags.group(1), 16) if flags else 0))
+        return tasks
+
+    def visible_task(stage):
+        tasks = main_tasks()
+        assert len(tasks) == 1, f'{stage}: expected one live Wing task, found {len(tasks)}'
+        task_id, flags = tasks[0]
+        assert not flags & 0x00800000, (
+            f'[NATIVE_NOTIFICATION_RECENTS] {stage}: Wing task {task_id} is excluded '
+            f'from Android Recents (base intent flags=0x{flags:x})'
+        )
+        return task_id
+
+    for missing_task in (True, False):
+        stage = 'notification without an app task' if missing_task else 'notification with an app task'
+        original = None if missing_task else visible_task(stage)
+        adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+        state('/reply', {'text': 'WING-RECENTS-REGRESSION'})
+        if missing_task:
+            original_tasks = main_tasks()
+            assert len(original_tasks) == 1, 'Expected the original fixture task before removal'
+            for task_id, _ in original_tasks:
+                # Remove only this disposable fixture's task, as a Recents swipe does.
+                adb('shell', 'am', 'stack', 'remove', task_id)
+            assert not main_tasks(), 'Original fixture task was not removed'
+        shade()
+        # Android's collapsed automatic group uses a launcher PendingIntent.
+        # Expand it and tap a child: only that reaches NotificationActionActivity.
+        shown = nodes()
+        if any(n.get('resource-id') == 'android:id/expand_button_number' for n in shown):
+            tap(resource='android:id/expand_button')
+            shown = nodes()
+        target = next((n for n in shown if n.get('resource-id') == 'android:id/title'
+                       and n.get('text') in ('Website refresh', 'Weekly report', 'a chat', 'b chat')), None)
+        assert target is not None, 'Missing native fixture reply notification'
+        x1, y1, x2, y2 = map(int, re.findall(r'\d+', target.get('bounds')))
+        adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+        until(lambda: any(component in line for line in
+                         adb('shell', 'dumpsys', 'activity', 'activities').splitlines()
+                         if 'topResumedActivity=' in line), 'Notification did not open Wing')
+        task_id = visible_task(stage)
+        if original is not None:
+            assert task_id == original, 'Notification replaced the existing app task'
+        pid = adb('shell', 'pidof', PACKAGE).strip()
+        adb('shell', 'am', 'start', '-W', '-a', 'android.settings.SETTINGS')
+        assert visible_task(stage + ' after switching apps') == task_id
+        assert adb('shell', 'pidof', PACKAGE).strip() == pid, 'App switch restarted Wing'
+        adb('shell', 'input', 'keyevent', 'KEYCODE_APP_SWITCH')
+        until(lambda: any(n.get('resource-id', '').endswith('/snapshot')
+                          and n.get('content-desc', '').startswith('Wing Dev') for n in nodes()),
+              'Wing card is missing from the actual Android Recents UI')
+        assert visible_task(stage + ' in Recents') == task_id
+        screenshot(output / ('recents-new-task.png' if missing_task else 'recents-existing-task.png'))
+        adb('shell', 'am', 'start', '-W', '-n', component,
+            '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER')
+        assert visible_task(stage + ' after launcher reentry') == task_id
+        until(lambda: state()['ready'], 'Fixture did not resume')
+        print(f'PASS: {stage} retains one visible task across app switch and launcher reentry', flush=True)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial', default=SERIAL)
     parser.add_argument('--output', type=Path, default=Path('build/notification-review'))
+    parser.add_argument('--recents-only', action='store_true',
+                        help='Check real notification task visibility with absent/existing app tasks')
     args = parser.parse_args()
     SERIAL = args.serial
     try:
-        run(args.output)
+        if args.recents_only:
+            check_recents_visibility(args.output)
+        else:
+            run(args.output)
+            check_recents_visibility(args.output)
     finally:
         if SERIAL.startswith('emulator-'):
             adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
