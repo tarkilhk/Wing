@@ -8942,6 +8942,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/services/health_alert_incident_store.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/health_alert_settings_session.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -15294,6 +15299,7 @@
         "lib/core/services/connection_manager.dart",
         "lib/core/services/deleted_draft_cleanup_store.dart",
         "lib/core/services/device_preference.dart",
+        "lib/core/services/health_alert_incident_store.dart",
         "lib/core/services/health_alert_settings_store.dart",
         "lib/core/services/microphone_permission.dart",
         "lib/core/services/notification_delivery_ledger.dart",

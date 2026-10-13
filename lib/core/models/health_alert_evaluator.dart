@@ -14,6 +14,15 @@ class HealthAlertEvaluator {
   final _periods = <String, _Period>{};
   int _occurrence = 0;
   List<HealthAlert> get alerts => List.unmodifiable(_alerts.values);
+
+  /// Restart from retained incidents, never from stale hysteresis progress.
+  void restore(List<HealthAlert> incidents) {
+    for (final alert in incidents) {
+      _alerts[alert.id] = alert.copyWith(lastKnown: true);
+      if (alert.occurrence > _occurrence) _occurrence = alert.occurrence;
+    }
+  }
+
   void resetPeriods() => _periods.clear();
   void pause() {
     for (final entry in _alerts.entries.toList()) {

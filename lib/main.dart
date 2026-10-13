@@ -1,3 +1,4 @@
+import 'core/services/health_alert_incident_store.dart';
 import 'core/models/scheduled_task.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'core/services/connection_diagnostics.dart';
@@ -401,6 +402,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
       registry: _profileControllers,
       settings: _healthAlertSettings,
       monitoring: _backgroundMonitoring.state,
+      incidents: HealthAlertIncidentStore(widget.connManager.prefs),
     );
     _healthAlerts.setForeground(
       WidgetsBinding.instance.lifecycleState == null ||

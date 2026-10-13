@@ -1296,6 +1296,11 @@
       "feature": "notifications",
       "library": "lib/core/services/group_notification_session.dart"
     },
+    "lib/core/services/health_alert_incident_store.dart": {
+      "role": "data",
+      "feature": "administration-health",
+      "library": "lib/core/services/health_alert_incident_store.dart"
+    },
     "lib/core/services/health_alert_settings_session.dart": {
       "role": "application",
       "feature": "administration-health",

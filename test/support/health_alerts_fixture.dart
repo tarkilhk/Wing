@@ -1,3 +1,4 @@
+import 'package:wing/core/services/health_alert_incident_store.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -57,6 +58,7 @@ class HealthAlertsFixture {
   HealthAlertsFixture(
     this.preferences, {
     AdministrationRepository? repository,
+    HealthAlertIncidentStore? incidentStore,
   }) {
     appPreferences = AppPreferences(preferences);
     owner = AlertWorkspaceFixture(
@@ -73,6 +75,7 @@ class HealthAlertsFixture {
       registry: registry,
       settings: settings,
       monitoring: monitoring,
+      incidents: incidentStore ?? HealthAlertIncidentStore(preferences),
     );
   }
   final SharedPreferences preferences;

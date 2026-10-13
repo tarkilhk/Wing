@@ -1,3 +1,4 @@
+import 'package:wing/core/services/health_alert_incident_store.dart';
 import 'package:wing/core/screens/health_alert_health_screen.dart';
 import 'package:wing/core/widgets/health_alerts/health_alert_notice.dart';
 import 'package:wing/core/models/health_alert.dart';
@@ -30,6 +31,7 @@ import 'package:wing/core/screens/administration/admin_scheduled_tasks_page.dart
 import 'package:wing/core/screens/profile_capabilities_screen.dart';
 import 'support/host_resources_fixture.dart';
 import 'support/health_alerts_fixture.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 
 class _DelayedSettingsStore extends HealthAlertSettingsStore {
   _DelayedSettingsStore(super.preferences);
@@ -40,6 +42,18 @@ class _DelayedSettingsStore extends HealthAlertSettingsStore {
     await gate.future;
     if (fail) throw StateError('Storage unavailable');
     await super.write(settings);
+  }
+}
+
+class _DelayedIncidentStore extends HealthAlertIncidentStore {
+  _DelayedIncidentStore(super.preferences);
+  Completer<void>? gate;
+  bool fail = false;
+  @override
+  Future<void> write(String connection, List<HealthAlert> alerts) async {
+    if (gate case final held?) await held.future;
+    if (fail) throw StateError('Storage unavailable');
+    await super.write(connection, alerts);
   }
 }
 
@@ -260,6 +274,166 @@ void main() {
     onReviewAccess: null,
   );
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('alert choice saving feedback $brightness $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final store = _DelayedIncidentStore(prefs);
+        final fixture = HealthAlertsFixture(prefs, incidentStore: store);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
+                disableAnimations: scale == 2,
+              ),
+              child: HealthAlertsScope(
+                alerts: fixture.coordinator,
+                openAlert: (_) async {},
+                child: RepaintBoundary(
+                  key: const ValueKey('capture-alerts'),
+                  child: child!,
+                ),
+              ),
+            ),
+            home: Builder(
+              builder: (context) => Scaffold(
+                appBar: WingAppBar(
+                  context: context,
+                  title: const Text('Chats'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await fixture.critical();
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('health-alert-bell')));
+        await tester.pumpAndSettle();
+        final heading = tester.getRect(find.text('Health alerts'));
+        final close = tester.getRect(find.byTooltip('Close alerts'));
+        store.gate = Completer<void>();
+        await tester.tap(
+          find.byTooltip(
+            scale == 1 ? 'Acknowledge issue' : 'Snooze for 30 minutes',
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(find.text('Acknowledged.'), findsNothing);
+        expect(
+          tester
+              .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.done))
+              .onPressed,
+          isNull,
+        );
+        expect(
+          tester
+              .widget<IconButton>(
+                find.byWidgetPredicate(
+                  (w) => w is IconButton && w.tooltip == 'Close alerts',
+                ),
+              )
+              .onPressed,
+          isNotNull,
+        );
+        await tester.pump(const Duration(seconds: 12));
+        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(tester.getRect(find.text('Health alerts')), heading);
+        expect(tester.getRect(find.byTooltip('Close alerts')), close);
+        await shot(tester, 'choice-held-${brightness.name}-$scale');
+        store.fail = true;
+        store.gate!.complete();
+        await tester.pumpAndSettle();
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(find.textContaining('Could not save'), findsOneWidget);
+        expect(fixture.coordinator.attentionAlerts, hasLength(1));
+        await shot(tester, 'choice-failed-${brightness.name}-$scale');
+        store.fail = false;
+        store.gate = Completer<void>();
+        await tester.tap(
+          find.byTooltip(
+            scale == 1 ? 'Acknowledge issue' : 'Snooze for 30 minutes',
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(StudioLoading), findsOneWidget);
+        store.gate!.complete();
+        await tester.pumpAndSettle();
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(
+          scale == 1
+              ? find.text('Acknowledged.')
+              : find.textContaining('Snoozed until'),
+          findsOneWidget,
+        );
+        expect(fixture.coordinator.attentionAlerts, isEmpty);
+        await shot(tester, 'choice-saved-${brightness.name}-$scale');
+        await tester.tap(find.byTooltip('Close alerts'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('health-alert-bell')), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+        fixture.dispose();
+      });
+    }
+  }
+
+  testWidgets('closing the dialog keeps its pending snooze save alive', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final store = _DelayedIncidentStore(prefs);
+    final fixture = HealthAlertsFixture(prefs, incidentStore: store);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        builder: (_, child) => HealthAlertsScope(
+          alerts: fixture.coordinator,
+          openAlert: (_) async {},
+          child: child!,
+        ),
+        home: Builder(
+          builder: (context) => Scaffold(
+            appBar: WingAppBar(context: context, title: const Text('Chats')),
+            body: healthContent(fixture),
+          ),
+        ),
+      ),
+    );
+    await fixture.critical();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('health-alert-bell')));
+    await tester.pumpAndSettle();
+    store.gate = Completer<void>();
+    await tester.tap(find.byTooltip('Snooze for 30 minutes'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(StudioLoading), findsOneWidget);
+    await tester.tap(find.byTooltip('Close alerts'));
+    await tester.pumpAndSettle();
+    expect(fixture.coordinator.saving, isTrue);
+    store.gate!.complete();
+    await tester.pumpAndSettle();
+    expect(fixture.coordinator.saving, isFalse);
+    expect(fixture.coordinator.attentionAlerts, isEmpty);
+    await tester.tap(find.byKey(const ValueKey('health-alerts-entry')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Snoozed until'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    fixture.dispose();
+  });
+
   testWidgets('header counts only issues that need attention', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final fixture = HealthAlertsFixture(await SharedPreferences.getInstance());
@@ -285,7 +459,7 @@ void main() {
     expect(fixture.coordinator.alerts, hasLength(2));
     expect(find.text('2'), findsOneWidget);
     final acknowledged = fixture.coordinator.alerts.first;
-    fixture.coordinator.acknowledge(acknowledged);
+    await fixture.coordinator.acknowledge(acknowledged);
     await tester.pumpAndSettle();
     expect(fixture.coordinator.attentionAlerts, hasLength(1));
     expect(find.text('1'), findsOneWidget);
@@ -301,7 +475,7 @@ void main() {
     await tester.tap(find.byTooltip('Close alerts'));
     await tester.pumpAndSettle();
     final remaining = fixture.coordinator.attentionAlerts.single;
-    fixture.coordinator.snooze(remaining);
+    await fixture.coordinator.snooze(remaining);
     await tester.pumpAndSettle();
     expect(fixture.coordinator.attentionAlerts, isEmpty);
     expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
@@ -351,6 +525,7 @@ void main() {
         registry: fixture.registry,
         settings: fixture.settings,
         monitoring: fixture.monitoring,
+        incidents: HealthAlertIncidentStore(fixture.preferences),
         now: () => now,
       );
       final navigatorKey = GlobalKey<NavigatorState>();

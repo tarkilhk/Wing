@@ -8,6 +8,7 @@ import '../models/host_resources.dart';
 import '../models/host_thresholds.dart';
 import 'administration_health.dart';
 import 'health_alert_settings_session.dart';
+import 'health_alert_incident_store.dart';
 import 'host_resources_session.dart';
 
 /// Connection-owned evaluator borrowing canonical observations. Owns only its
@@ -17,21 +18,37 @@ class HealthAlertsSession extends ChangeNotifier {
     required this.host,
     required this.health,
     required this.settings,
+    required this.incidents,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now,
        _evaluator = HealthAlertEvaluator(
          connectionIdentity: host.connectionIdentity,
          connectionLabel: host.scopeLabel,
        ) {
+    try {
+      _evaluator.restore(incidents.read(host.connectionIdentity));
+    } catch (_) {
+      _error =
+          'Saved health alerts could not be read. Acknowledge again to save.';
+    }
+    _durableState = _incidentState(alerts);
     _watch = host.watch(interval: const Duration(seconds: 15), active: false);
     _lastSettings = settings.settings;
     host.addListener(_changed);
     health.addListener(_changed);
     settings.addListener(_settingsChanged);
+    _changed();
   }
   final HostResourcesSession host;
   final AdministrationHealth health;
   final HealthAlertSettingsSession settings;
+  final HealthAlertIncidentStore incidents;
+  bool _closed = false, _saving = false;
+  String? _error;
+  HealthAlert? _pendingChoice;
+  bool get saving => _saving;
+  String? get error => _error;
+  List<Object>? _durableState;
   final DateTime Function() _now;
   final HealthAlertEvaluator _evaluator;
   late final HostResourcesWatch _watch;
@@ -193,21 +210,89 @@ class HealthAlertsSession extends ChangeNotifier {
     _publish();
   }
 
-  void acknowledge(HealthAlert alert) {
-    _evaluator.acknowledge(alert.id, alert.occurrence);
-    _publish();
+  Future<void> acknowledge(HealthAlert alert) =>
+      _silence(alert, acknowledge: true);
+
+  Future<void> snooze(HealthAlert alert) => _silence(alert, acknowledge: false);
+
+  Future<void> _silence(HealthAlert alert, {required bool acknowledge}) async {
+    if (_closed || _saving) return;
+    final current = alerts.where((a) => a.id == alert.id).firstOrNull;
+    if (current == null || current.occurrence != alert.occurrence) return;
+    final until = _now().add(const Duration(minutes: 30));
+    final target = current.copyWith(
+      acknowledged: acknowledge ? true : current.acknowledged,
+      snoozedUntil: acknowledge ? current.snoozedUntil : until,
+    );
+    _saving = true;
+    _pendingChoice = target;
+    _error = null;
+    notifyListeners();
+    final snapshot = [for (final a in alerts) a.id == alert.id ? target : a];
+    // Submit before yielding so later recovery/escalation writes follow it.
+    _durableState = _incidentState(snapshot);
+    try {
+      await incidents.write(host.connectionIdentity, snapshot);
+      if (!_closed) {
+        _error = null;
+        if (acknowledge) {
+          _evaluator.acknowledge(alert.id, alert.occurrence);
+        } else {
+          _evaluator.snooze(alert.id, alert.occurrence, until);
+        }
+      }
+    } catch (_) {
+      if (!_closed) {
+        _durableState = null;
+        _error = 'Could not save this choice. Please try again.';
+      }
+    } finally {
+      _saving = false;
+      _pendingChoice = null;
+      if (!_closed) {
+        // A recovered/escalated occurrence must win over a held user save.
+        _publish();
+        notifyListeners();
+      }
+    }
   }
 
-  void snooze(HealthAlert alert) {
-    _evaluator.snooze(
-      alert.id,
-      alert.occurrence,
-      _now().add(const Duration(minutes: 30)),
+  List<Object> _incidentState(List<HealthAlert> values) => [
+    for (final a in values)
+      (a.id, a.occurrence, a.severity, a.acknowledged, a.snoozedUntil),
+  ];
+
+  void _persistIncidents() {
+    // Fresh detail notifications must not queue an unsilenced snapshot behind
+    // a pending user choice. A replacement occurrence never inherits that choice.
+    final pending = _pendingChoice;
+    final snapshot = [
+      for (final a in alerts)
+        pending != null &&
+                a.id == pending.id &&
+                a.occurrence == pending.occurrence
+            ? a.copyWith(
+                acknowledged: pending.acknowledged,
+                snoozedUntil: pending.snoozedUntil,
+              )
+            : a,
+    ];
+    final state = _incidentState(snapshot);
+    if (listEquals(state, _durableState)) return;
+    _durableState = state;
+    final write = incidents.write(host.connectionIdentity, snapshot);
+    unawaited(
+      write.catchError((Object _) {
+        if (_closed) return;
+        if (listEquals(state, _durableState)) _durableState = null;
+        _error = 'Could not save health alerts. Please try again.';
+        notifyListeners();
+      }),
     );
-    _publish();
   }
 
   void _publish() {
+    _persistIncidents();
     final next = alerts
         .expand(
           (a) => <Object>[
@@ -238,6 +323,7 @@ class HealthAlertsSession extends ChangeNotifier {
 
   @override
   void dispose() {
+    _closed = true;
     _watch.close();
     host.removeListener(_changed);
     health.removeListener(_changed);

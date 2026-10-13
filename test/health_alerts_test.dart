@@ -1,3 +1,4 @@
+import 'package:wing/core/services/health_alert_incident_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,7 @@ import 'package:wing/core/services/health_alerts_session.dart';
 import 'package:wing/core/services/host_resources_session.dart';
 import 'package:wing/core/services/server_connection_status.dart';
 import 'support/host_resources_fixture.dart';
+import 'support/health_alerts_fixture.dart';
 
 class _HeldStore extends HealthAlertSettingsStore {
   _HeldStore(super.preferences);
@@ -26,6 +28,25 @@ class _HeldStore extends HealthAlertSettingsStore {
     await gate.future;
     if (fail) throw StateError('disk unavailable');
     await super.write(settings);
+  }
+}
+
+class _HeldIncidentStore extends HealthAlertIncidentStore {
+  _HeldIncidentStore(super.preferences);
+  Completer<void>? gate;
+  bool fail = false;
+  Future<void> _tail = Future<void>.value();
+  @override
+  Future<void> write(String connection, List<HealthAlert> alerts) {
+    final held = gate;
+    final snapshot = List<HealthAlert>.of(alerts);
+    final result = _tail.then((_) async {
+      if (held != null) await held.future;
+      if (fail) throw StateError('Disk unavailable');
+      await super.write(connection, snapshot);
+    });
+    _tail = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
   }
 }
 
@@ -76,6 +97,206 @@ void main() {
       sample(i, value);
     }
   }
+
+  test('acknowledgement survives device-preference reconstruction', () async {
+    SharedPreferences.setMockInitialValues({});
+    var prefs = await SharedPreferences.getInstance();
+    var fixture = HealthAlertsFixture(prefs);
+    await fixture.owner.hostResources().refresh();
+    await fixture.critical();
+    await fixture.coordinator.acknowledge(fixture.coordinator.alerts.single);
+    await Future<void>.delayed(Duration.zero);
+    expect(fixture.coordinator.attentionAlerts, isEmpty);
+    fixture.dispose();
+    final saved = {for (final key in prefs.getKeys()) key: prefs.get(key)!};
+    SharedPreferences.setMockInitialValues(saved);
+    prefs = await SharedPreferences.getInstance();
+    fixture = HealthAlertsFixture(prefs);
+    await fixture.owner.hostResources().refresh();
+    await fixture.critical();
+    expect(fixture.coordinator.alerts.single.acknowledged, isTrue);
+    expect(fixture.coordinator.attentionAlerts, isEmpty);
+    fixture.dispose();
+  });
+
+  test('snooze survives restart with its original deadline', () async {
+    SharedPreferences.setMockInitialValues({});
+    var prefs = await SharedPreferences.getInstance();
+    var fixture = HealthAlertsFixture(prefs);
+    await fixture.owner.hostResources().refresh();
+    await fixture.critical();
+    await fixture.coordinator.snooze(fixture.coordinator.alerts.single);
+    final until = fixture.coordinator.alerts.single.snoozedUntil!;
+    final saved = {for (final key in prefs.getKeys()) key: prefs.get(key)!};
+    fixture.dispose();
+    SharedPreferences.setMockInitialValues(saved);
+    prefs = await SharedPreferences.getInstance();
+    fixture = HealthAlertsFixture(prefs);
+    expect(fixture.coordinator.alerts.single.lastKnown, isTrue);
+    expect(
+      fixture.coordinator.alerts.single.snoozedUntil!.isAtSameMomentAs(until),
+      isTrue,
+    );
+    expect(fixture.coordinator.alerts.single.remindsAt(until), isTrue);
+    expect(fixture.coordinator.attentionAlerts, isEmpty);
+    await fixture.owner.hostResources().refresh();
+    await fixture.critical();
+    expect(
+      fixture.coordinator.alerts.single.snoozedUntil!.isAtSameMomentAs(until),
+      isTrue,
+    );
+    fixture.dispose();
+  });
+
+  test(
+    'saved profile choices isolate connections/profiles and reset on recovery or escalation',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = HealthAlertIncidentStore(
+        await SharedPreferences.getInstance(),
+      );
+      void finding(
+        HealthAlertEvaluator owner,
+        String profile,
+        int seconds, {
+        bool failed = true,
+        HealthAlertSeverity severity = HealthAlertSeverity.warning,
+      }) => owner.finding(
+        key: 'exact-endpoint:profile:$profile:Scheduled tasks',
+        title: 'Scheduled tasks',
+        detail: 'One reported error',
+        scope: HealthAlertScope.profile,
+        profileName: profile,
+        destination: 'Scheduled tasks',
+        at: start.add(Duration(seconds: seconds)),
+        failed: failed,
+        severity: severity,
+      );
+      finding(evaluator, 'pace', 0);
+      final original = evaluator.alerts.single;
+      evaluator.acknowledge(original.id, original.occurrence);
+      await store.write('exact-endpoint', evaluator.alerts);
+      expect(store.read('other-endpoint'), isEmpty);
+      evaluator = HealthAlertEvaluator(
+        connectionIdentity: 'exact-endpoint',
+        connectionLabel: 'Home',
+      )..restore(store.read('exact-endpoint'));
+      finding(evaluator, 'pace', 15);
+      expect(evaluator.alerts.single.acknowledged, isTrue);
+      expect(evaluator.alerts.single.destination, 'Scheduled tasks');
+      finding(evaluator, 'other-profile', 15);
+      expect(evaluator.alerts.last.acknowledged, isFalse);
+      finding(evaluator, 'pace', 30, severity: HealthAlertSeverity.critical);
+      final escalated = evaluator.alerts.first;
+      expect(escalated.acknowledged, isFalse);
+      expect(escalated.occurrence, greaterThan(original.occurrence));
+      evaluator.acknowledge(original.id, original.occurrence);
+      expect(evaluator.alerts.first.acknowledged, isFalse);
+      evaluator.acknowledge(escalated.id, escalated.occurrence);
+      finding(evaluator, 'pace', 45, failed: false);
+      await store.write('exact-endpoint', evaluator.alerts);
+      evaluator = HealthAlertEvaluator(
+        connectionIdentity: 'exact-endpoint',
+        connectionLabel: 'Home',
+      )..restore(store.read('exact-endpoint'));
+      finding(evaluator, 'pace', 60);
+      expect(evaluator.alerts.last.acknowledged, isFalse);
+    },
+  );
+
+  test(
+    'held save survives disposal and fresh readings without losing the choice',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = _HeldIncidentStore(prefs);
+      final fixture = HealthAlertsFixture(prefs, incidentStore: store);
+      await fixture.owner.hostResources().refresh();
+      await fixture.critical();
+      store.gate = Completer<void>();
+      final original = fixture.coordinator.alerts.single;
+      final action = fixture.coordinator.acknowledge(original);
+      expect(fixture.coordinator.saving, isTrue);
+      expect(fixture.coordinator.alerts.single.acknowledged, isFalse);
+      await fixture.critical();
+      fixture.dispose();
+      store.gate!.complete();
+      await action;
+      expect(
+        store.read(original.connectionIdentity).single.acknowledged,
+        isTrue,
+      );
+    },
+  );
+
+  test('failed choice remains active and can be retried', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final store = _HeldIncidentStore(prefs);
+    final fixture = HealthAlertsFixture(prefs, incidentStore: store);
+    await fixture.owner.hostResources().refresh();
+    await fixture.critical();
+    // Settle the initial incident write before simulating a failed user save.
+    await Future<void>.delayed(Duration.zero);
+    store.fail = true;
+    final alert = fixture.coordinator.alerts.single;
+    await fixture.coordinator.acknowledge(alert);
+    expect(fixture.coordinator.saving, isFalse);
+    expect(fixture.coordinator.attentionAlerts, hasLength(1));
+    expect(fixture.coordinator.error(alert), contains('Could not save'));
+    store.fail = false;
+    await fixture.coordinator.acknowledge(alert);
+    expect(fixture.coordinator.error(alert), isNull);
+    expect(fixture.coordinator.attentionAlerts, isEmpty);
+    expect(store.read(alert.connectionIdentity).single.acknowledged, isTrue);
+    fixture.dispose();
+  });
+
+  test('recovery while a save is held wins over the old occurrence', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final store = _HeldIncidentStore(prefs);
+    final fixture = HostResourcesFixture();
+    var now = start;
+    fixture.pressure = hostPressurePayload(now: now);
+    fixture.pressure['memory']['pressure'] = 'critical';
+    final host = HostResourcesSession(fixture.server, now: () => now);
+    final health = AdministrationHealth(fixture.server, now: () => now);
+    final settings = HealthAlertSettingsSession(
+      HealthAlertSettingsStore(prefs),
+    );
+    final session = HealthAlertsSession(
+      host: host,
+      health: health,
+      settings: settings,
+      incidents: store,
+      now: () => now,
+    );
+    session.setActive(true);
+    await host.refresh();
+    store.gate = Completer<void>();
+    final original = session.alerts.single;
+    final action = session.acknowledge(original);
+    fixture.pressure = hostPressurePayload(now: now);
+    await host.refresh();
+    now = now.add(const Duration(minutes: 2));
+    await host.refresh();
+    expect(session.alerts, isEmpty);
+    fixture.pressure = hostPressurePayload(now: now);
+    fixture.pressure['memory']['pressure'] = 'critical';
+    await host.refresh();
+    expect(session.alerts.single.occurrence, greaterThan(original.occurrence));
+    store.gate!.complete();
+    await action;
+    await Future<void>.delayed(Duration.zero);
+    expect(session.alerts.single.acknowledged, isFalse);
+    expect(store.read(fixture.identity).single.acknowledged, isFalse);
+    session.dispose();
+    host.dispose();
+    health.dispose();
+    settings.dispose();
+    fixture.server.close();
+  });
 
   for (final acknowledge in [true, false]) {
     test(
@@ -240,6 +461,9 @@ void main() {
         ),
       );
       final session = HealthAlertsSession(
+        incidents: HealthAlertIncidentStore(
+          await SharedPreferences.getInstance(),
+        ),
         host: host,
         health: health,
         settings: settings,
@@ -663,6 +887,9 @@ void main() {
         HealthAlertSettingsStore(await SharedPreferences.getInstance()),
       );
       final session = HealthAlertsSession(
+        incidents: HealthAlertIncidentStore(
+          await SharedPreferences.getInstance(),
+        ),
         host: host,
         health: health,
         settings: settings,
@@ -753,6 +980,9 @@ void main() {
         ),
       );
       final session = HealthAlertsSession(
+        incidents: HealthAlertIncidentStore(
+          await SharedPreferences.getInstance(),
+        ),
         host: host,
         health: health,
         settings: settings,
@@ -809,6 +1039,9 @@ void main() {
             ),
           );
           final session = HealthAlertsSession(
+            incidents: HealthAlertIncidentStore(
+              await SharedPreferences.getInstance(),
+            ),
             host: host,
             health: health,
             settings: settings,
@@ -876,6 +1109,9 @@ void main() {
         HealthAlertSettingsStore(prefs),
       );
       final session = HealthAlertsSession(
+        incidents: HealthAlertIncidentStore(
+          await SharedPreferences.getInstance(),
+        ),
         host: host,
         health: health,
         settings: settings,
@@ -932,6 +1168,9 @@ void main() {
         HealthAlertSettingsStore(prefs),
       );
       final session = HealthAlertsSession(
+        incidents: HealthAlertIncidentStore(
+          await SharedPreferences.getInstance(),
+        ),
         host: host,
         health: health,
         settings: settings,

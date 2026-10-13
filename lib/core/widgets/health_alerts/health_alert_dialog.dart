@@ -3,6 +3,7 @@ import '../../models/health_alert.dart';
 import '../../presentation/health_alert_presentation.dart';
 import '../../theme/wing_theme.dart';
 import 'health_alerts_scope.dart';
+import '../studio_loading.dart';
 
 Future<void> showHealthAlerts(
   BuildContext context,
@@ -17,8 +18,9 @@ Future<void> showHealthAlerts(
           reverseDuration: Duration(milliseconds: 150),
           curve: Curves.easeOutCubic,
         ),
-  builder: (_) =>
-      _HealthAlertDialog(scope: scope, includeSilenced: includeSilenced),
+  builder: (_) => StudioLoadingFrame(
+    child: _HealthAlertDialog(scope: scope, includeSilenced: includeSilenced),
+  ),
 );
 
 class _HealthAlertDialog extends StatefulWidget {
@@ -68,6 +70,8 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
       if (index < 0) index = 0;
       final alert = alerts.isEmpty ? null : alerts[index];
       final tokens = WingTokens.of(context);
+      final saving = widget.scope.alerts.saving;
+      final error = alert == null ? null : widget.scope.alerts.error(alert);
       return Dialog(
         insetPadding: const EdgeInsets.all(16),
         child: ConstrainedBox(
@@ -79,23 +83,17 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Health alerts',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  StudioButtonPress(
-                    child: IconButton(
-                      tooltip: 'Close alerts',
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ),
-                ],
+              if (saving)
+                const StudioPageLoading.waiting(
+                  label: 'Saving health alert choice',
+                ),
+              Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: WingModalHeader(
+                  title: const Text('Health alerts'),
+                  closeLabel: 'Close alerts',
+                  onClose: () => Navigator.pop(context),
+                ),
               ),
               const Divider(height: 1),
               Flexible(
@@ -201,9 +199,12 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
               ),
               if (alert != null) ...[
                 const Divider(height: 1),
-                if (alert.acknowledged ||
-                    alert.snoozedUntil != null &&
-                        alert.snoozedUntil!.isAfter(widget.scope.alerts.now))
+                if (!saving &&
+                    (alert.acknowledged ||
+                        alert.snoozedUntil != null &&
+                            alert.snoozedUntil!.isAfter(
+                              widget.scope.alerts.now,
+                            )))
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                     child: Semantics(
@@ -216,13 +217,26 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
                       ),
                     ),
                   ),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        error,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     StudioButtonPress(
                       child: IconButton(
                         tooltip: 'Acknowledge issue',
-                        onPressed: alert.acknowledged
+                        onPressed: saving || alert.acknowledged
                             ? null
                             : () => widget.scope.alerts.acknowledge(alert),
                         icon: const Icon(Icons.done),
@@ -231,7 +245,7 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
                     StudioButtonPress(
                       child: IconButton(
                         tooltip: 'Snooze for 30 minutes',
-                        onPressed: alert.acknowledged
+                        onPressed: saving || alert.acknowledged
                             ? null
                             : () => widget.scope.alerts.snooze(alert),
                         icon: const Icon(Icons.snooze_outlined),

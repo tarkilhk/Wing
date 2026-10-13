@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../theme/wing_theme.dart';
 
 /// Wing's three feathers keep their shape while a quiet highlight passes across.
 class StudioLoading extends StatefulWidget {
@@ -530,5 +531,38 @@ class _StudioRefreshState extends State<StudioRefresh> {
       },
       child: widget.child,
     ),
+  );
+}
+
+/// A shared modal heading with a reserved progress slot and close action.
+class WingModalHeader extends StatelessWidget {
+  const WingModalHeader({
+    super.key,
+    required this.title,
+    required this.onClose,
+    required this.closeLabel,
+  });
+  final Widget title;
+  final VoidCallback? onClose;
+  final String closeLabel;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: DefaultTextStyle(
+          style: Theme.of(context).textTheme.titleMedium!,
+          child: title,
+        ),
+      ),
+      const StudioLoadingSlot(),
+      StudioButtonPress(
+        child: IconButton(
+          tooltip: closeLabel,
+          onPressed: onClose,
+          icon: const Icon(Icons.close),
+        ),
+      ),
+    ],
   );
 }

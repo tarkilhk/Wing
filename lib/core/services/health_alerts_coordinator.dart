@@ -4,6 +4,7 @@ import '../models/health_alert.dart';
 import 'background_monitoring_service.dart';
 import 'health_alert_settings_session.dart';
 import 'health_alerts_session.dart';
+import 'health_alert_incident_store.dart';
 import 'profile_workspace_controller.dart';
 import 'profile_workspace_registry.dart';
 
@@ -14,6 +15,7 @@ class HealthAlertsCoordinator extends ChangeNotifier {
     required this.registry,
     required this.settings,
     required this.monitoring,
+    required this.incidents,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now {
     registry.addListener(_reconcile);
@@ -23,6 +25,7 @@ class HealthAlertsCoordinator extends ChangeNotifier {
   }
   final ProfileWorkspaceRegistry registry;
   final HealthAlertSettingsSession settings;
+  final HealthAlertIncidentStore incidents;
   final ValueListenable<BackgroundMonitoringState> monitoring;
   final DateTime Function() _now;
   DateTime get now => _now();
@@ -68,6 +71,7 @@ class HealthAlertsCoordinator extends ChangeNotifier {
           host: owner.hostResources(),
           health: owner.healthSession().health,
           settings: settings,
+          incidents: incidents,
           now: _now,
         );
         void changed() => _ownerChanged(owner);
@@ -130,9 +134,12 @@ class HealthAlertsCoordinator extends ChangeNotifier {
   ProfileWorkspaceController? ownerFor(HealthAlert alert) => _sessions.keys
       .where((owner) => owner.connectionIdentity == alert.connectionIdentity)
       .firstOrNull;
-  void acknowledge(HealthAlert alert) =>
+  bool get saving => _sessions.values.any((session) => session.saving);
+  String? error(HealthAlert alert) => _sessions[ownerFor(alert)]?.error;
+  Future<void> acknowledge(HealthAlert alert) async =>
       _sessions[ownerFor(alert)]?.acknowledge(alert);
-  void snooze(HealthAlert alert) => _sessions[ownerFor(alert)]?.snooze(alert);
+  Future<void> snooze(HealthAlert alert) async =>
+      _sessions[ownerFor(alert)]?.snooze(alert);
   @override
   void dispose() {
     _closed = true;

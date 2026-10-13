@@ -7,7 +7,6 @@ import '../services/server_files_browser.dart';
 import '../theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'studio_loading.dart';
-import 'wing_app_bar.dart';
 
 /// Folder-selection presentation over the shared server filesystem browser.
 class ProjectFolderPickerDialog extends StatefulWidget {
