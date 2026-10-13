@@ -23,10 +23,10 @@ class ProfileLiveWorkDock extends StatefulWidget {
   final Future<void> Function() onAgentsSelected;
 
   @override
-  State<ProfileLiveWorkDock> createState() => _ProfileLiveWorkDockState();
+  ProfileLiveWorkDockState createState() => ProfileLiveWorkDockState();
 }
 
-class _ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
+class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
     with SingleTickerProviderStateMixin {
   final _portal = OverlayPortalController();
   final _link = LayerLink();
@@ -37,6 +37,13 @@ class _ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
   int _selected = 0, _generation = 0;
 
   bool get _reduced => MediaQuery.disableAnimationsOf(context);
+
+  /// Let the workspace consume Back before its own conversation navigation.
+  bool dismiss() {
+    if (!_open) return false;
+    _close(keyboard: true);
+    return true;
+  }
 
   @override
   void initState() {
@@ -296,148 +303,141 @@ class _ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_open,
-    onPopInvokedWithResult: (didPop, _) {
-      if (!didPop && _open) _close(keyboard: true);
-    },
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final height = math.max(
-          36.0,
-          MediaQuery.textScalerOf(context).scale(12) * 3,
-        );
-        return OverlayPortal(
-          controller: _portal,
-          // Measure the anchor during overlay layout, after the composer has
-          // moved for an IME inset. Build-time coordinates lag by one layout.
-          overlayChildBuilder: (context) => LayoutBuilder(
-            builder: (context, _) {
-              final box =
-                  _target.currentContext!.findRenderObject()! as RenderBox;
-              final bottom = box.localToGlobal(Offset(0, box.size.height)).dy;
-              final query = MediaQuery.of(context);
-              final available = math.max(
-                48.0,
-                bottom - height - query.padding.top - 56,
-              );
-              final panelHeight = math.min(
-                available,
-                math.min(470.0, query.size.height * .55),
-              );
-              return Stack(
-                children: [
-                  Positioned.fill(
-                    child: ModalBarrier(
-                      color: Colors.black.withValues(alpha: .54),
-                      dismissible: true,
-                      onDismiss: _close,
-                    ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      final height = math.max(
+        36.0,
+        MediaQuery.textScalerOf(context).scale(12) * 3,
+      );
+      return OverlayPortal(
+        controller: _portal,
+        // Measure the anchor during overlay layout, after the composer has
+        // moved for an IME inset. Build-time coordinates lag by one layout.
+        overlayChildBuilder: (context) => LayoutBuilder(
+          builder: (context, _) {
+            final box =
+                _target.currentContext!.findRenderObject()! as RenderBox;
+            final bottom = box.localToGlobal(Offset(0, box.size.height)).dy;
+            final query = MediaQuery.of(context);
+            final available = math.max(
+              48.0,
+              bottom - height - query.padding.top - 56,
+            );
+            final panelHeight = math.min(
+              available,
+              math.min(470.0, query.size.height * .55),
+            );
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: ModalBarrier(
+                    color: Colors.black.withValues(alpha: .54),
+                    dismissible: true,
+                    onDismiss: _close,
                   ),
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    child: CompositedTransformFollower(
-                      link: _link,
-                      targetAnchor: Alignment.bottomLeft,
-                      followerAnchor: Alignment.bottomLeft,
-                      showWhenUnlinked: false,
-                      child: SizedBox(
-                        width: width,
-                        height: panelHeight + height,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: height,
-                              height: panelHeight,
-                              child: AnimatedBuilder(
-                                animation: _reveal,
-                                builder: (_, child) => Align(
-                                  alignment: Alignment.bottomCenter,
-                                  child: ClipRect(
-                                    child: Align(
-                                      alignment: Alignment.bottomCenter,
-                                      heightFactor: Curves.easeOutCubic
-                                          .transform(_reveal.value),
-                                      child: child,
+                ),
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  child: CompositedTransformFollower(
+                    link: _link,
+                    targetAnchor: Alignment.bottomLeft,
+                    followerAnchor: Alignment.bottomLeft,
+                    showWhenUnlinked: false,
+                    child: SizedBox(
+                      width: width,
+                      height: panelHeight + height,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: height,
+                            height: panelHeight,
+                            child: AnimatedBuilder(
+                              animation: _reveal,
+                              builder: (_, child) => Align(
+                                alignment: Alignment.bottomCenter,
+                                child: ClipRect(
+                                  child: Align(
+                                    alignment: Alignment.bottomCenter,
+                                    heightFactor: Curves.easeOutCubic.transform(
+                                      _reveal.value,
                                     ),
+                                    child: child,
                                   ),
                                 ),
-                                child: Material(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.surfaceContainerLow,
-                                  shape: RoundedRectangleBorder(
-                                    side: BorderSide(
-                                      color: WingTokens.of(context).border,
-                                    ),
-                                    borderRadius: WingRadius.sheet,
+                              ),
+                              child: Material(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerLow,
+                                shape: RoundedRectangleBorder(
+                                  side: BorderSide(
+                                    color: WingTokens.of(context).border,
                                   ),
-                                  child: ClipRRect(
-                                    borderRadius: WingRadius.sheet,
-                                    child: PageView(
-                                      controller: _pages,
-                                      pageSnapping: false,
-                                      allowImplicitScrolling: true,
-                                      physics: _WorkPagePhysics(
-                                        reducedMotion: _reduced,
-                                      ),
-                                      onPageChanged: (index) {
-                                        if (!_openingPages &&
-                                            _selected != index) {
-                                          setState(() => _selected = index);
-                                          if (index == 0) _refreshAgents();
-                                        }
-                                      },
-                                      children: [
-                                        _WorkPage(
-                                          key: const PageStorageKey(
-                                            'live-subagents',
-                                          ),
-                                          child: widget.subagents,
-                                        ),
-                                        _WorkPage(
-                                          key: const PageStorageKey(
-                                            'live-tasks',
-                                          ),
-                                          child: widget.tasks,
-                                        ),
-                                      ],
+                                  borderRadius: WingRadius.sheet,
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: WingRadius.sheet,
+                                  child: PageView(
+                                    controller: _pages,
+                                    pageSnapping: false,
+                                    allowImplicitScrolling: true,
+                                    physics: _WorkPagePhysics(
+                                      reducedMotion: _reduced,
                                     ),
+                                    onPageChanged: (index) {
+                                      if (!_openingPages &&
+                                          _selected != index) {
+                                        setState(() => _selected = index);
+                                        if (index == 0) _refreshAgents();
+                                      }
+                                    },
+                                    children: [
+                                      _WorkPage(
+                                        key: const PageStorageKey(
+                                          'live-subagents',
+                                        ),
+                                        child: widget.subagents,
+                                      ),
+                                      _WorkPage(
+                                        key: const PageStorageKey('live-tasks'),
+                                        child: widget.tasks,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ),
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              child: _bar(width, height, overlay: true),
-                            ),
-                          ],
-                        ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: _bar(width, height, overlay: true),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              );
-            },
+                ),
+              ],
+            );
+          },
+        ),
+        child: CompositedTransformTarget(
+          key: _target,
+          link: _link,
+          child: ExcludeSemantics(
+            excluding: _portal.isShowing,
+            child: _bar(width, height, overlay: false),
           ),
-          child: CompositedTransformTarget(
-            key: _target,
-            link: _link,
-            child: ExcludeSemantics(
-              excluding: _portal.isShowing,
-              child: _bar(width, height, overlay: false),
-            ),
-          ),
-        );
-      },
-    ),
+        ),
+      );
+    },
   );
 }
 

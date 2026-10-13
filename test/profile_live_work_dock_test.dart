@@ -24,6 +24,7 @@ void main() {
     }
   });
   final frame = GlobalKey();
+  final dock = GlobalKey<ProfileLiveWorkDockState>();
   Future<void> show(
     WidgetTester tester, {
     Brightness brightness = Brightness.dark,
@@ -46,55 +47,62 @@ void main() {
           ),
           child: RepaintBoundary(key: frame, child: child!),
         ),
-        home: Scaffold(
-          body: Column(
-            children: [
-              const Expanded(
-                child: Center(child: Text('Conversation remains here')),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ProfileLiveWorkDock(
-                      taskCount: 7,
-                      completedTasks: 3,
-                      subagentCount: 2,
-                      onAgentsSelected: refresh ?? () async {},
-                      subagents: Column(
-                        children: [
-                          for (var i = 0; i < 8; i++)
-                            SizedBox(
-                              height: 64,
-                              child: Text(
-                                'Subagent $i: inspect source mappings',
-                              ),
-                            ),
-                        ],
-                      ),
-                      tasks: Column(
-                        children: [
-                          for (var i = 0; i < 12; i++)
-                            SizedBox(
-                              height: 64,
-                              child: Text(
-                                'Task $i: research metric definitions',
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const TextField(
-                      key: ValueKey('draft'),
-                      decoration: InputDecoration(
-                        hintText: 'Draft your next message',
-                      ),
-                    ),
-                  ],
+        home: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) dock.currentState?.dismiss();
+          },
+          child: Scaffold(
+            body: Column(
+              children: [
+                const Expanded(
+                  child: Center(child: Text('Conversation remains here')),
                 ),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ProfileLiveWorkDock(
+                        key: dock,
+                        taskCount: 7,
+                        completedTasks: 3,
+                        subagentCount: 2,
+                        onAgentsSelected: refresh ?? () async {},
+                        subagents: Column(
+                          children: [
+                            for (var i = 0; i < 8; i++)
+                              SizedBox(
+                                height: 64,
+                                child: Text(
+                                  'Subagent $i: inspect source mappings',
+                                ),
+                              ),
+                          ],
+                        ),
+                        tasks: Column(
+                          children: [
+                            for (var i = 0; i < 12; i++)
+                              SizedBox(
+                                height: 64,
+                                child: Text(
+                                  'Task $i: research metric definitions',
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const TextField(
+                        key: ValueKey('draft'),
+                        decoration: InputDecoration(
+                          hintText: 'Draft your next message',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

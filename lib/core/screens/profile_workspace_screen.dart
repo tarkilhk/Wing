@@ -548,6 +548,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   bool _appIsActive = true;
   RecentConversationSession? _recentVisit, _pendingRecentVisit;
   final _recentSwitcher = GlobalKey<RecentConversationSwitcherState>();
+  GlobalKey<ProfileLiveWorkDockState> _liveWorkDock = GlobalKey();
   ProfileChat? _recentRenderedChat;
   bool _conversationObscured = false;
   bool _restoreComposerFocus = false;
@@ -1093,6 +1094,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         _composer.text != (chat?.composer.observation.displayedText ?? '')) {
       final changedChat = _composerKey != chat?.key;
       if (changedChat) {
+        _liveWorkDock = GlobalKey();
         _conversationBot = null;
         _senderAppearances.clear();
       }
@@ -1340,6 +1342,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         if (!didPop) {
           if (_scaffoldKey.currentState?.isDrawerOpen == true) {
             _scaffoldKey.currentState?.closeDrawer();
+          } else if (_liveWorkDock.currentState?.dismiss() == true) {
+            return;
           } else if (_recentSwitcher.currentState?.dismissStack() == true) {
             return;
           } else if (chat.composer.observation.editingEntry != null) {
@@ -2532,7 +2536,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                             children: [
                               if (_showLiveWorkDock(chat))
                                 ProfileLiveWorkDock(
-                                  key: ValueKey(('live-work-dock', chat.key)),
+                                  key: _liveWorkDock,
                                   taskCount: chat.todoRevision == null
                                       ? null
                                       : chat.todos.length,

@@ -228,9 +228,10 @@ void main() {
           greaterThanOrEqualTo(56),
         );
         await picture('keyboard');
-        await tester.tap(tab(0));
+        await tester.binding.handlePopRoute();
         await settle();
         expect(find.byType(PageView), findsNothing);
+        expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
         expect(find.text('Keep my draft'), findsOneWidget);
         final liveTool = tester.element(find.byType(ProfileToolCall));
         host.event('a', 'message.delta', {'text': 'The first answer text.'});
