@@ -65,14 +65,16 @@ to the same conversation.
 
 Switch between connections and profiles. Manage supported model settings, provider access, MCP connectors and server-run scheduled tasks. Health and diagnostics help you find setup problems; analytics shows activity, tokens and model breakdowns. Supported controls depend on your Hermes server and profile.
 
-The title-row bell warns about issues affecting Hermes while Wing is open or
+The title-row warning triangle warns about issues affecting Hermes while Wing is open or
 already monitoring work. Tap it for one issue at a time. Configure device-local
 thresholds under **Hermes health → Alert settings**; RAM and disk warnings start
 above 90% for two minutes and clear below 85% for two minutes. Valid settings
 save automatically. Separate native-pressure toggles admit Hermes's critical
 memory and disk reports immediately. [Health alerts](ADMINISTRATION.md#health-alerts)
 explains recovery and investigation. Closing the alert dialog leaves unresolved
-issues visible in the bell; there are no acknowledgement or snooze controls.
+issues visible in the alert icon. Use the checkmark to acknowledge an occurrence
+or the snooze icon to pause its cues for 30 minutes. Escalation or recurrence
+alerts you again.
 
 ## Make it yours
 

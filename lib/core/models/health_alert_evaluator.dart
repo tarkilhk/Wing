@@ -158,6 +158,8 @@ class HealthAlertEvaluator {
         occurrence: alert.occurrence,
         destination: alert.destination,
         trigger: alert.trigger,
+        acknowledged: alert.acknowledged,
+        snoozedUntil: alert.snoozedUntil,
         lastKnown:
             alert.severity == HealthAlertSeverity.critical && !pressureKnown,
       );
@@ -232,7 +234,21 @@ class HealthAlertEvaluator {
       connectorNames: List.unmodifiable(connectorNames),
       trigger: escalated ? trigger : old.trigger,
       occurrence: escalated ? ++_occurrence : old.occurrence,
+      acknowledged: !escalated && old.acknowledged,
+      snoozedUntil: escalated ? null : old.snoozedUntil,
     );
+  }
+
+  void acknowledge(String id, int occurrence) {
+    if (_alerts[id] case final alert? when alert.occurrence == occurrence) {
+      _alerts[id] = alert.copyWith(acknowledged: true);
+    }
+  }
+
+  void snooze(String id, int occurrence, DateTime until) {
+    if (_alerts[id] case final alert? when alert.occurrence == occurrence) {
+      _alerts[id] = alert.copyWith(snoozedUntil: until);
+    }
   }
 }
 

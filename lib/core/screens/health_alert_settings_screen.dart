@@ -100,7 +100,7 @@ class HealthAlertSettingsScreen extends StatelessWidget {
             ]),
             _section(context, 'When an issue arrives', [
               _toggle(
-                'Animate the bell',
+                'Animate the alert icon',
                 'Once for a new issue or escalation.',
                 settings.animateBell,
                 (value) => session.update(
@@ -109,7 +109,7 @@ class HealthAlertSettingsScreen extends StatelessWidget {
               ),
               _toggle(
                 'Show a brief notice',
-                'Tap the bell for details.',
+                'Tap the alert icon for details.',
                 settings.showNotice,
                 (value) => session.update(
                   (current) => current.copyWith(showNotice: value),

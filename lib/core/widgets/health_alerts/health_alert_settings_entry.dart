@@ -34,7 +34,7 @@ class HealthAlertSettingsEntry extends StatelessWidget {
                 key: const ValueKey('health-alert-settings-entry'),
                 contentPadding: EdgeInsets.zero,
                 minVerticalPadding: 4,
-                leading: const Icon(Icons.notifications_none),
+                leading: const Icon(Icons.warning_amber_rounded),
                 title: const Text('Alert settings'),
                 subtitle: Text(
                   'This device${summary.isEmpty ? '' : ' · $summary'}',

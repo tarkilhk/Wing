@@ -16,6 +16,7 @@ import 'package:wing/core/services/background_monitoring_service.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/health_alert_settings_session.dart';
 import 'package:wing/core/services/health_alert_settings_store.dart';
+import 'package:wing/core/services/health_alerts_coordinator.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/widgets/compact_switch.dart';
@@ -158,7 +159,7 @@ void main() {
             builder: (context) => Scaffold(
               body: IconButton(
                 tooltip: 'Open alert settings',
-                icon: const Icon(Icons.notifications_outlined),
+                icon: const Icon(Icons.warning_amber_rounded),
                 onPressed: () => Navigator.push<void>(
                   context,
                   MaterialPageRoute(
@@ -246,6 +247,102 @@ void main() {
       final retired = fixture.host.requests.length;
       await tester.pump(const Duration(seconds: 60));
       expect(fixture.host.requests, hasLength(retired));
+      fixture.dispose();
+    },
+  );
+  testWidgets(
+    'snooze expiry reminds once; acknowledge cancels reminders across resume',
+    (tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      SharedPreferences.setMockInitialValues({});
+      final fixture = HealthAlertsFixture(
+        await SharedPreferences.getInstance(),
+      );
+      // Fake owner time remains just after the fixture's real sample timestamps.
+      var now = DateTime.now().add(const Duration(seconds: 5));
+      final coordinator = HealthAlertsCoordinator(
+        registry: fixture.registry,
+        settings: fixture.settings,
+        monitoring: fixture.monitoring,
+        now: () => now,
+      );
+      final navigatorKey = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          theme: wingTheme(Brightness.light),
+          builder: (context, child) => HealthAlertsScope(
+            alerts: coordinator,
+            openAlert: (_) async {},
+            child: HealthAlertNotice(navigatorKey: navigatorKey, child: child!),
+          ),
+          home: Builder(
+            builder: (context) => Scaffold(
+              appBar: WingAppBar(context: context, title: const Text('Chats')),
+            ),
+          ),
+        ),
+      );
+      await fixture.critical();
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Dismiss health notice'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('health-alert-bell')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Snooze for 30 minutes'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Dismiss health notice'), findsNothing);
+      expect(find.textContaining('Snoozed until'), findsOneWidget);
+      // Stop collection so the reminder must fire without a new host observation.
+      fixture.owner.mountedRoute = false;
+      fixture.owner.publishActivity();
+      now = now.add(const Duration(minutes: 29));
+      await tester.pump(const Duration(minutes: 29));
+      expect(find.byTooltip('Dismiss health notice'), findsNothing);
+      now = now.add(const Duration(minutes: 1));
+      await tester.pump(const Duration(minutes: 1));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Dismiss health notice'), findsOneWidget);
+      expect(find.textContaining('Snoozed until'), findsNothing);
+      await tester.pump(const Duration(seconds: 6));
+      expect(find.byTooltip('Dismiss health notice'), findsNothing);
+      // Further publications of this occurrence must not repeat the notice.
+      fixture.owner.publishActivity();
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Dismiss health notice'), findsNothing);
+      // Expiry while inactive waits for foreground return, without polling.
+      await tester.tap(find.byTooltip('Snooze for 30 minutes'));
+      await tester.pumpAndSettle();
+      coordinator.setForeground(false);
+      now = now.add(const Duration(minutes: 30));
+      await tester.pump(const Duration(minutes: 30));
+      expect(find.byTooltip('Dismiss health notice'), findsNothing);
+      coordinator.setForeground(true);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Dismiss health notice'), findsOneWidget);
+      await tester.tap(find.byTooltip('Snooze for 30 minutes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Acknowledge issue'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Acknowledged.'), findsOneWidget);
+      var publications = 0;
+      void changed() => publications++;
+      coordinator.addListener(changed);
+      now = now.add(const Duration(minutes: 30));
+      await tester.pump(const Duration(minutes: 30));
+      expect(publications, 0); // Acknowledge cancels the pending deadline.
+      coordinator.removeListener(changed);
+      coordinator.setForeground(false);
+      now = now.add(const Duration(hours: 1));
+      await tester.pump(const Duration(hours: 1));
+      coordinator.setForeground(true);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Dismiss health notice'), findsNothing);
+      expect(coordinator.alerts.single.acknowledged, isTrue);
+      await tester.tap(find.byTooltip('Close alerts'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('health-alert-bell')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      coordinator.dispose();
       fixture.dispose();
     },
   );
@@ -947,17 +1044,14 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.text('Critical memory pressure'), findsOneWidget);
           expect(find.byTooltip('Alert settings'), findsNothing);
-          expect(find.byTooltip('Acknowledge issue'), findsNothing);
-          expect(
-            find.byTooltip('Pause reminders for 30 minutes'),
-            findsNothing,
-          );
+          expect(find.byTooltip('Acknowledge issue'), findsOneWidget);
+          expect(find.byTooltip('Snooze for 30 minutes'), findsOneWidget);
           expect(
             find.descendant(
               of: find.byType(Dialog),
               matching: find.byType(IconButton),
             ),
-            findsNWidgets(2),
+            findsNWidgets(4),
           );
           await tester.tap(find.byTooltip('Close alerts'));
           await tester.pumpAndSettle();
@@ -965,7 +1059,7 @@ void main() {
           final bellIcon = tester.widget<Icon>(
             find.descendant(
               of: find.byKey(const ValueKey('health-alert-bell')),
-              matching: find.byIcon(Icons.notifications_none),
+              matching: find.byIcon(Icons.warning_amber_rounded),
             ),
           );
           expect(
@@ -977,6 +1071,43 @@ void main() {
           await tester.tap(find.byKey(const ValueKey('health-alert-bell')));
           await tester.pumpAndSettle();
           await shot(tester, '${brightness.name}-$scale-alert');
+          await tester.tap(find.byTooltip('Snooze for 30 minutes'));
+          await tester.pumpAndSettle();
+          expect(
+            find.textContaining('Snoozed until').hitTestable(),
+            findsOneWidget,
+          );
+          expect(
+            fixture.coordinator.alerts.single.remindsAt(
+              fixture.coordinator.now,
+            ),
+            isFalse,
+          );
+          await shot(tester, '${brightness.name}-$scale-snoozed');
+          await tester.tap(find.byTooltip('Acknowledge issue'));
+          await tester.pumpAndSettle();
+          expect(
+            find.textContaining('Acknowledged.').hitTestable(),
+            findsOneWidget,
+          );
+          expect(find.textContaining('Snoozed until'), findsNothing);
+          expect(
+            tester
+                .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.done))
+                .onPressed,
+            isNull,
+          );
+          expect(
+            tester
+                .widget<IconButton>(
+                  find.widgetWithIcon(IconButton, Icons.snooze_outlined),
+                )
+                .onPressed,
+            isNull,
+          );
+          expect(fixture.coordinator.alerts, hasLength(1));
+          expect(tester.takeException(), isNull);
+          await shot(tester, '${brightness.name}-$scale-acknowledged');
           await tester.tap(find.text('Critical memory pressure'));
           await tester.pumpAndSettle();
           expect(opened, 1);

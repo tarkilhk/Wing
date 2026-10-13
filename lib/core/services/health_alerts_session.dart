@@ -193,6 +193,20 @@ class HealthAlertsSession extends ChangeNotifier {
     _publish();
   }
 
+  void acknowledge(HealthAlert alert) {
+    _evaluator.acknowledge(alert.id, alert.occurrence);
+    _publish();
+  }
+
+  void snooze(HealthAlert alert) {
+    _evaluator.snooze(
+      alert.id,
+      alert.occurrence,
+      _now().add(const Duration(minutes: 30)),
+    );
+    _publish();
+  }
+
   void _publish() {
     final next = alerts
         .expand(
@@ -210,6 +224,8 @@ class HealthAlertsSession extends ChangeNotifier {
               a.connectorNames.length,
               a.trigger,
               a.lastKnown,
+              a.acknowledged,
+              a.snoozedUntil,
             ),
             ...a.connectorNames,
           ],

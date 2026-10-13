@@ -523,8 +523,8 @@ void main() {
       expect(find.text('Critical memory pressure'), findsOneWidget);
       expect(find.byTooltip('Alert settings'), findsNothing);
       await _capture('$label-alert');
-      expect(find.byTooltip('Acknowledge issue'), findsNothing);
-      expect(find.byTooltip('Pause reminders for 30 minutes'), findsNothing);
+      expect(find.byTooltip('Acknowledge issue'), findsOneWidget);
+      expect(find.byTooltip('Snooze for 30 minutes'), findsOneWidget);
       await tester.tap(find.byTooltip('Open Hermes health'));
       await _settleScreen(tester);
       await _capture('$label-health');

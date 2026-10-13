@@ -77,6 +77,79 @@ void main() {
     }
   }
 
+  for (final acknowledge in [true, false]) {
+    test(
+      '${acknowledge ? 'acknowledge' : 'snooze'} survives reads and pauses; escalation and recurrence reset it',
+      () {
+        period(0, 120, 93);
+        final warning = evaluator.alerts.single;
+        final until = start.add(const Duration(minutes: 30));
+        if (acknowledge) {
+          evaluator.acknowledge(warning.id, warning.occurrence);
+        } else {
+          evaluator.snooze(warning.id, warning.occurrence, until);
+        }
+        sample(135, 94);
+        evaluator.pause();
+        evaluator.unknown(warning.id);
+        final retained = evaluator.alerts.single;
+        expect(retained.lastKnown, isTrue);
+        expect(
+          retained.remindsAt(start.add(const Duration(minutes: 29))),
+          isFalse,
+        );
+        expect(retained.remindsAt(until), !acknowledge);
+        sample(150, 97, critical: true);
+        final critical = evaluator.alerts.single;
+        expect(critical.occurrence, greaterThan(warning.occurrence));
+        expect(critical.acknowledged, isFalse);
+        expect(critical.snoozedUntil, isNull);
+        // A command captured before escalation cannot silence the new occurrence.
+        evaluator.acknowledge(warning.id, warning.occurrence);
+        evaluator.snooze(warning.id, warning.occurrence, until);
+        expect(evaluator.alerts.single.remindsAt(start), isTrue);
+        evaluator.acknowledge(critical.id, critical.occurrence);
+        sample(165, 80);
+        sample(285, 80);
+        expect(evaluator.alerts, isEmpty);
+        sample(300, 99, critical: true);
+        expect(
+          evaluator.alerts.single.occurrence,
+          greaterThan(critical.occurrence),
+        );
+        expect(evaluator.alerts.single.remindsAt(start), isTrue);
+      },
+    );
+  }
+
+  test('profile suppression retains its captured recovery destination', () {
+    void finding(int seconds) => evaluator.finding(
+      key: 'profile:work:connectors',
+      title: 'Connector settings',
+      detail: 'Sign-in expired',
+      scope: HealthAlertScope.profile,
+      profileName: 'work',
+      destination: 'MCP connectors',
+      connectorNames: ['calendar'],
+      at: start.add(Duration(seconds: seconds)),
+      failed: true,
+    );
+    finding(0);
+    final alert = evaluator.alerts.single;
+    evaluator.snooze(
+      alert.id,
+      alert.occurrence,
+      start.add(const Duration(minutes: 30)),
+    );
+    finding(15);
+    expect(evaluator.alerts.single.remindsAt(start), isFalse);
+    evaluator.acknowledge(alert.id, alert.occurrence);
+    finding(30);
+    expect(evaluator.alerts.single.acknowledged, isTrue);
+    expect(evaluator.alerts.single.destination, 'MCP connectors');
+    expect(evaluator.alerts.single.connectorNames, ['calendar']);
+  });
+
   for (final metric in [ram, HostMetric.diskUsedPercent]) {
     test('native-only ${metric.name} alerts immediately and can recover', () {
       final nativeOnly = rule.copyWith(enabled: false);

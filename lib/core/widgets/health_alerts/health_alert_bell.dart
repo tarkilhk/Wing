@@ -38,7 +38,7 @@ class _HealthAlertBellState extends State<HealthAlertBell>
       _scope?.alerts.addListener(_changed);
       _seen.clear();
       for (final a in _scope?.alerts.alerts ?? <HealthAlert>[]) {
-        _seen[a.id] = a.occurrence;
+        if (a.remindsAt(_scope!.alerts.now)) _seen[a.id] = a.occurrence;
       }
     }
     if (MediaQuery.disableAnimationsOf(context)) _motion.stop();
@@ -60,6 +60,7 @@ class _HealthAlertBellState extends State<HealthAlertBell>
     final current = <String, int>{};
     var arrived = false;
     for (final a in scope.alerts.alerts) {
+      if (!a.remindsAt(scope.alerts.now)) continue;
       current[a.id] = a.occurrence;
       if (_seen[a.id] != a.occurrence) arrived = true;
     }
@@ -112,7 +113,7 @@ class _HealthAlertBellState extends State<HealthAlertBell>
                         (1 - _motion.value)
                   : 0,
               alignment: Alignment.topCenter,
-              child: Icon(Icons.notifications_none, color: color),
+              child: Icon(Icons.warning_amber_rounded, color: color),
             ),
           ),
         ),

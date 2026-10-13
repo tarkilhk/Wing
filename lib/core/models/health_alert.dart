@@ -35,6 +35,8 @@ class HealthAlert {
     this.profileName,
     this.trigger,
     this.lastKnown = false,
+    this.acknowledged = false,
+    this.snoozedUntil,
   });
   final String id, connectionIdentity, connectionLabel, title, detail;
   final String? profileName;
@@ -49,7 +51,15 @@ class HealthAlert {
   final DateTime observedAt;
   final int occurrence;
   final bool lastKnown;
-  HealthAlert copyWith({bool? lastKnown}) => HealthAlert(
+  final bool acknowledged;
+  final DateTime? snoozedUntil;
+  bool remindsAt(DateTime now) =>
+      !acknowledged && (snoozedUntil == null || !now.isBefore(snoozedUntil!));
+  HealthAlert copyWith({
+    bool? lastKnown,
+    bool? acknowledged,
+    DateTime? snoozedUntil,
+  }) => HealthAlert(
     id: id,
     connectionIdentity: connectionIdentity,
     connectionLabel: connectionLabel,
@@ -64,6 +74,8 @@ class HealthAlert {
     profileName: profileName,
     trigger: trigger,
     lastKnown: lastKnown ?? this.lastKnown,
+    acknowledged: acknowledged ?? this.acknowledged,
+    snoozedUntil: snoozedUntil ?? this.snoozedUntil,
   );
 }
 

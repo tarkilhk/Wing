@@ -35,14 +35,16 @@ class _HealthAlertNoticeState extends State<HealthAlertNotice> {
       _scope = next;
       _scope?.alerts.addListener(_changed);
       for (final a in _scope?.alerts.alerts ?? <HealthAlert>[]) {
-        _seen[a.id] = a.occurrence;
+        if (a.remindsAt(_scope!.alerts.now)) _seen[a.id] = a.occurrence;
       }
     }
   }
 
   void _changed() {
     if (!mounted || _scope == null) return;
-    final alerts = _scope!.alerts.alerts;
+    final alerts = _scope!.alerts.alerts
+        .where((a) => a.remindsAt(_scope!.alerts.now))
+        .toList();
     final fresh = alerts.where((a) => _seen[a.id] != a.occurrence).firstOrNull;
     _seen
       ..clear()

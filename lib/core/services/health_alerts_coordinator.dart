@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/health_alert.dart';
 import 'background_monitoring_service.dart';
@@ -13,7 +14,8 @@ class HealthAlertsCoordinator extends ChangeNotifier {
     required this.registry,
     required this.settings,
     required this.monitoring,
-  }) {
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now {
     registry.addListener(_reconcile);
     monitoring.addListener(_reconcile);
     settings.addListener(_reconcile);
@@ -22,6 +24,9 @@ class HealthAlertsCoordinator extends ChangeNotifier {
   final ProfileWorkspaceRegistry registry;
   final HealthAlertSettingsSession settings;
   final ValueListenable<BackgroundMonitoringState> monitoring;
+  final DateTime Function() _now;
+  DateTime get now => _now();
+  Timer? _reminder;
   final _sessions = <ProfileWorkspaceController, HealthAlertsSession>{};
   final _listeners = <ProfileWorkspaceController, VoidCallback>{};
   bool _foreground = true, _closed = false;
@@ -56,6 +61,7 @@ class HealthAlertsCoordinator extends ChangeNotifier {
           host: owner.hostResources(),
           health: owner.healthSession().health,
           settings: settings,
+          now: _now,
         );
         void changed() => _ownerChanged(owner);
         _listeners[owner] = changed;
@@ -90,15 +96,40 @@ class HealthAlertsCoordinator extends ChangeNotifier {
 
   void _changed() {
     if (_closed) return;
+    _reminder?.cancel();
+    _reminder = null;
+    if (_foreground ||
+        monitoring.value == BackgroundMonitoringState.active ||
+        monitoring.value == BackgroundMonitoringState.batteryRestricted) {
+      final time = now;
+      final deadlines =
+          alerts
+              .where(
+                (a) =>
+                    !a.acknowledged &&
+                    a.snoozedUntil != null &&
+                    a.snoozedUntil!.isAfter(time),
+              )
+              .map((a) => a.snoozedUntil!)
+              .toList()
+            ..sort();
+      if (deadlines.isNotEmpty) {
+        _reminder = Timer(deadlines.first.difference(time), _changed);
+      }
+    }
     notifyListeners();
   }
 
   ProfileWorkspaceController? ownerFor(HealthAlert alert) => _sessions.keys
       .where((owner) => owner.connectionIdentity == alert.connectionIdentity)
       .firstOrNull;
+  void acknowledge(HealthAlert alert) =>
+      _sessions[ownerFor(alert)]?.acknowledge(alert);
+  void snooze(HealthAlert alert) => _sessions[ownerFor(alert)]?.snooze(alert);
   @override
   void dispose() {
     _closed = true;
+    _reminder?.cancel();
     registry.removeListener(_reconcile);
     monitoring.removeListener(_reconcile);
     settings.removeListener(_reconcile);

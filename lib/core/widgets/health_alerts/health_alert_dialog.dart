@@ -173,9 +173,42 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
               ),
               if (alert != null) ...[
                 const Divider(height: 1),
+                if (alert.acknowledged ||
+                    alert.snoozedUntil != null &&
+                        alert.snoozedUntil!.isAfter(widget.scope.alerts.now))
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        alert.acknowledged
+                            ? 'Acknowledged.'
+                            : 'Snoozed until ${TimeOfDay.fromDateTime(alert.snoozedUntil!.toLocal()).format(context)}.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    StudioButtonPress(
+                      child: IconButton(
+                        tooltip: 'Acknowledge issue',
+                        onPressed: alert.acknowledged
+                            ? null
+                            : () => widget.scope.alerts.acknowledge(alert),
+                        icon: const Icon(Icons.done),
+                      ),
+                    ),
+                    StudioButtonPress(
+                      child: IconButton(
+                        tooltip: 'Snooze for 30 minutes',
+                        onPressed: alert.acknowledged
+                            ? null
+                            : () => widget.scope.alerts.snooze(alert),
+                        icon: const Icon(Icons.snooze_outlined),
+                      ),
+                    ),
                     StudioButtonPress(
                       child: IconButton(
                         tooltip: healthAlertActionLabel(alert),
