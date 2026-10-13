@@ -321,7 +321,7 @@ class Host {
         return {
           'session_id': path.split('/')[1],
           'pagination': {
-            'limit': 50,
+            'limit': int.parse(query['limit']!),
             'offset': 0,
             'order': 'latest',
             'returned': historyMessages?.length ?? 1,

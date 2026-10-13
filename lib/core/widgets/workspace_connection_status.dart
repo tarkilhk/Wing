@@ -1,10 +1,10 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/server_connection_status.dart';
 import 'status_transition.dart';
+import 'studio_loading.dart';
 
-/// Quiet recovery feedback that takes space only while a notice is needed.
-class WorkspaceConnectionStatus extends StatefulWidget {
+/// Recovery uses the reserved header slot; failures retain actionable notices.
+class WorkspaceConnectionStatus extends StatelessWidget {
   final ServerConnectionStatus status;
   final bool showHint;
   const WorkspaceConnectionStatus({
@@ -13,82 +13,40 @@ class WorkspaceConnectionStatus extends StatefulWidget {
     this.showHint = true,
   });
   @override
-  State<WorkspaceConnectionStatus> createState() =>
-      _WorkspaceConnectionStatusState();
-}
-
-class _WorkspaceConnectionStatusState extends State<WorkspaceConnectionStatus> {
-  Timer? _grace;
-  bool _show = false;
-  ServerConnectionPhase? _previous;
-  @override
-  void initState() {
-    super.initState();
-    widget.status.addListener(_update);
-    _update();
-  }
-
-  @override
-  void didUpdateWidget(covariant WorkspaceConnectionStatus oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.status != widget.status) {
-      oldWidget.status.removeListener(_update);
-      widget.status.addListener(_update);
-      _previous = null;
-      _update();
-    }
-  }
-
-  void _update() {
-    final phase = widget.status.phase;
-    if (_previous == phase) return;
-    _previous = phase;
-    _grace?.cancel();
-    _show =
-        phase == ServerConnectionPhase.disconnected ||
-        phase == ServerConnectionPhase.limited;
-    if (phase == ServerConnectionPhase.reconnecting) {
-      _grace = Timer(const Duration(seconds: 2), () {
-        if (mounted) setState(() => _show = true);
-      });
-    }
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void dispose() {
-    widget.status.removeListener(_update);
-    _grace?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => StatusTransition(
-    key: const ValueKey('workspace-connection-status'),
-    child: _show && widget.showHint
-        ? SizedBox(
-            height: MediaQuery.textScalerOf(context).scale(16) + 8,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Semantics(
-                liveRegion: true,
-                child: Text(
-                  switch (widget.status.phase) {
-                    ServerConnectionPhase.reconnecting =>
-                      'Reconnecting… Your draft stays here.',
-                    ServerConnectionPhase.disconnected =>
-                      widget.status.recoveryProblem == null
-                          ? 'Offline · Tap the status icon to retry.'
-                          : 'Chat unavailable · Your draft stays here.',
-                    _ => widget.status.description,
-                  },
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: status,
+    builder: (context, _) => StudioPageLoading(
+      active: status.phase == ServerConnectionPhase.reconnecting,
+      label: 'Reconnecting',
+      child: StatusTransition(
+        key: const ValueKey('workspace-connection-status'),
+        child:
+            showHint &&
+                (status.phase == ServerConnectionPhase.disconnected ||
+                    status.phase == ServerConnectionPhase.limited)
+            ? SizedBox(
+                height: MediaQuery.textScalerOf(context).scale(16) + 8,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      switch (status.phase) {
+                        ServerConnectionPhase.disconnected =>
+                          status.recoveryProblem == null
+                              ? 'Offline · Tap the status icon to retry.'
+                              : 'Chat unavailable · Your draft stays here.',
+                        _ => status.description,
+                      },
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          )
-        : null,
+              )
+            : null,
+      ),
+    ),
   );
 }

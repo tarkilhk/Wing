@@ -1,16 +1,26 @@
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/recent_identity_card.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
+
+const _captureRecovery = bool.fromEnvironment('CAPTURE_CONNECTION_RECOVERY');
 
 void main() {
   late Host host;
@@ -18,6 +28,20 @@ void main() {
   late AppPreferences appPreferences;
   late ProfileChat chat;
   final navigator = GlobalKey<NavigatorState>();
+
+  setUpAll(() async {
+    if (!_captureRecovery) return;
+    for (final entry in {
+      'Roboto': 'build/studio-roboto.ttf',
+      'MaterialIcons': 'build/studio-icons.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            File(entry.value).readAsBytes().then(ByteData.sublistView),
+          ))
+          .load();
+    }
+  });
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -110,6 +134,140 @@ void main() {
     final drawer = tester.widget<Scaffold>(find.byType(Scaffold).first).drawer;
     if (drawer is! AppDrawer) throw StateError('Workspace drawer missing');
     drawer.onSelected(destination);
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'Recents held recovery keeps cards ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          host.profiles = ['a'];
+          host.indexedSessions = [
+            {
+              'id': 'same',
+              'profile': 'a',
+              'title': 'Saved recent conversation',
+              'source': 'desktop',
+              'last_active': DateTime.now().millisecondsSinceEpoch / 1000,
+            },
+          ];
+          host.historyMessages = [
+            {
+              'id': 1,
+              'role': 'assistant',
+              'content': 'Saved reply',
+              'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
+            },
+          ];
+          await controller.refreshRecents();
+          expect(
+            controller.recentChats(),
+            isNotEmpty,
+            reason: '${controller.recentsProfileErrors} ${host.reads}',
+          );
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                initialDestination: AppDestination.activity,
+                createBotsSession: () => BotsSession((_) async => []),
+              ),
+            ),
+          );
+          await settleRecovery(tester);
+          final cards = find.byType(RecentIdentityCard);
+          expect(cards, findsWidgets);
+          expect(find.byType(StudioLoading), findsNothing);
+          final rectangles = [
+            for (final card in cards.evaluate())
+              tester.getRect(find.byWidget(card.widget)),
+          ];
+          final title = tester.getRect(find.text('Recents'));
+          final connection = Completer<void>();
+          host.connectDelay = connection;
+          addTearDown(() {
+            if (!connection.isCompleted) connection.complete();
+          });
+          final recovery = controller.reconnect(chat.key.workspace);
+          final connectionCalls = host.connectCalls;
+          await tester.pump();
+          await tester.pump();
+          expect(find.byType(StudioLoading), findsOneWidget);
+          await tester.pump(const Duration(seconds: 12));
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.textContaining('Reconnecting'), findsNothing);
+          for (final card in tester.widgetList<RecentIdentityCard>(cards)) {
+            expect(card.onTap, isNotNull);
+          }
+          expect(host.connectCalls, connectionCalls);
+          expect(tester.getRect(find.text('Recents')), title);
+          expect([
+            for (final card in cards.evaluate())
+              tester.getRect(find.byWidget(card.widget)),
+          ], rectangles);
+          expect(chat.composer.observation.text, 'Keep my draft');
+          expect(tester.takeException(), isNull);
+
+          Future<void> capture(String state) async {
+            if (!_captureRecovery) return;
+            await tester.runAsync(() async {
+              final boundary =
+                  frame.currentContext!.findRenderObject()!
+                      as RenderRepaintBoundary;
+              final bitmap = await boundary.toImage();
+              try {
+                final bytes = await bitmap.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final directory = Directory(
+                  'build/design-previews/connection-recovery',
+                )..createSync(recursive: true);
+                await File(
+                  '${directory.path}/${brightness.name}-$scale-$state.png',
+                ).writeAsBytes(bytes!.buffer.asUint8List());
+              } finally {
+                bitmap.dispose();
+              }
+            });
+          }
+
+          await capture('held');
+          connection.complete();
+          var recovered = false;
+          unawaited(recovery.then((_) => recovered = true));
+          for (var attempt = 0; attempt < 100 && !recovered; attempt++) {
+            await settleRecovery(tester);
+          }
+          expect(recovered, isTrue);
+          await tester.pump();
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(tester.getRect(find.text('Recents')), title);
+          expect([
+            for (final card in cards.evaluate())
+              tester.getRect(find.byWidget(card.widget)),
+          ], rectangles);
+          expect(chat.composer.observation.text, 'Keep my draft');
+          expect(
+            host.calls.where((call) => call.$2 == 'prompt.submit'),
+            isEmpty,
+          );
+          await capture('settled');
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
   }
 
   testWidgets('app resume immediately retries the visible chat', (

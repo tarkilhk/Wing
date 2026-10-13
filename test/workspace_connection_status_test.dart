@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/widgets/workspace_connection_status.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 
 void main() {
   late ServerConnectionStatus status;
@@ -22,9 +23,14 @@ void main() {
       home: MediaQuery(
         data: MediaQueryData(disableAnimations: reducedMotion),
         child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Recents'),
+            actions: const [StudioLoadingSlot()],
+          ),
           body: Column(
             children: [
               WorkspaceConnectionStatus(status: status, showHint: showHint),
+              const Text('Retained recent chat'),
             ],
           ),
         ),
@@ -33,6 +39,27 @@ void main() {
   );
 
   final bar = find.byKey(const ValueKey('workspace-connection-status'));
+
+  testWidgets('held recovery pulses above retained Recents immediately', (
+    tester,
+  ) async {
+    await render(tester);
+    final card = find.text('Retained recent chat');
+    final position = tester.getRect(card);
+    status.beginRecovery('chat');
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(tester.getRect(card), position);
+    await tester.pump(const Duration(seconds: 12));
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(tester.getRect(card), position);
+    status.endRecovery('chat');
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.byType(StudioLoading), findsNothing);
+    expect(tester.getRect(card), position);
+  });
 
   testWidgets('short reconnects never open the connection bar', (tester) async {
     await render(tester);
@@ -52,7 +79,8 @@ void main() {
       final semantics = tester.ensureSemantics();
       await render(tester);
       status.beginRecovery('chat');
-      await tester.pump(const Duration(seconds: 2));
+      status.failRecovery('chat', 'History unavailable');
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 60));
       final entering = tester.getSize(bar).height;
       expect(entering, greaterThan(0));
@@ -60,14 +88,14 @@ void main() {
       final expanded = tester.getSize(bar).height;
       expect(expanded, greaterThan(entering));
       expect(
-        find.bySemanticsLabel('Reconnecting… Your draft stays here.'),
+        find.bySemanticsLabel('Chat unavailable · Your draft stays here.'),
         findsOneWidget,
       );
 
       status.endRecovery('chat');
       await tester.pump();
       expect(
-        find.bySemanticsLabel('Reconnecting… Your draft stays here.'),
+        find.bySemanticsLabel('Chat unavailable · Your draft stays here.'),
         findsNothing,
       );
       await tester.pump(const Duration(milliseconds: 60));
@@ -96,18 +124,31 @@ void main() {
     },
   );
 
-  testWidgets(
-    'reduced motion changes height immediately after the grace period',
-    (tester) async {
-      await render(tester, reducedMotion: true);
-      status.beginRecovery('chat');
-      await tester.pump(const Duration(seconds: 1));
-      expect(tester.getSize(bar).height, 0);
-      await tester.pump(const Duration(seconds: 1));
-      expect(tester.getSize(bar).height, greaterThan(0));
-      status.endRecovery('chat');
-      await tester.pump();
-      expect(tester.getSize(bar).height, 0);
-    },
-  );
+  for (final reducedMotion in [false, true]) {
+    testWidgets(
+      'recovery survives overlapping owners with hidden hints motion=$reducedMotion',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        await render(tester, showHint: false, reducedMotion: reducedMotion);
+        status.beginRecovery('chat');
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(find.bySemanticsLabel('Reconnecting'), findsOneWidget);
+        status.beginRecovery('other');
+        status.endRecovery('chat');
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(tester.getSize(bar).height, 0);
+        status.failRecovery('other', 'History unavailable');
+        await tester.pump();
+        await tester.pumpAndSettle();
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(tester.getSize(bar).height, 0);
+        expect(find.bySemanticsLabel('Reconnecting'), findsNothing);
+        semantics.dispose();
+      },
+    );
+  }
 }
