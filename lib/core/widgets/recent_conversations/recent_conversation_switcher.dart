@@ -49,7 +49,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   late final ConversationCardMotion _motion = ConversationCardMotion(this);
   late final AnimationController _pulse = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 650),
+    duration: _PondRipplePainter.duration,
   );
   final _liveBoundary = GlobalKey();
   late final AnimationController _reveal = AnimationController(
@@ -129,6 +129,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     _motion.addListener(_motionChanged);
     widget.session.addListener(_sessionChanged);
     widget.session.nudges.addListener(_nudgeChanged);
+    _pulse.addStatusListener(_pulseStatusChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _queueIdleWork());
   }
 
@@ -136,6 +137,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
   void didUpdateWidget(RecentConversationSwitcher oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session != widget.session) {
+      _clearCue();
       oldWidget.session.setVisible(false);
       oldWidget.session.snapshots.removeListener(_snapshotsChanged);
       widget.session.snapshots.addListener(_snapshotsChanged);
@@ -151,6 +153,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       _membership = widget.session.entries;
       _motion.jump(position: 0, lift: 0, zoom: 0);
     } else if (oldWidget.chatKey != widget.chatKey && !_selecting) {
+      _clearCue();
       _base = math.max(0, _indexOf(widget.chatKey));
       _active = _stack = false;
       _motion.jump(position: 0, lift: 0, zoom: 0);
@@ -208,6 +211,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
       if (_stack) _beginBatch();
     }
     if (!widget.session.active) {
+      _clearCue();
       _active = _stack = _selecting = false;
       _gesture = null;
       _motion.stop();
@@ -237,8 +241,7 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
           : widget.chatKey,
     );
     if (!enabled) {
-      _pulse.stop();
-      _cue = null;
+      _clearCue();
     }
   }
 
@@ -253,6 +256,17 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     }
     setState(() => _cue = widget.session.nudges.value);
     _pulse.forward(from: 0);
+  }
+
+  void _clearCue() {
+    _pulse.stop();
+    _cue = null;
+  }
+
+  void _pulseStatusChanged(AnimationStatus status) {
+    if (status == AnimationStatus.completed && mounted) {
+      setState(() => _cue = null);
+    }
   }
 
   void _motionChanged() {
@@ -1214,38 +1228,31 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     if (cue == null || _reduced) return const SizedBox.shrink();
     final light = Theme.of(context).brightness == Brightness.light;
     final color = cue.kind == ConversationActivityKind.inputNeeded
-        ? const Color(0xffefaa5b)
+        ? light
+              ? const Color(0xffaa5e1e)
+              : const Color(0xfff4b160)
         : light
-        ? const Color(0xff3b3b3b)
-        : const Color(0xffe9efef);
-    return AnimatedBuilder(
-      animation: _pulse,
-      builder: (context, _) {
-        final t = Curves.easeOut.transform(_pulse.value);
-        final opacity = t < .18 ? t / .18 * .68 : .68 * (1 - (t - .18) / .82);
-        return Positioned(
-          left: cue.direction == ConversationDirection.left ? -8 : null,
-          right: cue.direction == ConversationDirection.right ? -8 : null,
-          top: _size.height * .22,
-          height: _size.height * .44,
-          width: 15,
-          child: IgnorePointer(
-            child: Opacity(
-              opacity: opacity.clamp(0.0, .68),
-              child: ImageFiltered(
-                key: const ValueKey('recent-conversation-nudge'),
-                imageFilter: ui.ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                ),
-              ),
+        ? const Color(0xff2a393f)
+        : const Color(0xffe8f7f7);
+    return Positioned(
+      left: cue.direction == ConversationDirection.left ? 0 : null,
+      right: cue.direction == ConversationDirection.right ? 0 : null,
+      top: 0,
+      bottom: 0,
+      width: _size.width * (.25 + 48 / 360),
+      child: IgnorePointer(
+        child: RepaintBoundary(
+          child: CustomPaint(
+            key: const ValueKey('recent-conversation-nudge'),
+            painter: _PondRipplePainter(
+              progress: _pulse,
+              color: color,
+              direction: cue.direction,
+              viewportWidth: _size.width,
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -1545,4 +1552,153 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
     _reveal.dispose();
     super.dispose();
   }
+}
+
+/// The approved pond study, in its 360 × 800 reference viewport. Ticks repaint
+/// only this clipped edge layer; the transcript never rebuilds for the ripples.
+class _PondRipplePainter extends CustomPainter {
+  _PondRipplePainter({
+    required this.progress,
+    required this.color,
+    required this.direction,
+    required this.viewportWidth,
+  }) : super(repaint: progress);
+
+  static const duration = Duration(milliseconds: 3800);
+  static const _sourceRadius = 1200.0;
+  static const _texture = .35;
+  static const _intensity = .45;
+  static const _spacing = 25.0;
+  static const _reach = 360 * .25;
+  static const _lifetime = 3.0;
+  static const _speed = (_reach + 14) / _lifetime;
+  static const _interval = _spacing / _speed;
+
+  final Animation<double> progress;
+  final Color color;
+  final ConversationDirection direction;
+  final double viewportWidth;
+
+  static double _smooth(double value) {
+    final t = value.clamp(0.0, 1.0);
+    return t * t * (3 - 2 * t);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = progress.value;
+    if (t <= 0 || t >= 1 || size.isEmpty || viewportWidth <= 0) return;
+    final strength =
+        (1 - math.pow(1 - (t / .04).clamp(0.0, 1.0), 3)) *
+        (1 - _smooth((t - .72) / .28)) *
+        _intensity;
+    final seconds = t * duration.inMilliseconds / 1000;
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    if (direction == ConversationDirection.right) {
+      canvas.translate(size.width, 0);
+    }
+    canvas.scale(
+      viewportWidth / 360 * (direction == ConversationDirection.right ? -1 : 1),
+      size.height / 800,
+    );
+
+    canvas.save();
+    canvas.translate(0, 400);
+    canvas.scale(54, 244);
+    canvas.drawCircle(
+      Offset.zero,
+      1,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          Offset.zero,
+          1,
+          [
+            color.withValues(alpha: .13 * strength),
+            color.withValues(alpha: .13 * strength * .62),
+            color.withValues(alpha: 0),
+          ],
+          const [0, .35, 1],
+        ),
+    );
+    canvas.restore();
+
+    final newest = (seconds / _interval).floor();
+    final oldest = math.max(0, ((seconds - _lifetime) / _interval).ceil());
+    for (var n = oldest; n <= newest; n++) {
+      final age = seconds - n * _interval;
+      if (age <= 0 || age >= _lifetime) continue;
+      final energy =
+          _smooth(age / .24) *
+          (1 - _smooth((age - .6) / 2.4)) *
+          (.92 + .08 * math.sin(n * 2.1)) *
+          strength;
+      final radius = _sourceRadius - 14 + age * _speed;
+      final path = Path();
+      for (var i = 0; i <= 96; i++) {
+        final y = 100 + i / 96 * 600;
+        final dy = y - 400;
+        final water =
+            _texture *
+            (4.5 * math.sin(dy * .019 + seconds * .7) +
+                2.4 * math.sin(dy * .041 - seconds * .5 + n * .28) +
+                1.2 * math.sin(dy * .083 + seconds * .8 + n * .5));
+        final x = math.sqrt(radius * radius - dy * dy) - _sourceRadius + water;
+        if (i == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
+      }
+
+      final colors = <Color>[];
+      final stops = <double>[];
+      for (var i = 0; i <= 16; i++) {
+        final u = i / 16;
+        final edge = math.pow(math.sin(math.pi * u), .8);
+        final shimmer =
+            1 -
+            _texture * .16 +
+            _texture * .10 * math.sin(u * 19 - seconds * .55 + n * .65) +
+            _texture * .06 * math.sin(u * 37 + seconds * .45);
+        colors.add(
+          color.withValues(alpha: (energy * edge * shimmer).clamp(0.0, 1.0)),
+        );
+        stops.add(u);
+      }
+      void stroke(double width, double blur, double opacity) {
+        canvas.drawPath(
+          path,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = width
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            // The study's canvas was painted at 2× resolution; CSS filter blur
+            // used device pixels while its stroke geometry used logical pixels.
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, blur / 2)
+            ..shader = ui.Gradient.linear(
+              const Offset(0, 100),
+              const Offset(0, 700),
+              colors
+                  .map((value) => value.withValues(alpha: value.a * opacity))
+                  .toList(),
+              stops,
+            ),
+        );
+      }
+
+      stroke(25, 16, .46);
+      stroke(9 + math.sin(n * 1.7) * 1.3, 6, .82);
+      stroke(3, 3.5, .22);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_PondRipplePainter oldDelegate) =>
+      oldDelegate.progress != progress ||
+      oldDelegate.color != color ||
+      oldDelegate.direction != direction ||
+      oldDelegate.viewportWidth != viewportWidth;
 }

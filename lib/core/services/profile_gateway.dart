@@ -1430,6 +1430,39 @@ class ProfileGateway {
     return Map<String, dynamic>.from(project);
   }
 
+  /// Changes the primary folder while retaining all existing associations.
+  Future<Map<String, dynamic>> setProjectPrimaryFolder(
+    String id,
+    String path, {
+    required bool Function() canDispatch,
+  }) async {
+    final projectId = id.trim();
+    final folder = path.trim();
+    if (projectId.isEmpty || folder.isEmpty) {
+      throw ArgumentError('A project id and folder are required');
+    }
+    await requireProfile();
+    final result = await _browserCommand('projects.add_folder', {
+      'id': projectId,
+      'path': folder,
+      'is_primary': true,
+    }, canDispatch);
+    final project = result['project'];
+    if (project is! Map ||
+        project['id'] != projectId ||
+        project['primary_path'] != folder ||
+        project['folders'] is! List ||
+        !(project['folders'] as List).any(
+          (entry) =>
+              entry is Map &&
+              entry['path'] == folder &&
+              entry['is_primary'] == true,
+        )) {
+      throw const FormatException('Primary folder change not acknowledged');
+    }
+    return Map<String, dynamic>.from(project);
+  }
+
   Future<void> deleteProject(
     String id, {
     required bool Function() canDispatch,

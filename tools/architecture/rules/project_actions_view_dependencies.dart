@@ -14,7 +14,7 @@ List<Finding> check(Snapshot snapshot) => checkViewAdapterDependencies(
   snapshot,
   id: id,
   view: view,
-  viewClass: '_ProjectDialog',
+  viewClass: 'ProjectEditorDialog',
   adapters: _adapters,
   message:
       'Use the typed project actions owner and observations; raw profile adapters belong outside the completed project actions view library.',

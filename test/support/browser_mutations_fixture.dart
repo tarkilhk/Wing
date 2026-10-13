@@ -24,6 +24,8 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
   final folderCreates = <(String, Map<String, dynamic>)>[];
   Completer<void>? folderCreateGate;
   bool failFolderCreate = false;
+  bool failProjectUpdate = false;
+  bool failPrimaryFolder = false;
   final resumeRuntimeIds = <String, String>{};
 
   void event(
@@ -65,6 +67,7 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
     'primary_path': project['path'],
     'color': project['color'],
     'icon': project['icon'],
+    if (project.containsKey('folders')) 'folders': project['folders'],
   };
 
   @override
@@ -181,7 +184,33 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
         if (method == 'file.attach') {
           return {'attached': true, 'ref_text': 'attached:${params['name']}'};
         }
+        if (method == 'projects.add_folder') {
+          if (failPrimaryFolder) throw StateError('Folder change rejected');
+          final id = params['id'] as String;
+          final project = projects(
+            scope.profileName,
+          ).firstWhere((p) => p['id'] == id);
+          final path = params['path'] as String;
+          final folders =
+              project['folders'] as List? ??
+              [
+                {'path': project['path'], 'is_primary': true},
+              ];
+          final updated = {
+            ...project,
+            'path': path,
+            'folders': [
+              for (final folder in folders)
+                if (folder['path'] != path)
+                  {...(folder as Map<String, dynamic>), 'is_primary': false},
+              {'path': path, 'is_primary': true},
+            ],
+          };
+          projectChanges['${scope.profileName}/$id'] = updated;
+          return {'project': _confirmedProject(updated)};
+        }
         if (method == 'projects.update') {
+          if (failProjectUpdate) throw StateError('Project details rejected');
           final id = params['id'] as String;
           final project = projects(
             scope.profileName,

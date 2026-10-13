@@ -646,7 +646,7 @@ final class ChatBrowserData extends ChangeNotifier {
   Future<void> createProject({
     required Future<void> Function(
       ServerFilesBrowser Function(),
-      Future<void> Function(ProjectCreationDraft),
+      Future<void> Function(ProjectDraft),
     )
     showEditor,
   }) async {
@@ -1671,10 +1671,9 @@ final class BrowserActionSession extends ChangeNotifier {
                 'New chat',
                 true,
               ),
-              const BrowserActionChoice(BrowserAction.rename, 'Rename', true),
               const BrowserActionChoice(
-                BrowserAction.appearance,
-                'Appearance',
+                BrowserAction.editProject,
+                'Edit project',
                 true,
               ),
               const BrowserActionChoice(BrowserAction.delete, 'Delete', true),
@@ -1728,6 +1727,10 @@ final class BrowserActionSession extends ChangeNotifier {
   BrowserActionState _state = const BrowserActionState();
   BrowserActionState get state => _state;
   WorkspaceScope get scope => _resource.scope;
+  ServerFilesBrowser createFilesBrowser() => ServerFilesBrowser(
+    files: _resource.gateway.files,
+    isCurrent: () => _active,
+  );
   String get title => project != null
       ? (project!.name.trim().isEmpty
             ? 'Untitled project'
@@ -1768,6 +1771,7 @@ final class BrowserActionSession extends ChangeNotifier {
     String name = '',
     String color = '',
     String icon = '',
+    String path = '',
     BrowserProject? target,
   }) async {
     if (_state.submitting) return false;
@@ -1783,7 +1787,14 @@ final class BrowserActionSession extends ChangeNotifier {
       return false;
     }
     final trimmed = name.trim();
-    if (action == BrowserAction.rename && trimmed.isEmpty) return false;
+    if ((action == BrowserAction.rename ||
+            action == BrowserAction.editProject) &&
+        trimmed.isEmpty) {
+      return false;
+    }
+    if (action == BrowserAction.editProject && path.trim().isEmpty) {
+      return false;
+    }
     _publish(BrowserActionState(submitting: true, moving: target));
     if (!_active) {
       _publish(
@@ -1809,19 +1820,14 @@ final class BrowserActionSession extends ChangeNotifier {
               owner: scope,
               canDispatch: () => _active,
             );
-          case BrowserAction.rename:
+          case BrowserAction.editProject:
             await owner.updateProject(
               scope,
               captured.id,
               name: trimmed,
-              canDispatch: () => _active,
-            );
-          case BrowserAction.appearance:
-            await owner.updateProject(
-              scope,
-              captured.id,
               color: color,
               icon: icon,
+              path: path,
               canDispatch: () => _active,
             );
           case BrowserAction.delete:
@@ -1909,6 +1915,7 @@ final class BrowserActionSession extends ChangeNotifier {
         BrowserActionState(
           error: project != null
               ? message.startsWith('Profile changed.') ||
+                        message.startsWith('Folder saved.') ||
                         message.startsWith('Project is unavailable.')
                     ? message
                     : 'The project change was not acknowledged. Check the connection and try again.'

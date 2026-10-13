@@ -3774,8 +3774,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       return showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (_) =>
-            NewProjectDialog(createFolders: createFolders, create: create),
+        builder: (_) => ProjectEditorDialog.create(
+          createFolders: createFolders,
+          save: create,
+        ),
       );
     },
   );
