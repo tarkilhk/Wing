@@ -1,3 +1,4 @@
+import '../models/chat_list_view.dart' show ProjectFolderSuggestion;
 import 'profile_model_catalog.dart';
 import 'gateway_endpoint.dart';
 import 'remote_files_client.dart';
@@ -78,13 +79,6 @@ class ProfileHistoryPage {
   });
   int? get nextOffset =>
       !isComplete && rows.length == limit ? offset + rows.length : null;
-}
-
-class ProjectFolderSuggestion {
-  final String path;
-  final String label;
-
-  const ProjectFolderSuggestion({required this.path, required this.label});
 }
 
 DashboardClient _dashboardFor(ConnectionAccess access) {
@@ -1345,13 +1339,47 @@ class ProfileGateway {
   Future<Map<String, dynamic>> createProject(
     String name,
     String path, {
+    required String color,
+    required String icon,
     required bool Function() canDispatch,
   }) async {
+    if (name.trim().isEmpty || path.trim().isEmpty) {
+      throw ArgumentError('A project name and folder are required');
+    }
     await requireProfile();
+    late final Map<String, dynamic> directory;
+    try {
+      directory = await postOwned(
+        'files/mkdir',
+        {'path': path},
+        canDispatch: canDispatch,
+        onDispatched: () {},
+      );
+    } on DashboardRequestNotSentException {
+      rethrow;
+    } catch (_) {
+      throw StateError(
+        'Could not create the project folder. Check the path and permissions, then try again.',
+      );
+    }
+    final folder = directory['path'];
+    final entry = directory['entry'];
+    if (directory['ok'] != true ||
+        folder is! String ||
+        folder.trim().isEmpty ||
+        entry is! Map ||
+        entry['is_directory'] != true ||
+        entry['path'] != folder) {
+      throw StateError(
+        'Hermes did not confirm the project folder. Check the folder and try again.',
+      );
+    }
     final result = await _browserCommand('projects.create', {
       'name': name,
-      'folders': [path],
-      'primary_path': path,
+      'folders': [folder],
+      'primary_path': folder,
+      'color': color,
+      'icon': icon,
     }, canDispatch);
     if (result['project'] is! Map) {
       throw const FormatException('Missing project');

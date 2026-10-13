@@ -1593,6 +1593,8 @@ void main() {
       await controller.createProject(
         'New project',
         '/new',
+        color: '#112233',
+        icon: 'folder',
         canDispatch: () => true,
       );
       expect(

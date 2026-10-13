@@ -93,6 +93,12 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
   ];
   List<ChatListGroup> get _groups => _currentGroups;
   Timer? _debounce;
+  bool _showProjectFab = false;
+
+  void _dismissProjectFab() {
+    if (_showProjectFab) setState(() => _showProjectFab = false);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -111,6 +117,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _data.setReadActive(state == AppLifecycleState.resumed);
+    if (state != AppLifecycleState.resumed) _dismissProjectFab();
   }
 
   void _dataChanged() {
@@ -457,6 +464,7 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
         });
         unawaited(_data.refresh(archivedOnly: !_archivedOnly));
       case 'new-project':
+        _dismissProjectFab();
         unawaited(
           _run(() async {
             final name = await _chooseOwner();
@@ -1183,10 +1191,12 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
         ),
     ];
     return PopScope(
-      canPop: widget.drawer == null && !_archivedOnly,
+      canPop: widget.drawer == null && !_archivedOnly && !_showProjectFab,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        if (_archivedOnly) {
+        if (_showProjectFab) {
+          _dismissProjectFab();
+        } else if (_archivedOnly) {
           unawaited(_data.refresh(archivedOnly: false));
         } else if (_scaffoldKey.currentState?.isDrawerOpen == true) {
           unawaited(SystemNavigator.pop());
@@ -1326,18 +1336,65 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
             ),
           ),
         ),
-        floatingActionButton: StudioButtonPress(
-          child: FloatingActionButton(
-            key: const ValueKey('workspace-new-chat'),
-            tooltip: 'New chat',
-            elevation: 2,
-            onPressed: !enabled || workspace.offline || workspace.recovering
-                ? null
-                : () => _run(() async {
-                    final name = await _chooseOwner();
-                    if (name != null) await _data.newChat(name);
-                  }),
-            child: const Icon(WingIcons.newChat),
+        floatingActionButton: TapRegion(
+          onTapOutside: (_) => _dismissProjectFab(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_showProjectFab) ...[
+                StudioButtonPress(
+                  child: FloatingActionButton(
+                    key: const ValueKey('workspace-new-project'),
+                    heroTag: 'workspace-new-project',
+                    tooltip: 'New project',
+                    elevation: 2,
+                    onPressed:
+                        !enabled || workspace.offline || workspace.recovering
+                        ? null
+                        : () => _menuAction('new-project'),
+                    child: const Icon(Icons.create_new_folder_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              Tooltip(
+                message: 'New chat',
+                triggerMode: TooltipTriggerMode.manual,
+                child: Semantics(
+                  hint: 'Long press to show New project',
+                  child: GestureDetector(
+                    onLongPress:
+                        !enabled || workspace.offline || workspace.recovering
+                        ? null
+                        : () => setState(
+                            () => _showProjectFab = !_showProjectFab,
+                          ),
+                    child: StudioButtonPress(
+                      child: FloatingActionButton(
+                        key: const ValueKey('workspace-new-chat'),
+                        heroTag: 'workspace-new-chat',
+                        elevation: 2,
+                        onPressed:
+                            !enabled ||
+                                workspace.offline ||
+                                workspace.recovering
+                            ? null
+                            : () {
+                                _dismissProjectFab();
+                                unawaited(
+                                  _run(() async {
+                                    final name = await _chooseOwner();
+                                    if (name != null) await _data.newChat(name);
+                                  }),
+                                );
+                              },
+                        child: const Icon(WingIcons.newChat),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

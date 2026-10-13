@@ -248,6 +248,20 @@ class Host {
     late final ProfileGateway gateway;
     gateway = ProfileGateway(
       ownedPatch: ownedPatch,
+      ownedPost: (endpoint, body, canDispatch, onDispatched) async {
+        if (!canDispatch()) {
+          throw DashboardRequestNotSentException(
+            StateError('Creation retired'),
+          );
+        }
+        expect(endpoint, 'files/mkdir?profile=$name');
+        onDispatched();
+        return {
+          'ok': true,
+          'path': body['path'],
+          'entry': {'path': body['path'], 'is_directory': true},
+        };
+      },
       scope: scope,
       discover: () async {
         if (name == 'default' && defaultDiscoveryDelay != null) {
@@ -2099,7 +2113,13 @@ void main() {
   test(
     'profile traffic is scoped and GUI timing logs stay process-wide',
     () async {
-      await controller.createProject('Test', '/a', canDispatch: () => true);
+      await controller.createProject(
+        'Test',
+        '/a',
+        color: '#112233',
+        icon: 'folder',
+        canDispatch: () => true,
+      );
       final chat = await controller.createChat(canDispatch: () => true);
       chat.composer.editText('hello');
       await controller.send(chat);

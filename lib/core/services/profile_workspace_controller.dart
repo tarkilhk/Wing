@@ -250,6 +250,7 @@ class ProfileWorkspaceData {
   final _deletedDraftCleanup =
       <String, ({List<DeletedDraftFile> files, Future<void>? writes})>{};
   List<Map<String, dynamic>> _projects = const [];
+  bool _creatingProject = false;
   String? _projectsError;
   Map<String, String?>? _projectMembership;
   Map<String, String> _projectMembershipLabels = {};
@@ -284,6 +285,7 @@ class ProfileWorkspaceData {
   Set<String> get deletedSessions => Set.unmodifiable(_deletedSessions);
   Set<String> get quarantinedSessions => Set.unmodifiable(_quarantinedSessions);
   List<Map<String, dynamic>> get projects => _projects;
+  bool get creatingProject => _creatingProject;
   String? get projectsError => _projectsError;
   Map<String, ProfileChat> get chats => Map.unmodifiable(_chats);
   String? get selectedSession => _selectedSession;
@@ -4783,22 +4785,42 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> createProject(
     String name,
     String path, {
+    required String color,
+    required String icon,
     required bool Function() canDispatch,
   }) => _retainWorkspaceOperation(() async {
     final resource = _writable();
-    final project = _savedProject(
-      await resource.gateway.createProject(
-        name,
-        path,
-        canDispatch: () =>
-            !_closed && identical(_current, resource) && canDispatch(),
-      ),
-    );
-    if (_closed) return;
-    _applyProjects(resource, [...resource._projects, project]);
-    _browserMutated(
-      ProjectBrowserMutation(resource.scope, project['id'] as String, project),
-    );
+    if (resource._creatingProject) {
+      throw StateError(
+        'A project is already being created. Wait for it to finish.',
+      );
+    }
+    resource._creatingProject = true;
+    _changed();
+    try {
+      final project = _savedProject(
+        await resource.gateway.createProject(
+          name,
+          path,
+          color: color,
+          icon: icon,
+          canDispatch: () =>
+              !_closed && identical(_current, resource) && canDispatch(),
+        ),
+      );
+      if (_closed) return;
+      _applyProjects(resource, [...resource._projects, project]);
+      _browserMutated(
+        ProjectBrowserMutation(
+          resource.scope,
+          project['id'] as String,
+          project,
+        ),
+      );
+    } finally {
+      resource._creatingProject = false;
+      _changed();
+    }
   });
 
   Map<String, dynamic> _savedProject(Map<String, dynamic> project) {

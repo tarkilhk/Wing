@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:wing/core/models/chat_list_view.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +24,16 @@ class _ProjectScreenHost {
       currentName: 'work',
       activeName: 'work',
     ),
+    ownedPost: (endpoint, body, canDispatch, onDispatched) async {
+      if (!canDispatch()) throw StateError('Creation retired');
+      onDispatched();
+      calls.add((endpoint, body));
+      return {
+        'ok': true,
+        'path': body['path'],
+        'entry': {'path': body['path'], 'is_directory': true},
+      };
+    },
     get: (path, query) async {
       if (path != 'sessions') throw StateError('Unexpected read $path');
       return {
@@ -58,7 +70,11 @@ class _ProjectScreenHost {
             'lastActive': 11,
           });
           return {
-            'project': {'id': 'created'},
+            'project': {
+              'id': 'created',
+              'name': params['name'],
+              'primary_path': params['primary_path'],
+            },
           };
         default:
           throw StateError('Unexpected RPC $method');
@@ -92,6 +108,70 @@ void main() {
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
+  }
+
+  for (final failed in [false, true]) {
+    testWidgets(
+      'folder discovery retains feedback until ${failed ? 'failure' : 'success'}',
+      (tester) async {
+        final gate = Completer<List<ProjectFolderSuggestion>>();
+        var calls = 0;
+        await showPicker(
+          tester,
+          discover: () {
+            calls++;
+            return gate.future;
+          },
+          onResult: (_) {},
+        );
+        final findFolders = find.byKey(const ValueKey('project-folder-find'));
+        await tester.tap(findFolders);
+        await tester.pump();
+        expect(
+          find.bySemanticsLabel('Finding project folders'),
+          findsOneWidget,
+        );
+        expect(tester.widget<IconButton>(findFolders).onPressed, isNull);
+        await tester.enterText(
+          find.byKey(const ValueKey('project-folder-path')),
+          '/srv/manual',
+        );
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(
+          find.bySemanticsLabel('Finding project folders'),
+          findsOneWidget,
+        );
+        expect(calls, 1);
+        if (failed) {
+          gate.completeError(StateError('offline'));
+        } else {
+          gate.complete(const [
+            ProjectFolderSuggestion(path: '/srv/docs', label: 'Docs'),
+          ]);
+        }
+        await tester.pumpAndSettle();
+        expect(find.bySemanticsLabel('Finding project folders'), findsNothing);
+        expect(tester.widget<IconButton>(findFolders).onPressed, isNotNull);
+        if (failed) {
+          expect(
+            find.textContaining('Folders could not be loaded'),
+            findsOneWidget,
+          );
+        } else {
+          expect(find.text('Docs'), findsOneWidget);
+        }
+        expect(
+          tester
+              .widget<TextField>(
+                find.byKey(const ValueKey('project-folder-path')),
+              )
+              .controller!
+              .text,
+          '/srv/manual',
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
   }
 
   testWidgets('manual path is available without scanning the host', (
@@ -264,7 +344,7 @@ void main() {
       'New workspace',
     );
     await tester.pump();
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.byKey(const ValueKey('project-choose-folder')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('project-folder-find')));
@@ -276,13 +356,23 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const ValueKey('project-create-confirm')));
+    await tester.pumpAndSettle();
+
     final create = host.calls.singleWhere(
       (call) => call.$1 == 'projects.create',
     );
+    final mkdir = host.calls
+        .where((call) => call.$1.startsWith('files/mkdir'))
+        .single;
+    expect(mkdir.$1, 'files/mkdir?profile=work');
+    expect(mkdir.$2, {'path': '/srv/Client Work'});
     expect(create.$2, {
       'name': 'New workspace',
       'folders': ['/srv/Client Work'],
       'primary_path': '/srv/Client Work',
+      'color': '',
+      'icon': 'folder-library',
       'profile': 'work',
     });
   });

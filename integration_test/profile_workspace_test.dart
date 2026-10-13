@@ -84,6 +84,8 @@ void main() {
           await controller.createProject(
             'Android QA ${DateTime.now().millisecondsSinceEpoch}',
             projectPath,
+            color: '',
+            icon: 'folder-library',
             canDispatch: () => true,
           );
         }

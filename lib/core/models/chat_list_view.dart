@@ -67,6 +67,22 @@ String chatDateBucket(DateTime date, {required DateTime now}) {
       : 'Older';
 }
 
+/// A folder discovered on the captured Hermes host.
+class ProjectFolderSuggestion {
+  final String path;
+  final String label;
+
+  const ProjectFolderSuggestion({required this.path, required this.label});
+}
+
+/// User-entered project details, submitted together to the captured profile.
+typedef ProjectCreationDraft = ({
+  String name,
+  String path,
+  String color,
+  String icon,
+});
+
 /// Detached project facts. Wire maps never cross into browser views.
 final class BrowserProject {
   const BrowserProject({

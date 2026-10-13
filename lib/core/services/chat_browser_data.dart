@@ -14,8 +14,7 @@ import '../models/bots.dart';
 import 'bots_repository.dart';
 import 'bots_session.dart';
 import 'profile_workspace_controller.dart';
-import 'profile_gateway.dart'
-    show ProjectFolderSuggestion, ProfileCanonicalBotChat;
+import 'profile_gateway.dart' show ProfileCanonicalBotChat;
 import 'connection_manager.dart' show DashboardRequestNotSentException;
 import 'workspace_connection_failure.dart';
 import 'connection_diagnostics.dart';
@@ -406,7 +405,9 @@ final class ChatBrowserData extends ChangeNotifier {
           _controller.profileSelectionRepairBusy,
       recovering: _controller.recovering,
       offline: _controller.current?.offlineSnapshot == true,
-      mutating: _controller.current?.mutatingSessions.isNotEmpty == true,
+      mutating:
+          _controller.current?.creatingProject == true ||
+          _controller.current?.mutatingSessions.isNotEmpty == true,
       error: _controller.error,
       visibility: _controller.sessionVisibility,
       visibilityNotice: visibility.notice,
@@ -642,11 +643,11 @@ final class ChatBrowserData extends ChangeNotifier {
   }
 
   Future<void> createProject({
-    required Future<String?> Function() readName,
-    required Future<String?> Function(
+    required Future<void> Function(
       Future<List<ProjectFolderSuggestion>> Function(),
+      Future<void> Function(ProjectCreationDraft),
     )
-    chooseFolder,
+    showEditor,
   }) async {
     final resource = _controller.current;
     if (_disposed || resource == null || _controller.switching) return;
@@ -654,16 +655,26 @@ final class ChatBrowserData extends ChangeNotifier {
         !_disposed &&
         identical(_controller.current, resource) &&
         !_controller.switching;
-    final name = await readName();
-    if (!active() || name == null || name.trim().isEmpty) return;
-    final path = await chooseFolder(() {
-      if (!active()) {
-        throw StateError('Profile changed. Open the project dialog again.');
-      }
-      return resource.gateway.discoverProjectFolders();
-    });
-    if (!active() || path == null || path.trim().isEmpty) return;
-    await _controller.createProject(name.trim(), path, canDispatch: active);
+    await showEditor(
+      () {
+        if (!active()) {
+          throw StateError('Profile changed. Open the project dialog again.');
+        }
+        return resource.gateway.discoverProjectFolders();
+      },
+      (draft) async {
+        if (!active()) {
+          throw StateError('Profile changed. Open the project dialog again.');
+        }
+        await _controller.createProject(
+          draft.name.trim(),
+          draft.path.trim(),
+          color: draft.color,
+          icon: draft.icon,
+          canDispatch: active,
+        );
+      },
+    );
   }
 
   Future<void> newChat(String profileName) async {
@@ -824,6 +835,7 @@ final class ChatBrowserData extends ChangeNotifier {
     _controller.recovering,
     _controller.current?.offlineSnapshot,
     _controller.current?.mutatingSessions.length,
+    _controller.current?.creatingProject,
     _controller.sessionVisibility,
     _controller.savedDraftRevision,
   );

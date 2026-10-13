@@ -146,6 +146,57 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'New project FAB reveal and dismissal ${brightness.name} $scale',
+        (tester) async {
+          final semantics = tester.ensureSemantics();
+          try {
+            await show(tester, brightness: brightness, scale: scale);
+            final chat = find.byKey(const ValueKey('workspace-new-chat'));
+            final project = find.byKey(const ValueKey('workspace-new-project'));
+            final initial = tester.getRect(chat);
+            expect(project, findsNothing);
+            await tester.longPress(chat);
+            await tester.pumpAndSettle();
+            expect(project, findsOneWidget);
+            final expanded = tester.getRect(chat);
+            expect(expanded.left, closeTo(initial.left, 0.01));
+            expect(expanded.top, closeTo(initial.top, 0.01));
+            expect(expanded.width, closeTo(initial.width, 0.01));
+            expect(expanded.height, closeTo(initial.height, 0.01));
+            expect(tester.getRect(project).bottom, lessThan(initial.top));
+            expect(
+              tester.widget<FloatingActionButton>(project).tooltip,
+              'New project',
+            );
+            expect(
+              host.wireCalls.where((method) => method == 'session.create'),
+              isEmpty,
+            );
+            await screenshot(tester, 'project-fab-${brightness.name}-$scale');
+            await tester.binding.handlePopRoute();
+            await tester.pumpAndSettle();
+            expect(project, findsNothing);
+            await tester.longPress(chat);
+            await tester.pumpAndSettle();
+            await tester.tap(find.byKey(const ValueKey('workspace-search')));
+            await tester.pumpAndSettle();
+            expect(project, findsNothing);
+            expect(
+              host.wireCalls.where((method) => method == 'session.create'),
+              isEmpty,
+            );
+            await tester.pumpWidget(const SizedBox.shrink());
+          } finally {
+            semantics.dispose();
+          }
+        },
+      );
+    }
+  }
+
   testWidgets(
     'one New chat tap opens the selected profile while its list is refreshing',
     (tester) async {

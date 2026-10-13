@@ -21,6 +21,9 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
   final wireCalls = <String>[];
   final rpcDelays = <String, Completer<void>>{};
   final rpcStarted = <String, Completer<void>>{};
+  final folderCreates = <(String, Map<String, dynamic>)>[];
+  Completer<void>? folderCreateGate;
+  bool failFolderCreate = false;
   final resumeRuntimeIds = <String, String>{};
 
   void event(
@@ -70,6 +73,22 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
     final gateway = ProfileGateway(
       scope: scope,
       discover: base.discover,
+      ownedPost: (endpoint, body, canDispatch, onDispatched) async {
+        if (!canDispatch()) {
+          throw DashboardRequestNotSentException(
+            StateError('Creation retired'),
+          );
+        }
+        onDispatched();
+        folderCreates.add((endpoint, body));
+        await folderCreateGate?.future;
+        if (failFolderCreate) throw StateError('Directory is not writable');
+        return {
+          'ok': true,
+          'path': body['path'],
+          'entry': {'path': body['path'], 'is_directory': true},
+        };
+      },
       get: (endpoint, query) async {
         final path = Uri.parse(endpoint).path;
         if (path != 'sessions/search' &&
@@ -164,6 +183,8 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
             'id': 'created',
             'label': params['name'],
             'path': params['primary_path'],
+            'color': params['color'],
+            'icon': params['icon'],
             'lastActive': now,
           };
           projectChanges['${scope.profileName}/created'] = project;

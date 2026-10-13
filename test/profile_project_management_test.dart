@@ -2,6 +2,7 @@ import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/services/chat_browser_data.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -36,6 +37,13 @@ class _ProjectHost {
   final failNextTree = <String>{};
   Completer<void>? deleteStarted;
   Completer<void>? deleteGate;
+  Completer<void>? folderStarted;
+  Completer<void>? folderGate;
+  bool failFolder = false;
+  bool rejectFolderAck = false;
+  bool failCreate = false;
+  final folderAckOverrides = <String, dynamic>{};
+  String? confirmedFolder;
 
   Future<ProfileDiscovery> discover() async => ProfileDiscovery(
     profiles: const [
@@ -49,6 +57,23 @@ class _ProjectHost {
   ProfileGateway gateway(WorkspaceScope scope) => ProfileGateway(
     scope: scope,
     discover: discover,
+    ownedPost: (endpoint, body, canDispatch, onDispatched) async {
+      if (!canDispatch()) throw StateError('Creation retired');
+      onDispatched();
+      calls.add((scope.profileName, endpoint, body));
+      expect(Uri.parse(endpoint).path, 'files/mkdir');
+      expect(Uri.parse(endpoint).queryParameters['profile'], scope.profileName);
+      folderStarted?.complete();
+      await folderGate?.future;
+      if (failFolder) throw StateError('Directory is not writable');
+      final path = confirmedFolder ?? body['path'];
+      return {
+        'ok': !rejectFolderAck,
+        'path': path,
+        'entry': {'path': path, 'is_directory': true},
+        ...folderAckOverrides,
+      };
+    },
     get: (path, query) async {
       if (path == 'sessions') {
         return {
@@ -88,6 +113,17 @@ class _ProjectHost {
     rpc: (method, params) async {
       calls.add((scope.profileName, method, params));
       switch (method) {
+        case 'projects.create':
+          if (failCreate) throw StateError('Project registration failed');
+          return {
+            'project': {
+              'id': 'created',
+              'name': params['name'],
+              'primary_path': params['primary_path'],
+              'color': params['color'],
+              'icon': params['icon'],
+            },
+          };
         case 'session.resume':
           return {
             'session_id': '${scope.profileName}-runtime',
@@ -187,6 +223,257 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  test(
+    'creates the folder before registering the confirmed project path',
+    () async {
+      host.confirmedFolder = '/resolved/new';
+      host.folderStarted = Completer<void>();
+      host.folderGate = Completer<void>();
+      final owner = controller.current!;
+      final creating = controller.createProject(
+        'New project',
+        '/requested/new',
+        color: '#112233',
+        icon: 'folder',
+        canDispatch: () => true,
+      );
+      await host.folderStarted!.future.timeout(const Duration(seconds: 1));
+      expect(owner.creatingProject, isTrue);
+      expect(host.calls.where((call) => call.$2 == 'projects.create'), isEmpty);
+      expect(owner.projects, hasLength(1));
+      host.folderGate!.complete();
+      await creating;
+      final mutations = host.calls
+          .where(
+            (call) =>
+                call.$2.startsWith('files/mkdir') ||
+                call.$2 == 'projects.create',
+          )
+          .toList();
+      expect(mutations.map((call) => call.$2), [
+        'files/mkdir?profile=a',
+        'projects.create',
+      ]);
+      expect(mutations.first.$3, {'path': '/requested/new'});
+      expect(mutations.last.$3, {
+        'name': 'New project',
+        'folders': ['/resolved/new'],
+        'primary_path': '/resolved/new',
+        'color': '#112233',
+        'icon': 'folder',
+        'profile': 'a',
+      });
+      expect(owner.projects.last['path'], '/resolved/new');
+      expect(owner.creatingProject, isFalse);
+    },
+  );
+
+  for (final rejectAck in [false, true]) {
+    test(
+      'folder ${rejectAck ? 'missing acknowledgement' : 'failure'} prevents project registration',
+      () async {
+        host.failFolder = !rejectAck;
+        host.rejectFolderAck = rejectAck;
+        await expectLater(
+          controller.createProject(
+            'New project',
+            '/new',
+            color: '#112233',
+            icon: 'folder',
+            canDispatch: () => true,
+          ),
+          throwsStateError,
+        );
+        expect(
+          host.calls.where((call) => call.$2 == 'projects.create'),
+          isEmpty,
+        );
+        expect(controller.current!.projects, hasLength(1));
+        expect(controller.current!.creatingProject, isFalse);
+      },
+    );
+  }
+
+  test(
+    'retirement after folder creation prevents project registration',
+    () async {
+      host.folderStarted = Completer<void>();
+      host.folderGate = Completer<void>();
+      var active = true;
+      final creating = controller.createProject(
+        'New project',
+        '/new',
+        color: '#112233',
+        icon: 'folder',
+        canDispatch: () => active,
+      );
+      final failure = expectLater(
+        creating,
+        throwsA(isA<DashboardRequestNotSentException>()),
+      );
+      await host.folderStarted!.future.timeout(const Duration(seconds: 1));
+      active = false;
+      host.folderGate!.complete();
+      await failure;
+      expect(host.calls.where((call) => call.$2 == 'projects.create'), isEmpty);
+      expect(controller.current!.projects, hasLength(1));
+      expect(controller.current!.creatingProject, isFalse);
+    },
+  );
+
+  test(
+    'browser publishes project creation through failure and retry',
+    () async {
+      final browser = ChatBrowserData(controller);
+      addTearDown(browser.dispose);
+      final pending = <bool>[];
+      browser.addListener(() => pending.add(browser.workspace.mutating));
+      host.failFolder = true;
+      await browser.run(
+        () => controller.createProject(
+          'New project',
+          '/new',
+          color: '#112233',
+          icon: 'folder',
+          canDispatch: () => true,
+        ),
+      );
+      expect(pending, contains(true));
+      expect(pending.last, isFalse);
+      expect(browser.notice, contains('project folder'));
+      host.failFolder = false;
+      expect(
+        await browser.run(
+          () => controller.createProject(
+            'New project',
+            '/new',
+            color: '#112233',
+            icon: 'folder',
+            canDispatch: () => true,
+          ),
+        ),
+        isTrue,
+      );
+      expect(browser.workspace.mutating, isFalse);
+      expect(browser.notice, isNull);
+    },
+  );
+
+  for (final acknowledgement in <Map<String, dynamic>>[
+    {'path': ''},
+    {'entry': null},
+    {
+      'entry': {'path': '/new', 'is_directory': false},
+    },
+    {
+      'entry': {'path': '/different', 'is_directory': true},
+    },
+  ]) {
+    test(
+      'unconfirmed directory $acknowledgement prevents registration',
+      () async {
+        host.folderAckOverrides.addAll(acknowledgement);
+        await expectLater(
+          controller.createProject(
+            'New project',
+            '/new',
+            color: '#112233',
+            icon: 'folder',
+            canDispatch: () => true,
+          ),
+          throwsStateError,
+        );
+        expect(
+          host.calls.where((call) => call.$2 == 'projects.create'),
+          isEmpty,
+        );
+        expect(controller.current!.creatingProject, isFalse);
+      },
+    );
+  }
+
+  test('duplicate creation does not dispatch another folder write', () async {
+    host.folderStarted = Completer<void>();
+    host.folderGate = Completer<void>();
+    final creating = controller.createProject(
+      'New project',
+      '/new',
+      color: '#112233',
+      icon: 'folder',
+      canDispatch: () => true,
+    );
+    await host.folderStarted!.future.timeout(const Duration(seconds: 1));
+    await expectLater(
+      controller.createProject(
+        'Another project',
+        '/another',
+        color: '#112233',
+        icon: 'folder',
+        canDispatch: () => true,
+      ),
+      throwsStateError,
+    );
+    expect(
+      host.calls.where((call) => call.$2.startsWith('files/mkdir')),
+      hasLength(1),
+    );
+    host.folderGate!.complete();
+    await creating;
+    expect(controller.current!.creatingProject, isFalse);
+  });
+
+  test(
+    'profile switch after mkdir does not register in either profile',
+    () async {
+      final original = controller.current!;
+      host.folderStarted = Completer<void>();
+      host.folderGate = Completer<void>();
+      final creating = controller.createProject(
+        'New project',
+        '/new',
+        color: '#112233',
+        icon: 'folder',
+        canDispatch: () => true,
+      );
+      final failure = expectLater(
+        creating,
+        throwsA(isA<DashboardRequestNotSentException>()),
+      );
+      await host.folderStarted!.future.timeout(const Duration(seconds: 1));
+      await controller.navigateProfile('b');
+      host.folderGate!.complete();
+      await failure;
+      expect(host.calls.where((call) => call.$2 == 'projects.create'), isEmpty);
+      expect(original.projects, hasLength(1));
+      expect(original.creatingProject, isFalse);
+      expect(controller.current!.projects.single['id'], 'project-b');
+    },
+  );
+
+  test(
+    'registration failure settles progress and leaves confirmed projects unchanged',
+    () async {
+      host.failCreate = true;
+      await expectLater(
+        controller.createProject(
+          'New project',
+          '/new',
+          color: '#112233',
+          icon: 'folder',
+          canDispatch: () => true,
+        ),
+        throwsStateError,
+      );
+      expect(
+        host.calls.where((call) => call.$2.startsWith('files/mkdir')),
+        hasLength(1),
+      );
+      expect(controller.current!.projects, hasLength(1));
+      expect(controller.current!.creatingProject, isFalse);
+      expect(host.calls.any((call) => call.$2.contains('delete')), isFalse);
+    },
+  );
 
   test('updates server appearance and refreshes selected metadata', () async {
     final resource = controller.current!;

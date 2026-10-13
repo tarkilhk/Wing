@@ -1,5 +1,6 @@
 import '../widgets/studio_action_label.dart';
 import '../widgets/studio_error.dart';
+import '../widgets/project_folder_picker.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 import '../theme/wing_icons.dart';
@@ -29,14 +30,30 @@ const _projectIcons = <String, IconData>{
   'repo': Icons.account_tree_outlined,
   'rocket': Icons.rocket_launch_outlined,
   'beaker': Icons.science_outlined,
+  'flame': Icons.local_fire_department_outlined,
   'star-full': Icons.star_outline,
+  'heart': Icons.favorite_outline,
+  'zap': Icons.bolt_outlined,
   'target': Icons.adjust,
   'lightbulb': Icons.lightbulb_outline,
+  'tools': Icons.handyman_outlined,
+  'device-desktop': Icons.desktop_windows_outlined,
+  'device-mobile': Icons.phone_android_outlined,
   'terminal': Icons.terminal,
+  'dashboard': Icons.dashboard_outlined,
   'globe': Icons.public,
+  'broadcast': Icons.cell_tower_outlined,
+  'cloud': Icons.cloud_outlined,
   'database': Icons.storage_outlined,
+  'package': Icons.inventory_2_outlined,
   'book': Icons.menu_book_outlined,
+  'organization': Icons.business_outlined,
   'bug': Icons.bug_report_outlined,
+  'shield': Icons.shield_outlined,
+  'key': Icons.key_outlined,
+  'gift': Icons.card_giftcard_outlined,
+  'telescope': Icons.travel_explore_outlined,
+  'home': Icons.home_outlined,
 };
 
 Future<void> showProjectActions(
@@ -184,64 +201,12 @@ class _ProjectDialogState extends State<_ProjectDialog> {
               decoration: const InputDecoration(labelText: 'Project name'),
             )
           else if (widget.action == BrowserAction.appearance) ...[
-            const Text('Color'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _ChoiceButton(
-                  key: const ValueKey('project-color-none'),
-                  selected: _color.isEmpty,
-                  label: 'Default color',
-                  onPressed: _pending
-                      ? null
-                      : () => setState(() => _color = ''),
-                  child: const Icon(Icons.block, size: 20),
-                ),
-                for (var index = 0; index < _projectColors.length; index++)
-                  _ChoiceButton(
-                    key: ValueKey('project-color-$index'),
-                    selected: _color == _projectColors[index],
-                    label: 'Color ${index + 1}',
-                    onPressed: _pending
-                        ? null
-                        : () => setState(() => _color = _projectColors[index]),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: _parseProjectColor(_projectColors[index]),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const SizedBox.square(dimension: 20),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            const Text('Icon'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _ChoiceButton(
-                  key: const ValueKey('project-icon-none'),
-                  selected: _icon.isEmpty,
-                  label: 'Default icon',
-                  onPressed: _pending ? null : () => setState(() => _icon = ''),
-                  child: const Icon(Icons.folder_outlined, size: 20),
-                ),
-                for (final entry in _projectIcons.entries)
-                  _ChoiceButton(
-                    key: ValueKey('project-icon-${entry.key}'),
-                    selected: _icon == entry.key,
-                    label: entry.key,
-                    onPressed: _pending
-                        ? null
-                        : () => setState(() => _icon = entry.key),
-                    child: Icon(entry.value, size: 20),
-                  ),
-              ],
+            _ProjectAppearancePicker(
+              color: _color,
+              icon: _icon,
+              enabled: !_pending,
+              onColor: (value) => setState(() => _color = value),
+              onIcon: (value) => setState(() => _icon = value),
             ),
           ] else
             Text(
@@ -278,6 +243,287 @@ class _ProjectDialogState extends State<_ProjectDialog> {
               widget.action == BrowserAction.delete ? 'Delete' : 'Save',
               busy: _pending,
             ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ProjectAppearancePicker extends StatelessWidget {
+  const _ProjectAppearancePicker({
+    required this.color,
+    required this.icon,
+    required this.enabled,
+    required this.onColor,
+    required this.onIcon,
+  });
+
+  final String color;
+  final String icon;
+  final bool enabled;
+  final ValueChanged<String> onColor;
+  final ValueChanged<String> onIcon;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('Color'),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _ChoiceButton(
+            key: const ValueKey('project-color-none'),
+            selected: color.isEmpty,
+            label: 'Default color',
+            onPressed: !enabled ? null : () => onColor(''),
+            child: const Icon(Icons.block, size: 20),
+          ),
+          for (var index = 0; index < _projectColors.length; index++)
+            _ChoiceButton(
+              key: ValueKey('project-color-$index'),
+              selected: color == _projectColors[index],
+              label: 'Color ${index + 1}',
+              onPressed: !enabled ? null : () => onColor(_projectColors[index]),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: _parseProjectColor(_projectColors[index]),
+                  shape: BoxShape.circle,
+                ),
+                child: const SizedBox.square(dimension: 20),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: 20),
+      const Text('Icon'),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _ChoiceButton(
+            key: const ValueKey('project-icon-none'),
+            selected: icon.isEmpty,
+            label: 'Default icon',
+            onPressed: !enabled ? null : () => onIcon(''),
+            child: const Icon(Icons.restart_alt, size: 20),
+          ),
+          for (final entry in _projectIcons.entries)
+            _ChoiceButton(
+              key: ValueKey('project-icon-${entry.key}'),
+              selected: icon == entry.key,
+              label: entry.key,
+              onPressed: !enabled ? null : () => onIcon(entry.key),
+              child: Icon(entry.value, size: 20),
+            ),
+        ],
+      ),
+    ],
+  );
+}
+
+/// One draft keeps the project's name, host folder and appearance together.
+class NewProjectDialog extends StatefulWidget {
+  const NewProjectDialog({
+    super.key,
+    required this.discover,
+    required this.create,
+  });
+
+  final Future<List<ProjectFolderSuggestion>> Function() discover;
+  final Future<void> Function(ProjectCreationDraft) create;
+
+  @override
+  State<NewProjectDialog> createState() => _NewProjectDialogState();
+}
+
+class _NewProjectDialogState extends State<NewProjectDialog> {
+  final _name = TextEditingController();
+  final _errorScroll = ScrollController();
+  String _path = '';
+  String _color = '';
+  String _icon = 'folder-library';
+  bool _pending = false;
+  String? _failure;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _errorScroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _chooseFolder() async {
+    final path = await showDialog<String>(
+      context: context,
+      builder: (_) => ProjectFolderPickerDialog(discover: widget.discover),
+    );
+    if (!mounted || path == null) return;
+    setState(() => _path = path);
+  }
+
+  Future<void> _create() async {
+    if (_pending || _name.text.trim().isEmpty || _path.isEmpty) return;
+    setState(() {
+      _pending = true;
+      _failure = null;
+    });
+    try {
+      await widget.create((
+        name: _name.text.trim(),
+        path: _path,
+        color: _color,
+        icon: _icon,
+      ));
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _failure = error is StateError
+              ? error.message.toString()
+              : error.toString(),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_pending,
+    child: AlertDialog(
+      scrollable: true,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      title: const Text('New project'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                projectAvatar(
+                  context,
+                  BrowserProject(
+                    id: 'draft',
+                    name: _name.text,
+                    color: _color,
+                    icon: _icon,
+                  ),
+                  size: 40,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    key: const ValueKey('project-name-field'),
+                    controller: _name,
+                    enabled: !_pending,
+                    maxLength: 200,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Project name',
+                      counterText: '',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _path.isEmpty ? 'Choose a folder on Hermes' : _path,
+                    key: const ValueKey('project-chosen-folder'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                StudioButtonPress(
+                  child: IconButton.outlined(
+                    key: const ValueKey('project-choose-folder'),
+                    tooltip: 'Choose project folder',
+                    onPressed: _pending ? null : _chooseFolder,
+                    icon: const Icon(Icons.folder_open_outlined),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _ProjectAppearancePicker(
+              color: _color,
+              icon: _icon,
+              enabled: !_pending,
+              onColor: (value) => setState(() => _color = value),
+              onIcon: (value) => setState(() => _icon = value),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_failure != null) ...[
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 120),
+                  child: Scrollbar(
+                    controller: _errorScroll,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      key: const ValueKey('project-create-error'),
+                      controller: _errorScroll,
+                      primary: false,
+                      child: StudioError(_failure!),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  StudioButtonPress(
+                    child: IconButton(
+                      tooltip: 'Cancel',
+                      onPressed: _pending ? null : () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ),
+                  StudioButtonPress(
+                    child: IconButton.filled(
+                      key: const ValueKey('project-create-confirm'),
+                      tooltip: 'Create project',
+                      onPressed:
+                          _pending || _name.text.trim().isEmpty || _path.isEmpty
+                          ? null
+                          : _create,
+                      icon: _pending
+                          ? SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(
+                                value: MediaQuery.disableAnimationsOf(context)
+                                    ? 0.75
+                                    : null,
+                                strokeWidth: 2,
+                                semanticsLabel: 'Creating project',
+                              ),
+                            )
+                          : const Icon(Icons.check),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ],

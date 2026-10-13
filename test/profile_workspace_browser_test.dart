@@ -121,6 +121,7 @@ void main() {
       RepaintBoundary(
         key: captureKey,
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: wingTheme(brightness),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
@@ -350,42 +351,225 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('New project retains its captured profile through both dialogs', (
-    tester,
-  ) async {
-    final host = await useMutationHost();
-    await showActions(tester);
-    final browser = tester.state(find.byType(ProfileWorkspaceBrowser));
-    await tester.tap(find.byTooltip('Chat list options'));
-    await tester.pumpAndSettle();
-    final choice = find.byKey(const ValueKey('chat-menu-new-project'));
-    await tester.ensureVisible(choice);
-    await tester.pumpAndSettle();
-    await tester.tap(choice);
-    await tester.pumpAndSettle();
-    expect(controller.current!.scope.profileName, 'work');
-    expect(tester.state(find.byType(ProfileWorkspaceBrowser)), same(browser));
-    expect(find.text('New project'), findsOneWidget);
-    await tester.enterText(find.byType(TextField).last, 'Created work project');
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('project-folder-path')),
-      '/work/new',
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
-    await tester.pumpAndSettle();
-    expect(
-      host.projectChanges['work/created']?['label'],
-      'Created work project',
-    );
-    expect(host.projectChanges['work/created']?['path'], '/work/new');
-    expect(host.projectChanges.keys, ['work/created']);
-    expect(find.text('Created work project'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  testWidgets(
+    'New project FAB keeps its captured profile and chosen appearance',
+    (tester) async {
+      final host = await useMutationHost();
+      await showActions(tester);
+      final browser = tester.state(find.byType(ProfileWorkspaceBrowser));
+      await tester.longPress(find.byKey(const ValueKey('workspace-new-chat')));
+      await tester.pumpAndSettle();
+      final chatRect = tester.getRect(
+        find.byKey(const ValueKey('workspace-new-chat')),
+      );
+      final projectRect = tester.getRect(
+        find.byKey(const ValueKey('workspace-new-project')),
+      );
+      expect(projectRect.bottom, lessThan(chatRect.top));
+      expect(projectRect.right, chatRect.right);
+      await tester.tap(find.byKey(const ValueKey('workspace-new-project')));
+      await tester.pumpAndSettle();
+      expect(controller.current!.scope.profileName, 'work');
+      expect(tester.state(find.byType(ProfileWorkspaceBrowser)), same(browser));
+      expect(find.text('New project'), findsWidgets);
+      await tester.enterText(
+        find.byKey(const ValueKey('project-name-field')),
+        'Created work project',
+      );
+      await tester.ensureVisible(find.byKey(const ValueKey('project-color-7')));
+      await tester.tap(find.byKey(const ValueKey('project-color-7')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('project-icon-rocket')),
+      );
+      await tester.tap(find.byKey(const ValueKey('project-icon-rocket')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('project-choose-folder')),
+      );
+      await tester.tap(find.byKey(const ValueKey('project-choose-folder')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('project-folder-path')),
+        '/work/new',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('project-create-confirm')));
+      await tester.pumpAndSettle();
+      expect(host.projectChanges['work/created']?['color'], 'hsl(210 68% 58%)');
+      expect(host.projectChanges['work/created']?['icon'], 'rocket');
+      expect(
+        host.projectChanges['work/created']?['label'],
+        'Created work project',
+      );
+      expect(host.projectChanges['work/created']?['path'], '/work/new');
+      expect(host.projectChanges.keys, ['work/created']);
+      expect(find.text('Created work project'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final failFolder in [false, true]) {
+        testWidgets(
+          'New project folder creation feedback ${brightness.name} $scale failure=$failFolder',
+          (tester) async {
+            final semantics = tester.ensureSemantics();
+            try {
+              final host = await useMutationHost();
+              host.folderCreateGate = Completer<void>();
+              host.failFolderCreate = failFolder;
+              host.rpcDelays['projects.create'] = Completer<void>();
+              await showActions(tester, brightness: brightness, scale: scale);
+              await tester.tap(find.byTooltip('Chat list options'));
+              await tester.pumpAndSettle();
+              final choice = find.byKey(
+                const ValueKey('chat-menu-new-project'),
+              );
+              await tester.scrollUntilVisible(
+                choice,
+                120,
+                scrollable: find.byType(Scrollable).last,
+              );
+              await tester.ensureVisible(choice);
+              await tester.tap(choice);
+              await tester.pumpAndSettle();
+              await tester.enterText(
+                find.byType(TextField).last,
+                'Bangkok Oct26',
+              );
+              tester.view.viewInsets = FakeViewPadding(
+                bottom: 260 * tester.view.devicePixelRatio,
+              );
+              await tester.pumpAndSettle();
+              final create = find.byKey(
+                const ValueKey('project-create-confirm'),
+              );
+              expect(create.hitTestable(), findsOneWidget);
+              expect(
+                tester.getRect(create).bottom,
+                lessThanOrEqualTo(844 - 260),
+              );
+              await actionCapture(
+                tester,
+                'project-keyboard-${brightness.name}-$scale',
+              );
+              tester.view.resetViewInsets();
+              await tester.pumpAndSettle();
+              await tester.tap(
+                find.byKey(const ValueKey('project-choose-folder')),
+              );
+              await tester.pumpAndSettle();
+              await tester.enterText(
+                find.byKey(const ValueKey('project-folder-path')),
+                '/work/bangkok-oct26',
+              );
+              await tester.pump();
+              await tester.tap(
+                find.byKey(const ValueKey('project-folder-continue')),
+              );
+              await tester.pumpAndSettle();
+              await actionCapture(
+                tester,
+                'project-form-${brightness.name}-$scale',
+              );
+              await tester.tap(
+                find.byKey(const ValueKey('project-create-confirm')),
+              );
+              await tester.pumpAndSettle();
+              expect(find.bySemanticsLabel('Creating project'), findsOneWidget);
+              expect(host.folderCreates.single.$1, 'files/mkdir?profile=work');
+              expect(host.projectChanges, isEmpty);
+              expect(find.bySemanticsLabel('Creating project'), findsOneWidget);
+              final row = find.byKey(const ValueKey('chat-work-newest'));
+              final before = tester.getRect(row);
+              final search = find.byKey(const ValueKey('workspace-search'));
+              expect(tester.widget<TextField>(search).enabled, isNot(false));
+              await actionCapture(
+                tester,
+                'project-folder-${brightness.name}-$scale-$failFolder',
+              );
+              host.folderCreateGate!.complete();
+              await tester.pumpAndSettle();
+              if (!failFolder) {
+                expect(host.wireCalls, contains('projects.create'));
+                expect(host.projectChanges, isEmpty);
+                expect(
+                  find.bySemanticsLabel('Creating project'),
+                  findsOneWidget,
+                );
+                expect(tester.getRect(row), before);
+                host.rpcDelays['projects.create']!.complete();
+                await tester.pumpAndSettle();
+                expect(
+                  host.projectChanges['work/created']?['path'],
+                  '/work/bangkok-oct26',
+                );
+              } else {
+                expect(host.wireCalls, isNot(contains('projects.create')));
+                expect(
+                  find.textContaining('Could not create the project folder'),
+                  findsOneWidget,
+                );
+                expect(
+                  find
+                      .descendant(
+                        of: find.byType(AlertDialog),
+                        matching: find.byIcon(Icons.error_outline),
+                      )
+                      .hitTestable(),
+                  findsOneWidget,
+                );
+                await actionCapture(
+                  tester,
+                  'project-error-${brightness.name}-$scale',
+                );
+                if (scale == 2) {
+                  await tester.drag(
+                    find.byKey(const ValueKey('project-create-error')),
+                    const Offset(0, -240),
+                  );
+                  await tester.pumpAndSettle();
+                  expect(
+                    find
+                        .byKey(const ValueKey('project-create-confirm'))
+                        .hitTestable(),
+                    findsOneWidget,
+                  );
+                  await actionCapture(
+                    tester,
+                    'project-error-details-${brightness.name}-$scale',
+                  );
+                }
+              }
+              expect(find.bySemanticsLabel('Creating project'), findsNothing);
+              if (failFolder) {
+                expect(
+                  tester
+                      .widget<TextField>(
+                        find.byKey(const ValueKey('project-name-field')),
+                      )
+                      .controller!
+                      .text,
+                  'Bangkok Oct26',
+                );
+                expect(find.text('/work/bangkok-oct26'), findsOneWidget);
+                await tester.tap(find.byTooltip('Cancel'));
+                await tester.pumpAndSettle();
+              }
+              expect(tester.getRect(row), before);
+              expect(tester.takeException(), isNull);
+              await tester.pumpWidget(const SizedBox.shrink());
+            } finally {
+              semantics.dispose();
+            }
+          },
+        );
+      }
+    }
+  }
 
   for (final failAfterResume in [false, true]) {
     testWidgets('background chat read is retired when its failure arrives '

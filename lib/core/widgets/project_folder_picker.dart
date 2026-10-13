@@ -2,7 +2,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 
-import '../services/profile_gateway.dart';
+import '../models/chat_list_view.dart';
 
 class ProjectFolderPickerDialog extends StatefulWidget {
   final Future<List<ProjectFolderSuggestion>> Function() discover;
@@ -73,11 +73,22 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
           ),
           const SizedBox(height: 12),
           StudioButtonPress(
-            child: OutlinedButton.icon(
+            child: IconButton.outlined(
               key: const ValueKey('project-folder-find'),
+              tooltip: 'Find folders',
               onPressed: _loading ? null : _findFolders,
-              icon: const Icon(Icons.search),
-              label: const Text('Find folders'),
+              icon: _loading
+                  ? SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(
+                        value: MediaQuery.disableAnimationsOf(context)
+                            ? 0.75
+                            : null,
+                        strokeWidth: 2,
+                        semanticsLabel: 'Finding project folders',
+                      ),
+                    )
+                  : const Icon(Icons.search),
             ),
           ),
           if (_failed) ...[
@@ -115,18 +126,20 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
     ),
     actions: [
       StudioButtonPress(
-        child: TextButton(
+        child: IconButton(
+          tooltip: 'Cancel',
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          icon: const Icon(Icons.close),
         ),
       ),
       StudioButtonPress(
-        child: TextButton(
+        child: IconButton.filled(
           key: const ValueKey('project-folder-continue'),
+          tooltip: 'Use folder',
           onPressed: _hasPath
               ? () => Navigator.pop(context, _path.text.trim())
               : null,
-          child: const Text('Continue'),
+          icon: const Icon(Icons.check),
         ),
       ),
     ],

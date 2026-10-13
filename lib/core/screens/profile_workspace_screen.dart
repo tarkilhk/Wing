@@ -88,7 +88,6 @@ import '../widgets/profile_execution_activity.dart';
 import '../widgets/profile_subagent_panel.dart';
 import '../widgets/profile_goal_panel.dart';
 import '../widgets/profile_background_work_panel.dart';
-import '../widgets/project_folder_picker.dart';
 import '../widgets/slash_command_suggestions.dart';
 import '../widgets/side_question_delivery_card.dart';
 import 'profile_workspace_browser.dart';
@@ -3697,43 +3696,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     ),
   );
 
-  Future<String?> _textDialog(String title, String label) async {
-    var input = '';
-    // Let the field own its controller through the dialog's exit animation.
-    // showDialog resolves before the route's widgets have finished unmounting.
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          onChanged: (value) => input = value,
-          decoration: InputDecoration(labelText: label),
-        ),
-        actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, input.trim()),
-              child: const Text('Continue'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _projectDialog(ChatBrowserData browser) => browser.createProject(
-    readName: () => _textDialog('New project', 'Project name'),
-    chooseFolder: (discover) {
+    showEditor: (discover, create) {
       if (!mounted) return Future.value();
-      return showDialog<String>(
+      return showDialog<void>(
         context: context,
-        builder: (context) => ProjectFolderPickerDialog(discover: discover),
+        barrierDismissible: false,
+        builder: (_) => NewProjectDialog(discover: discover, create: create),
       );
     },
   );
