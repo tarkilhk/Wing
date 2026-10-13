@@ -74,6 +74,7 @@ void main() {
       await tester.tap(find.byTooltip('Copy code'));
       await tester.pump();
       expect(copied, fixture.$2);
+      expect(find.byType(SnackBar), findsNothing);
       expect(tester.takeException(), isNull);
     }
     expect(find.text('Longer tail', findRichText: true), findsOneWidget);

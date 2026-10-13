@@ -369,6 +369,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(copied, 'Hi');
+          expect(find.byType(SnackBar), findsNothing);
           expect(tester.takeException(), isNull);
         },
       );
@@ -471,6 +472,7 @@ void main() {
     await tester.tap(find.byTooltip('Copy message'));
     await tester.pumpAndSettle();
     expect(copied, '**Ready**\n\n- One\n- Two');
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets(

@@ -313,18 +313,11 @@ class AdminProviderInstructions extends StatelessWidget {
                 ),
               ),
             StudioButtonPress(
-              child: TextButton.icon(
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: command));
-                  if (context.mounted) {
-                    adminMessage(
-                      context,
-                      'Command copied. Run it on the server.',
-                    );
-                  }
-                },
+              child: IconButton(
+                tooltip: 'Copy command',
+                onPressed: () =>
+                    Clipboard.setData(ClipboardData(text: command)),
                 icon: const Icon(Icons.copy, size: 18),
-                label: const Text('Copy command'),
               ),
             ),
           ],

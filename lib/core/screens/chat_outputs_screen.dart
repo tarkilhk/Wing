@@ -315,13 +315,8 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                 ResourceViewerAction(
                   label: 'Copy content',
                   icon: Icons.copy_outlined,
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: preview.text));
-                    if (!previewContext.mounted) return;
-                    ScaffoldMessenger.of(previewContext).showSnackBar(
-                      const SnackBar(content: Text('Content copied')),
-                    );
-                  },
+                  onPressed: () =>
+                      Clipboard.setData(ClipboardData(text: preview.text)),
                 ),
               ],
             ];

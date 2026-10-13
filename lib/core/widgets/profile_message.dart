@@ -63,15 +63,6 @@ class ProfileMessage extends StatelessWidget {
     this.onRestore,
   });
 
-  static Future<void> _copyMessage(BuildContext context, String content) async {
-    await Clipboard.setData(ClipboardData(text: content));
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Message copied')));
-    }
-  }
-
   static Widget copyAction(BuildContext context, TranscriptMessage message) =>
       StudioButtonPress(
         child: IconButton(
@@ -84,7 +75,8 @@ class ProfileMessage extends StatelessWidget {
             visualDensity: VisualDensity.standard,
           ),
           icon: const Icon(Icons.copy_outlined, size: 17),
-          onPressed: () => _copyMessage(context, message.copyText),
+          onPressed: () =>
+              Clipboard.setData(ClipboardData(text: message.copyText)),
         ),
       );
 

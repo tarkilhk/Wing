@@ -305,6 +305,7 @@ void main() {
         await tester.tap(find.byTooltip('Copy content'));
         await tester.pump();
         expect(copied, source);
+        expect(find.byType(SnackBar), findsNothing);
         await tester.tap(find.byTooltip('Show Raw content'));
         await tester.pump();
         expect(find.byType(MarkdownMessageContent), findsNothing);
@@ -314,6 +315,7 @@ void main() {
         await tester.tap(find.byTooltip('Copy content'));
         await tester.pump();
         expect(copied, source);
+        expect(find.byType(SnackBar), findsNothing);
         expect(tester.takeException(), isNull);
       });
     }

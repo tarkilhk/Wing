@@ -362,6 +362,22 @@ void main() {
     expect(find.text('Sign-in options'), findsOneWidget);
   });
   testWidgets('expired device sign-in can start again', (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
     fixture.override = (method, path, query, body) async {
       if (path == 'profiles') {
         return {
@@ -395,7 +411,12 @@ void main() {
     );
     await tester.tap(find.text('Start sign-in'));
     await tester.pumpAndSettle();
-    expect(find.text('Copy code'), findsOneWidget);
+    expect(find.text('Copy code'), findsNothing);
+    await tester.tap(find.byTooltip('Copy code'));
+    await tester.pump();
+    expect(copied, 'ABCD-EFGH');
+    expect(find.byType(SnackBar), findsNothing);
+    await shot(tester, 'device-code-copy');
     await tester.tap(find.text('Check status'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start again'));

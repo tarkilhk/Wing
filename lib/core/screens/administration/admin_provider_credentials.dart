@@ -364,17 +364,12 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   StudioButtonPress(
-                    child: TextButton.icon(
-                      onPressed: () async {
-                        await Clipboard.setData(
-                          ClipboardData(text: attempt.userCode),
-                        );
-                        if (context.mounted) {
-                          adminMessage(context, 'Code copied.');
-                        }
-                      },
+                    child: IconButton(
+                      tooltip: 'Copy code',
+                      onPressed: () => Clipboard.setData(
+                        ClipboardData(text: attempt.userCode),
+                      ),
                       icon: const Icon(Icons.copy, size: 18),
-                      label: const Text('Copy code'),
                     ),
                   ),
                   if (session.error != null)

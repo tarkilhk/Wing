@@ -1871,8 +1871,7 @@ void main() {
             await tester.tapAt(Offset(copyRect.right - 2, copyRect.bottom - 2));
             expect(copied, expectedText);
             await tester.pumpAndSettle();
-            await tester.pump(const Duration(seconds: 5));
-            await tester.pumpAndSettle();
+            expect(find.byType(SnackBar), findsNothing);
             await _render(
               tester,
               frame,

@@ -104,11 +104,6 @@ Future<void> showChatActions(
   if (action == null || !context.mounted) return;
   if (action == 'copy') {
     await Clipboard.setData(ClipboardData(text: key.sessionId));
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Chat ID copied')));
-    }
     return;
   }
   if (action == 'move') {

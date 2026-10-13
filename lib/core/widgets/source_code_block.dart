@@ -72,19 +72,6 @@ class _SourceCodeBlockState extends State<SourceCodeBlock> {
     super.dispose();
   }
 
-  Future<void> _copy() async {
-    await Clipboard.setData(ClipboardData(text: widget.code));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Code copied'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-  }
-
   @override
   Widget build(BuildContext context) {
     final start = CompletionDiagnostics.enabled
@@ -161,7 +148,8 @@ class _SourceCodeBlockState extends State<SourceCodeBlock> {
                   child: StudioButtonPress(
                     child: IconButton(
                       icon: const Icon(Icons.copy_outlined, size: 18),
-                      onPressed: _copy,
+                      onPressed: () =>
+                          Clipboard.setData(ClipboardData(text: widget.code)),
                       constraints: const BoxConstraints.tightFor(
                         width: 48,
                         height: 48,

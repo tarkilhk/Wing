@@ -78,4 +78,7 @@ queued follow-ups. Use **Find in chat** to search older messages, **Outputs** to
 browse files, or the answer actions to regenerate or branch into another chat.
 Model changes show Hermes warnings before you confirm them.
 
+Copy actions throughout Wing write directly to the clipboard without a bottom
+confirmation popup. Android may show its own clipboard confirmation.
+
 [Explore Wing](FEATURES.md) · [Conversation details](CONVERSATION_ACTIONS_AND_READING.md)
