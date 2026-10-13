@@ -9,6 +9,7 @@ BotsSession savedBotsSession(
   ConnectionManager manager,
   ProfileWorkspaceRegistry registry,
 ) => BotsSession(
+  onIdentityChanged: registry.observeMonitoringBotIdentity,
   (canUse) async {
     final connections = await manager.loadConnectionsWithSecrets();
     final sources = <BotsRepository>[];

@@ -16,9 +16,11 @@ class ProfileInputNotification {
 }
 
 extension ProfileNotificationState on ProfileWorkspaceController {
-  Iterable<({String title, String state})>
+  Iterable<({ProfileSessionKey? key, String title, String state})>
   get notificationMonitoringChats sync* {
-    yield* _groupNotifications.monitoringGroups;
+    for (final group in _groupNotifications.monitoringGroups) {
+      yield (key: null, title: group.title, state: group.state);
+    }
     for (final chat in notificationChats) {
       if (chat.source == 'bot_room') {
         continue;
@@ -39,7 +41,9 @@ extension ProfileNotificationState on ProfileWorkspaceController {
       } else {
         state = null;
       }
-      if (state != null) yield (title: chat._title, state: state);
+      if (state != null) {
+        yield (key: chat.key, title: _monitoringChatTitle(chat), state: state);
+      }
     }
     for (final entry in _backgroundChats.entries) {
       if (_hasLoadedNotificationChat(entry.key, entry.value.sessionId)) {
@@ -52,10 +56,16 @@ extension ProfileNotificationState on ProfileWorkspaceController {
       if (chat.source == 'bot_room') {
         continue;
       } else {
-        yield (title: chat._title, state: state);
+        yield (key: chat.key, title: _monitoringChatTitle(chat), state: state);
       }
     }
   }
+
+  String _monitoringChatTitle(ProfileChat chat) =>
+      chat.source == 'desktop' && chat.title == 'Bot Chat'
+      ? _discovery?.named(chat.key.workspace.profileName)?.label ??
+            chat.key.workspace.profileName
+      : chat.title;
 
   Iterable<ProfileChat> get notificationChats =>
       _resources.values.expand((r) => r._chats.values);

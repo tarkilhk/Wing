@@ -367,7 +367,11 @@ void main() {
       host.changed();
       await waitForReads(host, 1);
       expect(controller.notificationMonitoringChats.toList(), [
-        (title: 'Outside task', state: 'working'),
+        (
+          key: ProfileSessionKey(controller.current!.scope, 'outside'),
+          title: 'Outside task',
+          state: 'working',
+        ),
       ]);
       host.questions = [
         for (var i = 0; i < 3; i++)

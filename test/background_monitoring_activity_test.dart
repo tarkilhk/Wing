@@ -1,4 +1,5 @@
 import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -12,6 +13,7 @@ import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
 import 'package:wing/core/services/background_monitoring_service.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/ws_client.dart';
 
 import 'profile_connection_identity_test.dart'
@@ -19,6 +21,27 @@ import 'profile_connection_identity_test.dart'
 import 'profile_notification_coverage_test.dart'
     show NotificationCoverageHost, row, waitForReads;
 import 'profile_workspace_controller_test.dart' show Host;
+import 'support/bots_fixture.dart';
+
+BotRecord monitoringBot(
+  ProfileSessionKey root, {
+  String title = 'Research bot',
+  ProfileSessionKey? tip,
+}) => BotRecord(
+  scope: root.workspace,
+  instance: 'Test server',
+  profile: HermesProfile(name: root.workspace.profileName),
+  title: title,
+  shape: 'circle',
+  color: '#123456',
+  pinned: false,
+  hidden: false,
+  hasAvatar: false,
+  revision: 1,
+  metadata: const {},
+  chat: root,
+  resolvedChat: tip,
+);
 
 Future<void> until(bool Function() condition) async {
   for (var i = 0; i < 100 && !condition(); i++) {
@@ -194,7 +217,53 @@ void main() {
         await service.sync();
         expect(service.state.value, BackgroundMonitoringState.active);
         expect(calls.last.method, 'start');
-        expect(calls.last.arguments['text'], 'Bot Chat · working');
+        expect(calls.last.arguments['text'], '$profile · working');
+        final otherProfile = ProfileSessionKey(
+          WorkspaceScope(
+            connectionId: owner.connection.id,
+            connectionIdentity: owner.connectionIdentity,
+            profileName: profile == 'a' ? 'b' : 'a',
+          ),
+          chat.key.sessionId,
+        );
+        botRegistry.observeMonitoringBotIdentity(
+          otherProfile.workspace,
+          monitoringBot(otherProfile, title: 'Other profile bot'),
+        );
+        final otherInstance = ProfileSessionKey(
+          WorkspaceScope(
+            connectionId: owner.connection.id,
+            connectionIdentity: 'another-server',
+            profileName: profile,
+          ),
+          chat.key.sessionId,
+        );
+        botRegistry.observeMonitoringBotIdentity(
+          otherInstance.workspace,
+          monitoringBot(otherInstance, title: 'Other instance bot'),
+        );
+        expect(botRegistry.monitoringSummary['text'], '$profile · working');
+        final root = ProfileSessionKey(chat.key.workspace, 'canonical-root');
+        botRegistry.observeMonitoringBotIdentity(
+          chat.key.workspace,
+          monitoringBot(root, tip: chat.key),
+        );
+        await service.sync();
+        expect(calls.last.arguments['text'], 'Research bot · working');
+        botRegistry.observeMonitoringBotIdentity(
+          chat.key.workspace,
+          monitoringBot(root, title: 'Renamed bot', tip: chat.key),
+        );
+        await service.sync();
+        expect(calls.last.arguments['text'], 'Renamed bot · working');
+        botRegistry.observeMonitoringBotIdentity(
+          chat.key.workspace,
+          monitoringBot(root, title: 'Replacement bot'),
+        );
+        await service.sync();
+        expect(calls.last.arguments['text'], '$profile · working');
+        botRegistry.observeMonitoringBotIdentity(chat.key.workspace, null);
+        expect(botRegistry.monitoringSummary['text'], '$profile · working');
         owner.current!.gateway.onEvent!(
           StreamEvent(
             type: 'message.complete',
@@ -209,6 +278,39 @@ void main() {
       },
     );
   }
+
+  test(
+    'Bots reads publish names, renames and removed profile identities',
+    () async {
+      final fixture = BotsFixture();
+      final observed = <WorkspaceScope, BotRecord>{};
+      final bots = BotsSession(
+        (_) async => [fixture.repository],
+        onIdentityChanged: (scope, bot) {
+          if (bot == null) {
+            observed.remove(scope);
+          } else {
+            observed[scope] = bot;
+          }
+        },
+      );
+      addTearDown(bots.dispose);
+      await bots.refresh();
+      final atlas = observed.values.singleWhere(
+        (bot) => bot.profile.name == 'atlas',
+      );
+      expect(atlas.title, 'Atlas');
+      fixture.profiles.first['ui_meta']['hermes-bots']['title'] =
+          'Renamed Atlas';
+      bots.invalidateAppearances();
+      await bots.identitiesForProfiles([atlas.scope], canRead: () => true);
+      expect(observed[atlas.scope]!.title, 'Renamed Atlas');
+      fixture.profiles.removeAt(0);
+      bots.invalidateAppearances();
+      await bots.identitiesForProfiles([atlas.scope], canRead: () => true);
+      expect(observed.containsKey(atlas.scope), isFalse);
+    },
+  );
 
   test('group work starts the service and releases it when idle', () async {
     final host = NotificationCoverageHost();

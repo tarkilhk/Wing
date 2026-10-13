@@ -26,12 +26,15 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     this.onGroupRead,
     this.beforeGroupSend,
     this.afterGroupSend,
+    this.onIdentityChanged,
   }) : _loadPreferences = loadPreferences ?? BotsPreferences.load;
   final groupReads = BotGroupReadState();
   final BotsSources _sources;
   final Future<void> Function(BotGroup, int)? onGroupRead;
   final Future<void> Function(BotGroup, String)? beforeGroupSend;
   final Future<void> Function(BotGroup, BotGroupSendOutcome)? afterGroupSend;
+  final void Function(WorkspaceScope, BotRecord?)? onIdentityChanged;
+  final _monitoringIdentityScopes = <WorkspaceScope>{};
   final Future<BotsPreferences> Function() _loadPreferences;
   BotsPreferences? _preferences;
   Set<String> _groupPins = const {};
@@ -154,6 +157,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
       _avatarRead.remove(evicted);
       _appearanceKeys.removeWhere((_, value) => value == evicted);
     }
+    onIdentityChanged?.call(bot.scope, bot);
     return bot;
   }
 
@@ -167,9 +171,26 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   }
 
   Future<List<BotRecord>> _appearanceRoster(BotsRepository source) async {
+    final generation = _appearanceGeneration;
     final read = _appearanceRosters.putIfAbsent(source.scope, source.bots);
     try {
-      return await read;
+      final roster = await read;
+      if (!_closed && generation == _appearanceGeneration) {
+        final scopes = roster.map((bot) => bot.scope).toSet();
+        for (final scope in _monitoringIdentityScopes.toList()) {
+          if (scope.connectionId == source.scope.connectionId &&
+              scope.connectionIdentity == source.scope.connectionIdentity &&
+              !scopes.contains(scope)) {
+            _monitoringIdentityScopes.remove(scope);
+            onIdentityChanged?.call(scope, null);
+          }
+        }
+        _monitoringIdentityScopes.addAll(scopes);
+        for (final bot in roster) {
+          onIdentityChanged?.call(bot.scope, bot);
+        }
+      }
+      return roster;
     } catch (_) {
       if (identical(_appearanceRosters[source.scope], read)) {
         _appearanceRosters.remove(source.scope);

@@ -1,4 +1,6 @@
 import '../models/profile_session_key.dart';
+import '../models/bots.dart';
+import '../models/hermes_profile.dart';
 // Keep the factory's named argument public without exposing mutable state.
 // ignore_for_file: prefer_initializing_formals
 
@@ -23,6 +25,11 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
   final ProfileConnectionIdentity identities;
   final ProfileControllerFactory _create;
   final _controllers = <String, ProfileWorkspaceController>{};
+  final _monitoringBots =
+      <
+        WorkspaceScope,
+        ({String title, ProfileSessionKey? root, ProfileSessionKey? tip})
+      >{};
   bool _closed = false;
   bool _hasActiveChats = false;
   String _monitoringFingerprint = '';
@@ -43,8 +50,38 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     );
     return {
       'title': 'Watching chats',
-      'text': chats.map((chat) => '${chat.title} · ${chat.state}').join('\n'),
+      'text': chats
+          .map((chat) {
+            final bot = _monitoringBots[chat.key?.workspace];
+            final title =
+                bot != null &&
+                    chat.key != null &&
+                    (chat.key == bot.root || chat.key == bot.tip)
+                ? bot.title
+                : chat.title;
+            return '$title · ${chat.state}';
+          })
+          .join('\n'),
     };
+  }
+
+  /// Borrow only immutable identity metadata from the existing Bots reader.
+  /// Exact root/tip keys prevent another chat or instance inheriting its name.
+  void observeMonitoringBotIdentity(WorkspaceScope scope, BotRecord? bot) {
+    if (_closed) return;
+    if (bot != null && bot.scope != scope) {
+      throw ArgumentError('Bot identity belongs to another workspace');
+    }
+    final next = bot == null
+        ? null
+        : (title: bot.title, root: bot.chat, tip: bot.resolvedChat);
+    if (_monitoringBots[scope] == next) return;
+    if (next == null) {
+      _monitoringBots.remove(scope);
+    } else {
+      _monitoringBots[scope] = next;
+    }
+    _activityChanged();
   }
 
   bool get hasActiveChats => _hasActiveChats;
@@ -100,6 +137,9 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
         continue;
       }
       _controllers.remove(entry.key);
+      _monitoringBots.removeWhere(
+        (scope, _) => scope.connectionIdentity == entry.key,
+      );
       entry.value.removeListener(_activityChanged);
       entry.value.retentionChanges.removeListener(_activityChanged);
       entry.value.dispose();
@@ -224,6 +264,7 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
       controller.dispose();
     }
     _controllers.clear();
+    _monitoringBots.clear();
     super.dispose();
   }
 }

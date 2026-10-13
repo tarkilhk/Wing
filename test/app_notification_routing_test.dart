@@ -347,7 +347,7 @@ void main() {
     await _pumpNavigation(tester);
     expect(harness.registry.hasActiveChats, isTrue);
     expect(monitoring.where((call) => call.method == 'start'), isNotEmpty);
-    expect(monitoring.last.arguments['text'], 'Bot Chat · working');
+    expect(monitoring.last.arguments['text'], 'a · working');
     await tester.pumpWidget(const SizedBox.shrink());
     await _pumpNavigation(tester);
     debugDefaultTargetPlatformOverride = null;

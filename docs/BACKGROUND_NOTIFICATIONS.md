@@ -1,6 +1,6 @@
 # Background notifications
 
-Wing can keep watching connected work while you use other apps. Its ongoing Android notification shows a summary such as **Watching 3 chats · 2 working · 1 needs approval**. Replies and requests for input appear as separate chat alerts.
+Wing can keep watching connected work while you use other apps. Its ongoing Android notification shows **Watching chats**, with each chat's name and status, such as **Research bot · working**. Bot conversations use the bot's saved name once its identity loads, and the profile's display name while it is unavailable. Replies and requests for input appear as separate chat alerts.
 
 ## Enable monitoring
 
@@ -11,7 +11,7 @@ Wing can keep watching connected work while you use other apps. Its ongoing Andr
 There is no separate monitoring switch. Idle chats do not start monitoring. Monitoring uses additional battery and stops when the watched work finishes, after posting final alerts. Another working chat or live child task can keep it active. Disabling both alert categories or revoking notification permission stops it.
 
 Connected group discussions also keep monitoring active while their bots work.
-The ongoing notification summarizes them as **Group discussions**. Read replies
+The ongoing notification shows each discussion's name and status. Read replies
 and answer requests inside the discussion; group workers do not send chat alerts.
 
 Android force-stop, process termination, reboot, connectivity loss and manufacturer restrictions can interrupt delivery. Reopen Wing after restarting your phone or terminating its process. Work started elsewhere cannot wake a stopped Wing app. Accepted Hermes work continues on the server.

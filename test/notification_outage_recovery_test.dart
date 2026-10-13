@@ -1,4 +1,5 @@
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 
@@ -44,7 +45,11 @@ void main() {
       if (scenario == 'disconnect' || scenario == 'network-resume') {
         owner.networkUnavailable();
         expect(owner.notificationMonitoringChats.toList(), [
-          (title: 'Outside task', state: 'reconnecting'),
+          (
+            key: ProfileSessionKey(owner.current!.scope, 'outside'),
+            title: 'Outside task',
+            state: 'reconnecting',
+          ),
         ]);
         expect(
           owner.hasActiveChats,
@@ -150,7 +155,11 @@ void main() {
         expect(notices, isEmpty);
         expect(owner.hasActiveChats, isTrue);
         expect(owner.notificationMonitoringChats.toList(), [
-          (title: 'Outside task', state: 'reconnecting'),
+          (
+            key: ProfileSessionKey(owner.current!.scope, 'outside'),
+            title: 'Outside task',
+            state: 'reconnecting',
+          ),
         ]);
         host.saved['b'] = [];
         host.historyFails = false;
