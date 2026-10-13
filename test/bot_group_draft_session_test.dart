@@ -418,12 +418,18 @@ void main() {
       final draft = BotGroupDraftSession(
         session,
         existing: session.state.groups.single,
+        random: Random(25),
       );
       addTearDown(draft.dispose);
-      draft.chooseColor(ProfileColorChoice.magenta);
+      // An undecorated room can already start with the requested palette color.
+      final color = draft.iconColor == ProfileColorChoice.magenta
+          ? ProfileColorChoice.cyan
+          : ProfileColorChoice.magenta;
+      draft.chooseColor(color);
+      expect(draft.hasChanges, true);
       expect(await draft.save(canUse: () => true), true);
       expect(fixture.commands.map((c) => c.$2), ['profiles.configure']);
-      expect(session.state.groups.single.iconColor, ProfileColorChoice.magenta);
+      expect(session.state.groups.single.iconColor, color);
     },
   );
 
