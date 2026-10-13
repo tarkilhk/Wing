@@ -170,6 +170,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   final _senderAppearances =
       <(ProfileSessionKey, String), Future<BotRecord?>>{};
   int _botNavigation = 0;
+  String? _pendingBotTitle;
+  BotRecord? _pendingBot;
+  String? _pendingBotError;
+  Future<void> Function()? _retryBotChat;
   WorkspaceRecentsSession? get _borrowedRecents => context
       .getInheritedWidgetOfExactType<RecentConversationRouteScope>()
       ?.recents;
@@ -220,28 +224,83 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Future<void> _openBotChat(
     ProfileSessionKey key, {
     AppDestination origin = AppDestination.bots,
-  }) => _run(() async {
+  }) => _openBotConversation((_) async => key, origin: origin);
+
+  Future<void> _openBot(BotRecord bot) => _openBotConversation(
+    (current) => _bots.open(bot, canUse: current),
+    title: bot.title,
+    bot: bot,
+  );
+
+  Future<void> _openBotConversation(
+    Future<ProfileSessionKey?> Function(bool Function()) resolve, {
+    String title = 'Bot Chat',
+    BotRecord? bot,
+    AppDestination origin = AppDestination.bots,
+  }) async {
     if (_destination != origin) return;
+    final returnTo = _chatOrigin ?? origin;
+    // Enter before identity, resume or history I/O. The captured visit owns
+    // completion; leaving the loading screen retires that navigation.
+    _selectDestination(AppDestination.chats);
+    _chatOrigin = returnTo;
     final navigation = ++_botNavigation;
     bool current() =>
-        mounted && navigation == _botNavigation && _destination == origin;
-    if (!controller.owns(key)) {
-      final open = widget.onOpenBotChat;
-      if (open == null) {
-        throw StateError('Open this bot from its saved instance');
+        mounted &&
+        navigation == _botNavigation &&
+        _destination == AppDestination.chats;
+    setState(() {
+      _pendingBotTitle = title;
+      _pendingBot = bot;
+      _pendingBotError = null;
+      _retryBotChat = () => _openBotConversation(
+        resolve,
+        title: title,
+        bot: bot,
+        origin: AppDestination.chats,
+      );
+    });
+    controller.setRouteVisibility(this, _hasChatFocus);
+    try {
+      final key = await resolve(current);
+      if (!current()) return;
+      if (key == null) {
+        throw StateError(
+          _bots.state.errors.lastOrNull ?? 'Bot chat could not be opened',
+        );
       }
-      await open(key, current);
-      return;
+      if (!controller.owns(key)) {
+        final open = widget.onOpenBotChat;
+        if (open == null) {
+          throw StateError('Open this bot from its saved instance');
+        }
+        await open(key, current);
+        if (current()) throw StateError('Bot chat could not be opened');
+        return;
+      }
+      final chat = await controller.openSession(
+        key,
+        propagateHistoryFailure: true,
+        isCurrentRequest: current,
+      );
+      if (!current()) return;
+      if (chat == null) throw StateError('Bot chat could not be opened');
+      setState(() {
+        _pendingBotTitle = null;
+        _pendingBot = null;
+        _retryBotChat = null;
+      });
+      controller.setRouteVisibility(this, _hasChatFocus);
+    } catch (error) {
+      if (!current()) return;
+      setState(
+        () => _pendingBotError = error is StateError
+            ? error.message.toString()
+            : workspaceFailureMessage(error),
+      );
     }
-    await controller.openSession(
-      key,
-      propagateHistoryFailure: true,
-      isCurrentRequest: current,
-    );
-    if (!current()) return;
-    _selectDestination(AppDestination.chats);
-    _chatOrigin = origin;
-  });
+  }
+
   (ProfileWorkspaceController, ChatReadingFocus)? _renderedReadingFocus;
   final _composer = SkillComposerController();
   final _profileNavigation = WorkspaceProfileNavigation();
@@ -706,6 +765,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   bool get _hasChatFocus =>
       _hasWorkspaceFocus &&
+      _pendingBotTitle == null &&
       _destination == AppDestination.chats &&
       !_conversationObscured;
 
@@ -984,6 +1044,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       ?_recentVisit,
     ]),
     builder: (context, _) {
+      if (_pendingBotTitle != null) return _botChatOpening(context);
       final current = controller.current;
       final selectedChat = controller.notificationChat ?? current?.chat;
       final chat = _recentVisit?.selecting == true
@@ -1037,6 +1098,68 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         },
       );
     },
+  );
+
+  Widget _botChatOpening(BuildContext context) => PopScope(
+    canPop: false,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) _leaveChat();
+    },
+    child: Scaffold(
+      key: _scaffoldKey,
+      drawer: _drawer(),
+      appBar: WingAppBar(
+        context: context,
+        leading: StudioButtonPress(
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Back',
+            onPressed: _leaveChat,
+          ),
+        ),
+        title: WingConversationTitle(title: _pendingBotTitle!),
+        contextRow: ServerConnectionLabel(
+          label: _pendingBot?.instance ?? controller.connection.label,
+          icon:
+              _pendingBot == null ||
+                  _pendingBot!.scope.connectionIdentity ==
+                      controller.connectionIdentity
+              ? controller.connection.icon
+              : null,
+          status:
+              _pendingBot == null ||
+                  _pendingBot!.scope.connectionIdentity ==
+                      controller.connectionIdentity
+              ? controller.connectionStatus
+              : _bots
+                    .repository(_pendingBot!.scope.connectionIdentity)
+                    .connectionStatus,
+        ),
+      ),
+      body: StudioLoadingRegion(
+        busy: _pendingBotError == null,
+        available: false,
+        label: 'Opening bot chat',
+        child: _pendingBotError == null
+            ? const SizedBox.expand()
+            : Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: StudioError(_pendingBotError!)),
+                    StudioButtonPress(
+                      child: IconButton(
+                        icon: const Icon(Icons.refresh),
+                        tooltip: 'Retry',
+                        onPressed: () => unawaited(_retryBotChat!()),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    ),
   );
 
   Future<void> _openBotSettings(
@@ -3344,6 +3467,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   void _selectDestination(AppDestination destination) {
     _botNavigation++;
+    _pendingBotTitle = null;
+    _pendingBot = null;
+    _pendingBotError = null;
+    _retryBotChat = null;
     _conversationBot = null;
     _disposeRecentVisit();
     _chatOrigin = null;
@@ -3464,7 +3591,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   viewState: _botsView,
                   onViewChanged: (view) => setState(() => _botsView = view),
                   onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                  onOpenChat: _openBotChat,
+                  onOpenChat: _openBot,
                   onOpenGroup: (group) =>
                       _openRecentGroup(group, origin: AppDestination.bots),
                 ),

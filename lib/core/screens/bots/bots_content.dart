@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../widgets/studio_loading.dart';
 import '../../models/bots.dart';
-import '../../models/profile_session_key.dart';
 import '../../widgets/bot_group_identity.dart';
 import '../../services/bot_profile_edit_session.dart';
 import '../../services/bot_screen_session.dart';
@@ -42,7 +41,7 @@ class BotsContent extends StatefulWidget {
   final BotsViewState viewState;
   final ValueChanged<BotsViewState> onViewChanged;
   final VoidCallback onOpenMenu;
-  final Future<void> Function(ProfileSessionKey) onOpenChat;
+  final Future<void> Function(BotRecord) onOpenChat;
   final Future<void> Function(BotGroup) onOpenGroup;
   @override
   State<BotsContent> createState() => _BotsContentState();
@@ -80,10 +79,7 @@ class _BotsContentState extends State<BotsContent> {
     }
   }
 
-  Future<void> _open(BotRecord bot) async {
-    final key = await widget.session.open(bot, canUse: _canUse);
-    if (mounted && key != null) await widget.onOpenChat(key);
-  }
+  Future<void> _open(BotRecord bot) => widget.onOpenChat(bot);
 
   Future<void> _editAppearance(BotRecord bot) {
     final repository = widget.session.repository(bot.scope.connectionIdentity);

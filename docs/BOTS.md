@@ -7,6 +7,10 @@ when loading finishes.
 
 Tap a bot's avatar to edit its appearance. Tap its name or message preview to open its continuing **Bot Chat**. Back returns to the same tab and search. Bot Chats use the usual conversation screen, showing its saved avatar to the left of its display name when available. Tap that avatar or name in the chat header to open Bot settings. Back returns to your conversation with its draft intact.
 
+The chat screen opens immediately after the tap. Wing's feather pulse appears
+while the conversation loads. You can go Back during loading; a failed load
+offers Retry in the chat screen.
+
 Explicitly selected classic shapes blink and move in the Bots roster and the
 open Bot Chat header. The status Wing pulses while work continues. Pictures
 and avatars without an explicit saved shape choice stay still. Select a shape

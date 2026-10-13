@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/profile_colors.dart';
 import 'package:wing/core/services/attachment_image_worker.dart';
 import 'package:wing/core/screens/bots/bot_group_screen.dart';
@@ -51,6 +52,22 @@ import 'package:wing/core/screens/profile_workspace_screen.dart';
 const _export = bool.fromEnvironment('STUDIO_REVIEW');
 
 class _BotConversationBrowser extends ProfileBrowserFixture {
+  Completer<void>? resumeDelay;
+
+  @override
+  ProfileGateway gateway(WorkspaceScope scope) {
+    final base = super.gateway(scope);
+    return ProfileGateway(
+      scope: scope,
+      discover: base.discover,
+      get: base.read,
+      rpc: (method, params) async {
+        if (method == 'session.resume') await resumeDelay?.future;
+        return base.call(method, params);
+      },
+    );
+  }
+
   @override
   List<Map<String, dynamic>> sessions(String profile) => [
     ...super.sessions(profile),
@@ -1878,7 +1895,10 @@ void main() {
                   viewState: view,
                   onViewChanged: (next) => setState(() => view = next),
                   onOpenMenu: () {},
-                  onOpenChat: (key) async => opened.add(key.sessionId),
+                  onOpenChat: (bot) async {
+                    final key = await session.open(bot, canUse: () => true);
+                    if (key != null) opened.add(key.sessionId);
+                  },
                   onOpenGroup: (group) => Navigator.of(context).push<void>(
                     MaterialPageRoute(
                       builder: (_) => BotGroupScreen(
@@ -2658,6 +2678,194 @@ void main() {
     }
   }
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'Bot chat enters immediately through held identity resume and history ${brightness.name} $scale',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          final preferences = await SharedPreferences.getInstance();
+          final appPreferences = AppPreferences(preferences);
+          final browser = _BotConversationBrowser();
+          final controller = ProfileWorkspaceController(
+            access: ConnectionAccess(
+              connection: SavedConnection(
+                id: 'host',
+                label: 'Home server',
+                host: 'localhost',
+                port: 1,
+                apiKey: '',
+              ),
+              dashboardOAuth: null,
+            ),
+            connectionIdentity: 'instance-1',
+            preferences: preferences,
+            appPreferences: appPreferences,
+            gatewayFactory: browser.gateway,
+          );
+          addTearDown(controller.dispose);
+          addTearDown(appPreferences.dispose);
+          await controller.initialize();
+          // An earlier selected chat must never flash beneath the new bot title.
+          await controller.openSession(
+            ProfileSessionKey(controller.current!.scope, 'ordinary'),
+          );
+          final bots = BotsFixture();
+          bots.profiles
+            ..clear()
+            ..add(BotsFixture.profile('personal', 'Atlas'));
+          bots.profiles.single['canonical_session']['id'] = 'canonical-root';
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                initialDestination: AppDestination.bots,
+                createBotsSession: () =>
+                    BotsSession((_) async => [bots.repository]),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byKey(const ValueKey('bots-search')),
+            'Atlas',
+          );
+          final identity = Completer<void>();
+          final resume = browser.resumeDelay = Completer<void>();
+          final history = Completer<void>();
+          browser.historyDelays[('canonical-root', 0)] = history;
+          bots.readHook = (_, method, _) async {
+            if (method == 'profiles.list') await identity.future;
+            return null;
+          };
+          await tester.tap(find.text('Atlas').last);
+          await tester.pump();
+          await tester.pump();
+          expect(find.byType(BotsContent), findsNothing);
+          expect(find.text('Atlas'), findsOneWidget);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byType(ProfileMessage), findsNothing);
+          expect(find.byTooltip('Back'), findsOneWidget);
+          final backRect = tester.getRect(find.byTooltip('Back'));
+          await _capture(
+            tester,
+            frame,
+            'bot-opening-${brightness.name}-$scale',
+            motion: true,
+          );
+          identity.complete();
+          for (var i = 0; i < 10; i++) {
+            await tester.pump();
+          }
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(tester.getRect(find.byTooltip('Back')), backRect);
+          expect(find.byType(ProfileMessage), findsNothing);
+          resume.complete();
+          for (var i = 0; i < 10; i++) {
+            await tester.pump();
+          }
+          expect(
+            browser.reads.any(
+              (read) => read.$1 == 'sessions/canonical-root/messages',
+            ),
+            isTrue,
+          );
+          await tester.pump(const Duration(seconds: 4));
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byType(BotsContent), findsNothing);
+          expect(tester.getRect(find.byTooltip('Back')), backRect);
+          history.complete();
+          await tester.pumpAndSettle();
+          await tester.settleMarkdown();
+          expect(controller.current!.chat!.key.sessionId, 'canonical-root');
+          expect(
+            find.text(
+              'Of course. What would you like to make time for this week?',
+              findRichText: true,
+            ),
+            findsOneWidget,
+          );
+          expect(find.byType(StudioLoading), findsNothing);
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(find.byType(BotsContent), findsOneWidget);
+
+          // Failed opening stays on the entered screen with a retry action.
+          browser.failHistory = true;
+          await tester.tap(find.text('Atlas').last);
+          for (var i = 0; i < 20; i++) {
+            await tester.pump();
+          }
+          expect(find.byType(BotsContent), findsNothing);
+          expect(find.byTooltip('Retry'), findsOneWidget);
+          expect(find.byType(StudioLoading), findsNothing);
+          await _capture(
+            tester,
+            frame,
+            'bot-opening-error-${brightness.name}-$scale',
+            motion: true,
+          );
+          browser.failHistory = false;
+          await tester.tap(find.byTooltip('Retry'));
+          await tester.pumpAndSettle();
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(find.byType(BotsContent), findsOneWidget);
+
+          // Back retires each I/O phase; later completion cannot select a chat.
+          for (final stage in ['identity', 'resume', 'history']) {
+            final held = Completer<void>();
+            bots.readHook = (_, method, _) async {
+              if (stage == 'identity' && method == 'profiles.list') {
+                await held.future;
+              }
+              return null;
+            };
+            browser.resumeDelay = stage == 'resume' ? held : null;
+            browser.historyDelays.remove(('canonical-root', 0));
+            if (stage == 'history') {
+              browser.historyDelays[('canonical-root', 0)] = held;
+            }
+            await tester.tap(find.text('Atlas').last);
+            for (var i = 0; i < 20; i++) {
+              await tester.pump();
+            }
+            expect(find.byType(StudioLoading), findsOneWidget);
+            await tester.tap(find.byTooltip('Back'));
+            await tester.pump();
+            await tester.pump();
+            expect(find.byType(BotsContent), findsOneWidget);
+            held.complete();
+            await tester.pumpAndSettle();
+            expect(controller.current!.chat, isNull);
+            expect(find.byType(BotsContent), findsOneWidget);
+            expect(
+              tester
+                  .widget<TextField>(find.byKey(const ValueKey('bots-search')))
+                  .controller!
+                  .text,
+              'Atlas',
+            );
+          }
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+  }
+
   testWidgets(
     'Bots drawer opens a canonical chat and Back retains the roster search',
     (tester) async {
@@ -2716,7 +2924,17 @@ void main() {
         'Atlas',
       );
       await tester.pumpAndSettle();
+      final rosterRead = Completer<void>();
+      bots.readHook = (profile, method, params) async {
+        if (method == 'profiles.list') await rosterRead.future;
+        return null;
+      };
       await tester.tap(find.text('Atlas').last);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(BotsContent), findsNothing);
+      expect(find.byType(StudioLoading), findsOneWidget);
+      rosterRead.complete();
       await tester.pumpAndSettle();
       expect(controller.current!.chat!.key.sessionId, 'pin-one');
       expect(controller.current!.chat!.key.workspace.profileName, 'personal');

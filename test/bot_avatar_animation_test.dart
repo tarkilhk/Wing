@@ -493,7 +493,10 @@ void main() {
                   viewState: view,
                   onViewChanged: (next) => setState(() => view = next),
                   onOpenMenu: () {},
-                  onOpenChat: (key) async => opened.add(key.sessionId),
+                  onOpenChat: (bot) async {
+                    final key = await session.open(bot, canUse: () => true);
+                    if (key != null) opened.add(key.sessionId);
+                  },
                   onOpenGroup: (_) async {},
                 ),
               ),
