@@ -1,8 +1,8 @@
 # Subagent supervision
 
-Open **Activity** in the conversation, then **Agents**, to inspect known
-children. Received activity also shows a compact
-expandable roster in the conversation. Saved delegation results show received
+While Hermes works, tap **Subagents** in the compact bar above your draft to
+inspect known children. Swipe horizontally to switch between subagents and tasks.
+Past answers retain **Activity → Agents**. Saved delegation results show received
 tasks, status, and output; they do not offer controls for past work.
 
 Open a live child's details to read its goal, status, available activity, and

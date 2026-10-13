@@ -1481,9 +1481,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
-    await tester.tap(
-      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-    );
+    await tester.tap(find.text('Activity · 1 tool').first);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
     final first = find.byWidgetPredicate(
@@ -1504,7 +1502,7 @@ void main() {
       tester.getTopLeft(find.text('Compare the results.')).dy,
       lessThan(tester.getTopLeft(second).dy),
     );
-    expect(find.text('Timeline'), findsOneWidget);
+    expect(find.text('Timeline'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

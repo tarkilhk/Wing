@@ -1,9 +1,14 @@
 # Tool activity
 
-Open **Activity** in the conversation for Timeline, Tasks, Agents and Work.
-Only categories with available content appear. Work contains known goals,
-recurring work and processes, including when no tools are running.
-The entry keeps its Activity name and adds the available tool count.
+While a reply streams, **Activity** contains tool calls, and received reasoning
+appears directly in the conversation between tool runs. Use the compact
+**Subagents / Tasks** bar above your draft for live work. Tap a side to open its
+drawer, swipe left/right to switch, and tap the selected side or outside to close.
+Tasks shows completed/total; cancelled tasks do not count as completed.
+
+Past answers keep **Activity** with Timeline, Tasks, Agents and Work. Only
+categories with available content appear. Known goals, recurring work and
+processes retain their existing panels. Activity adds the available tool count.
 Expand a row to see what was requested and what Hermes returned. Available
 controls use icons with accessible labels and tooltips. Long content can open
 in a fuller reader; reusable code, commands, and output offer copying and wrap
@@ -12,7 +17,7 @@ not summarized in the compact view.
 
 ## Timeline and reasoning
 
-Timeline shows individual tool calls and reasoning in their received order.
+For past answers, Timeline shows individual tool calls and reasoning in their received order.
 Compact rows show an action and input summary; warnings and failures remain
 visible. Expand for details, source references, received images, and available
 results. Opening a received result does not rerun its tool. Completion means the

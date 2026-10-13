@@ -393,15 +393,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             'args': {'command': 'python report.py'},
           });
           await tester.pump(const Duration(milliseconds: 300));
-          final activity = find.descendant(
-            of: find.byKey(ValueKey(('activity', chat.key))),
-            matching: find.textContaining(
-              RegExp(r'^Activity(?: · \d+ tools?)?$'),
-            ),
-          );
-          await tester.ensureVisible(activity);
-          await tester.tap(activity);
-          await tester.pump(const Duration(milliseconds: 300));
+          expect(find.text('Activity · 1 tool'), findsOneWidget);
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(find.byIcon(Icons.terminal_rounded), findsWidgets);
           await tester.ensureVisible(find.byType(ProfileToolCall));
@@ -447,19 +439,9 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     for (var i = 0; i < 8; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(ValueKey(('activity', chat.key))),
-        matching: find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-      ),
-    );
+    await tester.tap(find.byKey(const ValueKey(('live-work-tab', 1, false))));
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.ensureVisible(
-      find.byKey(const ValueKey(('activity-tab', 'tasks'))),
-    );
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.byKey(const ValueKey(('activity-tab', 'tasks'))));
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
     final tasks = find.byType(ProfileTodoPanel);
     expect(tasks, findsOneWidget);
     expect(

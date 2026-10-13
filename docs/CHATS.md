@@ -35,6 +35,12 @@ Search follows the same visibility choice.
 
 Create a chat, choose a profile and send a message. Replies stream into the conversation with code, tables and available tool activity. Your draft and attached files stay in place if you navigate away.
 
+While a reply streams, Activity contains tool calls. Reasoning appears directly
+in the conversation between tool runs. The compact bar above your draft shows
+subagents and completed/total tasks. Tap either side to open its drawer, then
+swipe left or right to switch. Tap the selected tab or outside to close it.
+Your draft stays in place. Past answers keep their existing Activity layout.
+
 While Hermes is working, the composer can **Steer**, **Queue** or **Stop**. The default action is your choice in App settings; hold and slide the arrow for a one-time alternative. Queued follow-ups can be edited before they send and need Wing to be running and connected to drain.
 
 The queue preview above the composer appears only while disconnected from the

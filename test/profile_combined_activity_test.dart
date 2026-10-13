@@ -389,7 +389,7 @@ void main() {
     });
   }
 
-  testWidgets('saved tool calls and current work share one Activity', (
+  testWidgets('saved tool calls retain their Activity beside the live run', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -439,17 +439,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-      findsOneWidget,
+      findsNWidgets(2),
     );
     expect(find.text('Tool activity'), findsNothing);
-    expect(find.text('Activity · 68 tools'), findsOneWidget);
+    expect(find.text('Activity · 67 tools'), findsOneWidget);
+    expect(find.text('Activity · 1 tool'), findsOneWidget);
+    expect(find.text('Running command'), findsOneWidget);
     expect(find.text('Search'), findsNothing);
-    await tester.tap(
-      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-    );
+    await tester.tap(find.text('Activity · 67 tools'));
     await tester.pumpAndSettle();
     expect(find.text('Search'), findsNWidgets(67));
-    expect(find.text('Running command'), findsOneWidget);
     expect(find.text('Timeline'), findsOneWidget);
     await tester.enterText(
       find.byKey(const Key('profile-message-composer')),
@@ -457,7 +456,6 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Search'), findsNWidgets(67));
-    expect(find.text('Running command'), findsOneWidget);
     await Scrollable.ensureVisible(
       tester.element(find.text('Search').first),
       alignment: 0.3,

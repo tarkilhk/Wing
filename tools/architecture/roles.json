@@ -2440,6 +2440,16 @@
       "role": "view",
       "feature": "app-shell",
       "library": "lib/main.dart"
+    },
+    "lib/core/widgets/profile_live_execution.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/profile_live_execution.dart"
+    },
+    "lib/core/widgets/profile_live_work_dock.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/profile_live_work_dock.dart"
     }
   }
 }

@@ -21,6 +21,7 @@ import 'package:wing/core/models/gateway_sensitive_prompt.dart';
 import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/profile_activity_tabs.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
@@ -173,7 +174,13 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                         height: 60 + ((m.message.id as int?) ?? 0) % 3 * 20,
                         child: Text(m.message.text),
                       ),
-                currentActivity: currentActivity,
+                liveExecution: currentActivity.isEmpty
+                    ? null
+                    : ProfileActivitySection(
+                        label: 'Activity',
+                        detailsBuilder: (_) =>
+                            Column(children: currentActivity),
+                      ),
                 tail: [
                   if (tailHeight > 0) SizedBox(height: tailHeight),
                   ...extraTail,

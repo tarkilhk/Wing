@@ -18,7 +18,6 @@ import '../utils/expansion_scroll_controller.dart';
 import '../widgets/anchored_expansion_tile.dart';
 import '../widgets/background_markdown_content.dart';
 import '../widgets/profile_tool_activity.dart';
-import '../widgets/profile_activity_tabs.dart';
 import '../widgets/playful_portrait.dart';
 import '../widgets/transcript_latest_button.dart';
 
@@ -39,9 +38,7 @@ class ProfileTranscript extends StatefulWidget {
   activityTrailingBuilder;
   final List<Widget> tail;
   final Future<void> Function() onLoadOlder;
-  final List<Widget> currentActivity;
-  final List<ProfileActivityTab> activityTabs;
-  final int liveToolCount;
+  final Widget? liveExecution;
   final Future<Uint8List> Function(String)? loadImage;
   final Future<void> Function(ChatOutput)? onOpenResource;
   final Future<void> Function(ChatOutput)? onShareResource;
@@ -64,9 +61,7 @@ class ProfileTranscript extends StatefulWidget {
     this.activityTrailingBuilder,
     required this.timeline,
     required this.tail,
-    this.currentActivity = const [],
-    this.activityTabs = const [],
-    this.liveToolCount = 0,
+    this.liveExecution,
     this.loadImage,
     this.onOpenResource,
     this.onShareResource,
@@ -433,10 +428,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   @override
   Widget build(BuildContext context) {
-    assert(
-      widget.identity != null ||
-          widget.currentActivity.isEmpty && widget.activityTabs.isEmpty,
-    );
+    assert(widget.identity != null || widget.liveExecution == null);
     if (widget.focusedMessageId != null) return _nearbyMessages(context);
     final buildStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
@@ -444,36 +436,43 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final reader = widget.reader;
     _scheduleNoticeVisibility();
     final timeline = widget.timeline;
-    final rows = timeline.sections.reversed.toList();
-    // Join adjacent saved calls and live work without crossing visible prose
-    // or moving a completed review across the next turn's live work.
-    final joinCurrentActivity = timeline.joinsCurrentActivity;
-    final hasCurrentActivity =
-        widget.currentActivity.isNotEmpty || widget.activityTabs.isNotEmpty;
-    Widget currentActivity() => ProfileActivitySection(
-      label: widget.liveToolCount > 0
-          ? 'Activity · ${widget.liveToolCount} ${widget.liveToolCount == 1 ? 'tool' : 'tools'}'
-          : 'Activity',
-      key: ValueKey(('activity', widget.identity!)),
-      detailsBuilder: (_) => ProfileActivityTabs(
-        tabs: [
-          if (widget.currentActivity.isNotEmpty)
-            ProfileActivityTab(
-              id: 'timeline',
-              label: 'Timeline',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: widget.currentActivity,
-              ),
-            ),
-          ...widget.activityTabs,
-        ],
-      ),
-    );
+    final liveReply = widget.liveExecution == null
+        ? null
+        : timeline.sections
+              .where(
+                (section) =>
+                    !section.isActivity && section.messages.last.streaming,
+              )
+              .firstOrNull;
+    final rows = timeline.sections.reversed
+        .where((section) => !identical(section, liveReply))
+        .toList();
     final tailContent = [
-      if (hasCurrentActivity && !joinCurrentActivity) currentActivity(),
+      if (widget.liveExecution != null)
+        // Keep the live run mounted when the first answer chunk arrives.
+        // Moving it from the tail into a new message row loses card state.
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
+              child: widget.liveExecution!,
+            ),
+            if (liveReply != null)
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: WingSpacing.lg,
+                  right: WingSpacing.xs,
+                ),
+                child: widget.messageBuilder(liveReply.messages.last),
+              ),
+          ],
+        ),
       ...widget.tail.map(
-        (child) => ConversationGestureBoundary(blocked: true, child: child),
+        (child) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
+          child: ConversationGestureBoundary(blocked: true, child: child),
+        ),
       ),
     ];
     final tail = [
@@ -485,15 +484,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               _recordRowHeight(_tail, row, height),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final child in tailContent)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: WingSpacing.lg,
-                  ),
-                  child: child,
-                ),
-            ],
+            children: tailContent,
           ),
         ),
     ];
@@ -651,17 +642,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                               loadImage: widget.loadImage,
                               onOpenResource: widget.onOpenResource,
                               onShareResource: widget.onShareResource,
-                              tabs: rowIndex == 0 && joinCurrentActivity
-                                  ? widget.activityTabs
-                                  : const [],
-                              liveToolCount:
-                                  rowIndex == 0 && joinCurrentActivity
-                                  ? widget.liveToolCount
-                                  : 0,
-                              currentActivity:
-                                  rowIndex == 0 && joinCurrentActivity
-                                  ? widget.currentActivity
-                                  : const [],
                             )
                           : widget.messageBuilder(row),
                     ),

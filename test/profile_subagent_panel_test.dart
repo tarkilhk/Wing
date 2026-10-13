@@ -608,7 +608,7 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('Activity Agents opens this chat subagent roster', (
+  testWidgets('live work Subagents opens this chat subagent roster', (
     tester,
   ) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -628,9 +628,7 @@ void main() {
     }
     expect(find.text('Inspect the release'), findsNothing);
 
-    await tester.tap(find.text('Activity'));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.byKey(const ValueKey(('activity-tab', 'agents'))));
+    await tester.tap(find.byKey(const ValueKey(('live-work-tab', 0, false))));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.ensureVisible(find.text('Inspect the release').last);

@@ -552,7 +552,9 @@ class ChatRuntime {
   }
 
   void reconcileHistoricalActivity() {
-    if (_closed) return;
+    if (_closed || observation.executionActive || observation.needsInput) {
+      return;
+    }
     _tools.removeWhere((activity) => activity.isTerminal);
     _activity.removeWhere(
       (entry) => switch (entry) {

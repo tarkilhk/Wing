@@ -6403,6 +6403,33 @@
       "purpose": "Canonical authenticated room message facts, monotonic coverage and retirement",
       "source": "internal/docs/TESTING.md; internal/docs/BOTS.md",
       "status": "supported"
+    },
+    {
+      "id": "host-test-test/profile_live_work_dock_test.dart",
+      "kind": "host-test",
+      "path": "test/profile_live_work_dock_test.dart",
+      "purpose": "Live answering layout and native dock behavior regression",
+      "source": "internal/docs/TESTING.md; test/profile_live_work_dock_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/profile_live_execution_test.dart",
+      "kind": "host-test",
+      "path": "test/profile_live_execution_test.dart",
+      "purpose": "Live answering layout and native dock behavior regression",
+      "source": "internal/docs/TESTING.md; test/profile_live_execution_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/profile_live_work_route_test.dart",
+      "kind": "host-test",
+      "path": "test/profile_live_work_route_test.dart",
+      "purpose": "Live work dock production route, counts and native render matrix",
+      "source": "internal/docs/TESTING.md; test/profile_live_work_route_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -9872,6 +9899,16 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/widgets/profile_live_execution.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/profile_live_work_dock.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/profile_message.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -11897,9 +11934,24 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/profile_live_execution_test.dart",
+      "area": "test",
+      "provenance": "task-authored"
+    },
+    {
       "path": "test/profile_live_history_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/profile_live_work_dock_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/profile_live_work_route_test.dart",
+      "area": "test",
+      "provenance": "task-authored"
     },
     {
       "path": "test/profile_management_owned_transport_test.dart",
