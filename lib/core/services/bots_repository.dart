@@ -42,6 +42,15 @@ typedef BotsSavedHistory =
       int offset,
     );
 
+final class BotPresenceObservation {
+  BotPresenceObservation(
+    Map<String, BotPresence> values, {
+    required this.validated,
+  }) : values = Map.unmodifiable(values);
+  final Map<String, BotPresence> values;
+  final bool validated;
+}
+
 /// Stock Hermes wire adapter. It never selects a workspace or owns an editor.
 class BotsRepository {
   BotsRepository({
@@ -158,15 +167,36 @@ class BotsRepository {
     profileName: name,
   );
 
-  Future<List<BotRecord>> bots() async {
-    final result = await _read('default', 'profiles.list', {
-      'include_sessions': true,
-    });
-    if (result['bot_mode_protocol'] != true ||
-        result['install_id'] is! String) {
-      throw const FormatException('Invalid Bots roster');
+  // Only concurrent readers share this wire response. Completed roster models
+  // retain bot-namespace metadata; group artwork stays with the catalog owner.
+  Future<List<Map<String, dynamic>>>? _pendingProfiles;
+
+  Future<List<Map<String, dynamic>>> _profileRows({
+    bool joinPending = false,
+  }) async {
+    // Only catalog work joins a roster read. An explicit roster reread after a
+    // mutation must never join an older, still-pending response.
+    final pending = joinPending && _pendingProfiles != null
+        ? _pendingProfiles!
+        : _pendingProfiles = () async {
+            final result = await _read('default', 'profiles.list', {
+              'include_sessions': true,
+            });
+            if (result['bot_mode_protocol'] != true ||
+                result['install_id'] is! String) {
+              throw const FormatException('Invalid Bots roster');
+            }
+            return _rows(result['profiles']);
+          }();
+    try {
+      return await pending;
+    } finally {
+      if (identical(_pendingProfiles, pending)) _pendingProfiles = null;
     }
-    final rows = _rows(result['profiles']);
+  }
+
+  Future<List<BotRecord>> bots() async {
+    final rows = await _profileRows();
     return List.unmodifiable(
       rows.map((row) {
         final profile = HermesProfile.fromJson(row);
@@ -231,6 +261,7 @@ class BotsRepository {
                   profileScope,
                   _requiredText(canonical['resolved_id']),
                 ),
+          canonicalLastActive: _sessionLastActive(canonical),
           preview: canonical == null ? '' : _text(canonical['preview']),
           workerLastActive: _workerLastActive(row['worker_session']),
           lastActive:
@@ -248,7 +279,7 @@ class BotsRepository {
     );
   }
 
-  Future<Map<String, BotPresence>> presence(List<BotRecord> roster) async {
+  Future<BotPresenceObservation> presence(List<BotRecord> roster) async {
     for (final bot in roster) {
       _owns(bot);
     }
@@ -275,11 +306,11 @@ class BotsRepository {
       for (final bot in roster) {
         owners[bot.id] = await _ownership(bot.profile.name, keys);
       }
-      return {
+      return BotPresenceObservation({
         for (final bot in roster) bot.id: _presenceFor(bot, live, owners, now),
-      };
+      }, validated: true);
     } catch (_) {
-      return unavailable;
+      return BotPresenceObservation(unavailable, validated: false);
     }
   }
 
@@ -342,45 +373,21 @@ class BotsRepository {
     );
   }
 
-  Future<BotRecord> enrich(
-    BotRecord bot, {
-    BotPresence presence = BotPresence.unknown,
-  }) async {
+  /// Stock asset absence is distinct from an unavailable/invalid response.
+  Future<BotAvatarRead> readAvatar(BotRecord bot) async {
     _owns(bot);
-    Uint8List? avatar;
-    if (bot.hasAvatar) {
-      try {
-        final result = await _read(bot.profile.name, 'profiles.get_asset', {
-          'name': bot.profile.name,
-          'asset': 'avatar',
-        });
-        if (result['found'] == true) {
-          avatar = _image(result['data'], maxBytes: 2000000);
-        }
-      } catch (_) {
-        /* Keep the deterministic face when the asset cannot load. */
-      }
+    try {
+      final result = await _read(bot.profile.name, 'profiles.get_asset', {
+        'name': bot.profile.name,
+        'asset': 'avatar',
+      });
+      if (result['found'] == false) return const BotAvatarRead.missing();
+      if (result['found'] != true) return const BotAvatarRead.unavailable();
+      final bytes = _image(result['data'], maxBytes: 2000000);
+      return BotAvatarRead.usable(bytes);
+    } catch (_) {
+      return const BotAvatarRead.unavailable();
     }
-    return BotRecord(
-      scope: bot.scope,
-      instance: bot.instance,
-      profile: bot.profile,
-      title: bot.title,
-      shape: bot.shape,
-      color: bot.color,
-      pinned: bot.pinned,
-      hidden: bot.hidden,
-      hasAvatar: bot.hasAvatar,
-      revision: bot.revision,
-      metadata: bot.metadata,
-      chat: bot.chat,
-      resolvedChat: bot.resolvedChat,
-      workerLastActive: bot.workerLastActive,
-      lastActive: bot.lastActive,
-      preview: bot.preview,
-      presence: presence,
-      avatar: avatar,
-    );
   }
 
   Future<BotRecord> metadata(
@@ -541,7 +548,7 @@ class BotsRepository {
     }
   }
 
-  Future<ProfileSessionKey> openChat(
+  Future<BotRecord> openChat(
     BotRecord bot,
     bool Function() canDispatch,
     void Function() onDispatched,
@@ -552,7 +559,7 @@ class BotsRepository {
         .where((row) => row.profile.name == bot.profile.name)
         .firstOrNull;
     if (current == null) throw StateError('Bot no longer exists');
-    if (current.chat != null) return current.chat!;
+    if (current.chat != null) return current;
     try {
       final created = await _command(
         bot.profile.name,
@@ -579,21 +586,19 @@ class BotsRepository {
       // A concurrent desktop creation or lost acknowledgement may have won.
       final resolved = (await bots())
           .where((row) => row.profile.name == bot.profile.name)
-          .firstOrNull
-          ?.chat;
-      if (resolved != null) return resolved;
+          .firstOrNull;
+      if (resolved?.chat != null) return resolved!;
       rethrow;
     }
     final resolved = (await bots())
         .where((row) => row.profile.name == bot.profile.name)
-        .firstOrNull
-        ?.chat;
-    if (resolved == null) {
+        .firstOrNull;
+    if (resolved?.chat == null) {
       throw StateError(
         'Bot Chat was not confirmed. Refresh before trying again.',
       );
     }
-    return resolved;
+    return resolved!;
   }
 
   Future<void> create(
@@ -625,8 +630,17 @@ class BotsRepository {
     }
   }
 
-  Future<bool> groupsReady() async =>
-      (await _read('default', 'groups.capabilities', {}))['driver'] == true;
+  Future<bool> groupsReady() async {
+    final driver = (await _read(
+      'default',
+      'groups.capabilities',
+      {},
+    ))['driver'];
+    if (driver is! bool) {
+      throw const FormatException('Invalid group driver readiness');
+    }
+    return driver;
+  }
 
   // Stock profiles.configure caps each incoming ui_meta document at 65,536
   // Python JSON characters. 45 KB leaves room for base64 and the ASCII envelope.
@@ -718,9 +732,9 @@ class BotsRepository {
     return revision + 1;
   }
 
-  Future<List<BotGroup>> groups({
-    required RecentGroupMessages? groupMessages,
-  }) async {
+  /// Catalog discovery carries identities and pictures, never runtime or logs.
+  Future<List<BotGroup>> groupCatalog() async {
+    final profiles = await _profileRows(joinPending: true);
     final groups = <BotGroup>[];
     var offset = 0;
     do {
@@ -728,81 +742,7 @@ class BotsRepository {
         'limit': 100,
         'offset': offset,
       });
-      for (final row in _rows(result['rooms'])) {
-        final base = _group(row);
-        var preview = '';
-        var working = false, blocked = false;
-        var activeMembers = const <String>[];
-        BotGroupEvent? message, answer;
-        final recentMessages = <BotGroupEvent>[];
-        var complete = false;
-        var observationComplete = false;
-        try {
-          final state = await _read('default', 'groups.state', {
-            'room_id': base.id,
-          });
-          final room = _map(state['room']);
-          if (room['room_id'] != base.id) {
-            throw const FormatException('Wrong group state owner');
-          }
-          final status = _map(state['driver_status']);
-          working = status['working'] == true;
-          blocked =
-              status['blocked'] == true ||
-              _rows(status['pending_actions']).isNotEmpty;
-          final latest = room['latest_seq'];
-          if (latest is! int || latest < 0) {
-            throw const FormatException('Invalid latest sequence');
-          }
-          if (working) {
-            activeMembers = base.members
-                .map((member) => member.profile)
-                .toList();
-          }
-          // Scan backwards until both latest message and latest bot reply are
-          // known. Non-message work events never establish recency or unread.
-          var end = latest;
-          while (end > 0 && (message == null || answer == null)) {
-            final start = (end - 100).clamp(0, end);
-            final events = await groupLogWindow(
-              base,
-              start: start,
-              end: end,
-              canRead: () => true,
-            );
-            recentMessages.insertAll(0, events.where((e) => e.isMessage));
-            for (final event
-                in events.where((e) => e.isMessage).toList().reversed) {
-              message ??= event;
-              if (event.kind == 'message.member') answer ??= event;
-            }
-            end = start;
-          }
-          complete = end == 0;
-          preview = message?.text ?? '';
-          observationComplete = true;
-        } catch (_) {
-          // Publish identity and explicit uncertainty, never an empty-history fact.
-        }
-        groups.add(
-          BotGroup(
-            scope: base.scope,
-            instance: instance,
-            id: base.id,
-            name: base.name,
-            members: base.members,
-            observationComplete: observationComplete,
-            preview: preview,
-            working: working,
-            blocked: blocked,
-            activeMemberProfiles: activeMembers,
-            lastMessageAt: message?.timestamp,
-            lastMessageSequence: message?.sequence ?? 0,
-            lastAnswerSequence: answer?.sequence ?? 0,
-          ),
-        );
-        groupMessages?.record(groups.last, recentMessages, complete: complete);
-      }
+      groups.addAll(_rows(result['rooms']).map(_group));
       final next = result['next_offset'];
       if (next == null) break;
       if (next is! int || next <= offset) {
@@ -812,15 +752,14 @@ class BotsRepository {
     } while (true);
     if (groups.isEmpty) return List.unmodifiable(groups);
     try {
-      final row = await _groupIconProfile();
+      final row = profiles.where((row) => row['name'] == 'default').firstOrNull;
       if (row == null) return List.unmodifiable(groups);
-      final meta = row['ui_meta'] == null
-          ? <String, dynamic>{}
-          : _map(row['ui_meta']);
+      final meta = _map(row['ui_meta']);
+      final revisions = _map(row['ui_meta_revisions']);
       BotGroup decorate(BotGroup room) {
         try {
           final key = '$_groupIconPrefix${room.id}';
-          final revision = _map(row['ui_meta_revisions'])[key] ?? 0;
+          final revision = revisions[key] ?? 0;
           if (revision is! int || revision < 0) return room;
           final value = meta[key];
           if (value == null) return room.withIcon(revision: revision);
@@ -845,16 +784,140 @@ class BotsRepository {
         }
       }
 
-      return List.unmodifiable(
-        groups.map((room) {
-          final updated = decorate(room);
-          groupMessages?.rebind(room, updated);
-          return updated;
-        }),
-      );
+      return List.unmodifiable(groups.map(decorate));
     } catch (_) {
       // The next roster refresh re-reads server pictures; no disk cache exists.
       return List.unmodifiable(groups);
+    }
+  }
+
+  /// An unavailable driver never fabricates idle or positive member admission.
+  Future<BotGroupState> groupState(BotGroup group) async {
+    _ownsGroup(group);
+    try {
+      final result = await _read('default', 'groups.state', {
+        'room_id': group.id,
+      });
+      final room = _map(result['room']);
+      final current = _group(room);
+      final latest = room['latest_seq'];
+      if (current.id != group.id || latest is! int || latest < 0) {
+        throw const FormatException('Invalid group state owner or sequence');
+      }
+      try {
+        final status = _map(result['driver_status']);
+        if (status['working'] is! bool || status['blocked'] is! bool) {
+          throw const FormatException('Invalid group runtime status');
+        }
+        return BotGroupState(
+          room: current,
+          roomAvailable: true,
+          latestSequence: latest,
+          runtimeAvailable: true,
+          working: status['working'] == true,
+          blocked:
+              status['blocked'] == true ||
+              _rows(status['pending_actions']).isNotEmpty,
+        );
+      } catch (_) {
+        return BotGroupState(
+          room: current,
+          roomAvailable: true,
+          latestSequence: latest,
+        );
+      }
+    } catch (_) {
+      return BotGroupState(room: group, roomAvailable: false);
+    }
+  }
+
+  /// Capture message facts independently, reusing an admitted room observation.
+  Future<BotGroup> groupPreview(
+    BotGroup group, {
+    BotGroupState? state,
+    required RecentGroupMessages? groupMessages,
+    required bool Function() canPublish,
+  }) async {
+    _ownsGroup(group);
+    final observed = state ?? await groupState(group);
+    final current = observed.applyTo(group);
+    final latest = observed.latestSequence;
+    BotGroup unavailable() => BotGroup(
+      scope: current.scope,
+      instance: current.instance,
+      id: current.id,
+      name: current.name,
+      members: current.members,
+      observationComplete: false,
+      runtimeAvailable: current.runtimeAvailable,
+      latestSequence: current.latestSequence,
+      messageCoverageSequence: current.messageCoverageSequence,
+      preview: current.preview,
+      working: current.working,
+      blocked: current.blocked,
+      activeMemberProfiles: current.activeMemberProfiles,
+      lastMessageAt: current.lastMessageAt,
+      lastMessageSequence: current.lastMessageSequence,
+      lastAnswerSequence: current.lastAnswerSequence,
+      pinned: current.pinned,
+      picture: current.picture,
+      iconColor: current.iconColor,
+      iconRevision: current.iconRevision,
+    );
+    if (!observed.roomAvailable || latest == null || !canPublish()) {
+      return unavailable();
+    }
+    if (group.observationComplete && group.messageCoverageSequence == latest) {
+      return current;
+    }
+    final recentMessages = <BotGroupEvent>[];
+    BotGroupEvent? message, answer;
+    var end = latest;
+    try {
+      // Scan backwards until both newest message and bot reply are established.
+      while (end > 0 && (message == null || answer == null)) {
+        final start = (end - 100).clamp(0, end);
+        final events = await groupLogWindow(
+          current,
+          start: start,
+          end: end,
+          canRead: canPublish,
+        );
+        recentMessages.insertAll(0, events.where((e) => e.isMessage));
+        for (final event
+            in events.where((e) => e.isMessage).toList().reversed) {
+          message ??= event;
+          if (event.kind == 'message.member') answer ??= event;
+        }
+        end = start;
+      }
+      final updated = BotGroup(
+        scope: current.scope,
+        instance: current.instance,
+        id: current.id,
+        name: current.name,
+        members: current.members,
+        observationComplete: true,
+        runtimeAvailable: current.runtimeAvailable,
+        latestSequence: latest,
+        messageCoverageSequence: latest,
+        preview: message?.text ?? '',
+        working: current.working,
+        blocked: current.blocked,
+        activeMemberProfiles: current.activeMemberProfiles,
+        lastMessageAt: message?.timestamp,
+        lastMessageSequence: message?.sequence ?? 0,
+        lastAnswerSequence: answer?.sequence ?? 0,
+        pinned: current.pinned,
+        picture: current.picture,
+        iconColor: current.iconColor,
+        iconRevision: current.iconRevision,
+      );
+      if (!canPublish()) return unavailable();
+      groupMessages?.record(updated, recentMessages, complete: end == 0);
+      return updated;
+    } catch (_) {
+      return unavailable();
     }
   }
 
@@ -1412,4 +1475,20 @@ class BotsRepository {
     inspectAttachmentImage(bytes);
     return bytes;
   }
+}
+
+enum BotAvatarReadKind { usable, missing, unavailable }
+
+final class BotAvatarRead {
+  BotAvatarRead.usable(Uint8List value)
+    : kind = BotAvatarReadKind.usable,
+      bytes = value.asUnmodifiableView();
+  const BotAvatarRead.missing()
+    : kind = BotAvatarReadKind.missing,
+      bytes = null;
+  const BotAvatarRead.unavailable()
+    : kind = BotAvatarReadKind.unavailable,
+      bytes = null;
+  final BotAvatarReadKind kind;
+  final Uint8List? bytes;
 }

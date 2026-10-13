@@ -1,6 +1,6 @@
 # Bots
 
-Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Bots show the most recent activity first, including conversation and background-worker activity. Bots without an activity timestamp appear last; pins break timestamp ties. Pinned groups lead their list. Names and message previews sit on the left, with saved artwork on the right. The floating + creates a bot or group for the selected tab. Lists refresh automatically while visible. Usable lists refresh quietly.
+Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Bots show the most recent activity first, including conversation and background-worker activity. Bots without an activity timestamp appear last; pins break timestamp ties. Pinned groups lead their list. Names and message previews sit on the left, with saved artwork on the right. The floating + creates a bot or group for the selected tab. Status refreshes every ten seconds while Bots is visible. Known group messages refresh every thirty seconds. Groups created elsewhere may take up to five minutes to appear. Usable lists refresh quietly.
 Wing's feather pulse appears when initial loading prevents you from using the
 list. It sits at the right of the instance row, without covering or moving the cards
 when loading finishes.
@@ -29,7 +29,7 @@ not report which member is currently writing. Individual Running and Needs
 input states keep their priority. A completed or unavailable room clears the
 group indication.
 
-Bot Chats stay hidden from the default Chats list. Enable **Show automated chats** in Chats to reveal them, or open them directly through Bots. Displayed Bot Chats show a small version of the bot's avatar before their name. Other conversations retain their saved titles.
+Bot Chats stay hidden from the default Chats list. Enable **Show automated chats** in Chats to reveal them, or open them directly through Bots. Displayed Bot Chats show a small version of the bot's avatar before their name. Cached names and avatars appear immediately while Wing refreshes them. On a first read, the name appears as soon as it is known, while the saved avatar loads. Other conversations retain their saved titles.
 
 In Chats, long press a profile icon beside the connection name to open that
 profile’s Bot Chat. A normal tap filters the list. Back returns to Chats with

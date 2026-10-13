@@ -351,13 +351,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                 final name = bot?.title ?? member.name;
                 return Row(
                   children: [
-                    BotAvatar(
-                      name: name,
-                      shape: bot?.shape ?? 'circle',
-                      color: bot?.color ?? '',
-                      image: bot?.avatar,
-                      size: 24,
-                    ),
+                    BorrowedBotAvatar(bot: bot, name: name, size: 24),
                     const SizedBox(width: WingSpacing.sm),
                     Expanded(
                       child: Text(
@@ -529,13 +523,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
               key: const ValueKey('group-bot-card-identity'),
               children: [
                 ExcludeSemantics(
-                  child: BotAvatar(
-                    name: name,
-                    shape: bot?.shape ?? 'circle',
-                    color: bot?.color ?? '',
-                    image: bot?.avatar,
-                    size: 32,
-                  ),
+                  child: BorrowedBotAvatar(bot: bot, name: name, size: 32),
                 ),
                 const SizedBox(width: WingSpacing.sm),
                 Expanded(

@@ -395,7 +395,10 @@ void main() {
     tester,
   ) async {
     final fixture = BotsFixture();
-    final group = (await fixture.repository.groups(groupMessages: null)).single;
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).single;
     final entry = RecentConversationEntry.group(group);
     await tester.pumpWidget(
       MaterialApp(
@@ -445,7 +448,10 @@ void main() {
     tester,
   ) async {
     final fixture = BotsFixture();
-    final group = (await fixture.repository.groups(groupMessages: null)).single;
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).single;
     final roster = await fixture.repository.bots();
     Widget render(Iterable<BotRecord> bots) => MaterialApp(
       theme: wingTheme(Brightness.dark),
@@ -606,7 +612,8 @@ void main() {
         final fixture = BotsFixture();
         final roster = await fixture.repository.bots();
         fixture.room['name'] = 'Build Pace Health Analysis Research team';
-        final group = (await fixture.repository.groups(
+        final group = (await readFixtureGroups(
+          fixture.repository,
           groupMessages: null,
         )).single;
         final status = ServerConnectionStatus(group.instance)
@@ -755,21 +762,25 @@ void main() {
             ),
             home: RepaintBoundary(
               key: frame,
-              child: ConversationPreview(
-                card: RecentConversationCard(
-                  entry: entry,
-                  bot: bot,
-                  preview: RecentConversationPreview(
+              child: BotAvatarScope(
+                session: owner,
+                prepared: true,
+                child: ConversationPreview(
+                  card: RecentConversationCard(
                     entry: entry,
-                    reading: TranscriptReadingSnapshot(
-                      messages: const [],
-                      historySessionId: key.sessionId,
+                    bot: bot,
+                    preview: RecentConversationPreview(
+                      entry: entry,
+                      reading: TranscriptReadingSnapshot(
+                        messages: const [],
+                        historySessionId: key.sessionId,
+                      ),
+                      draft: '',
+                      scopeLabel: 'Unassigned',
                     ),
-                    draft: '',
-                    scopeLabel: 'Unassigned',
                   ),
+                  connectionLabel: 'Host',
                 ),
-                connectionLabel: 'Host',
               ),
             ),
           ),
@@ -1367,7 +1378,8 @@ void main() {
       'group appearance replaces shared pixels without another preview read',
       (tester) async {
         final fixture = BotsFixture();
-        final group = (await fixture.repository.groups(
+        final group = (await readFixtureGroups(
+          fixture.repository,
           groupMessages: null,
         )).single;
         final entry = RecentConversationEntry.group(group);

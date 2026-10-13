@@ -576,12 +576,10 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
                 Semantics(
                   label: '${bot.title} bot avatar',
                   image: true,
-                  child: BotAvatar(
+                  child: BorrowedBotAvatar(
                     key: ValueKey('bot-chat-avatar-${e.profile}-${e.id}'),
+                    bot: bot,
                     name: bot.profile.name,
-                    shape: bot.shape,
-                    color: bot.color,
-                    image: bot.avatar,
                     size: 20,
                   ),
                 )
@@ -1046,7 +1044,12 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
   }
 
   @override
-  Widget build(BuildContext context) => ReadRecovery(
+  Widget build(BuildContext context) => BotAvatarScope(
+    session: _data.avatarOwner,
+    child: _buildWithAvatars(context),
+  );
+
+  Widget _buildWithAvatars(BuildContext context) => ReadRecovery(
     shouldRetry: () => _data.needsRecovery,
     retry: _data.recover,
     child: _buildContent(context),

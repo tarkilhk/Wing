@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'profile_session_key.dart';
 import 'bots.dart';
 import 'transcript_reading.dart';
@@ -47,17 +48,36 @@ final class GroupConversationPreview {
 final class RecentConversationAppearance {
   const RecentConversationAppearance({
     this.bot,
+    this.pixelRevisionOverride,
     this.group = const BotGroupAppearance.empty(),
   });
   final BotRecord? bot;
+  final String? pixelRevisionOverride;
+  String get pixelRevision =>
+      pixelRevisionOverride ??
+      jsonEncode([
+        if (bot case final value?) _pixels(value),
+        for (final member in group.byHandle.entries)
+          [member.key, _pixels(member.value)],
+      ]);
+  static List<Object?> _pixels(BotRecord bot) => [
+    bot.scope.connectionId,
+    bot.scope.connectionIdentity,
+    bot.scope.profileName,
+    bot.title,
+    bot.shape,
+    bot.color,
+    bot.metadata['imageKind'],
+  ];
   final BotGroupAppearance group;
   @override
   bool operator ==(Object other) =>
       other is RecentConversationAppearance &&
       bot == other.bot &&
-      group == other.group;
+      group == other.group &&
+      pixelRevision == other.pixelRevision;
   @override
-  int get hashCode => Object.hash(bot, group);
+  int get hashCode => Object.hash(bot, group, pixelRevision);
 }
 
 /// A captured catalog, including usable entries after partial failure.

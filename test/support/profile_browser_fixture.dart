@@ -34,6 +34,7 @@ class ProfileBrowserFixture {
   Future<Map<ProfileSessionKey, BotRecord>> botAppearances(
     Iterable<ProfileSessionKey> conversations,
   ) async {
+    if (failBotAppearance) throw StateError('Appearance unavailable');
     final keys = conversations.toList();
     final workspace = keys.first.workspace;
     final source = BotsRepository(

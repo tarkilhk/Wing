@@ -43,7 +43,8 @@ void main() {
           'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
         };
       };
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       expect(group.lastMessageAt!.millisecondsSinceEpoch, 1002000);
@@ -60,7 +61,8 @@ void main() {
     'read receipts persist, stay monotonic and isolate authenticated rooms',
     () async {
       final fixture = BotsFixture();
-      final base = (await fixture.repository.groups(
+      final base = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       final group = BotGroup(
@@ -123,7 +125,10 @@ void main() {
         'payload': {},
       },
     ]);
-    final group = (await fixture.repository.groups(groupMessages: null)).single;
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).single;
     final reads = BotGroupReadState();
     addTearDown(reads.dispose);
     await reads.load();
@@ -152,7 +157,8 @@ void main() {
     'retired passive tail stops paging without receipts or commands',
     () async {
       final fixture = BotsFixture();
-      final base = (await fixture.repository.groups(
+      final base = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       final group = BotGroup(

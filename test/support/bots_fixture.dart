@@ -1,3 +1,4 @@
+import 'package:wing/core/services/recent_conversation_snapshots.dart';
 import 'package:flutter/foundation.dart';
 import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/services/bot_group_session.dart';
@@ -346,4 +347,22 @@ class FixedGroupAppearances extends ChangeNotifier
   @override
   BotGroupAppearance appearanceForGroup(BotGroup group) =>
       BotGroupAppearance.forGroup(group, _bots);
+}
+
+/// Full discovery for standalone route fixtures; production schedules each read.
+Future<List<BotGroup>> readFixtureGroups(
+  BotsRepository repository, {
+  required RecentGroupMessages? groupMessages,
+}) async {
+  final rooms = <BotGroup>[];
+  for (final room in await repository.groupCatalog()) {
+    rooms.add(
+      await repository.groupPreview(
+        room,
+        groupMessages: groupMessages,
+        canPublish: () => true,
+      ),
+    );
+  }
+  return rooms;
 }

@@ -258,11 +258,9 @@ class RecentIdentityCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       if (row.bot != null)
-                        BotAvatar(
+                        BorrowedBotAvatar(
+                          bot: row.bot!,
                           name: row.bot!.title,
-                          shape: row.bot!.shape,
-                          color: row.bot!.color,
-                          image: row.bot!.avatar,
                           size: 46,
                         )
                       else if (row.group != null)

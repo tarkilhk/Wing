@@ -93,15 +93,17 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  Future<(BotsFixture, BotsSession)> roster() async {
+  Future<(BotsFixture, BotsSession)> roster({DateTime Function()? now}) async {
     final fixture = BotsFixture();
-    final session = BotsSession((_) async => [fixture.repository]);
+    final session = BotsSession((_) async => [fixture.repository], now: now);
     addTearDown(session.dispose);
     await session.refresh();
     return (fixture, session);
   }
 
-  Future<(BotsFixture, BotsSession, _PictureBackend)> editingRoster() async {
+  Future<(BotsFixture, BotsSession, _PictureBackend)> editingRoster({
+    DateTime Function()? now,
+  }) async {
     final fixture = BotsFixture();
     final backend = _PictureBackend(fixture);
     backend.profile['ui_meta']['wing-group-icon:room-1'] = {
@@ -110,7 +112,7 @@ void main() {
       'data': base64Encode(_photo()),
     };
     backend.profile['ui_meta_revisions']['wing-group-icon:room-1'] = 3;
-    final session = BotsSession((_) async => [fixture.repository]);
+    final session = BotsSession((_) async => [fixture.repository], now: now);
     addTearDown(session.dispose);
     await session.refresh();
     return (fixture, session, backend);
@@ -412,8 +414,10 @@ void main() {
   test(
     'editing an undecorated stock room saves its chosen icon without recreating membership',
     () async {
-      final (fixture, session) = await roster();
+      var now = DateTime.utc(2026, 10, 13);
+      final (fixture, session) = await roster(now: () => now);
       _PictureBackend(fixture);
+      now = now.add(const Duration(minutes: 5));
       await session.refresh();
       final draft = BotGroupDraftSession(
         session,
@@ -462,7 +466,8 @@ void main() {
   test(
     'editing a live room preserves unread message provenance in its immediate observation',
     () async {
-      final (fixture, session, _) = await editingRoster();
+      var now = DateTime.utc(2026, 10, 13);
+      final (fixture, session, _) = await editingRoster(now: () => now);
       fixture.events.add({
         'room_id': 'room-1',
         'seq': 1,
@@ -472,6 +477,7 @@ void main() {
         'created_at': 1791756000.0,
       });
       fixture.pending.add({'kind': 'retry', 'task_id': 'task-1'});
+      now = now.add(const Duration(seconds: 30));
       await session.refresh();
       final before = session.state.groups.single;
       expect(before.lastAnswerSequence, 1);
@@ -504,7 +510,10 @@ void main() {
       () {},
     );
     expect(
-      (await fixture.repository.groups(groupMessages: null)).single.picture,
+      (await readFixtureGroups(
+        fixture.repository,
+        groupMessages: null,
+      )).single.picture,
       _photo(),
     );
   });
@@ -526,7 +535,8 @@ void main() {
       expect(await draft.save(canUse: () => true), true);
       fixture.room['room_id'] = fixture.commands.first.$3['room_id'];
       fixture.room['name'] = 'Research team';
-      final saved = (await fixture.repository.groups(
+      final saved = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       expect(saved.iconColor, color);
@@ -915,7 +925,10 @@ void main() {
       );
       expect(backend.profile['ui_meta']['hermes-bots']['title'], 'Hermes');
       expect(
-        (await fixture.repository.groups(groupMessages: null)).single.picture,
+        (await readFixtureGroups(
+          fixture.repository,
+          groupMessages: null,
+        )).single.picture,
         picture,
       );
       expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);
@@ -958,7 +971,10 @@ void main() {
       expect(backend.profile['ui_meta']['hermes-bots']['unrelated'], isNotNull);
       final other = BotsFixture();
       expect(
-        (await other.repository.groups(groupMessages: null)).single.picture,
+        (await readFixtureGroups(
+          other.repository,
+          groupMessages: null,
+        )).single.picture,
         isNull,
       );
       expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);

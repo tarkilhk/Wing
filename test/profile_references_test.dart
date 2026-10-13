@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:io';
 import 'dart:async';
-import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -104,6 +103,7 @@ void main() {
   late BotsSession bots;
   late BotsFixture botFixture;
   late BotsRepository botRepository;
+  late DateTime botNow;
   const ref = ComposerReference(
     kind: ComposerReferenceKind.file,
     token: '@file:/work/note.md',
@@ -111,6 +111,7 @@ void main() {
   );
 
   setUp(() async {
+    botNow = DateTime.now();
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     preferences = AppPreferences(prefs);
@@ -156,7 +157,7 @@ void main() {
       ownership: botFixture.ownership,
       savedHistory: botFixture.savedHistory,
     );
-    bots = BotsSession((_) async => [botRepository]);
+    bots = BotsSession((_) async => [botRepository], now: () => botNow);
   });
   tearDown(() {
     bots.dispose();
@@ -178,7 +179,7 @@ void main() {
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=';
 
   test(
-    'ordinary references borrow canonical saved photos and reuse warm reads',
+    'ordinary reference identities retain saved-avatar hints without image demand',
     () async {
       botFixture.profiles.first['has_avatar'] = true;
       var rosters = 0, assets = 0;
@@ -205,20 +206,20 @@ void main() {
         expect(candidate.reference.token, '@Hermes');
         expect(candidate.reference.target, 'hermes');
         expect(candidate.appearance!.title, 'Hermes');
-        expect(candidate.appearance!.avatar, base64Decode(photo));
+        expect(candidate.appearance!.hasAvatar, true);
         expect(
           candidate.appearance!.scope.connectionIdentity,
           chat.key.workspace.connectionIdentity,
         );
       }
       expect(rosters, 1);
-      expect(assets, 1);
+      expect(assets, 0, reason: 'Metadata completion does not admit images');
       expect(botFixture.commands, isEmpty);
     },
   );
 
   test(
-    'retiring a reference query stops avatar admission and a fresh query recovers',
+    'retired reference queries reject metadata and fresh queries recover without image demand',
     () async {
       botFixture.profiles.first['has_avatar'] = true;
       final roster = Completer<Map<String, dynamic>?>();
@@ -255,8 +256,8 @@ void main() {
         bots: bots,
         canRead: () => allowed,
       );
-      expect(fresh.items.single.appearance!.avatar, base64Decode(photo));
-      expect(assets, 1);
+      expect(fresh.items.single.appearance!.hasAvatar, true);
+      expect(assets, 0, reason: 'Only mounted candidates borrow images');
     },
   );
 
@@ -291,6 +292,7 @@ void main() {
       );
       expect(completion.items.every((i) => i.appearance == null), isTrue);
       unavailable = false;
+      botNow = botNow.add(const Duration(seconds: 31));
       bots.invalidateAppearances();
       final recovered = await controller.completeMention(
         chat,
@@ -542,8 +544,10 @@ void main() {
               ),
               home: ProfileWorkspaceScreen(
                 controller: controller,
-                createBotsSession: () =>
-                    BotsSession((_) async => [botRepository]),
+                createBotsSession: () => BotsSession(
+                  (_) async => [botRepository],
+                  now: () => botNow,
+                ),
               ),
             ),
           ),

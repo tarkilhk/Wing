@@ -72,7 +72,9 @@ class _BotsContentState extends State<BotsContent> {
     try {
       await Navigator.push<void>(
         context,
-        MaterialPageRoute(builder: (_) => page),
+        MaterialPageRoute(
+          builder: (_) => BotAvatarScope(session: widget.session, child: page),
+        ),
       );
     } finally {
       if (mounted) widget.session.setVisible(true);
@@ -85,7 +87,17 @@ class _BotsContentState extends State<BotsContent> {
     final repository = widget.session.repository(bot.scope.connectionIdentity);
     return _push(
       BotProfileEditor(
-        createSession: () => BotProfileEditSession(repository, bot),
+        createSession: () => BotProfileEditSession(
+          repository,
+          bot,
+          avatars: widget.session.createAvatarBorrower(),
+          validateImage: (bot) => widget.session.reloadAvatar(bot.scope),
+          onSaved: (bot, image, assetSaved) => widget.session.acceptAppearance(
+            bot,
+            image: image,
+            assetSaved: assetSaved,
+          ),
+        ),
       ),
     );
   }
@@ -215,7 +227,12 @@ class _BotsContentState extends State<BotsContent> {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
+  Widget build(BuildContext context) => BotAvatarScope(
+    session: widget.session,
+    child: _buildWithAvatars(context),
+  );
+
+  Widget _buildWithAvatars(BuildContext context) => AnimatedBuilder(
     animation: widget.session,
     builder: (context, _) {
       final state = widget.session.state;

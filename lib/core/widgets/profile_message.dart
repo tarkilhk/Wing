@@ -242,11 +242,9 @@ class ProfileMessage extends StatelessWidget {
                                 color: colors.onSurfaceVariant,
                               ),
                             )
-                          : BotAvatar(
+                          : BorrowedBotAvatar(
+                              bot: appearance,
                               name: name,
-                              shape: appearance.shape,
-                              color: appearance.color,
-                              image: appearance.avatar,
                               size: 28,
                             ),
                     );

@@ -98,6 +98,7 @@ void main() {
           for (final row in fixture.profiles) {
             row['ui_meta']['hermes-bots']['imageKind'] = 'shape';
           }
+          var now = DateTime.now();
           var working = true;
           fixture.readHook = (_, method, _) async => switch (method) {
             'session.active_list' => {'sessions': []},
@@ -112,7 +113,10 @@ void main() {
             },
             _ => null,
           };
-          final session = BotsSession((_) async => [fixture.repository]);
+          final session = BotsSession(
+            (_) async => [fixture.repository],
+            now: () => now,
+          );
           addTearDown(session.dispose);
           await session.refresh();
           expect(session.state.groups.single.working, true);
@@ -177,6 +181,7 @@ void main() {
             filename: 'active-group-bots-${brightness.name}-$scale',
           );
           working = false;
+          now = now.add(const Duration(seconds: 30));
           await session.refresh();
           await tester.pump();
           expect(find.text('Group running'), findsNothing);
@@ -189,6 +194,212 @@ void main() {
     }
   }
 
+  testWidgets(
+    'completed sender metadata follows saved modes and keeps covered demand retired',
+    (tester) async {
+      final fixture = BotsFixture();
+      fixture.profiles
+        ..clear()
+        ..addAll([
+          for (var i = 0; i < 11; i++)
+            BotsFixture.profile('bot${i.toString().padLeft(2, '0')}', 'Bot $i')
+              ..['has_avatar'] = true,
+        ]);
+      fixture.profiles.last['ui_meta']['hermes-bots']['imageKind'] = 'shape';
+      fixture.readHook = (_, method, _) async =>
+          method == 'profiles.get_asset' ? {'found': true, 'data': _png} : null;
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      await owner.refresh();
+      final scope = owner.state.bots
+          .singleWhere((bot) => bot.profile.name == 'bot10')
+          .scope;
+      final sender = (await owner.appearanceForSender(scope, 'bot10'))!;
+      final navigator = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigator,
+          home: BotAvatarScope(
+            session: owner,
+            child: Scaffold(body: BorrowedBotAvatar(bot: sender)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(Image), findsNothing);
+      final photo = sender.withMetadata(
+        metadata: {...sender.metadata, 'imageKind': 'photo'},
+        revision: sender.revision + 1,
+      );
+      owner.acceptAppearance(
+        photo,
+        image: base64Decode(_png),
+        assetSaved: true,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(Image), findsOneWidget);
+      expect(owner.retainedAvatarCount, 11);
+      final provider = tester.widget<Image>(find.byType(Image)).image;
+      owner.acceptAppearance(
+        photo.withMetadata(
+          metadata: photo.metadata,
+          revision: photo.revision + 1,
+          title: 'Renamed sender',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.widget<Image>(find.byType(Image)).image, provider);
+      final shape = photo.withMetadata(
+        metadata: {...photo.metadata, 'imageKind': 'shape', 'shape': 'circle'},
+        revision: photo.revision + 2,
+        shape: 'circle',
+        color: '#ffffff',
+      );
+      owner.acceptAppearance(shape);
+      await tester.pumpAndSettle();
+      expect(find.byType(Image), findsNothing);
+      expect(tester.widget<BotAvatar>(find.byType(BotAvatar)).shape, 'circle');
+      expect(tester.widget<BotAvatar>(find.byType(BotAvatar)).color, '#ffffff');
+      expect(owner.retainedAvatarCount, 10);
+      navigator.currentState!.push(
+        MaterialPageRoute<void>(builder: (_) => const Scaffold()),
+      );
+      await tester.pumpAndSettle();
+      owner.acceptAppearance(
+        photo,
+        image: base64Decode(_png),
+        assetSaved: true,
+      );
+      await tester.pumpAndSettle();
+      expect(owner.retainedAvatarCount, 10);
+      expect(
+        tester
+            .widget<BotAvatar>(find.byType(BotAvatar, skipOffstage: false))
+            .image,
+        isNull,
+      );
+      navigator.currentState!.pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(Image), findsOneWidget);
+      expect(owner.retainedAvatarCount, 11);
+      await tester.pumpWidget(const SizedBox());
+      expect(owner.retainedAvatarCount, 10);
+    },
+  );
+
+  testWidgets(
+    'covered mounted avatar rows release transient bytes and repaint on return',
+    (tester) async {
+      final fixture = BotsFixture();
+      fixture.profiles
+        ..clear()
+        ..addAll([
+          for (var i = 0; i < 11; i++)
+            BotsFixture.profile('bot${i.toString().padLeft(2, '0')}', 'Bot $i')
+              ..['has_avatar'] = true,
+        ]);
+      fixture.readHook = (_, method, _) async =>
+          method == 'profiles.get_asset' ? {'found': true, 'data': _png} : null;
+      final owner = BotsSession((_) async => [fixture.repository]);
+      addTearDown(owner.dispose);
+      await owner.refresh();
+      final bot = owner.state.bots.singleWhere(
+        (bot) => bot.profile.name == 'bot10',
+      );
+      final navigator = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigator,
+          home: BotAvatarScope(
+            session: owner,
+            child: Scaffold(body: BorrowedBotAvatar(bot: bot)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(Image), findsOneWidget);
+      expect(owner.retainedAvatarCount, 11);
+      navigator.currentState!.push(
+        MaterialPageRoute<void>(builder: (_) => const Scaffold()),
+      );
+      await tester.pumpAndSettle();
+      expect(owner.retainedAvatarCount, 10);
+      expect(
+        tester
+            .widget<BotAvatar>(find.byType(BotAvatar, skipOffstage: false))
+            .image,
+        isNull,
+      );
+      navigator.currentState!.pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(Image), findsOneWidget);
+      expect(owner.retainedAvatarCount, 11);
+      await tester.pumpWidget(const SizedBox());
+      expect(owner.retainedAvatarCount, 10);
+    },
+  );
+
+  testWidgets(
+    'eager long rows borrow only the viewport and cache neighborhood',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 300);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final fixture = BotsFixture();
+      fixture.profiles
+        ..clear()
+        ..addAll([
+          for (var i = 0; i < 100; i++)
+            BotsFixture.profile('bot${i.toString().padLeft(3, '0')}', 'Bot $i')
+              ..['has_avatar'] = true,
+        ]);
+      var reads = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method != 'profiles.get_asset') return null;
+        reads++;
+        return {'found': true, 'data': _png};
+      };
+      final owner = BotsSession((_) async => [fixture.repository]);
+      final scroll = ScrollController();
+      addTearDown(owner.dispose);
+      addTearDown(scroll.dispose);
+      await owner.refresh();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BotAvatarScope(
+            session: owner,
+            child: Scaffold(
+              body: SingleChildScrollView(
+                controller: scroll,
+                child: Column(
+                  children: [
+                    for (final bot in owner.state.bots)
+                      SizedBox(height: 100, child: BorrowedBotAvatar(bot: bot)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(reads, lessThanOrEqualTo(10));
+      scroll.jumpTo(scroll.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      expect(reads, lessThanOrEqualTo(16));
+      expect(owner.retainedAvatarCount, lessThanOrEqualTo(16));
+      expect(
+        tester
+            .widgetList<BotAvatar>(find.byType(BotAvatar))
+            .where((avatar) => avatar.image != null)
+            .length,
+        lessThanOrEqualTo(6),
+      );
+      await tester.pumpWidget(const SizedBox());
+      expect(owner.retainedAvatarCount, lessThanOrEqualTo(10));
+    },
+  );
+
   test(
     'eligibility requires an explicit saved classic shape, even with an asset',
     () async {
@@ -196,7 +407,7 @@ void main() {
         expect(
           (await _bot(
             shape: shape,
-          )).withAvatar(base64Decode(_png)).hasExplicitClassicShape,
+          )).withAvatarHint(true).hasExplicitClassicShape,
           true,
         );
       }
@@ -217,20 +428,30 @@ void main() {
   testWidgets(
     'ambiguous images stay images; explicit shape snapshots animate',
     (tester) async {
-      final ambiguous = (await _bot(kind: null)).withAvatar(base64Decode(_png));
+      final ambiguous = (await _bot(kind: null)).withAvatarHint(true);
+      final owner = BotsSession((_) async => []);
+      owner.acceptAppearance(
+        ambiguous,
+        image: base64Decode(_png),
+        assetSaved: true,
+      );
+      addTearDown(owner.dispose);
       await tester.pumpWidget(
         _host(
-          LiveBotAvatar(
-            bot: ambiguous,
-            name: 'Atlas',
-            mood: BotAvatarMood.work,
+          BotAvatarScope(
+            session: owner,
+            child: LiveBotAvatar(
+              bot: ambiguous,
+              name: 'Atlas',
+              mood: BotAvatarMood.work,
+            ),
           ),
         ),
       );
       await tester.pumpAndSettle();
       expect(find.byType(Image), findsOneWidget);
       expect(tester.binding.transientCallbackCount, 0);
-      final explicit = (await _bot()).withAvatar(base64Decode(_png));
+      final explicit = (await _bot()).withAvatarHint(true);
       await tester.pumpWidget(
         _host(
           LiveBotAvatar(bot: explicit, name: 'Atlas', mood: BotAvatarMood.work),
@@ -465,7 +686,10 @@ void main() {
           }
           fixture.profiles.first['ui_meta']['hermes-bots']['shape'] =
               'triangle';
-          final session = BotsSession((_) async => [fixture.repository]);
+          final session = BotsSession(
+            (_) async => [fixture.repository],
+            now: () => now,
+          );
           await session.refresh();
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
           tester.view.devicePixelRatio = 1;

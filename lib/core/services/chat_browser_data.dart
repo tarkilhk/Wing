@@ -131,8 +131,13 @@ final class ChatBrowserData extends ChangeNotifier {
   )?
   _readBotAppearances;
   BotsSession? _botAppearanceOwner;
+  BotsSession get avatarOwner => _botAppearanceOwner ??= BotsSession(
+    (_) async => [BotsRepository.forServer(_controller.administration())],
+  );
   final _botAppearances = <ProfileSessionKey, BotRecord>{};
-  BotRecord? botAppearance(ProfileSessionKey key) => _botAppearances[key];
+  BotRecord? botAppearance(ProfileSessionKey key) => _readBotAppearances != null
+      ? _botAppearances[key]
+      : _botAppearanceOwner?.cachedAppearance(key);
   late final ValueListenable<BrowserPreferencesFact> _preferences;
   final _arrangement = ChatListArrangement();
   String _projectionQuery = '';
@@ -1335,19 +1340,19 @@ final class ChatBrowserData extends ChangeNotifier {
     _botAppearances.removeWhere((key, _) => !keys.contains(key));
     if (keys.isEmpty) return;
     try {
-      _botAppearanceOwner?.invalidateAppearances();
       final appearances = _readBotAppearances != null
           ? await _readBotAppearances(keys)
-          : await (_botAppearanceOwner ??= BotsSession(
-              (_) async => [
-                BotsRepository.forServer(_controller.administration()),
-              ],
-            )).appearancesForConversations(keys, canRead: isCurrent);
+          : await avatarOwner.appearancesForConversations(
+              keys,
+              canRead: isCurrent,
+            );
       if (!isCurrent()) return;
       for (final key in keys) {
         final bot = appearances[key];
         if (bot?.describesConversation(key) == true) {
           _botAppearances[key] = bot!;
+        } else {
+          _botAppearances.remove(key);
         }
       }
       _notify();

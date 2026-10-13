@@ -1081,6 +1081,11 @@
       "feature": "app-preferences-backup",
       "library": "lib/core/services/backup_session.dart"
     },
+    "lib/core/services/bot_avatar_cache.dart": {
+      "role": "application",
+      "feature": "bots",
+      "library": "lib/core/services/bots_session.dart"
+    },
     "lib/core/services/bot_avatar_io.dart": {
       "role": "platform",
       "feature": "bots",

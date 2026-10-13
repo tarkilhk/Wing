@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'dart:async';
@@ -339,6 +338,7 @@ void main() {
       await controller.refreshRecents();
       final keys = controller.recentChats().map((chat) => chat.key).toList();
       final target = keys.first;
+      var now = DateTime.now();
       final botFixture = BotsFixture();
       final row = BotsFixture.profile(
         target.workspace.profileName,
@@ -362,6 +362,7 @@ void main() {
             ownership: (_, _) async => throw StateError('No runtime reads'),
           ),
         ],
+        now: () => now,
       );
       addTearDown(bots.dispose);
       final activity = ValueNotifier<ChatNoticeActivity?>(null);
@@ -392,6 +393,7 @@ void main() {
         'hermes-bots': {'title': 'Renamed assistant'},
       };
       row['ui_meta_revisions'] = {'hermes-bots': 3};
+      now = now.add(const Duration(seconds: 30));
       await bots.refresh();
       expect(
         visit.previewRevision(RecentConversationKey.chat(target)),
@@ -556,7 +558,7 @@ void main() {
       recents.setVisible(reader, false);
       recents.setVisible(other, false);
       await recents.refresh(force: true);
-      expect(groupReads, 2);
+      expect(groupReads, 1, reason: 'Fresh group catalog is reused');
     },
   );
 
@@ -592,12 +594,17 @@ void main() {
     'Recents polls while any reader is visible and stops when hidden',
     (tester) async {
       final fixture = BotsFixture();
-      var groupReads = 0;
+      var now = DateTime.now();
+      var groupReads = 0, statusReads = 0;
       fixture.readHook = (_, method, _) async {
         if (method == 'groups.list') groupReads++;
+        if (method == 'profiles.list') statusReads++;
         return null;
       };
-      final bots = BotsSession((_) async => [fixture.repository]);
+      final bots = BotsSession(
+        (_) async => [fixture.repository],
+        now: () => now,
+      );
       final recents = recentsFor(bots);
       addTearDown(bots.dispose);
       await recents.refresh();
@@ -607,12 +614,16 @@ void main() {
       await tester.pump();
       expect(groupReads, 1);
       recents.setVisible(reader, false);
+      now = now.add(WorkspaceRecentsSession.refreshInterval);
       await tester.pump(WorkspaceRecentsSession.refreshInterval);
       await tester.pump();
-      expect(groupReads, 2);
+      expect(groupReads, 1);
+      expect(statusReads, 2);
       recents.setVisible(other, false);
+      now = now.add(WorkspaceRecentsSession.refreshInterval);
       await tester.pump(WorkspaceRecentsSession.refreshInterval);
-      expect(groupReads, 2);
+      expect(groupReads, 1);
+      expect(statusReads, 2);
     },
   );
 
@@ -651,6 +662,7 @@ void main() {
     test(
       'failed $method observation retains the cached group slot until recovery',
       () async {
+        var now = DateTime.now();
         final fixture = BotsFixture();
         fixture.room['name'] = 'Build Pace Health Analysis';
         fixture.events.add({
@@ -661,10 +673,14 @@ void main() {
           'actor': {'kind': 'member', 'id': 'atlas'},
           'payload': {'text': 'Recent group answer'},
         });
-        final bots = BotsSession((_) async => [fixture.repository]);
+        final bots = BotsSession(
+          (_) async => [fixture.repository],
+          now: () => now,
+        );
         final recents = WorkspaceRecentsSession(controller, bots);
         addTearDown(recents.dispose);
         addTearDown(bots.dispose);
+        now = now.add(const Duration(minutes: 5));
         await bots.refresh();
         await Future<void>.delayed(Duration.zero);
         final group = recents.items().single.group!;
@@ -677,12 +693,23 @@ void main() {
           activity: activity,
         );
         addTearDown(visit.dispose);
+        if (method == 'groups.log') {
+          fixture.events.add({
+            'room_id': 'room-1',
+            'seq': 2,
+            'kind': 'message.member',
+            'created_at': DateTime.now().millisecondsSinceEpoch / 1000,
+            'actor': {'kind': 'member', 'id': 'atlas'},
+            'payload': {'text': 'Newer group answer'},
+          });
+        }
         fixture.readHook = (_, requested, _) async {
           if (requested == method) {
             throw StateError('Group read unavailable');
           }
           return null;
         };
+        now = now.add(const Duration(minutes: 5));
         await bots.refresh();
         await Future<void>.delayed(Duration.zero);
         expect(recents.items().single.group!.key, group.key);
@@ -694,6 +721,7 @@ void main() {
         expect(visit.catalogError, isNotNull);
         fixture.readHook = null;
         fixture.room['name'] = 'Recovered Build Pace Health Analysis';
+        now = now.add(const Duration(minutes: 5));
         await bots.refresh();
         await Future<void>.delayed(Duration.zero);
         expect(recents.items().single.group!.key, group.key);
@@ -709,6 +737,7 @@ void main() {
           }
           return null;
         };
+        now = now.add(const Duration(minutes: 5));
         await bots.refresh();
         await Future<void>.delayed(Duration.zero);
         expect(recents.items(), isEmpty);
@@ -879,7 +908,7 @@ void main() {
         recents.dispose();
         bots.dispose();
       });
-      await started.future;
+      await refresh;
       await Future<void>.delayed(Duration.zero);
       final room = recents.catalog.entries.singleWhere((e) => e.group != null);
       final activity = ValueNotifier<ChatNoticeActivity?>(null);
@@ -891,8 +920,11 @@ void main() {
         activity: activity,
       );
       addTearDown(visit.dispose);
+      var emissions = 0;
+      visit.addListener(() => emissions++);
       visit.activate();
       visit.prepare([room.key]);
+      await started.future;
       for (var i = 0; i < 6; i++) {
         await Future<void>.delayed(Duration.zero);
       }
@@ -902,8 +934,10 @@ void main() {
         containsAll(['bot_atlas', 'bot_mira']),
       );
       expect(
-        visit.cardAt(index).groupAppearance.byHandle['bot_atlas']!.avatar,
-        isNull,
+        bots.avatarContentVersion(
+          visit.cardAt(index).groupAppearance.byHandle['bot_atlas']!.scope,
+        ),
+        0,
       );
       final before = visit.cardRevision(room.key),
           reading = visit.cardAt(index).preview!;
@@ -914,16 +948,24 @@ void main() {
         reason:
             'Roster and card preparation must share one physical avatar request',
       );
+      final beforeEmissions = emissions;
       release.complete();
       await refresh;
       for (var i = 0; i < 4; i++) {
         await Future<void>.delayed(Duration.zero);
       }
       expect(
-        visit.cardAt(index).groupAppearance.byHandle['bot_atlas']!.avatar,
-        orderedEquals(base64Decode(png)),
+        bots.avatarContentVersion(
+          visit.cardAt(index).groupAppearance.byHandle['bot_atlas']!.scope,
+        ),
+        greaterThan(0),
       );
       expect(visit.cardRevision(room.key), isNot(before));
+      expect(
+        emissions,
+        greaterThan(beforeEmissions),
+        reason: 'Changed image pixels notify the prepared source immediately',
+      );
       expect(visit.cardAt(index).preview, same(reading));
       expect(logs, reads);
       expect(assets, 1);
@@ -934,6 +976,7 @@ void main() {
   test(
     'pinch catalog matches merged Recents freshness order including rooms',
     () async {
+      var now = DateTime.now();
       final botFixture = BotsFixture();
       for (var seq = 1; seq <= 120; seq++) {
         botFixture.events.add({
@@ -945,7 +988,10 @@ void main() {
           'payload': {'text': 'Group answer $seq'},
         });
       }
-      final bots = BotsSession((_) async => [botFixture.repository]);
+      final bots = BotsSession(
+        (_) async => [botFixture.repository],
+        now: () => now,
+      );
       addTearDown(bots.dispose);
       await bots.refresh();
       await controller.openSession(
@@ -967,6 +1013,7 @@ void main() {
         onOpenGroup: (group) async {
           openedGroup = group;
           botFixture.room['name'] = 'Renamed research team';
+          now = now.add(const Duration(minutes: 5));
           await bots.refresh();
           await closeRoom.future;
         },
@@ -1023,8 +1070,12 @@ void main() {
     test(
       'group-origin Recents fences selection after $outcome normal route',
       () async {
+        var now = DateTime.now();
         final botFixture = BotsFixture();
-        final bots = BotsSession((_) async => [botFixture.repository]);
+        final bots = BotsSession(
+          (_) async => [botFixture.repository],
+          now: () => now,
+        );
         addTearDown(bots.dispose);
         await bots.refresh();
         await controller.openSession(
@@ -1055,6 +1106,7 @@ void main() {
         await bots.refresh();
         expect(visit.previewRevision(origin), revision);
         botFixture.room['name'] = 'Renamed team';
+        now = now.add(const Duration(minutes: 5));
         await bots.refresh();
         expect(visit.previewRevision(origin), isNot(revision));
         visit.activate();
@@ -1144,7 +1196,7 @@ void main() {
           reason: 'Group discovery must not wait for unrelated bot reads',
         );
         expect(published, isTrue);
-        expect(bots.state.loading, isTrue);
+        expect(bots.state.loading, heldMethod == 'session.active_list');
         expect(botFixture.commands, isEmpty);
       },
     );

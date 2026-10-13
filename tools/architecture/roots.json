@@ -8700,6 +8700,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/services/bot_avatar_cache.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/bot_avatar_io.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -10585,6 +10590,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "test/bot_avatar_cache_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/bot_display_client_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
@@ -10641,6 +10651,11 @@
     },
     {
       "path": "test/bots_contract_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bots_refresh_scheduling_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },

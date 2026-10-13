@@ -1,6 +1,6 @@
+import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import '../models/bots.dart';
 import '../models/profile_session_key.dart';
 import '../models/recent_conversation.dart';
 import 'bots_session.dart';
@@ -68,11 +68,11 @@ class WorkspaceRecentsSession extends ChangeNotifier
   int _appearanceGeneration = 0;
   Set<ProfileSessionKey> _keys = {};
   final _colorProfiles = <String>{};
-  Map<ProfileSessionKey, BotRecord> _appearances = const {};
   Timer? _poll;
   @override
   void setVisible(Object reader, bool visible) {
     if (_closed) return;
+    bots.setRecentsVisible(reader, visible);
     final wasVisible = _visible.isNotEmpty;
     if (visible) {
       _visible.add(reader);
@@ -129,11 +129,7 @@ class WorkspaceRecentsSession extends ChangeNotifier
 
   void _publish() {
     if (_closed) return;
-    final items = workspaceRecentItems(
-      controller,
-      bots,
-      appearances: _appearances,
-    );
+    final items = workspaceRecentItems(controller, bots);
     final facts = <Object?>[
       for (final item in items)
         (
@@ -147,7 +143,15 @@ class WorkspaceRecentsSession extends ChangeNotifier
           item.chat?.sideTasksRunning,
           item.chat?.project,
           item.bot,
+          item.bot == null ? null : bots.avatarContentVersion(item.bot!.scope),
           item.group,
+          item.group == null
+              ? null
+              : jsonEncode([
+                  for (final member
+                      in bots.appearanceForGroup(item.group!).byHandle.entries)
+                    [member.key, bots.avatarContentVersion(member.value.scope)],
+                ]),
           item.group == null ? null : bots.appearanceForGroup(item.group!),
         ),
     ];
@@ -214,7 +218,6 @@ class WorkspaceRecentsSession extends ChangeNotifier
             )
             .then((value) {
               if (_closed || generation != _appearanceGeneration) return;
-              _appearances = value;
               _changed();
             }),
       );
@@ -224,10 +227,12 @@ class WorkspaceRecentsSession extends ChangeNotifier
   @override
   void dispose() {
     _closed = true;
+    for (final reader in _visible) {
+      bots.setRecentsVisible(reader, false);
+    }
     _visible.clear();
     _items = const [];
     _facts = const [];
-    _appearances = const {};
     _keys = {};
     _colorProfiles.clear();
     _catalog = RecentConversationCatalog(entries: const [], error: null);

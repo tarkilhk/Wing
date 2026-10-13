@@ -124,6 +124,7 @@ void main() {
               appPreferences: appPreferences,
               gatewayFactory: fixture.gateway,
             );
+            var now = DateTime.now();
             final botFixture = BotsFixture();
             botFixture.events.add({
               'room_id': 'room-1',
@@ -133,7 +134,10 @@ void main() {
               'actor': {'kind': 'member', 'id': 'atlas'},
               'payload': {'text': 'Saved group reply'},
             });
-            final bots = BotsSession((_) async => [botFixture.repository]);
+            final bots = BotsSession(
+              (_) async => [botFixture.repository],
+              now: () => now,
+            );
             final recents = WorkspaceRecentsSession(controller, bots);
             final release = Completer<void>(), started = Completer<void>();
             Future<void>? refresh;
@@ -199,6 +203,7 @@ void main() {
             if (cached) {
               expect(recents.items(), isNotEmpty);
               expect(find.byType(StudioLoading), findsNothing);
+              now = now.add(const Duration(seconds: 30));
               refresh = recents.refresh(force: true);
             } else {
               for (var i = 0; i < 20; i++) {

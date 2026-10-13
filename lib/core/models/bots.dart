@@ -36,11 +36,10 @@ class BotRecord {
     this.resolvedChat,
     this.workerLastActive,
     this.lastActive,
+    this.canonicalLastActive,
     this.preview = '',
     this.presence = BotPresence.unknown,
-    Uint8List? avatar,
-  }) : metadata = Map.unmodifiable(metadata),
-       avatar = avatar?.asUnmodifiableView();
+  }) : metadata = Map.unmodifiable(metadata);
 
   final WorkspaceScope scope;
   final String instance, title, shape, color, preview;
@@ -65,6 +64,9 @@ class BotRecord {
   /// Newest stock conversation or worker activity for this profile.
   final DateTime? lastActive;
 
+  /// Canonical activity only; worker/ordinary activity never ranks warm images.
+  final DateTime? canonicalLastActive;
+
   static int compareForRoster(BotRecord a, BotRecord b) {
     final activity = switch ((a.lastActive, b.lastActive)) {
       (final DateTime left, final DateTime right) => right.compareTo(left),
@@ -82,7 +84,6 @@ class BotRecord {
   bool describesConversation(ProfileSessionKey key) =>
       key == chat || key == resolvedChat;
   final BotPresence presence;
-  final Uint8List? avatar;
   String get id => '${scope.connectionIdentity}/${profile.name}';
 
   BotRecord withPresence(BotPresence value) => BotRecord(
@@ -101,40 +102,31 @@ class BotRecord {
     resolvedChat: resolvedChat,
     workerLastActive: workerLastActive,
     lastActive: lastActive,
+    canonicalLastActive: canonicalLastActive,
     preview: preview,
     presence: value,
-    avatar: avatar,
   );
 
-  /// Adopt a confirmed asset write independently of metadata acknowledgements.
-  BotRecord withAvatar(Uint8List? image) =>
-      _withAvatar(image, hasAvatar: image != null);
-
-  /// Reading an asset does not change Hermes's saved has-avatar metadata.
-  BotRecord withObservedAvatar(Uint8List? image) =>
-      _withAvatar(image, hasAvatar: hasAvatar);
-
-  BotRecord _withAvatar(Uint8List? image, {required bool hasAvatar}) =>
-      BotRecord(
-        scope: scope,
-        instance: instance,
-        profile: profile,
-        title: title,
-        shape: shape,
-        color: color,
-        pinned: pinned,
-        hidden: hidden,
-        hasAvatar: hasAvatar,
-        revision: revision,
-        metadata: metadata,
-        chat: chat,
-        resolvedChat: resolvedChat,
-        workerLastActive: workerLastActive,
-        lastActive: lastActive,
-        preview: preview,
-        presence: presence,
-        avatar: image,
-      );
+  BotRecord withAvatarHint(bool value) => BotRecord(
+    scope: scope,
+    instance: instance,
+    profile: profile,
+    title: title,
+    shape: shape,
+    color: color,
+    pinned: pinned,
+    hidden: hidden,
+    hasAvatar: value,
+    revision: revision,
+    metadata: metadata,
+    chat: chat,
+    resolvedChat: resolvedChat,
+    workerLastActive: workerLastActive,
+    lastActive: lastActive,
+    canonicalLastActive: canonicalLastActive,
+    preview: preview,
+    presence: presence,
+  );
 
   BotRecord withMetadata({
     required Map<String, Object?> metadata,
@@ -160,9 +152,9 @@ class BotRecord {
     resolvedChat: resolvedChat,
     workerLastActive: workerLastActive,
     lastActive: lastActive,
+    canonicalLastActive: canonicalLastActive,
     preview: preview,
     presence: presence,
-    avatar: avatar,
   );
 }
 
@@ -219,6 +211,9 @@ class BotGroup {
     required this.name,
     required Iterable<BotGroupMember> members,
     required this.observationComplete,
+    this.runtimeAvailable = false,
+    this.latestSequence,
+    this.messageCoverageSequence,
     this.preview = '',
     this.working = false,
     this.blocked = false,
@@ -242,7 +237,11 @@ class BotGroup {
   /// Retained room details never carry this positive activity into a failed read.
   final Set<String> activeMemberProfiles;
 
-  /// False means runtime/message reads failed; absent fields are unknown.
+  /// Runtime availability does not establish message coverage.
+  final bool runtimeAvailable;
+  final int? latestSequence, messageCoverageSequence;
+
+  /// False means the latest message observation failed; retained facts may exist.
   final bool observationComplete;
   final DateTime? lastMessageAt;
   final int lastMessageSequence, lastAnswerSequence;
@@ -265,6 +264,9 @@ class BotGroup {
     name: name,
     members: members,
     observationComplete: observationComplete,
+    runtimeAvailable: runtimeAvailable,
+    latestSequence: latestSequence,
+    messageCoverageSequence: messageCoverageSequence,
     preview: preview,
     working: working,
     blocked: blocked,
@@ -284,6 +286,9 @@ class BotGroup {
     name: name,
     members: members,
     observationComplete: observationComplete,
+    runtimeAvailable: runtimeAvailable,
+    latestSequence: latestSequence,
+    messageCoverageSequence: messageCoverageSequence,
     preview: preview,
     working: working,
     blocked: blocked,
@@ -307,6 +312,9 @@ class BotGroup {
     name: name,
     members: members,
     observationComplete: observationComplete,
+    runtimeAvailable: runtimeAvailable,
+    latestSequence: latestSequence,
+    messageCoverageSequence: messageCoverageSequence,
     preview: preview,
     working: working,
     blocked: blocked,
@@ -320,7 +328,78 @@ class BotGroup {
     iconRevision: revision,
   );
 
-  /// Keep confirmed runtime/message facts when only room identity refreshed.
+  /// Catalog facts replace identity without invalidating runtime or messages.
+  BotGroup withCatalogObservation(
+    BotGroup observed, {
+    bool retainIdentity = false,
+  }) {
+    if (key != observed.key) {
+      throw ArgumentError('Wrong group catalog owner');
+    }
+    return BotGroup(
+      scope: scope,
+      instance: instance,
+      id: id,
+      name: retainIdentity ? name : observed.name,
+      members: retainIdentity ? members : observed.members,
+      observationComplete: observationComplete,
+      runtimeAvailable: runtimeAvailable,
+      latestSequence: latestSequence,
+      messageCoverageSequence: messageCoverageSequence,
+      preview: preview,
+      working: working,
+      blocked: blocked,
+      activeMemberProfiles: runtimeAvailable && working
+          ? (retainIdentity ? members : observed.members).map(
+              (member) => member.profile,
+            )
+          : const [],
+      lastMessageAt: lastMessageAt,
+      lastMessageSequence: lastMessageSequence,
+      lastAnswerSequence: lastAnswerSequence,
+      pinned: pinned,
+      picture: observed.picture,
+      iconColor: observed.iconColor,
+      iconRevision: observed.iconRevision,
+    );
+  }
+
+  /// A slower preview may publish messages without replacing newer status.
+  BotGroup withMessageObservation(BotGroup observed) {
+    if (key != observed.key) {
+      throw ArgumentError('Wrong group message owner');
+    }
+    final latest = latestSequence;
+    final incoming = observed.latestSequence;
+    return BotGroup(
+      scope: scope,
+      instance: instance,
+      id: id,
+      name: name,
+      members: members,
+      observationComplete: observed.observationComplete,
+      runtimeAvailable: runtimeAvailable,
+      latestSequence: latest == null
+          ? incoming
+          : incoming == null || latest >= incoming
+          ? latest
+          : incoming,
+      messageCoverageSequence: observed.messageCoverageSequence,
+      preview: observed.preview,
+      working: working,
+      blocked: blocked,
+      activeMemberProfiles: activeMemberProfiles,
+      lastMessageAt: observed.lastMessageAt,
+      lastMessageSequence: observed.lastMessageSequence,
+      lastAnswerSequence: observed.lastAnswerSequence,
+      pinned: pinned,
+      picture: picture,
+      iconColor: iconColor,
+      iconRevision: iconRevision,
+    );
+  }
+
+  /// Keep confirmed messages after a failed message read, using current runtime.
   BotGroup withRetainedObservation(BotGroup previous) {
     if (key != previous.key || observationComplete) {
       throw ArgumentError(
@@ -334,9 +413,12 @@ class BotGroup {
       name: name,
       members: members,
       observationComplete: false,
+      runtimeAvailable: runtimeAvailable,
+      latestSequence: latestSequence,
+      messageCoverageSequence: previous.messageCoverageSequence,
       preview: previous.preview,
-      working: previous.working,
-      blocked: previous.blocked,
+      working: working,
+      blocked: blocked,
       activeMemberProfiles: activeMemberProfiles,
       lastMessageAt: previous.lastMessageAt,
       lastMessageSequence: previous.lastMessageSequence,
@@ -345,6 +427,53 @@ class BotGroup {
       picture: picture,
       iconColor: iconColor,
       iconRevision: iconRevision,
+    );
+  }
+}
+
+/// A known room read separates room validity from optional live driver facts.
+final class BotGroupState {
+  BotGroupState({
+    required this.room,
+    required this.roomAvailable,
+    this.latestSequence,
+    this.runtimeAvailable = false,
+    this.working = false,
+    this.blocked = false,
+  });
+  final BotGroup room;
+  final bool roomAvailable, runtimeAvailable, working, blocked;
+  final int? latestSequence;
+  Set<String> get activeMemberProfiles => runtimeAvailable && working
+      ? Set.unmodifiable(room.members.map((member) => member.profile))
+      : const {};
+
+  /// Replace runtime and incidentally read identity, retaining confirmed messages.
+  BotGroup applyTo(BotGroup previous) {
+    if (room.key != previous.key) {
+      throw ArgumentError('Wrong group state owner');
+    }
+    return BotGroup(
+      scope: previous.scope,
+      instance: previous.instance,
+      id: previous.id,
+      name: roomAvailable ? room.name : previous.name,
+      members: roomAvailable ? room.members : previous.members,
+      observationComplete: previous.observationComplete,
+      runtimeAvailable: runtimeAvailable,
+      latestSequence: latestSequence ?? previous.latestSequence,
+      messageCoverageSequence: previous.messageCoverageSequence,
+      preview: previous.preview,
+      working: runtimeAvailable && working,
+      blocked: runtimeAvailable && blocked,
+      activeMemberProfiles: activeMemberProfiles,
+      lastMessageAt: previous.lastMessageAt,
+      lastMessageSequence: previous.lastMessageSequence,
+      lastAnswerSequence: previous.lastAnswerSequence,
+      pinned: previous.pinned,
+      picture: previous.picture,
+      iconColor: previous.iconColor,
+      iconRevision: previous.iconRevision,
     );
   }
 }

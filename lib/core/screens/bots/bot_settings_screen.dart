@@ -56,6 +56,13 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
         createSession: () => editor = BotProfileEditSession(
           widget.session.repository(_bot.scope.connectionIdentity),
           _bot,
+          avatars: widget.session.createAvatarBorrower(),
+          validateImage: (bot) => widget.session.reloadAvatar(bot.scope),
+          onSaved: (bot, image, assetSaved) => widget.session.acceptAppearance(
+            bot,
+            image: image,
+            assetSaved: assetSaved,
+          ),
         ),
       ),
     );

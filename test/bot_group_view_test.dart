@@ -126,7 +126,8 @@ void main() {
                 },
               };
             };
-            final group = (await fixture.repository.groups(
+            final group = (await readFixtureGroups(
+              fixture.repository,
               groupMessages: null,
             )).first;
             final stopGate = Completer<void>();
@@ -336,7 +337,8 @@ void main() {
           fixture.events.add(
             _event(1, 'message.member', 'atlas', 'Saved group reply'),
           );
-          final group = (await fixture.repository.groups(
+          final group = (await readFixtureGroups(
+            fixture.repository,
             groupMessages: null,
           )).first;
           final appearances = FixedGroupAppearances(
@@ -532,7 +534,8 @@ void main() {
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
           final fixture = BotsFixture();
-          final group = (await fixture.repository.groups(
+          final group = (await readFixtureGroups(
+            fixture.repository,
             groupMessages: null,
           )).first;
           final status = ServerConnectionStatus('Claw')
@@ -672,7 +675,8 @@ void main() {
         );
         final cache = RecentGroupMessages();
         addTearDown(cache.dispose);
-        final group = (await fixture.repository.groups(
+        final group = (await readFixtureGroups(
+          fixture.repository,
           groupMessages: cache,
         )).single;
         final waiting = Completer<void>();
@@ -728,7 +732,10 @@ void main() {
       for (var i = 1; i <= 100; i++)
         _event(i, 'message.member', 'atlas', 'Message $i\n' * 20),
     ]);
-    final group = (await fixture.repository.groups(groupMessages: null)).single;
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).single;
     await tester.pumpWidget(
       MaterialApp(
         home: BotGroupScreen(
@@ -771,7 +778,8 @@ void main() {
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
           final fixture = BotsFixture();
-          final group = (await fixture.repository.groups(
+          final group = (await readFixtureGroups(
+            fixture.repository,
             groupMessages: null,
           )).single;
           final device = VoiceDeviceFixture();
@@ -911,7 +919,10 @@ void main() {
     tester,
   ) async {
     final fixture = BotsFixture();
-    final group = (await fixture.repository.groups(groupMessages: null)).single;
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).single;
     final device = VoiceDeviceFixture();
     addTearDown(device.stream.close);
     final visible = ValueNotifier(true);
@@ -982,7 +993,8 @@ void main() {
     (tester) async {
       final server = AdministrationFixture();
       final fixture = BotsFixture(server: server.server);
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       final device = VoiceDeviceFixture()
@@ -1052,7 +1064,8 @@ void main() {
           fixture.events.add(
             _event(1, 'message.member', 'atlas', 'Keep this reply'),
           );
-          final group = (await fixture.repository.groups(
+          final group = (await readFixtureGroups(
+            fixture.repository,
             groupMessages: null,
           )).first;
           final appearances = await fixture.repository.bots();
@@ -1181,7 +1194,8 @@ void main() {
           fixture.workerMessages['mira'] = [
             {'id': 1, 'role': 'assistant', 'content': 'Mira internal work'},
           ];
-          final group = (await fixture.repository.groups(
+          final group = (await readFixtureGroups(
+            fixture.repository,
             groupMessages: null,
           )).first;
           final appearances = await fixture.repository.bots();
@@ -1398,7 +1412,10 @@ void main() {
   ) async {
     final fixture = BotsFixture();
     fixture.events.add(_event(1, 'message.member', 'mira', 'Saved Mira reply'));
-    final group = (await fixture.repository.groups(groupMessages: null)).first;
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).first;
     await tester.pumpWidget(
       MaterialApp(
         home: BotGroupScreen(
@@ -1453,7 +1470,10 @@ void main() {
     tester,
   ) async {
     final fixture = BotsFixture();
-    final group = (await fixture.repository.groups(groupMessages: null)).first;
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).first;
     final appearances = await fixture.repository.bots();
     var reads = 0;
     fixture.readHook = (_, method, _) async {
@@ -1542,7 +1562,8 @@ void main() {
               '**Literal user text** @bot_atlas',
             ),
           );
-          final group = (await fixture.repository.groups(
+          final group = (await readFixtureGroups(
+            fixture.repository,
             groupMessages: null,
           )).first;
           final appearances = await fixture.repository.bots();
@@ -1683,9 +1704,11 @@ void main() {
               'I’ll review the scientific assumptions before implementation. The comparison windows and missing-data rules need your approval.',
             ),
           ]);
-          final group = (await fixture.repository.groups(groupMessages: null))
-              .first
-              .withIcon(
+          final group =
+              (await readFixtureGroups(
+                fixture.repository,
+                groupMessages: null,
+              )).first.withIcon(
                 picture: File('assets/icon/icon.png').readAsBytesSync(),
               );
           final appearances = await fixture.repository.bots();
@@ -1863,7 +1886,8 @@ void main() {
             '@bot_atlas, please review this evidence and explain what I need to do next.',
           ),
         ]);
-        final group = (await fixture.repository.groups(
+        final group = (await readFixtureGroups(
+          fixture.repository,
           groupMessages: null,
         )).first;
         final appearances = await fixture.repository.bots();

@@ -97,11 +97,9 @@ class BotGroupPicture extends StatelessWidget {
               top: origin.dy + point.dy * avatarSize,
               child: bot == null
                   ? SizedBox.square(dimension: avatarSize)
-                  : BotAvatar(
+                  : BorrowedBotAvatar(
+                      bot: bot,
                       name: bot.title,
-                      shape: bot.shape,
-                      color: bot.color,
-                      image: bot.avatar,
                       size: avatarSize,
                     ),
             );

@@ -325,7 +325,8 @@ void main() {
             profile['ui_meta']['hermes-bots']['shape'] = botShapes[index];
           }
           final bots = await fixture.repository.bots();
-          final saved = (await fixture.repository.groups(
+          final saved = (await readFixtureGroups(
+            fixture.repository,
             groupMessages: null,
           )).single;
           final frame = GlobalKey();
@@ -482,15 +483,20 @@ void main() {
         'ready roster refresh stays quiet and fixed in ${brightness.name} at $scale',
         (tester) async {
           SharedPreferences.setMockInitialValues({});
+          var now = DateTime.now();
           final fixture = BotsFixture();
-          final session = BotsSession((_) async => [fixture.repository]);
+          final session = BotsSession(
+            (_) async => [fixture.repository],
+            now: () => now,
+          );
           addTearDown(session.dispose);
           await session.refresh();
           final held = Completer<Map<String, dynamic>?>();
           fixture.readHook = (_, method, _) async =>
-              ['profiles.list', 'groups.list'].contains(method)
+              ['profiles.list', 'groups.list', 'groups.state'].contains(method)
               ? held.future
               : null;
+          now = now.add(const Duration(minutes: 5));
           final refresh = session.refresh();
           var view = const BotsViewState();
           final frame = GlobalKey();
@@ -1567,8 +1573,8 @@ void main() {
         meta['imageKind'] = 'shape';
         const png =
             'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=';
-        final bot = (await fixture.repository.bots()).first.withAvatar(
-          base64Decode(png),
+        final bot = (await fixture.repository.bots()).first.withAvatarHint(
+          true,
         );
         final frame = GlobalKey();
         await tester.pumpWidget(
@@ -1577,8 +1583,14 @@ void main() {
             home: RepaintBoundary(
               key: frame,
               child: BotProfileEditor(
-                createSession: () =>
-                    BotProfileEditSession(fixture.repository, bot),
+                createSession: () => BotProfileEditSession(
+                  fixture.repository,
+                  bot,
+                  savedImage: base64Decode(png),
+
+                  validateImage: (bot) async =>
+                      (await fixture.repository.readAvatar(bot)).bytes,
+                ),
               ),
             ),
           ),
@@ -2273,6 +2285,7 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
+        var now = DateTime.now();
         final fixture = BotsFixture();
         fixture.profiles[0]['canonical_session'] = <String, dynamic>{
           ...fixture.profiles[0]['canonical_session'],
@@ -2287,7 +2300,10 @@ void main() {
           'source': 'tool',
           'last_active': 2000,
         };
-        final session = BotsSession((_) async => [fixture.repository]);
+        final session = BotsSession(
+          (_) async => [fixture.repository],
+          now: () => now,
+        );
         addTearDown(session.dispose);
         await session.refresh();
         final frame = GlobalKey();
@@ -2331,6 +2347,7 @@ void main() {
           ...fixture.profiles[0]['canonical_session'],
           'last_active': 4000,
         };
+        now = now.add(const Duration(seconds: 30));
         await session.refresh();
         await tester.pumpAndSettle();
         expect(top('atlas'), lessThan(top('mira')));
@@ -3255,6 +3272,150 @@ void main() {
         },
       );
     }
+  }
+
+  for (final (retained, brightness, scale) in [
+    for (final retained in ['cached', 'roster', 'first read'])
+      for (final brightness in Brightness.values)
+        for (final scale in [1.0, 2.0]) (retained, brightness, scale),
+  ]) {
+    testWidgets(
+      'bot header renders $retained identity during held reads ${brightness.name} $scale',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        final browser = _BotConversationBrowser();
+        final controller = ProfileWorkspaceController(
+          access: ConnectionAccess(
+            connection: SavedConnection(
+              id: 'host',
+              label: 'Home server',
+              host: 'localhost',
+              port: 1,
+              apiKey: '',
+            ),
+            dashboardOAuth: null,
+          ),
+          connectionIdentity: 'instance-1',
+          preferences: preferences,
+          appPreferences: appPreferences,
+          gatewayFactory: browser.gateway,
+        );
+        await controller.initialize();
+        final scope = controller.current!.scope;
+        final key = ProfileSessionKey(scope, 'canonical-root');
+        await controller.openSession(key);
+        const png =
+            'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAJUlEQVR4nGNwCj/ynxLMMGoApgH/byeBMbHiw9GAgY+FUQNIxwDOD2oPx3g6jQAAAABJRU5ErkJggg==';
+        final fixture = BotsFixture();
+        fixture.profiles
+          ..clear()
+          ..add(BotsFixture.profile('personal', 'Atlas'));
+        fixture.profiles.single['canonical_session'] = {
+          'id': 'canonical-root',
+          'resolved_id': 'canonical-tip',
+        };
+        fixture.profiles.single['has_avatar'] = true;
+        final held = Completer<Map<String, dynamic>?>();
+        var holding = false;
+        var heldReadStarted = false;
+        fixture.readHook = (_, method, _) async {
+          if (holding &&
+              method ==
+                  (retained == 'first read'
+                      ? 'profiles.get_asset'
+                      : 'profiles.list')) {
+            heldReadStarted = true;
+            return held.future;
+          }
+          if (method == 'profiles.get_asset') {
+            return {'found': true, 'data': png};
+          }
+          return null;
+        };
+        final owner = BotsSession((_) async => [fixture.repository]);
+        if (retained == 'cached') await owner.botForConversation(key);
+        if (retained == 'roster') await owner.refresh();
+        if (retained != 'first read') {
+          final borrower = owner.createAvatarBorrower()..replaceDemand({scope});
+          await owner.reloadAvatar(scope);
+          borrower.dispose();
+        }
+        owner.invalidateAppearances();
+        holding = true;
+        final frame = GlobalKey();
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: RepaintBoundary(key: frame, child: child!),
+            ),
+            home: ProfileWorkspaceScreen(
+              controller: controller,
+              createBotsSession: () => owner,
+            ),
+          ),
+        );
+        if (retained == 'first read') {
+          for (var frame = 0; frame < 8; frame++) {
+            await tester.pump(const Duration(milliseconds: 16));
+          }
+        }
+        expect(heldReadStarted, isTrue);
+        expect(find.text('Bot Chat'), findsNothing);
+        expect(find.text('Atlas'), findsOneWidget);
+        final avatar = find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(BotAvatar),
+        );
+        expect(avatar, findsOneWidget);
+        expect(
+          tester.widget<BotAvatar>(avatar).image,
+          retained == 'first read' ? isNull : base64Decode(png),
+        );
+        final bounds = tester.getRect(avatar);
+        await tester.settleMarkdown();
+        if (retained != 'first read') {
+          final image = tester.widget<BotAvatar>(avatar).image!;
+          await tester.runAsync(
+            () => precacheImage(MemoryImage(image), tester.element(avatar)),
+          );
+          await tester.pump();
+          expect(
+            tester
+                .renderObject<RenderImage>(
+                  find.descendant(of: avatar, matching: find.byType(RawImage)),
+                )
+                .image,
+            isNotNull,
+          );
+        }
+        await _capture(
+          tester,
+          frame,
+          'bot-header-held-$retained-${brightness.name}-$scale',
+        );
+        held.complete(
+          retained == 'first read' ? {'found': true, 'data': png} : null,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Atlas'), findsOneWidget);
+        expect(tester.widget<BotAvatar>(avatar).image, base64Decode(png));
+        expect(tester.getRect(avatar), bounds);
+        expect(fixture.commands, isEmpty);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        controller.dispose();
+        appPreferences.dispose();
+      },
+    );
   }
 
   testWidgets(

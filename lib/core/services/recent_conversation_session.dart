@@ -229,7 +229,7 @@ final class RecentConversationSession extends ChangeNotifier {
 
   /// Appearance changes affect passive pixels, never saved-history admission.
   Object cardRevision(RecentConversationKey key) =>
-      (previewRevision(key), _source.appearanceFor(key));
+      (previewRevision(key), _source.appearanceFor(key).pixelRevision);
 
   /// Unique center-outward priority, bounded independently of ring size.
   List<RecentConversationKey> keysAround(
@@ -388,6 +388,7 @@ final class RecentConversationSession extends ChangeNotifier {
     _openingEntries.clear();
     _preparationGeneration++;
     _wanted.clear();
+    unawaited(_source.prepareAppearances(const [], () => false));
   }
 
   bool _pumpPreviews() {

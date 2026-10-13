@@ -304,13 +304,7 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
 
   Widget _leading(MentionCandidate item) {
     if (item.appearance case final bot?) {
-      return BotAvatar(
-        name: bot.profile.name,
-        shape: bot.shape,
-        color: bot.color,
-        image: bot.avatar,
-        size: 32,
-      );
+      return BorrowedBotAvatar(bot: bot, name: bot.profile.name, size: 32);
     }
     return Icon(
       item.isCollective

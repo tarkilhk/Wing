@@ -15,7 +15,8 @@ class BotProfileEditor extends StatefulWidget {
   State<BotProfileEditor> createState() => _BotProfileEditorState();
 }
 
-class _BotProfileEditorState extends State<BotProfileEditor> {
+class _BotProfileEditorState extends State<BotProfileEditor>
+    with WidgetsBindingObserver {
   late final _session = widget.createSession();
   late final _title = TextEditingController(text: _session.title);
   final _prompt = TextEditingController();
@@ -24,7 +25,24 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _session.addListener(_changed);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncVisibility();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) => _syncVisibility();
+  void _syncVisibility() {
+    final state = WidgetsBinding.instance.lifecycleState;
+    _session.setVisible(
+      (state == null || state == AppLifecycleState.resumed) &&
+          ModalRoute.isCurrentOf(context) != false,
+    );
   }
 
   void _changed() {
@@ -36,6 +54,7 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _session.removeListener(_changed);
     _session.dispose();
     _title.dispose();

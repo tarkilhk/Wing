@@ -28,7 +28,10 @@ void main() {
   late BotGroupHistorySession session;
   setUp(() async {
     fixture = BotsFixture();
-    group = (await fixture.repository.groups(groupMessages: null)).single;
+    group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).single;
     session = BotGroupHistorySession(fixture.repository, group);
     fixture.workerRows['atlas'] = [_worker('atlas')];
     fixture.workerRows['mira'] = [_worker('mira')];

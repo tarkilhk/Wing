@@ -31,17 +31,13 @@ class WorkspaceRecentItem {
 List<WorkspaceRecentItem> workspaceRecentItems(
   ProfileWorkspaceController controller,
   BotsSession bots, {
-  required Map<ProfileSessionKey, BotRecord> appearances,
   DateTime? now,
 }) {
   final cutoff = (now ?? DateTime.now()).millisecondsSinceEpoch / 1000 - 86400;
   final result =
       [
         for (final chat in controller.recentChats(now: now))
-          WorkspaceRecentItem.chat(
-            chat,
-            bots.cachedAppearance(chat.key) ?? appearances[chat.key],
-          ),
+          WorkspaceRecentItem.chat(chat, bots.cachedAppearance(chat.key)),
         for (final group in bots.observedGroups)
           if (group.working ||
               group.blocked ||
@@ -75,9 +71,9 @@ final class _WorkspaceRecentConversationSource
       key.group == null ? null : bots.groupForKey(key.group!);
   final WorkspaceRecentsCache recents;
   BotsSession get bots => recents.bots;
-  Set<ProfileSessionKey> _appearanceDemand = {};
-  Set<WorkspaceScope> _groupAppearanceDemand = {};
-  int _appearanceEpoch = -1;
+  BotAvatarBorrower? _preparedAvatars;
+  int _avatarPreparation = 0;
+  bool _presentationVisible = false;
   final ProfileWorkspaceController controller;
   @override
   RecentConversationSnapshots get snapshots => recents.snapshots;
@@ -94,7 +90,14 @@ final class _WorkspaceRecentConversationSource
   RecentConversationCatalog get catalog => recents.catalog;
 
   @override
-  void setVisible(bool visible) => recents.setVisible(this, visible);
+  void setVisible(bool visible) {
+    recents.setVisible(this, visible);
+    _presentationVisible = visible;
+    if (!visible) {
+      _avatarPreparation++;
+      _preparedAvatars?.replaceDemand({});
+    }
+  }
 
   @override
   bool get current =>
@@ -166,11 +169,35 @@ final class _WorkspaceRecentConversationSource
   @override
   RecentConversationAppearance appearanceFor(RecentConversationKey key) {
     final group = _group(key);
-    return group == null
-        ? RecentConversationAppearance(
-            bot: key.chat == null ? null : bots.cachedAppearance(key.chat!),
-          )
-        : RecentConversationAppearance(group: bots.appearanceForGroup(group));
+    final bot = key.chat == null ? null : bots.cachedAppearance(key.chat!);
+    final members = group == null
+        ? const BotGroupAppearance.empty()
+        : bots.appearanceForGroup(group);
+    String token(BotRecord bot) => jsonEncode([
+      bot.scope.connectionId,
+      bot.scope.connectionIdentity,
+      bot.scope.profileName,
+      bot.title,
+      bot.shape,
+      bot.color,
+      bot.metadata['imageKind'],
+      bots.avatarContentVersion(bot.scope),
+    ]);
+    return RecentConversationAppearance(
+      bot: bot,
+      group: members,
+      pixelRevisionOverride: group == null
+          ? (bot == null ? '' : token(bot))
+          : jsonEncode([
+              for (final member in group.members)
+                [
+                  member.profile,
+                  members.byHandle[member.handle] == null
+                      ? null
+                      : token(members.byHandle[member.handle]!),
+                ],
+            ]),
+    );
   }
 
   @override
@@ -178,6 +205,7 @@ final class _WorkspaceRecentConversationSource
     Iterable<RecentConversationKey> keys,
     bool Function() canRead,
   ) async {
+    final preparation = ++_avatarPreparation;
     final demand = keys
         .map((key) => key.chat)
         .whereType<ProfileSessionKey>()
@@ -192,31 +220,45 @@ final class _WorkspaceRecentConversationSource
               profileName: member.profile,
             ),
     };
-    if (_appearanceEpoch == bots.appearanceEpoch &&
-        setEquals(demand, _appearanceDemand) &&
-        setEquals(profiles, _groupAppearanceDemand)) {
+    if (demand.isEmpty && profiles.isEmpty) {
+      _preparedAvatars?.replaceDemand({});
       return;
     }
-    _appearanceEpoch = bots.appearanceEpoch;
-    _appearanceDemand = demand;
-    _groupAppearanceDemand = profiles;
-    try {
-      await Future.wait([
-        bots.appearancesForConversations(
-          demand,
-          canRead: () => current && canRead(),
-        ),
-        bots.appearancesForProfiles(
-          profiles,
-          canRead: () => current && canRead(),
-        ),
-      ]);
-    } finally {
-      if (!canRead()) {
-        _appearanceDemand = {};
-        _groupAppearanceDemand = {};
-      }
+    if (!current || !canRead()) {
+      _preparedAvatars?.replaceDemand({});
+      return;
     }
+    // Retire the old neighborhood before awaiting newly missing metadata.
+    if (_presentationVisible) {
+      (_preparedAvatars ??= bots.createAvatarBorrower()).replaceDemand({
+        ...profiles,
+        for (final key in demand)
+          if (bots.cachedAppearance(key) case final bot?) bot.scope,
+      });
+    } else {
+      _preparedAvatars?.replaceDemand({});
+    }
+    await Future.wait([
+      bots.appearancesForConversations(
+        demand,
+        canRead: () => current && canRead(),
+      ),
+      bots.appearancesForProfiles(
+        profiles,
+        canRead: () => current && canRead(),
+      ),
+    ]);
+    if (!current ||
+        !canRead() ||
+        !_presentationVisible ||
+        preparation != _avatarPreparation) {
+      return;
+    }
+    (_preparedAvatars ??= bots.createAvatarBorrower()).replaceDemand({
+      ...profiles,
+      for (final key in demand)
+        if (bots.cachedAppearance(key) case final bot?) bot.scope,
+    });
   }
 
   @override
@@ -230,6 +272,8 @@ final class _WorkspaceRecentConversationSource
     controller.removeListener(listener);
     recents.removeListener(listener);
     setVisible(false);
+    _preparedAvatars?.dispose();
+    _preparedAvatars = null;
   }
 
   @override

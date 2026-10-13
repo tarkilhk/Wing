@@ -3,19 +3,41 @@ import 'package:flutter/foundation.dart';
 import '../models/bots.dart';
 import 'bot_avatar_io.dart';
 import 'bots_repository.dart';
+import 'bots_session.dart';
 
 /// A captured profile appearance editor. Metadata CAS and asset writes are
 /// separate commits; acknowledged sections are never resent after partial save.
 class BotProfileEditSession extends ChangeNotifier {
-  BotProfileEditSession(this.repository, BotRecord bot, {BotAvatarIo? avatarIo})
-    : _bot = bot,
-      _avatarIo = avatarIo ?? BotAvatarIo(),
-      _title = bot.title,
-      _shape = bot.shape,
-      _color = bot.color {
+  BotProfileEditSession(
+    this.repository,
+    BotRecord bot, {
+    BotAvatarIo? avatarIo,
+    this.avatars,
+    Uint8List? savedImage,
+    this.onSaved,
+    required this.validateImage,
+  }) : _bot = bot,
+       // The saved baseline is owned only by this editor visit.
+       // ignore: prefer_initializing_formals
+       _savedImage = savedImage,
+       _avatarIo = avatarIo ?? BotAvatarIo(),
+       _title = bot.title,
+       _shape = bot.shape,
+       _color = bot.color {
     repository.retain();
+    avatars?.replaceDemand({bot.scope});
+    avatars?.changes.addListener(_avatarChanged);
   }
   final BotsRepository repository;
+  final BotAvatarBorrower? avatars;
+  final void Function(BotRecord, Uint8List?, bool)? onSaved;
+  final Future<Uint8List?> Function(BotRecord) validateImage;
+  Uint8List? _savedImage;
+  Uint8List? get savedImage => _savedImage ?? avatars?.imageFor(_bot.scope);
+  void _avatarChanged() {
+    if (!_closed) notifyListeners();
+  }
+
   final BotAvatarIo _avatarIo;
   BotRecord _bot;
   BotRecord get bot => _bot;
@@ -23,12 +45,23 @@ class BotProfileEditSession extends ChangeNotifier {
   String get title => _title;
   String get shape => _shape;
   String get color => _color;
+  bool _visible = true;
+  void setVisible(bool visible) {
+    if (_closed || visible == _visible) return;
+    _visible = visible;
+    avatars?.replaceDemand(visible ? {_bot.scope} : {});
+    notifyListeners();
+  }
+
   Uint8List? _image;
   Uint8List? get image {
+    if (!_visible) return null;
     if (_assetDirty || _imageMetadataPending) return _image;
     // A saved classic shape may also have a desktop-rendered raster asset.
     // Preview the editable shape so its draft color is visible immediately.
-    return _bot.hasExplicitClassicShape ? null : _bot.avatar;
+    return _bot.hasExplicitClassicShape
+        ? null
+        : _savedImage ?? avatars?.imageFor(_bot.scope);
   }
 
   int _assetVersion = 0;
@@ -194,13 +227,16 @@ class BotProfileEditSession extends ChangeNotifier {
             () {},
           );
           if (_closed) return;
+          onSaved?.call(_bot, null, false);
           _trackEdits();
           if (_assetVersion == assetVersion) _imageMetadataPending = false;
         }
         if (assetDirty) {
           await repository.avatar(_bot, image, () => !_closed, () {});
           if (_closed) return;
-          _bot = _bot.withAvatar(image);
+          _savedImage = image;
+          _bot = _bot.withAvatarHint(image != null);
+          onSaved?.call(_bot, image, true);
           if (_assetVersion == assetVersion) _assetDirty = false;
         }
       }
@@ -236,8 +272,11 @@ class BotProfileEditSession extends ChangeNotifier {
           .firstOrNull;
       if (fresh == null) throw StateError('Profile no longer exists');
       if (_closed) return;
-      _bot = await repository.enrich(fresh);
+      _bot = fresh;
+      onSaved?.call(_bot, null, false);
+      final savedImage = await validateImage(fresh);
       if (_closed) return;
+      _savedImage = savedImage;
       if (_imageMetadataPending && _image == null && _bot.hasAvatar) {
         _assetDirty = true;
       }
@@ -266,6 +305,10 @@ class BotProfileEditSession extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    avatars?.changes.removeListener(_avatarChanged);
+    avatars?.dispose();
+    _savedImage = null;
+    _image = null;
     _autosave?.cancel();
     repository.release();
     super.dispose();

@@ -79,7 +79,8 @@ void main() {
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
           final fixture = BotsFixture();
-          final group = (await fixture.repository.groups(
+          final group = (await readFixtureGroups(
+            fixture.repository,
             groupMessages: null,
           )).single;
           final worker = {
@@ -212,7 +213,8 @@ void main() {
               'timestamp': 1791756060.0,
             },
           ];
-          final group = (await fixture.repository.groups(
+          final group = (await readFixtureGroups(
+            fixture.repository,
             groupMessages: null,
           )).single;
           final appearances = await fixture.repository.bots();

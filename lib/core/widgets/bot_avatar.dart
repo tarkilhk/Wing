@@ -4,11 +4,209 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../theme/profile_colors.dart';
 import '../models/bots.dart';
+import '../models/hermes_profile.dart';
+import '../services/bots_session.dart';
 import 'wing_app_bar.dart';
 
 enum BotAvatarMood { idle, work, think }
 
-/// Live surfaces borrow saved appearance; they never infer a choice from pixels.
+/// Supplies the existing image owner without retaining bytes in row definitions.
+class BotAvatarScope extends InheritedTheme {
+  const BotAvatarScope({
+    super.key,
+    required this.session,
+    this.prepared = false,
+    required super.child,
+  });
+  final BotsSession session;
+  final bool prepared;
+  @override
+  Widget wrap(BuildContext context, Widget child) =>
+      BotAvatarScope(session: session, prepared: prepared, child: child);
+  static BotsSession? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<BotAvatarScope>()?.session;
+  @override
+  bool updateShouldNotify(BotAvatarScope oldWidget) =>
+      session != oldWidget.session || prepared != oldWidget.prepared;
+}
+
+/// Mounted rows own demand; frozen row and navigation facts stay metadata-only.
+class BorrowedBotAvatar extends StatefulWidget {
+  const BorrowedBotAvatar({
+    super.key,
+    required this.bot,
+    this.name,
+    this.mood,
+    this.size = 40,
+  });
+  final BotRecord? bot;
+  final String? name;
+  final BotAvatarMood? mood;
+  final double size;
+  @override
+  State<BorrowedBotAvatar> createState() => _BorrowedBotAvatarState();
+}
+
+class _BorrowedBotAvatarState extends State<BorrowedBotAvatar>
+    with WidgetsBindingObserver {
+  BotsSession? _owner;
+  BotAvatarBorrower? _borrower;
+  bool _active = false, _queued = false, _admissionQueued = false;
+  ScrollPosition? _scroll;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final owner = BotAvatarScope.maybeOf(context);
+    if (!identical(owner, _owner)) {
+      _borrower?.changes.removeListener(_changed);
+      _borrower?.dispose();
+      _owner = owner;
+      _borrower = owner?.createAvatarBorrower();
+      _borrower?.changes.addListener(_changed);
+    }
+    final scroll = Scrollable.maybeOf(context)?.position;
+    if (!identical(scroll, _scroll)) {
+      _scroll?.removeListener(_queueAdmission);
+      _scroll = scroll;
+      _scroll?.addListener(_queueAdmission);
+    }
+    _syncDemand();
+    _queueAdmission();
+  }
+
+  @override
+  void didUpdateWidget(BorrowedBotAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncDemand();
+    _queueAdmission();
+  }
+
+  BotRecord? get _currentBot {
+    final captured = widget.bot;
+    return captured == null
+        ? null
+        : _owner?.cachedProfileAppearance(captured.scope) ?? captured;
+  }
+
+  void _syncDemand() {
+    final bot = _currentBot;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _active =
+        (lifecycle == null || lifecycle == AppLifecycleState.resumed) &&
+        (TickerMode.valuesOf(context).enabled ||
+            context
+                    .dependOnInheritedWidgetOfExactType<BotAvatarScope>()
+                    ?.prepared ==
+                true) &&
+        ModalRoute.isCurrentOf(context) != false &&
+        _inNeighborhood;
+    _borrower?.replaceDemand(
+      _active && bot != null && !bot.hasExplicitClassicShape
+          ? {bot.scope}
+          : <WorkspaceScope>{},
+    );
+  }
+
+  bool get _inNeighborhood {
+    if (_scroll == null ||
+        context
+                .dependOnInheritedWidgetOfExactType<BotAvatarScope>()
+                ?.prepared ==
+            true) {
+      return true;
+    }
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return false;
+    var visible = (Offset.zero & MediaQuery.sizeOf(context)).inflate(250);
+    final viewport = Scrollable.maybeOf(context)?.context.findRenderObject();
+    if (viewport is RenderBox && viewport.hasSize) {
+      visible = visible.intersect(
+        (viewport.localToGlobal(Offset.zero) & viewport.size).inflate(250),
+      );
+    }
+    return visible.overlaps(box.localToGlobal(Offset.zero) & box.size);
+  }
+
+  void _queueAdmission() {
+    if (_admissionQueued) return;
+    _admissionQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _admissionQueued = false;
+      if (!mounted) return;
+      final wasActive = _active;
+      _syncDemand();
+      if (wasActive != _active) _changed();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _syncDemand();
+    _changed();
+  }
+
+  void _changed() {
+    if (!mounted || _queued) return;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      _queued = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _queued = false;
+        if (mounted) setState(() {});
+      });
+    } else {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _scroll?.removeListener(_queueAdmission);
+    _borrower?.changes.removeListener(_changed);
+    _borrower?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Owner notifications may change image mode while a sender future or frozen
+    // selection still supplies the original metadata-only observation.
+    _syncDemand();
+    final bot = _currentBot;
+    final name = widget.name ?? bot?.title ?? '';
+    if (bot == null) {
+      return BotAvatar(name: name, shape: 'circle', size: widget.size);
+    }
+    if (widget.mood != null && bot.hasExplicitClassicShape) {
+      return _AnimatedFace(
+        key: ValueKey(bot.scope),
+        shape: bot.shape,
+        color: BotAvatar.resolveColor(bot.color, name),
+        mood: widget.mood!,
+        size: widget.size,
+        phase:
+            bot.id.codeUnits.fold(0, (int h, c) => (h * 31 + c) & 1023) /
+            1024 *
+            3.2,
+      );
+    }
+    return BotAvatar(
+      name: name,
+      shape: bot.shape,
+      color: bot.color,
+      image: _active ? _borrower?.imageFor(bot.scope) : null,
+      size: widget.size,
+    );
+  }
+}
+
 class LiveBotAvatar extends StatelessWidget {
   const LiveBotAvatar({
     super.key,
@@ -21,27 +219,9 @@ class LiveBotAvatar extends StatelessWidget {
   final String name;
   final BotAvatarMood mood;
   final double size;
-
   @override
-  Widget build(BuildContext context) => bot.hasExplicitClassicShape
-      ? _AnimatedFace(
-          key: ValueKey(bot.scope),
-          shape: bot.shape,
-          color: BotAvatar.resolveColor(bot.color, name),
-          mood: mood,
-          size: size,
-          phase:
-              bot.id.codeUnits.fold(0, (int h, c) => (h * 31 + c) & 1023) /
-              1024 *
-              3.2,
-        )
-      : BotAvatar(
-          name: name,
-          shape: bot.shape,
-          color: bot.color,
-          image: bot.avatar,
-          size: size,
-        );
+  Widget build(BuildContext context) =>
+      BorrowedBotAvatar(bot: bot, name: name, mood: mood, size: size);
 }
 
 /// Owns only paint time. Scroll, route, ticker and app visibility all retire it.
@@ -457,11 +637,9 @@ class BotConversationTitle extends StatelessWidget {
     avatar: switch (bot) {
       final appearance? =>
         mood == null
-            ? BotAvatar(
+            ? BorrowedBotAvatar(
+                bot: appearance,
                 name: appearance.title,
-                shape: appearance.shape,
-                color: appearance.color,
-                image: appearance.avatar,
                 size: 32,
               )
             : LiveBotAvatar(

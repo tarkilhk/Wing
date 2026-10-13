@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:crypto/crypto.dart';
 
 import '../models/bots.dart';
 import '../models/profile_colors.dart';
@@ -13,6 +15,8 @@ import 'bot_screen_session.dart';
 import 'bot_group_read_state.dart';
 import 'bot_group_session.dart';
 import 'recent_conversation_snapshots.dart';
+
+part 'bot_avatar_cache.dart';
 
 typedef BotsSources =
     Future<List<BotsRepository>> Function(bool Function() canUse);
@@ -27,14 +31,16 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     this.beforeGroupSend,
     this.afterGroupSend,
     this.onIdentityChanged,
-  }) : _loadPreferences = loadPreferences ?? BotsPreferences.load;
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now,
+       _loadPreferences = loadPreferences ?? BotsPreferences.load;
+  final DateTime Function() _now;
   final groupReads = BotGroupReadState();
   final BotsSources _sources;
   final Future<void> Function(BotGroup, int)? onGroupRead;
   final Future<void> Function(BotGroup, String)? beforeGroupSend;
   final Future<void> Function(BotGroup, BotGroupSendOutcome)? afterGroupSend;
   final void Function(WorkspaceScope, BotRecord?)? onIdentityChanged;
-  final _monitoringIdentityScopes = <WorkspaceScope>{};
   final Future<BotsPreferences> Function() _loadPreferences;
   BotsPreferences? _preferences;
   Set<String> _groupPins = const {};
@@ -49,8 +55,8 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   bool _emptySourcesObserved = false;
   int _readGeneration = 0;
   Timer? _poll;
-  Future<void>? _refreshOperation;
-  bool _refreshRequested = false;
+  int _refreshes = 0;
+  final _recentsReaders = <Object>{};
   RecentGroupMessages? _groupMessages;
   RecentGroupMessages? get groupMessages => _groupMessages;
 
@@ -68,189 +74,367 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
 
   final _unconfirmedCreates = <String>{};
   Future<List<BotsRepository>>? _appearanceSources;
-  final _appearanceRosters = <WorkspaceScope, Future<List<BotRecord>>>{};
-  final _appearanceReads = <WorkspaceScope, Future<BotRecord?>>{};
-  final _appearanceAdmissions = <WorkspaceScope, Set<bool Function()>>{};
-  final _appearanceCache = <WorkspaceScope, BotRecord>{};
+  DateTime? _sourcesFailedAt;
+  final _identities = <WorkspaceScope, BotRecord>{};
   final _appearanceKeys = <ProfileSessionKey, WorkspaceScope>{};
-  final _avatarRead = <WorkspaceScope>{};
-  int _appearanceGeneration = 0, _avatarReads = 0, _appearanceVersion = 0;
+  final _readErrors = <Object, String>{};
+  final _rosterJobs = <WorkspaceScope, _BotsReadJob>{};
+  final _statusJobs = <WorkspaceScope, _BotsReadJob>{};
+  final _readinessJobs = <WorkspaceScope, _BotsReadJob>{};
+  final _catalogJobs = <WorkspaceScope, _BotsReadJob>{};
+  final _stateJobs = <String, _BotsReadJob>{};
+  final _previewJobs = <String, _BotsReadJob>{};
+  final _roomStates = <String, BotGroupState>{};
+  final _avatars = _BotAvatarCache();
+  final _avatarPending = <WorkspaceScope, (int, Future<void>)>{};
+  int _avatarReads = 0, _appearanceGeneration = 0;
   Completer<void>? _avatarAvailable;
-  static const _appearanceLimit = 10;
-  static const _appearanceByteLimit = 20 * 1024 * 1024;
-
+  bool _avatarWakeQueued = false;
+  static const _metadataAge = Duration(minutes: 5);
+  Duration get _statusAge => Duration(seconds: _visible ? 10 : 30);
+  bool get _avatarActive =>
+      _visible ||
+      _recentsReaders.isNotEmpty ||
+      _avatars.borrowers.any((borrower) => borrower._demand.isNotEmpty);
   int get appearanceEpoch => _appearanceGeneration;
+  int avatarContentVersion(WorkspaceScope scope) =>
+      _avatars.entries[scope]?.version ?? 0;
+  @visibleForTesting
+  int get warmAvatarCount => _avatars.warm
+      .where((scope) => _avatars.entries[scope]?.bytes != null)
+      .length;
+  @visibleForTesting
+  int get warmAvatarBytes => _avatars.warm.fold(
+    0,
+    (sum, scope) => sum + (_avatars.entries[scope]?.bytes?.lengthInBytes ?? 0),
+  );
+  @visibleForTesting
+  int get retainedAvatarCount =>
+      _avatars.entries.values.where((entry) => entry.bytes != null).length;
 
-  /// Explicit refresh revokes stale reads and assets, retaining usable display
-  /// facts until their confirmed replacements arrive.
-  void invalidateAppearances() {
+  BotAvatarBorrower createAvatarBorrower() {
+    final borrower = _BotAvatarBorrower(this);
+    if (!_closed) _avatars.borrowers.add(borrower);
+    return borrower;
+  }
+
+  void setSelectedAvatar(WorkspaceScope? scope) {
+    if (_closed || _avatars.selected == scope) return;
+    _avatars.selected = scope;
+    _avatars.selectWarm();
+    _wakeAvatars();
+  }
+
+  void setRecentsVisible(Object reader, bool visible) {
     if (_closed) return;
-    _invalidateAppearances();
-    notifyListeners();
+    if (visible) {
+      _recentsReaders.add(reader);
+    } else {
+      _recentsReaders.remove(reader);
+    }
+    if (visible) _wakeAvatars();
   }
 
-  /// Exact canonical appearance already admitted by this workspace's owner.
-  /// This observation performs no reads, decoding or roster traversal.
-  BotRecord? cachedAppearance(ProfileSessionKey key) {
-    final scope = _appearanceKeys[key];
-    return scope == null ? null : _appearanceCache[scope];
-  }
-
-  @override
-  BotGroupAppearance appearanceForGroup(BotGroup group) {
-    if (_closed) return const BotGroupAppearance.empty();
-    final known = <BotRecord>[];
-    for (final profile
-        in group.members.map((member) => member.profile).toSet()) {
-      final scope = WorkspaceScope(
-        connectionId: group.scope.connectionId,
-        connectionIdentity: group.scope.connectionIdentity,
-        profileName: profile,
-      );
-      final cached = _appearanceCache[scope];
-      if (cached != null) {
-        known.add(cached);
-      } else {
-        known.addAll(
-          (_bots[group.scope.connectionIdentity] ?? const <BotRecord>[]).where(
-            (bot) => bot.scope == scope,
-          ),
-        );
+  /// Exact editor retirement makes its roster and asset due without fencing
+  /// unrelated image reads. A generic refresh invalidates metadata only.
+  void invalidateAppearances([WorkspaceScope? scope]) {
+    if (_closed) return;
+    for (final item in _rosterJobs.entries.toList()) {
+      if (scope == null ||
+          (item.key.connectionIdentity == scope.connectionIdentity &&
+              item.key.connectionId == scope.connectionId)) {
+        if (scope == null) {
+          item.value.success = null;
+        } else {
+          _rosterJobs.remove(item.key);
+          _readErrors.remove(item.value);
+        }
       }
     }
-    return BotGroupAppearance.forGroup(group, known);
+    if (scope != null) _avatars.due(scope);
+    _appearanceGeneration++;
+    notifyListeners();
+    _wakeAvatars();
   }
 
-  bool _sameAppearanceMetadata(BotRecord a, BotRecord b) =>
+  BotRecord? cachedAppearance(ProfileSessionKey key) {
+    final scope = _appearanceKeys[key];
+    return scope == null ? null : _identities[scope];
+  }
+
+  /// Current metadata for an already captured profile identity. Conversation
+  /// admission remains with cachedAppearance's exact root/tip index.
+  BotRecord? cachedProfileAppearance(WorkspaceScope scope) =>
+      _identities[scope];
+
+  @override
+  BotGroupAppearance appearanceForGroup(BotGroup group) =>
+      BotGroupAppearance.forGroup(group, _identities.values);
+
+  bool _sameMetadata(BotRecord a, BotRecord b) =>
       a.title == b.title &&
       a.shape == b.shape &&
       a.color == b.color &&
       a.revision == b.revision &&
       a.hasAvatar == b.hasAvatar &&
       a.chat == b.chat &&
-      a.resolvedChat == b.resolvedChat;
+      a.resolvedChat == b.resolvedChat &&
+      a.canonicalLastActive == b.canonicalLastActive &&
+      a.lastActive == b.lastActive &&
+      a.workerLastActive == b.workerLastActive &&
+      a.preview == b.preview &&
+      a.presence == b.presence &&
+      a.pinned == b.pinned &&
+      a.hidden == b.hidden &&
+      jsonEncode(a.metadata) == jsonEncode(b.metadata);
 
-  BotRecord _cacheAppearance(BotRecord bot, {required bool assetRead}) {
-    final previous = _appearanceCache[bot.scope];
-    if (previous != null &&
-        _sameAppearanceMetadata(previous, bot) &&
-        listEquals(previous.avatar, bot.avatar)) {
-      bot = previous;
-    }
-    final scope = bot.scope;
-    if (!identical(_appearanceCache[scope], bot)) _appearanceVersion++;
-    _appearanceCache.remove(scope);
-    _appearanceCache[scope] = bot;
-    if (assetRead) _avatarRead.add(scope);
-    _appearanceKeys.removeWhere((_, value) => value == scope);
+  BotRecord _cacheIdentity(BotRecord bot) {
+    final old = _identities[bot.scope];
+    if (old != null && _sameMetadata(old, bot)) bot = old;
+    _identities[bot.scope] = bot;
+    _appearanceKeys.removeWhere((_, scope) => scope == bot.scope);
     for (final key in [bot.chat, bot.resolvedChat]) {
-      if (key != null) _appearanceKeys[key] = scope;
+      if (key != null) _appearanceKeys[key] = bot.scope;
     }
-    while (_appearanceCache.length > _appearanceLimit ||
-        _appearanceCache.values.fold<int>(
-              0,
-              (bytes, row) => bytes + (row.avatar?.lengthInBytes ?? 0),
-            ) >
-            _appearanceByteLimit) {
-      final evicted = _appearanceCache.keys.first;
-      _appearanceCache.remove(evicted);
-      _avatarRead.remove(evicted);
-      _appearanceKeys.removeWhere((_, value) => value == evicted);
-    }
-    onIdentityChanged?.call(bot.scope, bot);
+    _avatars.observe(bot);
+    if (!identical(old, bot)) onIdentityChanged?.call(bot.scope, bot);
     return bot;
   }
 
-  void _invalidateAppearances() {
-    _appearanceGeneration++;
-    _appearanceSources = null;
-    _appearanceRosters.clear();
-    _appearanceReads.clear();
-    _appearanceAdmissions.clear();
-    _avatarRead.clear();
-  }
-
-  Future<List<BotRecord>> _appearanceRoster(BotsRepository source) async {
-    final generation = _appearanceGeneration;
-    final read = _appearanceRosters.putIfAbsent(source.scope, source.bots);
-    try {
-      final roster = await read;
-      if (!_closed && generation == _appearanceGeneration) {
-        final scopes = roster.map((bot) => bot.scope).toSet();
-        for (final scope in _monitoringIdentityScopes.toList()) {
-          if (scope.connectionId == source.scope.connectionId &&
-              scope.connectionIdentity == source.scope.connectionIdentity &&
-              !scopes.contains(scope)) {
-            _monitoringIdentityScopes.remove(scope);
-            onIdentityChanged?.call(scope, null);
-          }
-        }
-        _monitoringIdentityScopes.addAll(scopes);
-        for (final bot in roster) {
-          onIdentityChanged?.call(bot.scope, bot);
-        }
+  void _publishRoster(BotsRepository source, List<BotRecord> roster) {
+    final scopes = roster.map((bot) => bot.scope).toSet();
+    for (final scope in _identities.keys.toList()) {
+      if (scope.connectionId == source.scope.connectionId &&
+          scope.connectionIdentity == source.scope.connectionIdentity &&
+          !scopes.contains(scope)) {
+        _identities.remove(scope);
+        onIdentityChanged?.call(scope, null);
+        _avatars.forget(scope);
+        _appearanceKeys.removeWhere((_, value) => value == scope);
       }
-      return roster;
-    } catch (_) {
-      if (identical(_appearanceRosters[source.scope], read)) {
-        _appearanceRosters.remove(source.scope);
-      }
-      rethrow;
     }
-  }
-
-  Future<BotRecord?> _readAppearance(
-    BotsRepository source,
-    BotRecord bot,
-    bool Function() canRead,
-  ) async {
-    while (_avatarReads >= 3) {
-      if (!canRead()) return null;
-      await (_avatarAvailable ??= Completer<void>()).future;
-    }
-    if (!canRead()) return null;
-    _avatarReads++;
-    try {
-      return await source.enrich(bot);
-    } finally {
-      _avatarReads--;
-      final available = _avatarAvailable;
-      _avatarAvailable = null;
-      available?.complete();
-    }
-  }
-
-  Future<BotRecord?> _sharedAppearanceRead(
-    BotsRepository source,
-    BotRecord bot,
-    bool Function() canRead,
-  ) async {
-    if (!canRead()) return null;
-    final cached = _appearanceCache[bot.scope];
-    if (cached != null &&
-        _sameAppearanceMetadata(cached, bot) &&
-        _avatarRead.contains(bot.scope)) {
-      return bot.withObservedAvatar(cached.avatar);
-    }
-    final admissions = _appearanceAdmissions.putIfAbsent(bot.scope, () => {});
-    admissions.add(canRead);
-    final read = _appearanceReads.putIfAbsent(
-      bot.scope,
-      () => _readAppearance(
-        source,
-        bot,
-        () => !_closed && admissions.any((admit) => admit()),
-      ),
+    final previous = {
+      for (final bot in _bots[source.scope.connectionIdentity] ?? <BotRecord>[])
+        bot.scope: bot.presence,
+    };
+    _bots[source.scope.connectionIdentity] = List.unmodifiable(
+      roster.map((bot) {
+        final identity = _cacheIdentity(bot);
+        // Metadata can publish before the independent status proof finishes.
+        // Only that proof's outcome replaces an accepted presence observation.
+        final presence = previous[bot.scope] ?? identity.presence;
+        return presence == identity.presence
+            ? identity
+            : identity.withPresence(presence);
+      }),
     );
+    _appearanceGeneration++;
+    _avatars.selectWarm();
+    _publishAvatarChange();
+    notifyListeners();
+    _wakeAvatars();
+  }
+
+  _BotsReadJob _job<K>(Map<K, _BotsReadJob> jobs, K key, String error) =>
+      jobs.putIfAbsent(key, () {
+        final job = _BotsReadJob();
+        job.onOutcome = (validated) {
+          if (_closed || !identical(jobs[key], job)) return;
+          if (validated) {
+            _readErrors.remove(job);
+          } else if (_refreshes > 0 || _visible || _recentsReaders.isNotEmpty) {
+            _readErrors[job] = error;
+          }
+          notifyListeners();
+        };
+        return job;
+      });
+
+  void _publishAvatarChange() {
+    for (final borrower in _avatars.borrowers.toList()) {
+      borrower.changed();
+    }
+  }
+
+  Future<List<BotsRepository>> _loadSources(bool Function() current) async {
+    if (_sourcesFailedAt != null &&
+        _now().difference(_sourcesFailedAt!) < const Duration(seconds: 30)) {
+      throw StateError('Saved instances are temporarily unavailable');
+    }
+    final pending = _appearanceSources ??= _sources(current);
     try {
-      return await read;
+      final sources = await pending;
+      _sourcesFailedAt = null;
+      return sources;
+    } catch (_) {
+      _sourcesFailedAt = _now();
+      rethrow;
     } finally {
-      admissions.remove(canRead);
-      if (identical(_appearanceReads[bot.scope], read)) {
-        _appearanceReads.remove(bot.scope);
-        _appearanceAdmissions.remove(bot.scope);
+      if (identical(_appearanceSources, pending)) _appearanceSources = null;
+    }
+  }
+
+  /// Explicit editor reload bypasses successful freshness, while sharing an
+  /// admitted pending read and preserving the asset's failure cooldown/fences.
+  Future<Uint8List?> reloadAvatar(WorkspaceScope scope) async {
+    if (_closed) return null;
+    final entry = _avatars.entries[scope];
+    if (entry == null) return null;
+    entry.due = true;
+    await _readAvatar(scope);
+    return _avatars.entries[scope]?.bytes;
+  }
+
+  Future<List<BotRecord>> _appearanceRoster(
+    BotsRepository source, {
+    Duration maxAge = _metadataAge,
+  }) async {
+    final generation = _readGeneration;
+    final job = _job(
+      _rosterJobs,
+      source.scope,
+      '${source.instance}: bots could not refresh.',
+    );
+    await job.run(_now, maxAge, () async {
+      final roster = await source.bots();
+      if (!_sourceCurrent(source, generation) ||
+          !identical(_rosterJobs[source.scope], job)) {
+        return false;
+      }
+      _publishRoster(source, roster);
+      return true;
+    });
+    final rows = _bots[source.scope.connectionIdentity];
+    if (rows == null) throw StateError('Bot identities unavailable');
+    return rows;
+  }
+
+  bool _sourceCurrent(BotsRepository source, int generation) =>
+      !_closed &&
+      generation == _readGeneration &&
+      (_repositories?.any((row) => row.scope == source.scope) ?? false);
+
+  void _wakeAvatars() {
+    if (_closed || _avatarWakeQueued || !_avatarActive) return;
+    _avatarWakeQueued = true;
+    scheduleMicrotask(() async {
+      _avatarWakeQueued = false;
+      if (_closed || !_avatarActive) return;
+      final demands = _avatars.borrowers
+          .expand((borrower) => borrower._demand)
+          .toSet();
+      final missing = demands
+          .where((scope) => !_identities.containsKey(scope))
+          .toSet();
+      if (missing.isNotEmpty) {
+        await identitiesForProfiles(
+          missing,
+          canRead: () => !_closed && _avatarActive,
+        );
+      }
+      if (_closed) return;
+      for (final scope in {..._avatars.warm, ...demands}) {
+        if (_avatars.shouldRead(scope, _now())) {
+          unawaited(_readAvatar(scope));
+        }
+      }
+    });
+  }
+
+  Future<void> _readAvatar(WorkspaceScope scope) {
+    final entry = _avatars.entries[scope];
+    if (entry == null) return Future.value();
+    final generation = entry.generation;
+    final pending = _avatarPending[scope];
+    if (pending != null && pending.$1 == generation) return pending.$2;
+    final completion = Completer<void>();
+    _avatarPending[scope] = (generation, completion.future);
+    bool current() =>
+        !_closed &&
+        identical(_avatars.entries[scope], entry) &&
+        generation == entry.generation &&
+        _avatars.admitted(scope) &&
+        _avatarActive &&
+        _avatars.imageMode(entry.bot!);
+    unawaited(() async {
+      try {
+        while (_avatarReads >= 3 && current()) {
+          await (_avatarAvailable ??= Completer<void>()).future;
+        }
+        if (!current() || !_avatars.shouldRead(scope, _now())) return;
+        final source = _repositories
+            ?.where(
+              (source) =>
+                  source.scope.connectionId == scope.connectionId &&
+                  source.scope.connectionIdentity == scope.connectionIdentity,
+            )
+            .firstOrNull;
+        if (source == null) return;
+        source.retain();
+        _avatarReads++;
+        try {
+          final outcome = await source.readAvatar(entry.bot!);
+          if (!current()) return;
+          final hadBytes = entry.bytes != null;
+          final changed = _avatars.accept(scope, outcome, _now());
+          if (changed || hadBytes != (entry.bytes != null)) {
+            for (final borrower in _avatars.borrowers.toList()) {
+              borrower.changed();
+            }
+            notifyListeners();
+          }
+        } finally {
+          source.release();
+          _avatarReads--;
+          final available = _avatarAvailable;
+          _avatarAvailable = null;
+          available?.complete();
+        }
+      } finally {
+        if (_avatarPending[scope]?.$2 == completion.future) {
+          _avatarPending.remove(scope);
+        }
+        completion.complete();
+        if (!_closed && entry.generation != generation) _wakeAvatars();
+      }
+    }());
+    return completion.future;
+  }
+
+  void acceptAppearance(
+    BotRecord bot, {
+    Uint8List? image,
+    bool assetSaved = false,
+  }) {
+    if (_closed) return;
+    for (final jobs in [_rosterJobs, _statusJobs]) {
+      for (final scope
+          in jobs.keys
+              .where(
+                (scope) =>
+                    scope.connectionId == bot.scope.connectionId &&
+                    scope.connectionIdentity == bot.scope.connectionIdentity,
+              )
+              .toList()) {
+        _readErrors.remove(jobs.remove(scope));
       }
     }
+    _replaceBot(bot);
+    if (assetSaved) {
+      _avatars.due(bot.scope);
+      _avatars.accept(
+        bot.scope,
+        image == null
+            ? const BotAvatarRead.missing()
+            : BotAvatarRead.usable(image),
+        _now(),
+      );
+      // Acknowledged content is immediate; next eligible wake validates stock.
+      _avatars.entries[bot.scope]!.due = true;
+    }
+    _publishAvatarChange();
+    _appearanceGeneration++;
+    notifyListeners();
   }
 
   BotsSnapshot get state => BotsSnapshot(
@@ -262,7 +446,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
         .map((room) => room.withPinned(_groupPins.contains(room.key))),
     loading: _loading,
     busy: _busy,
-    errors: [..._errors, ?_operationError],
+    errors: [..._errors, ..._readErrors.values, ?_operationError],
     groupHosts: _ready,
     instances: (_repositories ?? <BotsRepository>[]).map(
       (r) => BotInstance(r.scope.connectionIdentity, r.instance),
@@ -291,6 +475,24 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
       source.retain();
     }
     final previous = _repositories ?? <BotsRepository>[];
+    for (final old in previous) {
+      if (sources.any((source) => source.scope == old.scope)) continue;
+      for (final jobs in [
+        _rosterJobs,
+        _statusJobs,
+        _readinessJobs,
+        _catalogJobs,
+      ]) {
+        final retired = jobs.remove(old.scope);
+        if (retired != null) _readErrors.remove(retired);
+      }
+      for (final room
+          in _groups[old.scope.connectionIdentity] ?? <BotGroup>[]) {
+        _readErrors.remove(_stateJobs.remove(room.key));
+        _readErrors.remove(_previewJobs.remove(room.key));
+        _roomStates.remove(room.key);
+      }
+    }
     _repositories = List.unmodifiable(sources);
     for (final source in previous) {
       source.release();
@@ -319,21 +521,6 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   /// Borrow canonical identity for live and passive room visits. References
   /// observe the same owner without starting roster or avatar reads.
   BotGroupSession openGroup(BotGroup group) {
-    final version = _appearanceVersion;
-    for (final bot in appearanceForGroup(group).byHandle.values) {
-      // A roster observation is already enriched; admit it once to the same
-      // canonical cache. Existing pending observations keep their asset fence.
-      if (!_appearanceCache.containsKey(bot.scope)) {
-        _cacheAppearance(bot, assetRead: true);
-      }
-    }
-    if (version != _appearanceVersion) {
-      // A live visit can be created during route composition. Borrowers see
-      // canonical facts now; publish after that attaching caller returns.
-      scheduleMicrotask(() {
-        if (!_closed) notifyListeners();
-      });
-    }
     return BotGroupSession(
       repository(group.scope.connectionIdentity),
       group,
@@ -385,7 +572,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     if (visible) {
       unawaited(refresh());
       _poll = Timer.periodic(
-        const Duration(seconds: 8),
+        const Duration(seconds: 10),
         (_) => unawaited(refresh()),
       );
     }
@@ -406,40 +593,22 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     WorkspaceScope scope,
     String handle,
   ) async {
-    bool current() => !_closed;
-    if (!current()) return null;
-    try {
-      final sources = await _sources(current);
-      if (!current()) return null;
-      for (final source in sources) {
-        if (source.scope.connectionId != scope.connectionId ||
-            source.scope.connectionIdentity != scope.connectionIdentity) {
-          continue;
-        }
-        source.retain();
-        try {
-          final roster = await source.bots();
-          if (!current()) return null;
-          final matches = roster.where(
-            (bot) =>
-                (bot.profile.name == 'default' ? 'hermes' : bot.profile.name) ==
-                handle,
-          );
-          if (matches.length != 1) return null;
-          final appearance = await source.enrich(matches.single);
-          return current() ? appearance : null;
-        } finally {
-          source.release();
-        }
-      }
-    } catch (_) {
-      // An unavailable appearance must never prevent reading the delivery.
-    }
-    return null;
+    final identities = await identitiesForProfiles([
+      scope,
+    ], canRead: () => !_closed);
+    // Ensure the instance roster was observed; sender handles are exact stock
+    // profile handles and never match display names.
+    if (_closed || identities.isEmpty && _repositories == null) return null;
+    final matches = _identities.values.where(
+      (bot) =>
+          bot.scope.connectionId == scope.connectionId &&
+          bot.scope.connectionIdentity == scope.connectionIdentity &&
+          (bot.profile.name == 'default' ? 'hermes' : bot.profile.name) ==
+              handle,
+    );
+    return matches.length == 1 ? matches.single : null;
   }
 
-  /// Shared passive roster and bounded avatar cache. Only exact canonical
-  /// root/tip keys admit assets. Physical admission is checked after each wait.
   Future<Map<ProfileSessionKey, BotRecord>> appearancesForConversations(
     Iterable<ProfileSessionKey> conversations, {
     required bool Function() canRead,
@@ -450,19 +619,11 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     canRead: canRead,
   );
 
-  /// Reference candidates already supply canonical profile identity. Reuse
-  /// the passive cache and physical read admission without creating a chat.
   Future<Map<WorkspaceScope, BotRecord>> appearancesForProfiles(
     Iterable<WorkspaceScope> profiles, {
     required bool Function() canRead,
-  }) => _appearancesFor(
-    profiles.toSet(),
-    (scope) => scope,
-    (bot, scope) => bot.scope == scope,
-    canRead: canRead,
-  );
+  }) => identitiesForProfiles(profiles, canRead: canRead);
 
-  /// Exact profile display facts for reference search, without admitting assets.
   Future<Map<WorkspaceScope, BotRecord>> identitiesForProfiles(
     Iterable<WorkspaceScope> profiles, {
     required bool Function() canRead,
@@ -471,7 +632,6 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     (scope) => scope,
     (bot, scope) => bot.scope == scope,
     canRead: canRead,
-    enrich: false,
   );
 
   Future<Map<K, BotRecord>> _appearancesFor<K>(
@@ -479,259 +639,339 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     WorkspaceScope Function(K) workspace,
     bool Function(BotRecord, K) matches, {
     required bool Function() canRead,
-    bool enrich = true,
   }) async {
-    final version = _appearanceVersion;
-    final appearances = <K, BotRecord>{};
-    final generation = _appearanceGeneration;
-    bool current() => !_closed && generation == _appearanceGeneration;
-    bool admit() => current() && canRead();
-    if (!admit() || keys.isEmpty) return const {};
+    bool current() => !_closed && canRead();
+    if (!current() || keys.isEmpty) return const {};
     try {
-      final sources = await (_appearanceSources ??= _sources(current));
-      if (!admit()) return const {};
-      // Direct chat entry needs the same captured settings/editor repository
-      // as roster entry, without starting roster polling or group reads.
+      final sources = await _loadSources(current);
+      if (!current()) return const {};
       if (_repositories == null) _retainRepositories(sources);
       for (final source in sources) {
-        final matching = keys
-            .where(
-              (key) =>
-                  source.scope.connectionId == workspace(key).connectionId &&
-                  source.scope.connectionIdentity ==
-                      workspace(key).connectionIdentity,
-            )
-            .toSet();
-        if (matching.isEmpty || !admit()) continue;
+        if (!keys.any(
+          (key) =>
+              source.scope.connectionId == workspace(key).connectionId &&
+              source.scope.connectionIdentity ==
+                  workspace(key).connectionIdentity,
+        )) {
+          continue;
+        }
         source.retain();
         try {
-          final roster = await _appearanceRoster(source);
-          if (!current()) return const {};
-          Future<void> prepareBot(BotRecord bot) async {
-            final owned = matching.where((key) => matches(bot, key)).toList();
-            if (owned.isEmpty) return;
-            if (!enrich) {
-              if (!admit()) return;
-              final cached = _appearanceCache[bot.scope];
-              final identity =
-                  cached != null && _sameAppearanceMetadata(cached, bot)
-                  ? cached
-                  : bot;
-              for (final key in owned) {
-                appearances[key] = identity;
-              }
-              return;
-            }
-            var appearance = _appearanceCache[bot.scope];
-            if (appearance == null ||
-                !_sameAppearanceMetadata(appearance, bot)) {
-              appearance = bot;
-              _avatarRead.remove(bot.scope);
-              appearance = _cacheAppearance(
-                bot,
-                assetRead: !bot.hasAvatar || bot.avatar != null,
-              );
-              // Publish canonical name/shape now; an image read must not keep
-              // a known bot in a generic title-only placeholder.
-              notifyListeners();
-            }
-            if (!_avatarRead.contains(bot.scope) && admit()) {
-              final enriched = await _sharedAppearanceRead(source, bot, admit);
-              if (!current()) return;
-              if (enriched != null) {
-                appearance = _cacheAppearance(enriched, assetRead: true);
-              }
-            }
-            for (final key in owned) {
-              appearances[key] = appearance;
-            }
-          }
-
-          await Future.wait(roster.map(prepareBot));
+          await _appearanceRoster(source);
         } catch (_) {
-          // Decoration cannot prevent reading another instance's conversations.
+          /* Retain usable identities. */
         } finally {
           source.release();
         }
+        if (!current()) return const {};
       }
     } catch (_) {
-      // A later explicit appearance request may recover unavailable authority.
+      _appearanceSources = null;
     }
     if (!current()) return const {};
-    if (version != _appearanceVersion) notifyListeners();
-    return Map.unmodifiable(appearances);
+    return Map.unmodifiable({
+      for (final key in keys)
+        for (final bot in _identities.values)
+          if (matches(bot, key)) key: bot,
+    });
   }
 
-  Future<void> refresh() {
-    if (_closed || _busy) return Future.value();
-    if (_refreshOperation case final pending?) return pending;
-    final completion = Completer<void>();
-    _refreshOperation = completion.future;
-    unawaited(() async {
-      try {
-        do {
-          _refreshRequested = false;
-          await _refresh();
-        } while (_refreshRequested && !_closed && !_busy);
-        completion.complete();
-      } catch (error, stack) {
-        completion.completeError(error, stack);
-      } finally {
-        _refreshOperation = null;
-      }
-    }());
-    return completion.future;
-  }
-
-  Future<void> _refresh() async {
-    if (_closed || _loading || _busy) return;
-    final generation = ++_readGeneration;
-    _invalidateAppearances();
+  Future<void> refresh() async {
+    if (_closed || _busy) return;
+    final generation = _readGeneration;
+    bool current() => !_closed && generation == _readGeneration;
+    _refreshes++;
     _loading = true;
     notifyListeners();
-    final errors = <String>[];
-    bool current() => !_closed && generation == _readGeneration;
     try {
       await groupReads.load();
-      if (_preferences == null) {
-        final preferences = await _loadPreferences();
-        if (!current()) return;
-        _preferences = preferences;
-        _groupPins = preferences.pins;
+      _preferences ??= await _loadPreferences();
+      if (!current()) return;
+      _groupPins = _preferences!.pins;
+      final sources = await _loadSources(current);
+      if (!current()) return;
+      _retainRepositories(sources);
+      final identities = sources
+          .map((source) => source.scope.connectionIdentity)
+          .toSet();
+      _bots.removeWhere((identity, _) => !identities.contains(identity));
+      _groups.removeWhere((identity, _) => !identities.contains(identity));
+      _ready.removeWhere((identity) => !identities.contains(identity));
+      for (final scope in _identities.keys.toList()) {
+        if (!sources.any(
+          (source) =>
+              source.scope.connectionIdentity == scope.connectionIdentity &&
+              source.scope.connectionId == scope.connectionId,
+        )) {
+          _identities.remove(scope);
+          _avatars.forget(scope);
+          _appearanceKeys.removeWhere((_, value) => value == scope);
+        }
       }
-      {
-        final sources = await _sources(current);
-        if (!current()) return;
-        _retainRepositories(sources);
-        final identities = sources
-            .map((source) => source.scope.connectionIdentity)
-            .toSet();
-        _bots.removeWhere((identity, _) => !identities.contains(identity));
-        _groups.removeWhere((identity, _) => !identities.contains(identity));
-        _groupPresenceAvailable.removeWhere(
-          (identity) => !identities.contains(identity),
-        );
-        _ready.removeWhere((identity) => !identities.contains(identity));
-      }
-      final sources = _repositories!;
       _emptySourcesObserved = sources.isEmpty;
-      // Room discovery never waits for unrelated bot ownership/avatar reads.
-      // Each catalog lane remains sequential across instances; appearance
-      // reads share three physical slots. Publish each completed observation.
-      Future<void> readBots() async {
-        for (final source in sources) {
-          if (!current()) return;
-          final identity = source.scope.connectionIdentity;
+      _errors = const [];
+      _publishAvatarChange();
+      await Future.wait(
+        sources.map((source) async {
+          source.retain();
           try {
-            final roster = await _appearanceRoster(source);
-            if (!current()) return;
-            final presence = await source.presence(roster);
-            final enriched = <BotRecord>[];
-            // Roster and card assets borrow one three-slot physical lane.
-            for (var start = 0; start < roster.length; start += 4) {
-              if (!current()) return;
-              enriched.addAll(
-                await Future.wait(
-                  roster.skip(start).take(4).map((bot) async {
-                    final appearance = await _sharedAppearanceRead(
-                      source,
-                      bot,
-                      current,
-                    );
-                    return (appearance ?? bot).withPresence(presence[bot.id]!);
-                  }),
-                ),
-              );
-            }
-            if (!current()) return;
-            _bots[identity] = List.unmodifiable(enriched);
-            _appearanceRosters[source.scope] = Future.value(_bots[identity]!);
-            final scopes = enriched.map((bot) => bot.scope).toSet();
-            for (final scope in _appearanceCache.keys.toList()) {
-              if (scope.connectionId != source.scope.connectionId ||
-                  scope.connectionIdentity != source.scope.connectionIdentity) {
-                continue;
-              }
-              if (!scopes.contains(scope)) {
-                _appearanceCache.remove(scope);
-                _avatarRead.remove(scope);
-                _appearanceKeys.removeWhere((_, value) => value == scope);
-              }
-            }
-            for (final bot in enriched) {
-              if (_appearanceCache.containsKey(bot.scope)) {
-                _cacheAppearance(bot, assetRead: true);
-              }
-            }
-          } catch (_) {
-            if (!current()) return;
-            errors.add('${source.instance}: bots could not refresh.');
-          }
-          if (current()) notifyListeners();
-        }
-      }
-
-      Future<void> readGroups() async {
-        for (final source in sources) {
-          if (!current()) return;
-          final identity = source.scope.connectionIdentity;
-          try {
-            final ready = await source.groupsReady();
-            if (!current()) return;
-            final rooms = await source.groups(groupMessages: _groupMessages);
-            if (!current()) return;
-            final previous = {
-              for (final room in _groups[identity] ?? const <BotGroup>[])
-                room.key: room,
-            };
-            _groups[identity] = List.unmodifiable([
-              for (final room in rooms)
-                if (!room.observationComplete && previous.containsKey(room.key))
-                  room.withRetainedObservation(previous[room.key]!)
-                else
-                  room,
+            await Future.wait([
+              _readStatus(source, generation),
+              _readReadiness(source, generation),
+              _readGroups(source, generation),
             ]);
-            _groupPresenceAvailable.add(identity);
-            if (rooms.any((room) => !room.observationComplete)) {
-              errors.add('${source.instance}: some groups could not refresh.');
-            }
-            if (ready) {
-              _ready.add(identity);
-            } else {
-              _ready.remove(identity);
-            }
-          } catch (_) {
-            if (!current()) return;
-            _ready.remove(identity);
-            errors.add('${source.instance}: groups are unavailable.');
-            _groupPresenceAvailable.remove(identity);
+          } finally {
+            source.release();
           }
-          if (current()) notifyListeners();
-        }
-      }
-
-      await Future.wait([readGroups(), readBots()]);
+        }),
+      );
+      _wakeAvatars();
     } catch (_) {
       if (current()) {
+        _appearanceSources = null;
+        _errors = ['Saved instances could not be loaded.'];
         _groupPresenceAvailable.clear();
+        for (final entry in _groups.entries.toList()) {
+          _groups[entry.key] = List.unmodifiable(
+            entry.value.map(
+              (room) =>
+                  BotGroupState(room: room, roomAvailable: false).applyTo(room),
+            ),
+          );
+        }
       }
-      errors.add('Saved instances could not be loaded.');
     } finally {
-      if (current()) {
-        _errors = List.unmodifiable(errors);
-        _loading = false;
+      _refreshes--;
+      if (!_closed) {
+        _loading = _refreshes > 0;
         notifyListeners();
       }
     }
   }
 
+  Future<void> _readStatus(BotsRepository source, int generation) {
+    final job = _job(
+      _statusJobs,
+      source.scope,
+      '${source.instance}: bot activity is unavailable.',
+    );
+    return job.run(_now, _statusAge, () async {
+      await _appearanceRoster(source, maxAge: _statusAge);
+      if (!_sourceCurrent(source, generation) ||
+          !identical(_statusJobs[source.scope], job)) {
+        return false;
+      }
+      final rosterJob = _rosterJobs[source.scope]!;
+      if (rosterJob.failed != null) {
+        final previous = _bots[source.scope.connectionIdentity];
+        if (previous != null) {
+          _bots[source.scope.connectionIdentity] = List.unmodifiable(
+            previous.map((bot) => bot.withPresence(BotPresence.unknown)),
+          );
+        }
+        notifyListeners();
+        return false;
+      }
+      final roster = _bots[source.scope.connectionIdentity]!;
+      final observation = await source.presence(roster);
+      if (!_sourceCurrent(source, generation) ||
+          !identical(_statusJobs[source.scope], job)) {
+        return false;
+      }
+      _bots[source.scope.connectionIdentity] = List.unmodifiable(
+        roster.map(
+          (bot) => bot.withPresence(
+            observation.values[bot.id] ?? BotPresence.unknown,
+          ),
+        ),
+      );
+      notifyListeners();
+      return observation.validated;
+    });
+  }
+
+  Future<void> _readReadiness(BotsRepository source, int generation) {
+    final job = _job(
+      _readinessJobs,
+      source.scope,
+      '${source.instance}: group driver is unavailable.',
+    );
+    return job.run(_now, _statusAge, () async {
+      try {
+        final ready = await source.groupsReady();
+        if (!_sourceCurrent(source, generation) ||
+            !identical(_readinessJobs[source.scope], job)) {
+          return false;
+        }
+        if (ready) {
+          _ready.add(source.scope.connectionIdentity);
+        } else {
+          _ready.remove(source.scope.connectionIdentity);
+        }
+        notifyListeners();
+        return true;
+      } catch (_) {
+        if (_sourceCurrent(source, generation)) {
+          _ready.remove(source.scope.connectionIdentity);
+          notifyListeners();
+        }
+        return false;
+      }
+    });
+  }
+
+  Future<void> _readGroups(BotsRepository source, int generation) async {
+    final identity = source.scope.connectionIdentity;
+    final existingRooms = List<BotGroup>.of(_groups[identity] ?? []);
+    final knownReads = Future.wait([
+      for (final room in existingRooms) _refreshRoom(source, room, generation),
+    ]);
+    final catalog = _job(
+      _catalogJobs,
+      source.scope,
+      '${source.instance}: groups could not refresh.',
+    );
+    await catalog.run(_now, _metadataAge, () async {
+      final startingStates = Map<String, BotGroupState>.of(_roomStates);
+      final rooms = await source.groupCatalog();
+      if (!_sourceCurrent(source, generation) ||
+          !identical(_catalogJobs[source.scope], catalog)) {
+        return false;
+      }
+      final old = {
+        for (final room in _groups[identity] ?? <BotGroup>[]) room.key: room,
+      };
+      _groups[identity] = List.unmodifiable(
+        rooms.map((room) {
+          final previous = old[room.key];
+          // Catalog establishes membership/metadata, never newer runtime/messages.
+          if (previous == null) return room;
+          final result = previous.withCatalogObservation(
+            room,
+            retainIdentity: !identical(
+              startingStates[room.key],
+              _roomStates[room.key],
+            ),
+          );
+          _groupMessages?.rebind(previous, result);
+          return result;
+        }),
+      );
+      final keys = rooms.map((room) => room.key).toSet();
+      for (final key in old.keys.where((key) => !keys.contains(key))) {
+        _stateJobs.remove(key);
+        _previewJobs.remove(key);
+        _roomStates.remove(key);
+      }
+      _groupPresenceAvailable.add(identity);
+      notifyListeners();
+      return true;
+    });
+    if (!_sourceCurrent(source, generation)) return;
+    await Future.wait([
+      knownReads,
+      for (final room in List<BotGroup>.of(_groups[identity] ?? []))
+        _refreshRoom(source, room, generation),
+    ]);
+  }
+
+  Future<void> _refreshRoom(
+    BotsRepository source,
+    BotGroup room,
+    int generation,
+  ) async {
+    bool current() =>
+        _sourceCurrent(source, generation) && groupForKey(room.key) != null;
+    final stateJob = _job(
+      _stateJobs,
+      room.key,
+      '${source.instance}: group status is unavailable.',
+    );
+    final stateRead = stateJob.run(_now, _statusAge, () async {
+      final observed = await source.groupState(groupForKey(room.key) ?? room);
+      if (!current() || !identical(_stateJobs[room.key], stateJob)) {
+        return false;
+      }
+      _roomStates[room.key] = observed;
+      final previous = groupForKey(room.key)!;
+      final updated = observed.applyTo(previous);
+      _publishRoom(previous, updated);
+      return observed.roomAvailable && observed.runtimeAvailable;
+    });
+    final previewJob = _job(
+      _previewJobs,
+      room.key,
+      '${source.instance}: group messages could not refresh.',
+    );
+    final previewRead = previewJob.run(
+      _now,
+      const Duration(seconds: 30),
+      () async {
+        await stateRead;
+        if (!current()) return false;
+        final starting = groupForKey(room.key)!;
+        bool admitted() =>
+            current() && identical(_previewJobs[room.key], previewJob);
+        final observed = await source.groupPreview(
+          starting,
+          state: _roomStates[room.key],
+          groupMessages: _groupMessages,
+          canPublish: admitted,
+        );
+        if (!admitted()) return false;
+        final previous = groupForKey(room.key)!;
+        final updated = previous.withMessageObservation(observed);
+        _groupMessages?.rebind(observed, updated);
+        _publishRoom(previous, updated);
+        return observed.observationComplete;
+      },
+    );
+    await Future.wait([stateRead, previewRead]);
+  }
+
+  void _publishRoom(BotGroup previous, BotGroup room) {
+    final identity = room.scope.connectionIdentity;
+    if (room.runtimeAvailable) _groupPresenceAvailable.add(identity);
+    _groups[identity] = List.unmodifiable(
+      (_groups[identity] ?? []).map((old) => old.key == room.key ? room : old),
+    );
+    if (previous.messageCoverageSequence == room.messageCoverageSequence &&
+        previous.lastMessageSequence == room.lastMessageSequence &&
+        previous.lastAnswerSequence == room.lastAnswerSequence) {
+      _groupMessages?.rebind(previous, room);
+    }
+    notifyListeners();
+  }
+
   Future<T?> _mutate<T>(
     Future<T> Function(bool Function(), void Function()) run, {
     required bool Function() canUse,
+    String? botSource,
+    String? groupSource,
+    String? roomKey,
   }) async {
     if (_closed || _busy || !canUse()) return null;
-    _readGeneration++;
-    _refreshRequested = true;
+    void retireSource(
+      Map<WorkspaceScope, _BotsReadJob> jobs,
+      String? identity,
+    ) {
+      if (identity == null) return;
+      for (final scope
+          in jobs.keys
+              .where((scope) => scope.connectionIdentity == identity)
+              .toList()) {
+        _readErrors.remove(jobs.remove(scope));
+      }
+    }
+
+    retireSource(_rosterJobs, botSource ?? groupSource);
+    retireSource(_statusJobs, botSource);
+    retireSource(_catalogJobs, groupSource);
+    if (roomKey != null) {
+      _readErrors.remove(_stateJobs.remove(roomKey));
+      _readErrors.remove(_previewJobs.remove(roomKey));
+      _roomStates.remove(roomKey);
+    }
     _loading = false;
     _busy = true;
     _operationError = null;
@@ -792,36 +1032,55 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     BotRecord bot, {
     required bool Function() canUse,
   }) => _mutate(
-    (active, sent) =>
-        repository(bot.scope.connectionIdentity).openChat(bot, active, sent),
+    (active, sent) async {
+      final verified = await repository(
+        bot.scope.connectionIdentity,
+      ).openChat(bot, active, sent);
+      if (active()) {
+        _replaceBot(verified);
+        _appearanceGeneration++;
+        notifyListeners();
+      }
+      return verified.chat!;
+    },
     canUse: canUse,
+    botSource: bot.scope.connectionIdentity,
   );
   Future<bool> setPinned(
     BotRecord bot, {
     required bool Function() canUse,
   }) async =>
-      await _mutate((active, sent) async {
-        final updated = await repository(
-          bot.scope.connectionIdentity,
-        ).metadata(bot, {'pinned': !bot.pinned}, active, sent);
-        if (active()) _replaceBot(updated);
-        return true;
-      }, canUse: canUse) ==
+      await _mutate(
+        (active, sent) async {
+          final updated = await repository(
+            bot.scope.connectionIdentity,
+          ).metadata(bot, {'pinned': !bot.pinned}, active, sent);
+          if (active()) _replaceBot(updated);
+          return true;
+        },
+        canUse: canUse,
+        botSource: bot.scope.connectionIdentity,
+      ) ==
       true;
   Future<bool> setHidden(
     BotRecord bot, {
     required bool Function() canUse,
   }) async =>
-      await _mutate((active, sent) async {
-        final updated = await repository(
-          bot.scope.connectionIdentity,
-        ).metadata(bot, {'hidden': !bot.hidden}, active, sent);
-        if (active()) _replaceBot(updated);
-        return true;
-      }, canUse: canUse) ==
+      await _mutate(
+        (active, sent) async {
+          final updated = await repository(
+            bot.scope.connectionIdentity,
+          ).metadata(bot, {'hidden': !bot.hidden}, active, sent);
+          if (active()) _replaceBot(updated);
+          return true;
+        },
+        canUse: canUse,
+        botSource: bot.scope.connectionIdentity,
+      ) ==
       true;
   void _replaceBot(BotRecord bot) {
-    _cacheAppearance(bot, assetRead: true);
+    bot = _cacheIdentity(bot);
+    _avatars.selectWarm();
     final rows = _bots[bot.scope.connectionIdentity];
     if (rows != null) {
       _bots[bot.scope.connectionIdentity] = List.unmodifiable(
@@ -881,22 +1140,26 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
       notifyListeners();
       return false;
     }
-    return await _mutate((active, sent) async {
-          if (clone != null && clone.scope.connectionIdentity != identity) {
-            throw StateError('Clone belongs to another instance');
-          }
-          final source = repository(identity);
-          final existing = await source.bots();
-          if (existing.any((bot) => bot.profile.name == name)) {
-            throw StateError('That profile name already exists');
-          }
-          await source.create(name, clone?.profile.name, active, () {
-            _unconfirmedCreates.add(target);
-            sent();
-          });
-          _unconfirmedCreates.remove(target);
-          return true;
-        }, canUse: canUse) ==
+    return await _mutate(
+          (active, sent) async {
+            if (clone != null && clone.scope.connectionIdentity != identity) {
+              throw StateError('Clone belongs to another instance');
+            }
+            final source = repository(identity);
+            final existing = await source.bots();
+            if (existing.any((bot) => bot.profile.name == name)) {
+              throw StateError('That profile name already exists');
+            }
+            await source.create(name, clone?.profile.name, active, () {
+              _unconfirmedCreates.add(target);
+              sent();
+            });
+            _unconfirmedCreates.remove(target);
+            return true;
+          },
+          canUse: canUse,
+          botSource: identity,
+        ) ==
         true;
   }
 
@@ -909,16 +1172,27 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     Uint8List? picture,
     required ProfileColorChoice iconColor,
   }) async =>
-      await _mutate((active, sent) async {
-        if (!_ready.contains(identity)) {
-          throw StateError('Group driver is unavailable');
-        }
-        final source = repository(identity);
-        await source.createGroup(roomId, name, members, active, sent);
-        if (!active()) return false;
-        await source.saveGroupIcon(roomId, 0, iconColor, picture, active, sent);
-        return true;
-      }, canUse: canUse) ==
+      await _mutate(
+        (active, sent) async {
+          if (!_ready.contains(identity)) {
+            throw StateError('Group driver is unavailable');
+          }
+          final source = repository(identity);
+          await source.createGroup(roomId, name, members, active, sent);
+          if (!active()) return false;
+          await source.saveGroupIcon(
+            roomId,
+            0,
+            iconColor,
+            picture,
+            active,
+            sent,
+          );
+          return true;
+        },
+        canUse: canUse,
+        groupSource: identity,
+      ) ==
       true;
   Future<bool> editGroup(
     BotGroup group,
@@ -928,51 +1202,56 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     String renameEvent, {
     required bool Function() canUse,
   }) async =>
-      await _mutate((active, sent) async {
-        final revision = group.iconRevision;
-        if (revision == null) {
-          throw StateError(
-            'Group picture is unavailable. Refresh Bots and reopen Edit group.',
-          );
-        }
-        final source = repository(group.scope.connectionIdentity);
-        await source.checkGroupEdit(group, name);
-        if (!active()) return false;
-        final confirmedRevision = await source.saveGroupIcon(
-          group.id,
-          revision,
-          color,
-          picture,
-          active,
-          sent,
-        );
-        if (!active()) return false;
-        if (name != group.name) {
-          await source.groupAction(
-            group,
-            'rename',
-            renameEvent,
+      await _mutate(
+        (active, sent) async {
+          final revision = group.iconRevision;
+          if (revision == null) {
+            throw StateError(
+              'Group picture is unavailable. Refresh Bots and reopen Edit group.',
+            );
+          }
+          final source = repository(group.scope.connectionIdentity);
+          await source.checkGroupEdit(group, name);
+          if (!active()) return false;
+          final confirmedRevision = await source.saveGroupIcon(
+            group.id,
+            revision,
+            color,
+            picture,
             active,
             sent,
-            name: name,
           );
-        }
-        if (!active()) return false;
-        final identity = group.scope.connectionIdentity;
-        _groups[identity] = (_groups[identity] ?? const <BotGroup>[])
-            .map(
-              (room) => room.key == group.key
-                  ? room.withDetails(
-                      name: name,
-                      color: color,
-                      picture: picture,
-                      revision: confirmedRevision,
-                    )
-                  : room,
-            )
-            .toList();
-        return true;
-      }, canUse: canUse) ==
+          if (!active()) return false;
+          if (name != group.name) {
+            await source.groupAction(
+              group,
+              'rename',
+              renameEvent,
+              active,
+              sent,
+              name: name,
+            );
+          }
+          if (!active()) return false;
+          final identity = group.scope.connectionIdentity;
+          _groups[identity] = (_groups[identity] ?? const <BotGroup>[])
+              .map(
+                (room) => room.key == group.key
+                    ? room.withDetails(
+                        name: name,
+                        color: color,
+                        picture: picture,
+                        revision: confirmedRevision,
+                      )
+                    : room,
+              )
+              .toList();
+          return true;
+        },
+        canUse: canUse,
+        groupSource: group.scope.connectionIdentity,
+        roomKey: group.key,
+      ) ==
       true;
   Future<Uint8List> generateGroupPicture(
     String identity,
@@ -995,27 +1274,36 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     String? name,
     required bool Function() canUse,
   }) async =>
-      await _mutate((active, sent) async {
-        await repository(group.scope.connectionIdentity).groupAction(
-          group,
-          action,
-          const Uuid().v4(),
-          active,
-          sent,
-          name: name,
-        );
-        return true;
-      }, canUse: canUse) ==
+      await _mutate(
+        (active, sent) async {
+          await repository(group.scope.connectionIdentity).groupAction(
+            group,
+            action,
+            const Uuid().v4(),
+            active,
+            sent,
+            name: name,
+          );
+          return true;
+        },
+        canUse: canUse,
+        groupSource: group.scope.connectionIdentity,
+        roomKey: group.key,
+      ) ==
       true;
 
   @override
   void dispose() {
     _closed = true;
     groupReads.dispose();
-    _invalidateAppearances();
-    _appearanceCache.clear();
+    for (final borrower in _avatars.borrowers.toList()) {
+      borrower.dispose();
+    }
+    _avatars.entries.clear();
+    _identities.clear();
     _appearanceKeys.clear();
-    _avatarRead.clear();
+    _avatarAvailable?.complete();
+    _avatarAvailable = null;
     _readGeneration++;
     _poll?.cancel();
     for (final source in _repositories ?? <BotsRepository>[]) {

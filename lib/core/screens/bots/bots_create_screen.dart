@@ -188,55 +188,58 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
       context: context,
       showDragHandle: true,
       useSafeArea: true,
-      builder: (context) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Icon color', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final color in ProfileColorChoice.values.where(
-                  (color) => color.slot != null,
-                ))
-                  Semantics(
-                    selected: draft.iconColor == color,
-                    child: StudioButtonPress(
-                      child: IconButton.filledTonal(
-                        key: ValueKey('group-color-${color.name}'),
-                        tooltip:
-                            '${color.name[0].toUpperCase()}${color.name.substring(1)}',
-                        isSelected: draft.iconColor == color,
-                        onPressed: () => Navigator.pop(context, color),
-                        icon: BotGroupPicture(
-                          avatars: draft.iconMembers,
-                          color: color,
-                          size: 32,
-                        ),
-                        selectedIcon: Stack(
-                          children: [
-                            BotGroupPicture(
-                              avatars: draft.iconMembers,
-                              color: color,
-                              size: 32,
-                            ),
-                            const Positioned(
-                              right: 0,
-                              bottom: 0,
-                              child: Icon(Icons.check_circle, size: 16),
-                            ),
-                          ],
+      builder: (context) => BotAvatarScope(
+        session: widget.session,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Icon color', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final color in ProfileColorChoice.values.where(
+                    (color) => color.slot != null,
+                  ))
+                    Semantics(
+                      selected: draft.iconColor == color,
+                      child: StudioButtonPress(
+                        child: IconButton.filledTonal(
+                          key: ValueKey('group-color-${color.name}'),
+                          tooltip:
+                              '${color.name[0].toUpperCase()}${color.name.substring(1)}',
+                          isSelected: draft.iconColor == color,
+                          onPressed: () => Navigator.pop(context, color),
+                          icon: BotGroupPicture(
+                            avatars: draft.iconMembers,
+                            color: color,
+                            size: 32,
+                          ),
+                          selectedIcon: Stack(
+                            children: [
+                              BotGroupPicture(
+                                avatars: draft.iconMembers,
+                                color: color,
+                                size: 32,
+                              ),
+                              const Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: Icon(Icons.check_circle, size: 16),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -529,11 +532,9 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                             title: Row(
                               children: [
                                 ExcludeSemantics(
-                                  child: BotAvatar(
+                                  child: BorrowedBotAvatar(
+                                    bot: bot,
                                     name: bot.title,
-                                    shape: bot.shape,
-                                    color: bot.color,
-                                    image: bot.avatar,
                                     size: 32,
                                   ),
                                 ),
@@ -671,7 +672,12 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.group
+  Widget build(BuildContext context) => BotAvatarScope(
+    session: widget.session,
+    child: _buildWithAvatars(context),
+  );
+
+  Widget _buildWithAvatars(BuildContext context) => widget.group
       ? _buildGroup(context)
       : Scaffold(
           appBar: WingAppBar(
@@ -775,11 +781,9 @@ class _PickedGroupMembers extends StatelessWidget {
                     children: [
                       const SizedBox(width: 8),
                       ExcludeSemantics(
-                        child: BotAvatar(
+                        child: BorrowedBotAvatar(
+                          bot: bot,
                           name: bot.title,
-                          shape: bot.shape,
-                          color: bot.color,
-                          image: bot.avatar,
                           size: 24,
                         ),
                       ),
@@ -828,13 +832,7 @@ class _ExistingGroupMember extends StatelessWidget {
             dimension: 32,
             child: Icon(Icons.smart_toy_outlined),
           )
-        : BotAvatar(
-            name: member.name,
-            shape: bot!.shape,
-            color: bot!.color,
-            image: bot!.avatar,
-            size: 32,
-          ),
+        : BorrowedBotAvatar(bot: bot!, name: member.name, size: 32),
     title: Text(member.name),
     subtitle: Text(
       '@${member.handle}',

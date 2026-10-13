@@ -384,7 +384,8 @@ void main() {
     'production group send passes its acknowledged stock sequence into notification recovery',
     () async {
       final fixture = BotsFixture();
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       host.states.clear();

@@ -80,12 +80,15 @@ final class RecentGroupMessages {
     );
   }
 
-  /// Decoration may replace a room object after its successful discovery read.
+  /// Metadata/runtime replacements may reuse only unchanged message coverage.
   void rebind(BotGroup previous, BotGroup updated) {
     final entry = _entries[previous.key];
     if (entry == null ||
         !identical(entry.group, previous) ||
-        previous.key != updated.key) {
+        previous.key != updated.key ||
+        previous.messageCoverageSequence != updated.messageCoverageSequence ||
+        previous.lastMessageSequence != updated.lastMessageSequence ||
+        previous.lastAnswerSequence != updated.lastAnswerSequence) {
       return;
     }
     _entries[updated.key] = (

@@ -36,7 +36,10 @@ void main() {
   }) async {
     final fixture = BotsFixture();
     fixture.pending.add({'kind': 'retry', 'task_id': 'paused-task'});
-    final group = (await fixture.repository.groups(groupMessages: null)).first;
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).first;
     final session = BotGroupSession(
       fixture.repository,
       group,
@@ -287,6 +290,182 @@ void main() {
   );
 
   test(
+    'presence validation distinguishes successful uncertainty from failed reads',
+    () async {
+      final fixture = BotsFixture();
+      fixture.profiles.first['canonical_session']['id'] = 'mira-chat';
+      final roster = await fixture.repository.bots();
+      final validated = await fixture.repository.presence(roster);
+      expect(validated.validated, true);
+      expect(validated.values[roster.first.id], BotPresence.unknown);
+      fixture.readHook = (_, method, _) async {
+        if (method == 'session.active_list') throw StateError('Disconnected');
+        return null;
+      };
+      final unavailable = await fixture.repository.presence(roster);
+      expect(unavailable.validated, false);
+      expect(unavailable.values.values, everyElement(BotPresence.unknown));
+    },
+  );
+
+  test('group catalog and known-room status never scan messages', () async {
+    final fixture = BotsFixture();
+    final calls = <String>[];
+    fixture.readHook = (_, method, _) async {
+      calls.add(method);
+      return null;
+    };
+    final room = (await fixture.repository.groupCatalog()).single;
+    expect(calls, ['profiles.list', 'groups.list']);
+    expect(room.observationComplete, false);
+    calls.clear();
+    final state = await fixture.repository.groupState(room);
+    expect(calls, ['groups.state']);
+    expect(state.roomAvailable, true);
+    expect(state.runtimeAvailable, true);
+    expect(state.applyTo(room).observationComplete, false);
+  });
+
+  test(
+    'missing group driver preserves room and independent message coverage',
+    () async {
+      final fixture = BotsFixture();
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': 1700000001,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Confirmed answer'},
+      });
+      final messages = RecentGroupMessages();
+      addTearDown(messages.dispose);
+      final room = (await fixture.repository.groupCatalog()).single;
+      final calls = <String>[];
+      fixture.readHook = (_, method, _) async {
+        calls.add(method);
+        if (method == 'groups.state') {
+          return {
+            'room': {...fixture.room, 'name': 'Renamed room', 'latest_seq': 1},
+          };
+        }
+        return null;
+      };
+      final state = await fixture.repository.groupState(room);
+      expect(state.roomAvailable, true);
+      expect(state.runtimeAvailable, false);
+      final preview = await fixture.repository.groupPreview(
+        room,
+        state: state,
+        groupMessages: messages,
+        canPublish: () => true,
+      );
+      expect(calls, ['groups.state', 'groups.log']);
+      expect(preview.name, 'Renamed room');
+      expect(preview.runtimeAvailable, false);
+      expect(preview.working, false);
+      expect(preview.activeMemberProfiles, isEmpty);
+      expect(preview.observationComplete, true);
+      expect(preview.messageCoverageSequence, 1);
+      expect(
+        messages.borrow(preview, limit: 6)!.single.text,
+        'Confirmed answer',
+      );
+      fixture.readHook = (_, method, _) async {
+        if (method == 'groups.state') throw StateError('Disconnected');
+        return null;
+      };
+      final unavailable = (await fixture.repository.groupState(
+        preview,
+      )).applyTo(preview);
+      expect(unavailable.preview, 'Confirmed answer');
+      expect(unavailable.messageCoverageSequence, 1);
+      expect(unavailable.runtimeAvailable, false);
+      expect(unavailable.activeMemberProfiles, isEmpty);
+    },
+  );
+
+  test(
+    'status cursors preserve old coverage and late previews preserve new status',
+    () async {
+      final fixture = BotsFixture();
+      final room = (await readFixtureGroups(
+        fixture.repository,
+        groupMessages: null,
+      )).single;
+      final state = BotGroupState(
+        room: room,
+        roomAvailable: true,
+        latestSequence: 20,
+        runtimeAvailable: true,
+        working: true,
+      );
+      final updated = state.applyTo(room);
+      expect(updated.latestSequence, 20);
+      expect(updated.messageCoverageSequence, 0);
+      expect(updated.activeMemberProfiles, {'atlas', 'mira'});
+      final merged = updated.withMessageObservation(room);
+      expect(merged.latestSequence, 20);
+      expect(merged.messageCoverageSequence, 0);
+      expect(merged.working, true);
+      expect(merged.activeMemberProfiles, {'atlas', 'mira'});
+      final unavailable = BotGroupState(
+        room: room,
+        roomAvailable: false,
+      ).applyTo(merged);
+      expect(unavailable.working, false);
+      expect(unavailable.blocked, false);
+      expect(unavailable.activeMemberProfiles, isEmpty);
+      expect(unavailable.messageCoverageSequence, 0);
+    },
+  );
+
+  test(
+    'retired group preview cannot replace the accepted message tail',
+    () async {
+      final fixture = BotsFixture();
+      void append(int seq) => fixture.events.add({
+        'room_id': 'room-1',
+        'seq': seq,
+        'kind': 'message.member',
+        'created_at': 1700000000 + seq,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Answer $seq'},
+      });
+      append(1);
+      final messages = RecentGroupMessages();
+      addTearDown(messages.dispose);
+      final accepted = (await readFixtureGroups(
+        fixture.repository,
+        groupMessages: messages,
+      )).single;
+      append(2);
+      final read = Completer<void>();
+      final release = Completer<void>();
+      fixture.readHook = (_, method, _) async {
+        if (method == 'groups.log') {
+          read.complete();
+          await release.future;
+        }
+        return null;
+      };
+      var current = true;
+      final pending = fixture.repository.groupPreview(
+        accepted,
+        groupMessages: messages,
+        canPublish: () => current,
+      );
+      await read.future;
+      current = false;
+      release.complete();
+      final retired = await pending;
+      expect(retired.observationComplete, false);
+      expect(messages.borrow(accepted, limit: 6)!.single.sequence, 1);
+      expect(messages.borrow(retired, limit: 6), isNull);
+    },
+  );
+
+  test(
     'byte-shortened group logs retain the latest discovery and passive tail',
     () async {
       final fixture = BotsFixture();
@@ -308,7 +487,8 @@ void main() {
       };
       final cache = RecentGroupMessages();
       addTearDown(cache.dispose);
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: cache,
       )).single;
       expect(reads.length, greaterThan(1));
@@ -360,7 +540,8 @@ void main() {
           'payload': {'text': 'Answer $seq'},
         });
       }
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       expect(
@@ -407,7 +588,8 @@ void main() {
               'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
             }
           : null;
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       expect(group.observationComplete, false);
@@ -419,8 +601,12 @@ void main() {
     test(
       'confirmed mutation replaces a retired roster read oldFirst=$oldReadFinishesFirst',
       () async {
+        var now = DateTime.utc(2026, 10, 13);
         final fixture = BotsFixture();
-        final owner = BotsSession((_) async => [fixture.repository]);
+        final owner = BotsSession(
+          (_) async => [fixture.repository],
+          now: () => now,
+        );
         addTearDown(owner.dispose);
         await owner.refresh();
         final readStarted = Completer<void>(), releaseRead = Completer<void>();
@@ -439,6 +625,7 @@ void main() {
           commandStarted.complete();
           await releaseCommand.future;
         };
+        now = now.add(const Duration(seconds: 30));
         final refresh = owner.refresh();
         await readStarted.future;
         final mutation = owner.createBot(
@@ -474,7 +661,8 @@ void main() {
     'group sends publish their exact acknowledged stock sequence and reject a wrong receipt',
     () async {
       final fixture = BotsFixture();
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       expect(
@@ -649,7 +837,8 @@ void main() {
       if (method == 'groups.log') logReads++;
       return null;
     };
-    final group = (await fixture.repository.groups(
+    final group = (await readFixtureGroups(
+      fixture.repository,
       groupMessages: groupMessages,
     )).single;
     final discoveryReads = logReads;
@@ -716,6 +905,7 @@ void main() {
   test(
     'unavailable group reads clear roster activity and recovery restores it',
     () async {
+      var now = DateTime.utc(2026, 10, 13);
       final fixture = BotsFixture();
       var failure = '';
       fixture.readHook = (_, method, _) async {
@@ -736,7 +926,10 @@ void main() {
         }
         return null;
       };
-      final owner = BotsSession((_) async => [fixture.repository]);
+      final owner = BotsSession(
+        (_) async => [fixture.repository],
+        now: () => now,
+      );
       addTearDown(owner.dispose);
       for (final failed in [
         '',
@@ -747,10 +940,11 @@ void main() {
         'groups.log',
       ]) {
         failure = failed;
+        now = now.add(const Duration(minutes: 5));
         await owner.refresh();
         expect(
           owner.state.bots.first.presence,
-          failed == 'groups.state' || failed == 'groups.list'
+          failed == 'groups.state'
               ? BotPresence.idle
               : BotPresence.groupWorking,
         );
@@ -760,6 +954,7 @@ void main() {
   );
 
   test('unavailable source discovery revokes group activity', () async {
+    var now = DateTime.utc(2026, 10, 13);
     final fixture = BotsFixture();
     fixture.readHook = (_, method, _) async => switch (method) {
       'session.active_list' => {'sessions': []},
@@ -778,14 +973,16 @@ void main() {
     final owner = BotsSession((_) async {
       if (unavailable) throw StateError('Source unavailable');
       return [fixture.repository];
-    });
+    }, now: () => now);
     addTearDown(owner.dispose);
     await owner.refresh();
     expect(owner.state.bots.first.presence, BotPresence.groupWorking);
     unavailable = true;
+    now = now.add(const Duration(seconds: 30));
     await owner.refresh();
     expect(owner.state.bots.first.presence, BotPresence.idle);
     unavailable = false;
+    now = now.add(const Duration(seconds: 30));
     await owner.refresh();
     expect(owner.state.bots.first.presence, BotPresence.groupWorking);
   });
@@ -793,8 +990,12 @@ void main() {
   test(
     'group observations update member rows before a held bot refresh',
     () async {
+      var now = DateTime.utc(2026, 10, 13);
       final fixture = BotsFixture();
-      final owner = BotsSession((_) async => [fixture.repository]);
+      final owner = BotsSession(
+        (_) async => [fixture.repository],
+        now: () => now,
+      );
       addTearDown(owner.dispose);
       await owner.refresh();
       final held = Completer<Map<String, dynamic>?>();
@@ -818,6 +1019,7 @@ void main() {
           published.complete();
         }
       });
+      now = now.add(const Duration(seconds: 30));
       final refresh = owner.refresh();
       await published.future;
       expect(owner.state.bots.first.presence, BotPresence.groupWorking);
@@ -892,7 +1094,8 @@ void main() {
         if (method == 'groups.log') logReads++;
         return null;
       };
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       final discoveryReads = logReads;
@@ -937,7 +1140,8 @@ void main() {
         if (method == 'groups.log') logReads++;
         return null;
       };
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: groupMessages,
       )).single;
       expect(logReads, 2);
@@ -982,16 +1186,20 @@ void main() {
       for (var seq = 1; seq <= 6; seq++) {
         append(seq);
       }
-      final old = (await fixture.repository.groups(
+      final old = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: groupMessages,
       )).single;
       expect(groupMessages.borrow(old, limit: 6), hasLength(6));
       for (var seq = 7; seq <= 11; seq++) {
         append(seq);
       }
-      final current = (await fixture.repository.groups(
+      final current = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: groupMessages,
       )).single;
+      expect(groupMessages.borrow(old, limit: 6), isNull);
+      groupMessages.rebind(current, old);
       expect(groupMessages.borrow(old, limit: 6), isNull);
       expect(
         groupMessages.borrow(current, limit: 6)!.map((event) => event.sequence),
@@ -1036,7 +1244,8 @@ void main() {
         'actor': {'kind': 'member', 'id': 'atlas'},
         'payload': {'text': 'x' * (1024 * 1024)},
       });
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: groupMessages,
       )).single;
       expect(groupMessages.borrow(group, limit: 6), isNull);
@@ -1047,7 +1256,8 @@ void main() {
     'group dictation requires the captured visit and exact draft revision',
     () async {
       final fixture = BotsFixture();
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       BotGroupSession open() => BotGroupSession(
@@ -1089,7 +1299,8 @@ void main() {
     () async {
       final server = AdministrationFixture();
       final fixture = BotsFixture(server: server.server);
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       server.mutationOverride =
@@ -1130,72 +1341,6 @@ void main() {
         ),
         '$name-$suffix',
       );
-
-  test(
-    'passive appearances coalesce roster and avatar reads and reuse warm headers',
-    () async {
-      final fixture = BotsFixture();
-      fixture.profiles.first['has_avatar'] = true;
-      final roster = Completer<Map<String, dynamic>?>();
-      final started = Completer<void>();
-      final asset = Completer<Map<String, dynamic>?>();
-      var rosters = 0, assets = 0, notifications = 0;
-      fixture.readHook = (_, method, _) async {
-        if (method == 'profiles.list') {
-          rosters++;
-          started.complete();
-          return roster.future;
-        }
-        if (method == 'profiles.get_asset') {
-          assets++;
-          return asset.future;
-        }
-        return null;
-      };
-      final owner = BotsSession((_) async => [fixture.repository]);
-      addTearDown(owner.dispose);
-      owner.addListener(() => notifications++);
-      final root = canonical('atlas'), tip = canonical('atlas', suffix: 'tip');
-      final a = owner.appearancesForConversations([root], canRead: () => true);
-      final b = owner.botForConversation(tip);
-      final c = owner.appearancesForProfiles([
-        root.workspace,
-      ], canRead: () => true);
-      await started.future;
-      roster.complete(null);
-      await Future<void>.delayed(Duration.zero);
-      expect(rosters, 1);
-      expect(assets, 1);
-      expect(owner.cachedAppearance(root)?.title, 'Atlas');
-      expect(owner.cachedAppearance(root)?.avatar, isNull);
-      expect(
-        notifications,
-        greaterThan(0),
-        reason:
-            'Canonical placeholder identity must publish before held assets',
-      );
-      asset.complete({'found': true, 'data': _avatarPng});
-      final results = await Future.wait<Object?>([a, b, c]);
-      final map = results[0] as Map<ProfileSessionKey, BotRecord>;
-      expect(map[root], same(results[1]));
-      expect(
-        (results[2] as Map<WorkspaceScope, BotRecord>)[root.workspace],
-        same(map[root]),
-      );
-      expect(map[root]!.avatar, base64Decode(_avatarPng));
-      expect(owner.cachedAppearance(tip), same(map[root]));
-      final changes = notifications;
-      expect(await owner.botForConversation(root), same(map[root]));
-      expect(rosters, 1);
-      expect(assets, 1);
-      expect(notifications, changes);
-      expect(fixture.commands, isEmpty);
-      expect(
-        owner.repository(root.workspace.connectionIdentity),
-        same(fixture.repository),
-      );
-    },
-  );
 
   test('direct chat retains its settings repository until disposal', () async {
     final fixture = BotsFixture();
@@ -1268,84 +1413,8 @@ void main() {
     },
   );
 
-  test('motion revokes avatar admission after a shared roster wait', () async {
-    final fixture = BotsFixture();
-    fixture.profiles.first['has_avatar'] = true;
-    final roster = Completer<Map<String, dynamic>?>(),
-        started = Completer<void>();
-    var allowed = true, assets = 0, rosters = 0;
-    fixture.readHook = (_, method, _) async {
-      if (method == 'profiles.list') {
-        rosters++;
-        started.complete();
-        return roster.future;
-      }
-      if (method == 'profiles.get_asset') {
-        assets++;
-        return {'found': true, 'data': _avatarPng};
-      }
-      return null;
-    };
-    final owner = BotsSession((_) async => [fixture.repository]);
-    addTearDown(owner.dispose);
-    final key = canonical('atlas');
-    final reading = owner.appearancesForConversations([
-      key,
-    ], canRead: () => allowed);
-    await started.future;
-    allowed = false;
-    roster.complete(null);
-    final metadata = await reading;
-    expect(metadata[key]!.title, 'Atlas');
-    expect(assets, 0);
-    allowed = true;
-    final ready = await owner.appearancesForConversations([
-      key,
-    ], canRead: () => allowed);
-    expect(ready[key]!.avatar, base64Decode(_avatarPng));
-    expect(rosters, 1);
-    expect(assets, 1);
-  });
-
   test(
-    'passive avatar allocation admits at most three physical reads',
-    () async {
-      final fixture = BotsFixture()
-        ..profiles.add(BotsFixture.profile('fourth', 'Fourth'));
-      for (final row in fixture.profiles) {
-        row['has_avatar'] = true;
-      }
-      final held = Completer<Map<String, dynamic>?>();
-      var active = 0, peak = 0, assets = 0, rosters = 0;
-      fixture.readHook = (_, method, _) async {
-        if (method == 'profiles.list') rosters++;
-        if (method != 'profiles.get_asset') return null;
-        assets++;
-        active++;
-        if (active > peak) peak = active;
-        final result = await held.future;
-        active--;
-        return result;
-      };
-      final owner = BotsSession((_) async => [fixture.repository]);
-      addTearDown(owner.dispose);
-      final reads = [
-        for (final row in fixture.profiles)
-          owner.botForConversation(canonical(row['name'] as String)),
-      ];
-      await Future<void>.delayed(Duration.zero);
-      expect(assets, 3);
-      expect(peak, 3);
-      held.complete({'found': true, 'data': _avatarPng});
-      expect(await Future.wait(reads), everyElement(isNotNull));
-      expect(assets, 4);
-      expect(rosters, 1);
-      expect(peak, 3);
-    },
-  );
-
-  test(
-    'passive cache retains at most ten appearances without rereading the roster',
+    'metadata remains available beyond the ten image slots without rereading the roster',
     () async {
       final fixture = BotsFixture();
       fixture.profiles
@@ -1366,7 +1435,7 @@ void main() {
           'Bot $i',
         );
       }
-      expect(owner.cachedAppearance(canonical('bot0')), isNull);
+      expect(owner.cachedAppearance(canonical('bot0'))!.title, 'Bot 0');
       expect(owner.cachedAppearance(canonical('bot10'))!.title, 'Bot 10');
       expect(
         (await owner.botForConversation(canonical('bot0')))!.title,
@@ -1377,45 +1446,14 @@ void main() {
   );
 
   test(
-    'explicit passive refresh recovers changed avatar without presence or group reads',
-    () async {
-      final fixture = BotsFixture();
-      fixture.profiles.first['has_avatar'] = true;
-      var found = false, rosters = 0, assets = 0;
-      final methods = <String>[];
-      fixture.readHook = (_, method, _) async {
-        methods.add(method);
-        if (method == 'profiles.list') rosters++;
-        if (method == 'profiles.get_asset') {
-          assets++;
-          return {'found': found, if (found) 'data': _avatarPng};
-        }
-        return null;
-      };
-      final owner = BotsSession((_) async => [fixture.repository]);
-      addTearDown(owner.dispose);
-      final key = canonical('atlas');
-      expect((await owner.botForConversation(key))!.avatar, isNull);
-      found = true;
-      owner.invalidateAppearances();
-      expect(
-        (await owner.botForConversation(key))!.avatar,
-        base64Decode(_avatarPng),
-      );
-      expect(rosters, 2);
-      expect(assets, 2);
-      expect(
-        methods,
-        everyElement(anyOf('profiles.list', 'profiles.get_asset')),
-      );
-    },
-  );
-
-  test(
     'confirmed owner refresh replaces only changed appearance observations',
     () async {
+      var now = DateTime.utc(2026, 10, 13);
       final fixture = BotsFixture();
-      final owner = BotsSession((_) async => [fixture.repository]);
+      final owner = BotsSession(
+        (_) async => [fixture.repository],
+        now: () => now,
+      );
       addTearDown(owner.dispose);
       final key = canonical('atlas');
       final before = await owner.botForConversation(key);
@@ -1424,6 +1462,7 @@ void main() {
       (fixture.profiles.first['ui_meta'] as Map)['hermes-bots']['title'] =
           'Atlas revised';
       fixture.profiles.first['ui_meta_revisions'] = {'hermes-bots': 3};
+      now = now.add(const Duration(seconds: 30));
       await owner.refresh();
       expect(owner.cachedAppearance(key)!.title, 'Atlas revised');
       expect(owner.cachedAppearance(key), isNot(same(before)));
@@ -1481,13 +1520,13 @@ void main() {
   test('retired group discovery cannot continue or publish', () async {
     final fixture = BotsFixture();
     final started = Completer<void>(), release = Completer<void>();
-    var listed = false;
+    var continued = false;
     fixture.readHook = (_, method, _) async {
-      if (method == 'groups.capabilities') {
+      if (method == 'groups.list') {
         started.complete();
         await release.future;
       }
-      if (method == 'groups.list') listed = true;
+      if (method == 'groups.state' || method == 'groups.log') continued = true;
       return null;
     };
     final owner = BotsSession((_) async => [fixture.repository]);
@@ -1496,7 +1535,7 @@ void main() {
     owner.dispose();
     release.complete();
     await refresh;
-    expect(listed, isFalse);
+    expect(continued, isFalse);
     expect(owner.observedGroups, isEmpty);
     expect(fixture.commands, isEmpty);
   });
@@ -1524,8 +1563,7 @@ void main() {
       );
       final atlas = await session.appearanceForSender(scope, 'atlas');
       expect(atlas!.title, 'Atlas');
-      expect(atlas.avatar, base64Decode(_avatarPng));
-      expect(methods, ['profiles.list', 'profiles.get_asset']);
+      expect(methods, ['profiles.list']);
       expect(
         (await session.appearanceForSender(scope, 'hermes'))!.profile.name,
         'default',
@@ -1617,7 +1655,7 @@ void main() {
         };
         final repository = BotsRepository.forServer(administration.server);
         final roster = await repository.bots();
-        final presence = await repository.presence(roster);
+        final presence = (await repository.presence(roster)).values;
         expect(
           presence[roster.first.id],
           status == 'waiting' ? BotPresence.needsInput : BotPresence.working,
@@ -1676,12 +1714,12 @@ void main() {
         final repository = BotsRepository.forServer(administration.server);
         final roster = await repository.bots();
         expect(
-          (await repository.presence(roster)).values,
+          (await repository.presence(roster)).values.values,
           everyElement(BotPresence.unknown),
         );
         broken = false;
         expect(
-          (await repository.presence(roster))[roster.first.id],
+          (await repository.presence(roster)).values[roster.first.id],
           BotPresence.working,
         );
       },
@@ -1695,13 +1733,17 @@ void main() {
         fixture.repository,
         (await fixture.repository.bots()).first,
         avatarIo: _AvatarPicker(),
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       await edit.pickImage();
       edit.change(title: 'Saved title', color: '#123456');
       expect(await edit.flush(), true);
       final acknowledged = edit.bot;
+      final savedImage = edit.savedImage;
       expect(acknowledged.hasAvatar, true);
-      expect(acknowledged.avatar, orderedEquals(base64Decode(_avatarPng)));
+      expect(edit.savedImage, orderedEquals(base64Decode(_avatarPng)));
       expect(acknowledged.title, 'Saved title');
       expect(acknowledged.color, '#123456');
       expect(acknowledged.chat!.sessionId, 'atlas-chat');
@@ -1709,16 +1751,28 @@ void main() {
         'nested': ['kept'],
       });
       edit.dispose();
-      final reopened = BotProfileEditSession(fixture.repository, acknowledged);
+      final reopened = BotProfileEditSession(
+        fixture.repository,
+        acknowledged,
+        savedImage: savedImage,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
+      );
       expect(reopened.image, orderedEquals(base64Decode(_avatarPng)));
       reopened.change(shape: 'triangle');
       expect(await reopened.flush(), true);
-      expect(reopened.bot.avatar, isNull);
+      expect(reopened.savedImage, isNull);
       expect(reopened.bot.hasAvatar, false);
       expect(fixture.commands.last.$3['clear'], true);
       final afterShape = reopened.bot;
       reopened.dispose();
-      final finalEditor = BotProfileEditSession(fixture.repository, afterShape);
+      final finalEditor = BotProfileEditSession(
+        fixture.repository,
+        afterShape,
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
+      );
       expect(finalEditor.image, isNull);
       expect(finalEditor.shape, 'triangle');
       finalEditor.dispose();
@@ -1729,13 +1783,15 @@ void main() {
     () async {
       final fixture = BotsFixture();
       fixture.profiles.first['ui_meta']['hermes-bots']['imageKind'] = 'shape';
-      final bot = (await fixture.repository.bots()).first.withAvatar(
-        base64Decode(_avatarPng),
-      );
+      final bot = (await fixture.repository.bots()).first.withAvatarHint(true);
       final edit = BotProfileEditSession(
         fixture.repository,
         bot,
+        savedImage: base64Decode(_avatarPng),
         avatarIo: _AvatarPicker(),
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       expect(edit.image, isNull);
@@ -1744,14 +1800,21 @@ void main() {
       expect(edit.image, isNull);
       expect(await edit.flush(), true);
       expect(edit.image, isNull);
-      expect(edit.bot.avatar, orderedEquals(base64Decode(_avatarPng)));
+      expect(edit.savedImage, orderedEquals(base64Decode(_avatarPng)));
       expect(fixture.commands.single.$2, 'profiles.configure');
       await edit.pickImage();
       expect(edit.image, orderedEquals(base64Decode(_avatarPng)));
       expect(await edit.flush(), true);
       expect(edit.bot.metadata['imageKind'], 'photo');
       expect(edit.image, orderedEquals(base64Decode(_avatarPng)));
-      final reopened = BotProfileEditSession(fixture.repository, edit.bot);
+      final reopened = BotProfileEditSession(
+        fixture.repository,
+        edit.bot,
+        savedImage: edit.savedImage,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
+      );
       expect(reopened.image, orderedEquals(base64Decode(_avatarPng)));
       reopened.dispose();
     },
@@ -1763,9 +1826,11 @@ void main() {
       if (kind != null) meta['imageKind'] = kind;
       final edit = BotProfileEditSession(
         fixture.repository,
-        (await fixture.repository.bots()).first.withAvatar(
-          base64Decode(_avatarPng),
-        ),
+        (await fixture.repository.bots()).first.withAvatarHint(true),
+        savedImage: base64Decode(_avatarPng),
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       edit.change(color: '#123456');
@@ -1794,6 +1859,9 @@ void main() {
         fixture.repository,
         (await fixture.repository.bots()).first,
         avatarIo: _AvatarPicker(),
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       await edit.pickImage();
@@ -1803,7 +1871,7 @@ void main() {
       edit.removeImage();
       held.complete();
       await clearing.future;
-      expect(edit.bot.avatar, orderedEquals(base64Decode(_avatarPng)));
+      expect(edit.savedImage, orderedEquals(base64Decode(_avatarPng)));
       expect(edit.bot.hasAvatar, true);
       expect(edit.bot.title, 'Newer title');
       expect(edit.bot.revision, 4);
@@ -1812,14 +1880,21 @@ void main() {
       clearHeld.complete();
       expect(await saving, true);
       expect(edit.bot.title, 'Newer title');
-      expect(edit.bot.avatar, isNull);
+      expect(edit.savedImage, isNull);
       expect(edit.bot.hasAvatar, false);
       expect(edit.dirty, false);
       expect(
         fixture.commands.where((c) => c.$2 == 'profiles.set_asset').length,
         2,
       );
-      final reopened = BotProfileEditSession(fixture.repository, edit.bot);
+      final reopened = BotProfileEditSession(
+        fixture.repository,
+        edit.bot,
+        savedImage: edit.savedImage,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
+      );
       expect(reopened.image, isNull);
       reopened.dispose();
     },
@@ -1872,15 +1947,11 @@ void main() {
         DateTime.fromMillisecondsSinceEpoch(3000000, isUtc: true),
       );
       expect(roster[2].lastActive, isNull);
-      final enriched = await fixture.repository.enrich(
-        roster[0],
-        presence: BotPresence.idle,
-      );
+      final enriched = roster[0].withPresence(BotPresence.idle);
       for (final copy in [
         enriched,
         enriched.withPresence(BotPresence.working),
-        enriched.withObservedAvatar(null),
-        enriched.withAvatar(null),
+        enriched.withAvatarHint(false),
         enriched.withMetadata(
           metadata: enriched.metadata,
           revision: 3,
@@ -1945,11 +2016,14 @@ void main() {
     fixture.profiles.first['worker_session'] = worker;
     fixture.readHook = (_, method, _) async =>
         method == 'session.active_list' ? {'sessions': []} : null;
-    final owner = BotsSession((_) async => [fixture.repository]);
+    final owner = BotsSession(
+      (_) async => [fixture.repository],
+      now: () => now,
+    );
     addTearDown(owner.dispose);
     for (final (elapsed, expected) in [
       (0, BotPresence.working),
-      (149999, BotPresence.working),
+      (120000, BotPresence.working),
       (150000, BotPresence.idle),
     ]) {
       now = DateTime.utc(2026, 10, 12, 12).add(Duration(milliseconds: elapsed));
@@ -1960,9 +2034,11 @@ void main() {
         DateTime.utc(2026, 10, 12, 12),
       );
     }
+    now = now.add(const Duration(seconds: 30));
     worker['last_active'] = now.millisecondsSinceEpoch / 1000;
     await owner.refresh();
     expect(owner.state.bots.first.presence, BotPresence.working);
+    now = now.add(const Duration(seconds: 30));
     fixture.profiles.first['worker_session'] = null;
     await owner.refresh();
     expect(owner.state.bots.first.presence, BotPresence.idle);
@@ -1982,7 +2058,7 @@ void main() {
       return null;
     };
     final roster = await fixture.repository.bots();
-    final presence = await fixture.repository.presence(roster);
+    final presence = (await fixture.repository.presence(roster)).values;
     expect(presence[roster.first.id], BotPresence.working);
     expect(presence[roster[1].id], BotPresence.unknown);
   });
@@ -1997,7 +2073,7 @@ void main() {
     };
     final roster = await fixture.repository.bots();
     expect(
-      (await fixture.repository.presence(roster))[roster[1].id],
+      (await fixture.repository.presence(roster)).values[roster[1].id],
       BotPresence.needsInput,
     );
   });
@@ -2037,7 +2113,7 @@ void main() {
       fixture.profiles.first['worker_session'] = value;
       final roster = await fixture.repository.bots();
       expect(
-        (await fixture.repository.presence(roster))[roster.first.id],
+        (await fixture.repository.presence(roster)).values[roster.first.id],
         BotPresence.idle,
       );
     }
@@ -2057,6 +2133,9 @@ void main() {
         fixture.repository,
         (await fixture.repository.bots()).first,
         avatarIo: _AvatarPicker(),
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       await edit.pickImage();
@@ -2065,10 +2144,10 @@ void main() {
       expect(edit.bot.title, 'Saved metadata');
       expect(edit.bot.revision, 3);
       expect(edit.bot.hasAvatar, false);
-      expect(edit.bot.avatar, isNull);
+      expect(edit.savedImage, isNull);
       failAsset = false;
       expect(await edit.flush(), true);
-      expect(edit.bot.avatar, orderedEquals(base64Decode(_avatarPng)));
+      expect(edit.savedImage, orderedEquals(base64Decode(_avatarPng)));
       expect(edit.bot.hasAvatar, true);
       expect(
         fixture.commands.where((c) => c.$2 == 'profiles.configure').length,
@@ -2104,19 +2183,13 @@ void main() {
           ProfileSessionKey(scope, id),
         );
         expect(bot!.title, 'Atlas');
-        expect(bot.avatar, base64Decode(png));
         expect(
           bot
               .withMetadata(metadata: bot.metadata, revision: 4)
               .describesConversation(ProfileSessionKey(scope, 'atlas-tip')),
           true,
         );
-        expect(
-          methods,
-          id == 'atlas-chat'
-              ? ['profiles.list', 'profiles.get_asset']
-              : isEmpty,
-        );
+        expect(methods, id == 'atlas-chat' ? ['profiles.list'] : isEmpty);
       }
       methods.clear();
       final root = ProfileSessionKey(scope, 'atlas-chat');
@@ -2129,7 +2202,6 @@ void main() {
       ], canRead: () => true);
       expect(appearances.keys, unorderedEquals([root, tip]));
       expect(identical(appearances[root], appearances[tip]), true);
-      expect(appearances[root]!.avatar, base64Decode(png));
       expect(methods, isEmpty);
       for (final key in [
         ProfileSessionKey(scope, 'atlas-cron'),
@@ -2168,6 +2240,7 @@ void main() {
   test(
     'conversation appearance read failure and disposal stay passive',
     () async {
+      var now = DateTime.utc(2026, 10, 13);
       final fixture = BotsFixture();
       var retains = 0, releases = 0;
       final repository = BotsRepository(
@@ -2180,7 +2253,7 @@ void main() {
         retain: () => retains++,
         release: () => releases++,
       );
-      final session = BotsSession((_) async => [repository]);
+      final session = BotsSession((_) async => [repository], now: () => now);
       final key = ProfileSessionKey(
         WorkspaceScope(
           connectionId: 'host',
@@ -2198,6 +2271,7 @@ void main() {
         started.complete();
         return held.future;
       };
+      now = now.add(const Duration(seconds: 30));
       final reading = session.botForConversation(key);
       await started.future;
       session.dispose();
@@ -2231,12 +2305,10 @@ void main() {
     () async {
       final fixture = BotsFixture();
       final roster = await fixture.repository.bots();
-      final presence = await fixture.repository.presence(roster);
-      final bots = await Future.wait(
-        roster.map(
-          (bot) => fixture.repository.enrich(bot, presence: presence[bot.id]!),
-        ),
-      );
+      final presence = (await fixture.repository.presence(roster)).values;
+      final bots = roster
+          .map((bot) => bot.withPresence(presence[bot.id]!))
+          .toList();
       expect(bots.map((bot) => bot.presence), [
         BotPresence.idle,
         BotPresence.needsInput,
@@ -2247,7 +2319,7 @@ void main() {
         return null;
       };
       expect(
-        (await fixture.repository.enrich(bots.first)).presence,
+        (await fixture.repository.presence(bots)).values[bots.first.id],
         BotPresence.unknown,
       );
     },
@@ -2266,7 +2338,12 @@ void main() {
       );
       expect(updated.revision, 3);
       expect(updated.metadata['unrelated'], bot.metadata['unrelated']);
-      final edit = BotProfileEditSession(fixture.repository, updated);
+      final edit = BotProfileEditSession(
+        fixture.repository,
+        updated,
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
+      );
       addTearDown(edit.dispose);
       edit.change(title: 'Atlas revised');
       fixture.conflict = true;
@@ -2302,7 +2379,10 @@ void main() {
       other.metadata(bot, {'pinned': false}, () => true, () {}),
       throwsStateError,
     );
-    final group = (await fixture.repository.groups(groupMessages: null)).first;
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).first;
     await expectLater(
       other.sendGroup(group, 'event', 'hello', () => true, () {}),
       throwsStateError,
@@ -2316,8 +2396,8 @@ void main() {
       fixture.profiles.first['canonical_session'] = null;
       final bot = (await fixture.repository.bots()).first;
       final key = await fixture.repository.openChat(bot, () => true, () {});
-      expect(key.workspace, bot.scope);
-      expect(key.sessionId, 'new-root-1');
+      expect(key.chat!.workspace, bot.scope);
+      expect(key.chat!.sessionId, 'new-root-1');
       expect(fixture.commands.first.$2, 'session.create');
       expect(fixture.commands.first.$3['hidden'], true);
       expect(fixture.commands.first.$3['follow_profile_config'], true);
@@ -2349,7 +2429,7 @@ void main() {
         () => true,
         () {},
       );
-      expect(key.sessionId, 'desktop-winner');
+      expect(key.chat!.sessionId, 'desktop-winner');
       expect(fixture.commands.where((c) => c.$2 == 'session.create').length, 1);
       expect(fixture.commands.any((c) => c.$2 == 'prompt.submit'), false);
     },
@@ -2389,7 +2469,6 @@ void main() {
         expect(choice.appearance!.title, 'Renamed Atlas');
         expect(choice.appearance!.shape, 'hexagon');
         expect(choice.appearance!.color, '#8b5cf6');
-        expect(choice.appearance!.avatar, base64Decode(_avatarPng));
         expect(choice.isCollective, isFalse);
       }
       final everyone = session
@@ -2405,7 +2484,8 @@ void main() {
     'room avatar admission rejects foreign and ambiguous profile observations',
     () async {
       final fixture = BotsFixture();
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).single;
       final roster = await fixture.repository.bots();
@@ -2462,7 +2542,8 @@ void main() {
         });
         final cache = RecentGroupMessages();
         addTearDown(cache.dispose);
-        final group = (await fixture.repository.groups(
+        final group = (await readFixtureGroups(
+          fixture.repository,
           groupMessages: cache,
         )).single;
         final tail = cache.borrow(group, limit: 10)!;
@@ -2498,7 +2579,8 @@ void main() {
       'concurrent group refresh awaits the owned read through $outcome',
       () async {
         final fixture = BotsFixture();
-        final group = (await fixture.repository.groups(
+        final group = (await readFixtureGroups(
+          fixture.repository,
           groupMessages: null,
         )).first;
         final session = BotGroupSession(
@@ -2550,7 +2632,8 @@ void main() {
     'group capture retires held reads and resumes the exact log cursor',
     () async {
       final fixture = BotsFixture();
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).first;
       fixture.events.add({
@@ -2605,7 +2688,8 @@ void main() {
     'lost group-send acknowledgement retries the same frozen id and text exactly once',
     () async {
       final fixture = BotsFixture()..sendLost = true;
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).first;
       final session = BotGroupSession(
@@ -2635,7 +2719,8 @@ void main() {
     'readable group names keep canonical routing and frozen retries',
     () async {
       final fixture = BotsFixture()..sendLost = true;
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).first;
       final session = BotGroupSession(
@@ -2678,7 +2763,8 @@ void main() {
       final members = fixture.room['members'] as List;
       members[0]['display_name'] = 'Client Work';
       members[1]['display_name'] = 'Client Work';
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).first;
       final session = BotGroupSession(
@@ -2723,7 +2809,10 @@ void main() {
       'handle': 'bot_forge',
       'display_name': 'Foo',
     });
-    final group = (await fixture.repository.groups(groupMessages: null)).first;
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).first;
     final session = BotGroupSession(
       fixture.repository,
       group,
@@ -2761,7 +2850,8 @@ void main() {
     'group picker uses frozen members; removed identity pauses before stock send',
     () async {
       final fixture = BotsFixture();
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).first;
       final session = BotGroupSession(
@@ -2799,7 +2889,10 @@ void main() {
   test('a member id named everyone is still a selected identity', () async {
     final fixture = BotsFixture();
     (fixture.room['members'] as List).first['member_id'] = 'everyone';
-    final group = (await fixture.repository.groups(groupMessages: null)).first;
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).first;
     final session = BotGroupSession(
       fixture.repository,
       group,
@@ -2879,7 +2972,8 @@ void main() {
           'choices': ['once', 'deny'],
         },
       });
-      final group = (await fixture.repository.groups(
+      final group = (await readFixtureGroups(
+        fixture.repository,
         groupMessages: null,
       )).first;
       final runtime = await fixture.repository.groupRuntime(group);
@@ -2946,6 +3040,9 @@ void main() {
       final edit = BotProfileEditSession(
         fixture.repository,
         (await fixture.repository.bots()).first,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       expect(edit.bot.metadata['imageKind'], isNull);
@@ -2966,6 +3063,9 @@ void main() {
     final edit = BotProfileEditSession(
       fixture.repository,
       (await fixture.repository.bots()).first,
+
+      validateImage: (bot) async =>
+          (await fixture.repository.readAvatar(bot)).bytes,
     );
     addTearDown(edit.dispose);
     edit.change(shape: edit.shape);
@@ -2986,7 +3086,12 @@ void main() {
     final fixture = BotsFixture();
     fixture.profiles.first['has_avatar'] = true;
     final bot = (await fixture.repository.bots()).first;
-    final edit = BotProfileEditSession(fixture.repository, bot);
+    final edit = BotProfileEditSession(
+      fixture.repository,
+      bot,
+      validateImage: (bot) async =>
+          (await fixture.repository.readAvatar(bot)).bytes,
+    );
     addTearDown(edit.dispose);
     expect(edit.image, isNull);
     edit.change(shape: edit.shape);
@@ -3003,6 +3108,9 @@ void main() {
       final edit = BotProfileEditSession(
         fixture.repository,
         (await fixture.repository.bots()).first,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       final chosen = edit.shape;
@@ -3038,6 +3146,9 @@ void main() {
       final edit = BotProfileEditSession(
         fixture.repository,
         (await fixture.repository.bots()).first,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       edit.change(title: 'First name');
@@ -3076,6 +3187,9 @@ void main() {
       final edit = BotProfileEditSession(
         fixture.repository,
         (await fixture.repository.bots()).first,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       edit.change(title: '');
       await tester.pump(const Duration(seconds: 1));
@@ -3098,6 +3212,9 @@ void main() {
     final edit = BotProfileEditSession(
       fixture.repository,
       (await fixture.repository.bots()).first,
+
+      validateImage: (bot) async =>
+          (await fixture.repository.readAvatar(bot)).bytes,
     );
     addTearDown(edit.dispose);
     await edit.generate('An owl');
@@ -3116,6 +3233,9 @@ void main() {
       final edit = BotProfileEditSession(
         fixture.repository,
         (await fixture.repository.bots()).first,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       edit.change(title: 'My edit');
@@ -3143,6 +3263,9 @@ void main() {
       final edit = BotProfileEditSession(
         fixture.repository,
         (await fixture.repository.bots()).first,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       edit.change(title: 'Unsaved name');
@@ -3165,6 +3288,9 @@ void main() {
       final edit = BotProfileEditSession(
         fixture.repository,
         (await fixture.repository.bots()).first,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       edit.change(color: '#a58cdf');
@@ -3185,6 +3311,9 @@ void main() {
       final edit = BotProfileEditSession(
         fixture.repository,
         (await fixture.repository.bots()).first,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       edit.change(color: '#a58cdf');
@@ -3217,6 +3346,9 @@ void main() {
       final edit = BotProfileEditSession(
         fixture.repository,
         (await fixture.repository.bots()).first,
+
+        validateImage: (bot) async =>
+            (await fixture.repository.readAvatar(bot)).bytes,
       );
       addTearDown(edit.dispose);
       edit.change(title: 'Updated title');
@@ -3240,7 +3372,7 @@ void main() {
       final fixture = BotsFixture();
       fixture.profiles.first['canonical_session']['id'] = 'mira-chat';
       final roster = await fixture.repository.bots();
-      final presence = await fixture.repository.presence(roster);
+      final presence = (await fixture.repository.presence(roster)).values;
       expect(presence[roster.first.id], BotPresence.unknown);
       expect(presence[roster[1].id], BotPresence.unknown);
       expect(presence[roster.last.id], BotPresence.working);

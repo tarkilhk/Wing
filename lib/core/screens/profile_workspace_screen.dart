@@ -518,15 +518,19 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   Widget _recentPreview(RecentConversationCard card) {
     final group = card.entry.group;
-    return ConversationPreview(
-      card: card,
-      connectionLabel: group?.instance ?? controller.connection.label,
-      connectionIcon: group == null
-          ? controller.connection.icon
-          : _groupConnection(group)?.icon,
-      connectionStatus: group == null
-          ? controller.connectionStatus
-          : _groupConnectionStatus(group),
+    return BotAvatarScope(
+      session: _bots,
+      prepared: true,
+      child: ConversationPreview(
+        card: card,
+        connectionLabel: group?.instance ?? controller.connection.label,
+        connectionIcon: group == null
+            ? controller.connection.icon
+            : _groupConnection(group)?.icon,
+        connectionStatus: group == null
+            ? controller.connectionStatus
+            : _groupConnectionStatus(group),
+      ),
     );
   }
 
@@ -595,31 +599,34 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         builder: (groupContext) {
           final status = _groupConnectionStatus(group);
           final connection = _groupConnection(group);
-          final discussion = GroupConversationSwitcher(
-            groupKey: RecentConversationEntry.group(group).key,
-            onLeave: () => _leaveConversation(origin),
-            onLeaveRecents: () => _leaveConversation(AppDestination.activity),
-            createSession: () => controller.groupRecentConversationSession(
-              group: group,
-              recents: _recents,
-              onOpenGroup: _openRecentGroup,
-              activity: () => ChatNoticeActivityScope.of(groupContext),
-              onOpenChat: (_) => _openGroupChatWindow(
-                groupContext,
-                origin: AppDestination.activity,
+          final discussion = BotAvatarScope(
+            session: _bots,
+            child: GroupConversationSwitcher(
+              groupKey: RecentConversationEntry.group(group).key,
+              onLeave: () => _leaveConversation(origin),
+              onLeaveRecents: () => _leaveConversation(AppDestination.activity),
+              createSession: () => controller.groupRecentConversationSession(
+                group: group,
+                recents: _recents,
+                onOpenGroup: _openRecentGroup,
+                activity: () => ChatNoticeActivityScope.of(groupContext),
+                onOpenChat: (_) => _openGroupChatWindow(
+                  groupContext,
+                  origin: AppDestination.activity,
+                ),
               ),
-            ),
-            previewBuilder: _recentPreview,
-            child: BotGroupScreen(
-              voiceInputSettings: () =>
-                  controller.appPreferences.current.voiceInputSettings,
-              voiceDevice: widget.voiceDevice,
-              stopVoicePlayback: _voiceOutput.stop,
-              createSession: () => _bots.openGroup(group),
-              onEdit: (group) => openGroupEditor(groupContext, _bots, group),
-              onOpenBotChat: (bot) => _openGroupBotChat(groupContext, bot),
-              onOpenBotSettings: (bot) =>
-                  _openBotSettings(bot, routeContext: groupContext),
+              previewBuilder: _recentPreview,
+              child: BotGroupScreen(
+                voiceInputSettings: () =>
+                    controller.appPreferences.current.voiceInputSettings,
+                voiceDevice: widget.voiceDevice,
+                stopVoicePlayback: _voiceOutput.stop,
+                createSession: () => _bots.openGroup(group),
+                onEdit: (group) => openGroupEditor(groupContext, _bots, group),
+                onOpenBotChat: (bot) => _openGroupBotChat(groupContext, bot),
+                onOpenBotSettings: (bot) =>
+                    _openBotSettings(bot, routeContext: groupContext),
+              ),
             ),
           );
           return status == null
@@ -898,6 +905,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   @override
   Widget build(BuildContext context) =>
+      BotAvatarScope(session: _bots, child: _buildWithAvatars(context));
+
+  Widget _buildWithAvatars(BuildContext context) =>
       ValueListenableBuilder<AppPreferencesState>(
         valueListenable: controller.appPreferences.state,
         builder: (context, preferences, _) => Theme(
@@ -1061,6 +1071,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         return _secondaryDestination(context);
       }
       if (chat == null) {
+        _bots.setSelectedAvatar(null);
         _disposeRecentVisit();
         // Transcript notifications must not recreate the Chats subtree.
         // The list spans profiles. Capturing a menu's target profile keeps the
@@ -1087,15 +1098,19 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       }
       _browser = null;
       _conversationBot ??= _bots.botForConversation(chat.key);
-      return FutureBuilder<BotRecord?>(
-        future: _conversationBot,
-        builder: (context, snapshot) {
-          final candidate = snapshot.data;
-          final bot = candidate?.describesConversation(chat.key) == true
-              ? candidate
-              : null;
-          return _conversationPage(context, chat, bot);
-        },
+      return ListenableBuilder(
+        listenable: _bots,
+        builder: (context, _) => FutureBuilder<BotRecord?>(
+          future: _conversationBot,
+          initialData: _bots.cachedAppearance(chat.key),
+          builder: (context, snapshot) {
+            final candidate = _bots.cachedAppearance(chat.key);
+            final bot = candidate?.describesConversation(chat.key) == true
+                ? candidate
+                : null;
+            return _conversationPage(context, chat, bot);
+          },
+        ),
       );
     },
   );
@@ -1184,7 +1199,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       ),
     );
     if (!mounted) return;
-    bots.invalidateAppearances();
+    bots.invalidateAppearances(bot.scope);
     setState(() => _conversationBot = null);
   }
 
@@ -1193,6 +1208,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     ProfileChat chat,
     BotRecord? bot,
   ) {
+    _bots.setSelectedAvatar(bot?.scope);
     final title = BotConversationTitle(
       title: chat.title,
       bot: bot,
