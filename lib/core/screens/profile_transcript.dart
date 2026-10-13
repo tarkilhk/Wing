@@ -977,24 +977,22 @@ class ProfileTranscriptOpening extends StatelessWidget {
     listenable: status,
     builder: (context, _) {
       final waiting = status.phase == ServerConnectionPhase.reconnecting;
+      if (waiting && error == null) return const SizedBox.shrink();
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            error ??
-                (waiting
-                    ? 'Reconnecting to ${status.label}'
-                    : 'Waiting for connection'),
+            error ?? 'Waiting for connection',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium,
           ),
-          const SizedBox(height: 8),
-          Text(
-            error == null
-                ? 'This conversation will open automatically.'
-                : 'You can retry or return to your chats.',
-            textAlign: TextAlign.center,
-          ),
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'You can retry or return to your chats.',
+              textAlign: TextAlign.center,
+            ),
+          ],
           if (!waiting)
             StudioButtonPress(
               child: TextButton(

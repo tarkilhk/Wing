@@ -380,19 +380,12 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     final String? label;
     final bool active;
     final IconData icon;
-    if (_session.sending) {
-      label = 'Sending message…';
-      active = runtime?.working == true && !interrupted;
-      icon = Icons.pending_outlined;
-    } else if (_session.acting) {
-      label = 'Updating group work…';
-      active = runtime?.working == true && !interrupted;
-      icon = Icons.pending_outlined;
-    } else if (_session.pendingText != null) {
+    final pendingAction = _session.sending || _session.acting;
+    if (_session.pendingText != null && !pendingAction) {
       label = 'Message not confirmed · Retry the same message';
       active = false;
       icon = Icons.error_outline;
-    } else if (_session.error != null) {
+    } else if (_session.error != null && !pendingAction) {
       label = 'Group needs attention';
       active = false;
       icon = Icons.error_outline;
@@ -414,19 +407,23 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       icon = Icons.chat_bubble_outline;
     }
     final tokens = WingTokens.of(context);
-    return ConversationActivityStatus(
-      label: label,
-      wrap: true,
-      leading: StudioWorkingIndicator(
-        conversation: true,
-        active: active,
-        label: label ?? 'Group status',
-        icon: icon,
-        color: active
-            ? tokens.running
-            : needsApproval || interrupted
-            ? tokens.blocked
-            : tokens.muted,
+    return StudioPageLoading(
+      active: pendingAction,
+      label: _session.sending ? 'Sending message' : 'Updating group work',
+      child: ConversationActivityStatus(
+        label: label,
+        wrap: true,
+        leading: StudioWorkingIndicator(
+          conversation: true,
+          active: active,
+          label: label ?? 'Group status',
+          icon: icon,
+          color: active
+              ? tokens.running
+              : needsApproval || interrupted
+              ? tokens.blocked
+              : tokens.muted,
+        ),
       ),
     );
   }

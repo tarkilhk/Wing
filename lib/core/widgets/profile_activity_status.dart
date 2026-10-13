@@ -22,7 +22,7 @@ class ProfileActivityStatus extends StatelessWidget {
       return null;
     }
     if (chat.runtime.reconnecting) {
-      return 'Reconnecting… · checking current activity';
+      return null;
     }
     if (chat.runtime.needsInput) {
       return chat.runtime.approval != null
@@ -31,7 +31,7 @@ class ProfileActivityStatus extends StatelessWidget {
     }
     switch (chat.runtime.execution) {
       case ChatExecution.submitting:
-        return 'Sending message…';
+        return null;
       case ChatExecution.failed:
         return 'Something went wrong';
       default:
@@ -122,10 +122,25 @@ class ProfileActivityStatus extends StatelessWidget {
     } else {
       leading = ProfileChatIndicator(chat: chat);
     }
-    return ConversationActivityStatus(
-      label: text,
-      leading: leading,
-      wrap: chat.runtime.compacting,
+    final waiting =
+        chat.runtime.openingError == null &&
+        !chat.runtime.opening &&
+        !chat.runtime.offline &&
+        (chat.runtime.reconnecting ||
+            (chat.runtime.execution == ChatExecution.submitting &&
+                !chat.runtime.needsInput));
+    return StudioPageLoading(
+      active: waiting || chat.composer.observation.saving,
+      label: chat.runtime.reconnecting
+          ? 'Reconnecting'
+          : chat.runtime.execution == ChatExecution.submitting
+          ? 'Sending message'
+          : 'Saving message',
+      child: ConversationActivityStatus(
+        label: text,
+        leading: leading,
+        wrap: chat.runtime.compacting,
+      ),
     );
   }
 }

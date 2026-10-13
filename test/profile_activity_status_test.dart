@@ -2,6 +2,8 @@ import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'helpers/pump_markdown_widget.dart';
 import 'dart:io';
+import 'dart:async';
+import 'package:wing/core/models/attachment_draft.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -137,6 +139,117 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      for (final fails in [false, true]) {
+        testWidgets(
+          'Send preparation uses header feedback ${brightness.name} $scale failure=$fails',
+          (tester) async {
+            tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            final cache = Directory.systemTemp.createTempSync('send-status-');
+            addTearDown(() => cache.deleteSync(recursive: true));
+            final file = File('${cache.path}/note.txt')
+              ..writeAsStringSync('note');
+            await tester.runAsync(
+              () => restoreComposerFixture(
+                chat: chat,
+                preferences: controller.preferences,
+                appendAttachments: [
+                  AttachmentDraft(
+                    id: 'note',
+                    cachedPath: file.path,
+                    name: 'note.txt',
+                    byteLength: 4,
+                    mediaType: 'text/plain',
+                    kind: AttachmentDraftKind.genericFile,
+                  ),
+                ],
+              ),
+            );
+            final gate = host.fileAttachDelay = Completer<void>();
+            host.fileAttachFails = fails;
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: RepaintBoundary(
+                    key: const ValueKey('work-status-review'),
+                    child: child!,
+                  ),
+                ),
+                home: ProfileWorkspaceScreen(controller: controller),
+              ),
+            );
+            for (var i = 0; i < 8; i++) {
+              await tester.pump(const Duration(milliseconds: 100));
+            }
+            final composer = find.byKey(
+              const ValueKey('conversation-composer'),
+            );
+            await tester.enterText(composer, 'Send this note');
+            await tester.tap(find.byTooltip('Send'));
+            for (var i = 0; i < 30; i++) {
+              await tester.runAsync(
+                () => Future<void>.delayed(const Duration(milliseconds: 10)),
+              );
+              await tester.pump(const Duration(milliseconds: 100));
+              if (host.calls.any((call) => call.$2 == 'file.attach')) break;
+            }
+            expect(chat.runtime.execution, ChatExecution.submitting);
+            expect(find.text('Sending message…'), findsNothing);
+            expect(find.text('Saving queue…'), findsNothing);
+            expect(find.byType(StudioLoading), findsOneWidget);
+            expect(
+              tester.getSize(find.byType(ProfileActivityStatus)).height,
+              0,
+            );
+            await tester.enterText(composer, 'Keep this next draft');
+            await tester.pump(const Duration(milliseconds: 300));
+            expect(chat.composer.observation.text, 'Keep this next draft');
+            await renderStatus(
+              tester,
+              'chat-sending-${brightness.name}-$scale',
+            );
+            expect(
+              tester
+                  .widget<EditableText>(
+                    find.descendant(
+                      of: composer,
+                      matching: find.byType(EditableText),
+                    ),
+                  )
+                  .controller
+                  .text,
+              'Keep this next draft',
+            );
+            gate.complete();
+            for (var i = 0; i < 30; i++) {
+              await tester.runAsync(
+                () => Future<void>.delayed(const Duration(milliseconds: 10)),
+              );
+              await tester.pump(const Duration(milliseconds: 100));
+              if (!chat.composer.observation.draining) break;
+            }
+            expect(
+              label(),
+              fails ? 'Something went wrong' : 'Hermes is working…',
+            );
+            expect(chat.composer.observation.text, 'Keep this next draft');
+            await tester.pump();
+            await tester.pump();
+            expect(
+              find.byType(StudioLoading),
+              fails ? findsNothing : findsOneWidget,
+            );
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox());
+          },
+        );
+      }
+
       testWidgets(
         'opening uses only the header pulse ${brightness.name} $scale',
         (tester) async {
@@ -146,6 +259,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           host.event('a', 'message.start');
           runtime.beginOpening();
           controller.connectionStatus.beginRecovery('opening-status-test');
+          chat.reading.installSavedHistory(const []);
           await tester.pumpWidget(
             MaterialApp(
               theme: wingTheme(brightness),
@@ -166,6 +280,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           }
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(tester.getSize(find.byType(ProfileActivityStatus)).height, 0);
+          expect(
+            find.text('This conversation will open automatically.'),
+            findsNothing,
+          );
+          expect(find.text('Waiting for connection'), findsNothing);
           final composer = find.byKey(const ValueKey('conversation-composer'));
           await tester.enterText(composer, 'Draft while opening');
           expect(chat.composer.observation.text, 'Draft while opening');
@@ -374,7 +493,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       });
       expect(label(), 'Waiting for your reply');
       runtime.beginRecovery();
-      expect(label(), 'Reconnecting… · checking current activity');
+      expect(label(), isNull);
       runtime.recovered();
       runtime.reconcileOpenRequests(const []);
       runtime.installResume({'session_id': 'a-runtime', 'running': true});
@@ -484,7 +603,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       host.event('a', 'subagent.start', {'subagent_id': 'child'});
       expect(label(), 'Waiting for 1 subagent…');
       for (final entry in {
-        ChatExecution.submitting: 'Sending message…',
+        ChatExecution.submitting: null,
         ChatExecution.failed: 'Something went wrong',
       }.entries) {
         if (entry.key == ChatExecution.submitting) {
@@ -634,7 +753,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     });
     expect(label(), 'Waiting for your approval');
     runtime.beginRecovery();
-    expect(label(), 'Reconnecting… · checking current activity');
+    expect(label(), isNull);
     runtime.recovered();
     runtime.reconcileOpenRequests(const []);
     runtime.cancelRequest({'id': 'file-server', 'method': 'approval'});

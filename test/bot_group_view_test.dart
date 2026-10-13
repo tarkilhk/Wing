@@ -313,6 +313,8 @@ void main() {
             await tester.pump();
             await tester.pump(const Duration(milliseconds: 300));
             expect(session.acting, isTrue);
+            expect(find.text('Updating group work…'), findsNothing);
+            expect(find.byType(StudioLoading), findsOneWidget);
             expect(session.canStopGroupWork, isFalse);
             final calls = fixture.commands
                 .where((call) => call.$2 == 'groups.stop')
@@ -2267,7 +2269,8 @@ void main() {
         };
         await tester.tap(find.byTooltip('Send group message'));
         await tester.pump(const Duration(milliseconds: 300));
-        expect(find.text('Sending message…'), findsOneWidget);
+        expect(find.text('Sending message…'), findsNothing);
+        expect(find.text('Bots are working…'), findsOneWidget);
         expect(tester.widget<TextField>(input).readOnly, isTrue);
         expect(find.byType(StudioLoading), findsOneWidget);
         expect(
@@ -2285,6 +2288,35 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Bots are working…'), findsNothing);
         expect(find.byType(StudioLoading), findsNothing);
+        expect(session.sending, isFalse);
+        expect(session.pendingText, isNull);
+        final idleSending = Completer<void>();
+        fixture.commandHook = (profile, method, params) async {
+          if (method == 'groups.send') {
+            await idleSending.future;
+            throw StateError('Synthetic send failure');
+          }
+          return null;
+        };
+        await tester.enterText(input, 'Message from idle group');
+        await tester.pump(const Duration(milliseconds: 300));
+        final idleComposer = tester.getRect(input);
+        await tester.tap(find.byTooltip('Send group message'));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump();
+        expect(find.text('Sending message…'), findsNothing);
+        expect(session.sending, isTrue);
+        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(tester.getRect(input), idleComposer);
+        await _render(tester, frame, 'idle-sending-${brightness.name}-$scale');
+        idleSending.complete();
+        await _settleGroupMarkdown(tester);
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(
+          find.text('Message not confirmed · Retry the same message'),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
       });

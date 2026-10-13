@@ -39,11 +39,8 @@ class ProfileQueuedMessages extends StatelessWidget {
             shrinkWrap: true,
             padding: EdgeInsets.zero,
             children: [
-              if (work.saving || work.paused)
-                Text(
-                  work.saving ? 'Saving queue…' : 'Queue paused',
-                  style: style,
-                ),
+              if (work.paused && !work.saving)
+                Text('Queue paused', style: style),
               for (final prompt in work.queue)
                 Semantics(
                   label: identical(prompt.id, work.editing)

@@ -16,6 +16,9 @@ the menu item is disabled while that refresh is pending.
 While a chat opens, the Wing pulse in the header shows loading progress and you
 can continue writing your draft.
 
+Message preparation, queue saves, reconnecting and group requests use the same
+header feedback. Bot activity and requests for your input keep their own status.
+
 **View screen** opens the remote desktop for the conversation's connection and
 profile, including ordinary chats. Chats in the same profile share that screen.
 Opening it does not start the desktop or create a canonical Bot Chat. Back returns
