@@ -556,13 +556,18 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Read'), findsOneWidget);
       expect(find.text('Private tool detail A'), findsNothing);
-      await tester.tap(find.text('Read'));
+      // The expanded title's center can sit beneath the floating Latest button.
+      final readTitle = find.text('Read');
+      expect(readTitle.hitTestable(at: Alignment.centerLeft), findsOneWidget);
+      await tester.tapAt(tester.getRect(readTitle).centerLeft);
       await tester.pumpAndSettle();
       expect(find.text('Private tool detail A'), findsOneWidget);
       expect(find.text('Private tool detail B'), findsNothing);
       await tester.ensureVisible(find.text('Search'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Search'));
+      final searchTitle = find.text('Search');
+      expect(searchTitle.hitTestable(at: Alignment.centerLeft), findsOneWidget);
+      await tester.tapAt(tester.getRect(searchTitle).centerLeft);
       await tester.pumpAndSettle();
       expect(find.text('Private tool detail B'), findsOneWidget);
       expect(tester.takeException(), isNull);
