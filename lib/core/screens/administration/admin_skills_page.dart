@@ -94,24 +94,28 @@ class _AdminSkillLibraryPageState extends State<AdminSkillLibraryPage> {
               onChanged: (value) => setState(() => _usageOrder = value),
             ),
             for (final skill in matches)
-              ListTile(
-                title: Text(skill.name),
-                subtitle: Text(
-                  '${skill.provenance} · ${skill.usage} recorded uses',
+              StudioButtonPress(
+                child: ListTile(
+                  title: Text(skill.name),
+                  subtitle: Text(
+                    '${skill.provenance} · ${skill.usage} recorded uses',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: state.canMutate ? () => _open(skill) : null,
                 ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: state.canMutate ? () => _open(skill) : null,
               ),
             if (rows.isEmpty)
               const AdminNotice('No skills reported for this profile.')
             else if (matches.isEmpty) ...[
               const AdminNotice('No installed skills match this search.'),
-              TextButton(
-                onPressed: () {
-                  _search.clear();
-                  setState(() => _query = '');
-                },
-                child: const Text('Clear search'),
+              StudioButtonPress(
+                child: TextButton(
+                  onPressed: () {
+                    _search.clear();
+                    setState(() => _query = '');
+                  },
+                  child: const Text('Clear search'),
+                ),
               ),
             ],
           ],
@@ -336,13 +340,17 @@ class _AdminSkillEditorState extends State<AdminSkillEditor> {
                 spacing: 8,
                 overflowSpacing: 8,
                 children: [
-                  TextButton(
-                    onPressed: state.busy ? null : _close,
-                    child: const Text('Close'),
+                  StudioButtonPress(
+                    child: TextButton(
+                      onPressed: state.busy ? null : _close,
+                      child: const Text('Close'),
+                    ),
                   ),
-                  FilledButton(
-                    onPressed: state.canSave ? _save : null,
-                    child: StudioActionLabel('Save', busy: state.saving),
+                  StudioButtonPress(
+                    child: FilledButton(
+                      onPressed: state.canSave ? _save : null,
+                      child: StudioActionLabel('Save', busy: state.saving),
+                    ),
                   ),
                 ],
               ),
@@ -458,9 +466,11 @@ class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
             builder: (state) => ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                TextButton(
-                  onPressed: state.canMutate ? _update : null,
-                  child: const Text('Update installed Hub skills'),
+                StudioButtonPress(
+                  child: TextButton(
+                    onPressed: state.canMutate ? _update : null,
+                    child: const Text('Update installed Hub skills'),
+                  ),
                 ),
                 if (state.partial)
                   const AdminNotice(
@@ -469,11 +479,13 @@ class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
                 if (state.catalog.isEmpty)
                   const AdminNotice('No skills found.'),
                 for (final skill in state.catalog)
-                  ListTile(
-                    title: Text(skill.name),
-                    subtitle: Text('${skill.source} · ${skill.description}'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: state.canMutate ? () => _open(skill) : null,
+                  StudioButtonPress(
+                    child: ListTile(
+                      title: Text(skill.name),
+                      subtitle: Text('${skill.source} · ${skill.description}'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: state.canMutate ? () => _open(skill) : null,
+                    ),
                   ),
               ],
             ),

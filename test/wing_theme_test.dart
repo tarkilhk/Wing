@@ -1,6 +1,7 @@
 import 'support/color_contrast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 
@@ -26,6 +27,306 @@ Future<WingTokens> _pumpAndReadTokens(
 }
 
 void main() {
+  group('Studio button press', () {
+    testWidgets('held pointer release after leaving the screen is harmless', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StudioButtonPress(
+              child: TextButton(onPressed: () {}, child: const Text('Hold')),
+            ),
+          ),
+        ),
+      );
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('Hold')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: Text('Left'))),
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'framework Back button receives the shared press from the theme',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(Brightness.dark),
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(title: const Text('Details')),
+                      ),
+                    ),
+                  ),
+                  child: const Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
+        final back = find.byType(BackButton);
+        expect(back, findsOneWidget);
+        final gesture = await tester.startGesture(tester.getCenter(back));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+        final motion = find.descendant(
+          of: back,
+          matching: find.byKey(const ValueKey('studio-button-press-transform')),
+        );
+        expect(motion, findsOneWidget);
+        expect(
+          tester.widget<Transform>(motion).transform.entry(0, 0),
+          closeTo(.97, .001),
+        );
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(find.text('Open'), findsOneWidget);
+      },
+    );
+
+    testWidgets('nested action compresses only the inner target', (
+      tester,
+    ) async {
+      var actions = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StudioButtonPress(
+              child: ListTile(
+                title: const Text('Row'),
+                onTap: () => actions += 10,
+                trailing: StudioButtonPress(
+                  child: IconButton(
+                    onPressed: () => actions++,
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(IconButton)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+      final transforms = tester
+          .widgetList<Transform>(
+            find.byKey(const ValueKey('studio-button-press-transform')),
+          )
+          .toList();
+      expect(transforms.first.transform.entry(0, 0), 1);
+      expect(transforms.last.transform.entry(0, 0), closeTo(.97, .001));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(actions, 1);
+    });
+
+    testWidgets(
+      'scroll movement cancels compression without intercepting drag',
+      (tester) async {
+        final scroll = ScrollController();
+        addTearDown(scroll.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ListView(
+                controller: scroll,
+                children: [
+                  for (var i = 0; i < 30; i++)
+                    StudioButtonPress(
+                      child: ListTile(title: Text('Row $i'), onTap: () {}),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.drag(find.text('Row 3'), const Offset(0, -180));
+        await tester.pumpAndSettle();
+        expect(scroll.offset, greaterThan(0));
+        for (final motion in tester.widgetList<Transform>(
+          find.byKey(const ValueKey('studio-button-press-transform')),
+        )) {
+          expect(motion.transform.entry(0, 0), 1);
+        }
+      },
+    );
+
+    testWidgets('menu entry retains selection and dismissal', (tester) async {
+      String? selected;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StudioButtonPress(
+              child: PopupMenuButton<String>(
+                onSelected: (value) => selected = value,
+                itemBuilder: (_) => [
+                  const StudioPopupMenuItem(
+                    value: 'retry',
+                    child: Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+      expect(selected, 'retry');
+      expect(find.text('Retry'), findsNothing);
+    });
+
+    for (final reduceMotion in [false, true]) {
+      testWidgets('quick tap confirms immediately reduced=$reduceMotion', (
+        tester,
+      ) async {
+        var taps = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(Brightness.dark),
+            home: MediaQuery(
+              data: MediaQueryData(disableAnimations: reduceMotion),
+              child: Scaffold(
+                body: Center(
+                  child: StudioButtonPress(
+                    child: OutlinedButton(
+                      onPressed: () => taps++,
+                      child: const Icon(Icons.refresh),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        final button = find.byType(OutlinedButton);
+        final motion = find
+            .descendant(
+              of: find.byType(StudioButtonPress),
+              matching: find.byKey(
+                const ValueKey('studio-button-press-transform'),
+              ),
+            )
+            .first;
+        double scale() =>
+            tester.widget<Transform>(motion).transform.entry(0, 0);
+        final targetBounds = tester.getRect(find.byType(StudioButtonPress));
+        final targetSize = tester.getSize(button);
+        final gesture = await tester.startGesture(tester.getCenter(button));
+        await tester.pump(const Duration(milliseconds: 100));
+        await gesture.up();
+        await tester.pump();
+        expect(taps, 1, reason: 'Feedback must not defer activation');
+        await tester.pump(const Duration(milliseconds: 60));
+        expect(scale(), reduceMotion ? 1 : lessThan(1));
+        expect(tester.getRect(find.byType(StudioButtonPress)), targetBounds);
+        expect(tester.getSize(button), targetSize);
+        expect(tester.widget<Transform>(motion).transformHitTests, isFalse);
+        await tester.pumpAndSettle();
+        expect(scale(), 1);
+      });
+    }
+
+    testWidgets('keyboard activation has no scale motion', (tester) async {
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      var taps = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StudioButtonPress(
+              child: IconButton(
+                focusNode: focus,
+                onPressed: () => taps++,
+                icon: const Icon(Icons.close),
+              ),
+            ),
+          ),
+        ),
+      );
+      focus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.space);
+      await tester.pump(const Duration(milliseconds: 120));
+      final motion = find
+          .descendant(
+            of: find.byType(StudioButtonPress),
+            matching: find.byKey(
+              const ValueKey('studio-button-press-transform'),
+            ),
+          )
+          .first;
+      expect(tester.widget<Transform>(motion).transform.entry(0, 0), 1);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      expect(taps, 1);
+    });
+
+    testWidgets('cancelled and disabled presses do not activate', (
+      tester,
+    ) async {
+      var taps = 0;
+      var enabled = true;
+      late StateSetter update;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                update = setState;
+                return StudioButtonPress(
+                  child: FilledButton(
+                    onPressed: enabled ? () => taps++ : null,
+                    child: const Icon(Icons.refresh),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      final button = find.byType(FilledButton);
+      final gesture = await tester.startGesture(tester.getCenter(button));
+      await tester.pump(const Duration(milliseconds: 100));
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      expect(taps, 0);
+      update(() => enabled = false);
+      await tester.pump();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(taps, 0);
+      final motion = find
+          .descendant(
+            of: find.byType(StudioButtonPress),
+            matching: find.byKey(
+              const ValueKey('studio-button-press-transform'),
+            ),
+          )
+          .first;
+      expect(tester.widget<Transform>(motion).transform.entry(0, 0), 1);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('WingSpacing', () {
     test('exposes a strictly increasing 4dp-based scale', () {
       const scale = [

@@ -42,23 +42,25 @@ class ChatIntelligenceButton extends StatelessWidget {
     );
     final modelButton = Tooltip(
       message: 'Model $model',
-      child: TextButton(
-        key: const Key('chat-intelligence-button'),
-        onPressed: onPressed,
-        style: buttonStyle,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.memory_rounded, size: 14),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                compactChatModelLabel(model),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+      child: StudioButtonPress(
+        child: TextButton(
+          key: const Key('chat-intelligence-button'),
+          onPressed: onPressed,
+          style: buttonStyle,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.memory_rounded, size: 14),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  compactChatModelLabel(model),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -78,23 +80,25 @@ class ChatIntelligenceButton extends StatelessWidget {
           child: Semantics(
             toggled: fastMode!.enabled,
             label: 'Fast mode',
-            child: TextButton(
-              key: const Key('composer-fast-control'),
-              onPressed: onPressed == null || onFastChanged == null
-                  ? null
-                  : () => onFastChanged!(
-                      fastMode!.enabled
-                          ? ChatFastMode.normal
-                          : ChatFastMode.fast,
-                    ),
-              style: buttonStyle.copyWith(
-                foregroundColor: WidgetStatePropertyAll(
-                  fastMode!.enabled ? tokens.accent : tokens.muted,
+            child: StudioButtonPress(
+              child: TextButton(
+                key: const Key('composer-fast-control'),
+                onPressed: onPressed == null || onFastChanged == null
+                    ? null
+                    : () => onFastChanged!(
+                        fastMode!.enabled
+                            ? ChatFastMode.normal
+                            : ChatFastMode.fast,
+                      ),
+                style: buttonStyle.copyWith(
+                  foregroundColor: WidgetStatePropertyAll(
+                    fastMode!.enabled ? tokens.accent : tokens.muted,
+                  ),
                 ),
-              ),
-              child: Icon(
-                fastMode!.enabled ? Icons.bolt : Icons.bolt_outlined,
-                size: 14,
+                child: Icon(
+                  fastMode!.enabled ? Icons.bolt : Icons.bolt_outlined,
+                  size: 14,
+                ),
               ),
             ),
           ),
@@ -313,16 +317,18 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                             ),
                           ),
                           const Spacer(),
-                          IconButton(
-                            style: IconButton.styleFrom(
-                              minimumSize: const Size(36, 36),
-                              padding: EdgeInsets.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.standard,
+                          StudioButtonPress(
+                            child: IconButton(
+                              style: IconButton.styleFrom(
+                                minimumSize: const Size(36, 36),
+                                padding: EdgeInsets.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.standard,
+                              ),
+                              tooltip: 'Close',
+                              onPressed: _applying ? null : widget.onCancel,
+                              icon: const Icon(Icons.close_rounded),
                             ),
-                            tooltip: 'Close',
-                            onPressed: _applying ? null : widget.onCancel,
-                            icon: const Icon(Icons.close_rounded),
                           ),
                         ],
                       ),
@@ -407,46 +413,50 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                                   : (value) =>
                                         setState(() => _fastMode = value),
                             ),
-                          PopupMenuButton<String>(
-                            style: IconButton.styleFrom(
-                              minimumSize: const Size(36, 36),
+                          StudioButtonPress(
+                            child: PopupMenuButton<String>(
+                              style: IconButton.styleFrom(
+                                minimumSize: const Size(36, 36),
+                                padding: EdgeInsets.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.standard,
+                              ),
                               padding: EdgeInsets.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.standard,
+                              tooltip: 'More model options',
+                              enabled: !_applying,
+                              icon: const Icon(Icons.more_horiz_rounded),
+                              onSelected: (value) {
+                                if (value == 'manual') {
+                                  _enterModel();
+                                } else {
+                                  widget.onReviewProviderAccess();
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                const StudioPopupMenuItem(
+                                  value: 'manual',
+                                  child: Text('Enter model ID'),
+                                ),
+                                const StudioPopupMenuItem(
+                                  value: 'access',
+                                  child: Text('Review provider access'),
+                                ),
+                              ],
                             ),
-                            padding: EdgeInsets.zero,
-                            tooltip: 'More model options',
-                            enabled: !_applying,
-                            icon: const Icon(Icons.more_horiz_rounded),
-                            onSelected: (value) {
-                              if (value == 'manual') {
-                                _enterModel();
-                              } else {
-                                widget.onReviewProviderAccess();
-                              }
-                            },
-                            itemBuilder: (_) => [
-                              const PopupMenuItem(
-                                value: 'manual',
-                                child: Text('Enter model ID'),
-                              ),
-                              const PopupMenuItem(
-                                value: 'access',
-                                child: Text('Review provider access'),
-                              ),
-                            ],
                           ),
                         ],
                       ),
-                      FilledButton(
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(64, 36),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.standard,
+                      StudioButtonPress(
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(64, 36),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.standard,
+                          ),
+                          onPressed: _applying ? null : _apply,
+                          child: Text(_applying ? 'Applying…' : 'Apply'),
                         ),
-                        onPressed: _applying ? null : _apply,
-                        child: Text(_applying ? 'Applying…' : 'Apply'),
                       ),
                     ],
                   ),
@@ -501,20 +511,22 @@ class _ManualModelDialogState extends State<_ManualModelDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DropdownButtonFormField<String>(
-            initialValue: _routes.containsKey(_provider) ? _provider : null,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Provider'),
-            items: [
-              for (final route in _routes.entries)
-                DropdownMenuItem(
-                  value: route.key,
-                  child: Text(route.value, overflow: TextOverflow.ellipsis),
-                ),
-            ],
-            onChanged: (value) {
-              if (value != null) setState(() => _provider = value);
-            },
+          StudioButtonPress(
+            child: DropdownButtonFormField<String>(
+              initialValue: _routes.containsKey(_provider) ? _provider : null,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Provider'),
+              items: [
+                for (final route in _routes.entries)
+                  DropdownMenuItem(
+                    value: route.key,
+                    child: Text(route.value, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _provider = value);
+              },
+            ),
           ),
           const SizedBox(height: 16),
           TextField(
@@ -532,29 +544,33 @@ class _ManualModelDialogState extends State<_ManualModelDialog> {
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+        StudioButtonPress(
+          child: TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
         ),
-        FilledButton(
-          onPressed: !valid || _provider.isEmpty
-              ? null
-              : () => Navigator.pop(
-                  context,
-                  widget.choices
-                          .where(
-                            (c) =>
-                                c.provider == _provider &&
-                                c.model == _id.text.trim(),
-                          )
-                          .firstOrNull ??
-                      ModelChoice(
-                        provider: _provider,
-                        model: _id.text.trim(),
-                        providerLabel: _routes[_provider],
-                      ),
-                ),
-          child: const Text('Use model'),
+        StudioButtonPress(
+          child: FilledButton(
+            onPressed: !valid || _provider.isEmpty
+                ? null
+                : () => Navigator.pop(
+                    context,
+                    widget.choices
+                            .where(
+                              (c) =>
+                                  c.provider == _provider &&
+                                  c.model == _id.text.trim(),
+                            )
+                            .firstOrNull ??
+                        ModelChoice(
+                          provider: _provider,
+                          model: _id.text.trim(),
+                          providerLabel: _routes[_provider],
+                        ),
+                  ),
+            child: const Text('Use model'),
+          ),
         ),
       ],
     );

@@ -104,64 +104,68 @@ class _ChatProfileBarState extends State<ChatProfileBar> {
                             triggerMode: TooltipTriggerMode.manual,
                             message:
                                 '${profile.label} · $hint · Long press to open Bot chat',
-                            child: TextButton(
-                              key: ValueKey('chat-profile-${profile.name}'),
-                              style: TextButton.styleFrom(
-                                fixedSize: const Size(24, 48),
-                                minimumSize: const Size(24, 48),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 2,
-                                  vertical: 14,
-                                ),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.standard,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: WingRadius.control,
-                                ),
-                              ),
-                              onPressed: () => widget.onSelected(profile.name),
-                              onLongPress: () =>
-                                  widget.onOpenBotChat(profile.name),
-                              child: Opacity(
-                                opacity: selected ? 1 : .55,
-                                child: Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    color: color.withValues(
-                                      alpha: selected ? .30 : .22,
-                                    ),
-                                    borderRadius: BorderRadius.circular(3),
+                            child: StudioButtonPress(
+                              child: TextButton(
+                                key: ValueKey('chat-profile-${profile.name}'),
+                                style: TextButton.styleFrom(
+                                  fixedSize: const Size(24, 48),
+                                  minimumSize: const Size(24, 48),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 2,
+                                    vertical: 14,
                                   ),
-                                  foregroundDecoration: selected
-                                      ? BoxDecoration(
-                                          border: Border.all(
-                                            color: color,
-                                            width: 1.5,
-                                            strokeAlign:
-                                                BorderSide.strokeAlignOutside,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            3,
-                                          ),
-                                        )
-                                      : null,
-                                  child: Center(
-                                    child: profile.isDefault
-                                        ? Icon(
-                                            Icons.home_outlined,
-                                            size: 14,
-                                            color: color,
-                                          )
-                                        : Text(
-                                            profile.label.characters.first
-                                                .toUpperCase(),
-                                            style: TextStyle(
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.standard,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: WingRadius.control,
+                                  ),
+                                ),
+                                onPressed: () =>
+                                    widget.onSelected(profile.name),
+                                onLongPress: () =>
+                                    widget.onOpenBotChat(profile.name),
+                                child: Opacity(
+                                  opacity: selected ? 1 : .55,
+                                  child: Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      color: color.withValues(
+                                        alpha: selected ? .30 : .22,
+                                      ),
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                    foregroundDecoration: selected
+                                        ? BoxDecoration(
+                                            border: Border.all(
                                               color: color,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w600,
+                                              width: 1.5,
+                                              strokeAlign:
+                                                  BorderSide.strokeAlignOutside,
                                             ),
-                                          ),
+                                            borderRadius: BorderRadius.circular(
+                                              3,
+                                            ),
+                                          )
+                                        : null,
+                                    child: Center(
+                                      child: profile.isDefault
+                                          ? Icon(
+                                              Icons.home_outlined,
+                                              size: 14,
+                                              color: color,
+                                            )
+                                          : Text(
+                                              profile.label.characters.first
+                                                  .toUpperCase(),
+                                              style: TextStyle(
+                                                color: color,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                    ),
                                   ),
                                 ),
                               ),

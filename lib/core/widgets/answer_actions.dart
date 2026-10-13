@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_icons.dart';
@@ -31,24 +32,30 @@ class AnswerActions extends StatelessWidget {
             child: StudioLoading(label: 'Preparing answer'),
           ),
         ),
-      IconButton(
-        tooltip: 'Branch in new session',
-        onPressed: onBranch,
-        icon: const Icon(WingIcons.fork, size: 18),
+      StudioButtonPress(
+        child: IconButton(
+          tooltip: 'Branch in new session',
+          onPressed: onBranch,
+          icon: const Icon(WingIcons.fork, size: 18),
+        ),
       ),
       if (onReadAloud != null)
-        IconButton(
-          tooltip: readingAloud ? 'Stop reading aloud' : 'Read aloud',
-          onPressed: onReadAloud,
-          icon: Icon(
-            readingAloud ? Icons.stop : Icons.volume_up_outlined,
-            size: 18,
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: readingAloud ? 'Stop reading aloud' : 'Read aloud',
+            onPressed: onReadAloud,
+            icon: Icon(
+              readingAloud ? Icons.stop : Icons.volume_up_outlined,
+              size: 18,
+            ),
           ),
         ),
-      IconButton(
-        tooltip: 'Regenerate response',
-        onPressed: onRegenerate,
-        icon: const Icon(Icons.refresh),
+      StudioButtonPress(
+        child: IconButton(
+          tooltip: 'Regenerate response',
+          onPressed: onRegenerate,
+          icon: const Icon(Icons.refresh),
+        ),
       ),
     ],
   );

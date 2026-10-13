@@ -254,26 +254,30 @@ class _ProjectDialogState extends State<_ProjectDialog> {
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: _pending ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+        StudioButtonPress(
+          child: TextButton(
+            onPressed: _pending ? null : () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
         ),
-        FilledButton(
-          key: ValueKey(switch (widget.action) {
-            BrowserAction.rename => 'project-rename-save',
-            BrowserAction.appearance => 'project-appearance-save',
-            BrowserAction.delete => 'project-delete-confirm',
-            _ => throw StateError('Unsupported project dialog'),
-          }),
-          style: widget.action == BrowserAction.delete
-              ? FilledButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error,
-                )
-              : null,
-          onPressed: _pending ? null : _save,
-          child: StudioActionLabel(
-            widget.action == BrowserAction.delete ? 'Delete' : 'Save',
-            busy: _pending,
+        StudioButtonPress(
+          child: FilledButton(
+            key: ValueKey(switch (widget.action) {
+              BrowserAction.rename => 'project-rename-save',
+              BrowserAction.appearance => 'project-appearance-save',
+              BrowserAction.delete => 'project-delete-confirm',
+              _ => throw StateError('Unsupported project dialog'),
+            }),
+            style: widget.action == BrowserAction.delete
+                ? FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                  )
+                : null,
+            onPressed: _pending ? null : _save,
+            child: StudioActionLabel(
+              widget.action == BrowserAction.delete ? 'Delete' : 'Save',
+              busy: _pending,
+            ),
           ),
         ),
       ],
@@ -300,27 +304,30 @@ class _ChoiceButton extends StatelessWidget {
     label: label,
     button: true,
     selected: selected,
-    child: IconButton(
-      tooltip: label,
-      isSelected: selected,
-      style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.resolveWith(
-          (states) =>
-              selected ? Theme.of(context).colorScheme.primaryContainer : null,
+    child: StudioButtonPress(
+      child: IconButton(
+        tooltip: label,
+        isSelected: selected,
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => selected
+                ? Theme.of(context).colorScheme.primaryContainer
+                : null,
+          ),
+          side: WidgetStateProperty.resolveWith((states) {
+            final colors = Theme.of(context).colorScheme;
+            if (states.contains(WidgetState.disabled)) {
+              return BorderSide(color: colors.outlineVariant);
+            }
+            if (states.contains(WidgetState.focused)) {
+              return BorderSide(color: colors.primary, width: 3);
+            }
+            return null;
+          }),
         ),
-        side: WidgetStateProperty.resolveWith((states) {
-          final colors = Theme.of(context).colorScheme;
-          if (states.contains(WidgetState.disabled)) {
-            return BorderSide(color: colors.outlineVariant);
-          }
-          if (states.contains(WidgetState.focused)) {
-            return BorderSide(color: colors.primary, width: 3);
-          }
-          return null;
-        }),
+        onPressed: onPressed,
+        icon: child,
       ),
-      onPressed: onPressed,
-      icon: child,
     ),
   );
 }

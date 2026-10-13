@@ -19,6 +19,7 @@ const completedView =
 const _session = 'lib/core/services/profiles_management_session.dart';
 const _helper = 'lib/core/screens/administration/admin_widgets.dart';
 const _loading = 'lib/core/widgets/studio_loading.dart';
+const _theme = 'lib/core/theme/wing_theme.dart';
 const _navigation = 'lib/core/screens/administration/admin_navigation.dart';
 const _presentation = 'lib/core/models/profiles_management.dart';
 const _renderPackages = {
@@ -245,6 +246,7 @@ class _Boundary extends RecursiveAstVisitor<void> {
         source == '$root/$_session' ||
         source == '$root/$_helper' ||
         source == '$root/$_loading' ||
+        source == '$root/$_theme' ||
         source == '$root/$_navigation') {
       return true;
     }

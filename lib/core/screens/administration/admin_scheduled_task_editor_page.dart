@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/model_choice.dart';
 import 'package:flutter/material.dart';
@@ -101,11 +102,13 @@ class _AdminScheduledTaskEditorPageState
       child: TaskPage(
         title: editing ? 'Edit task' : 'New task',
         scope: session.scopeLabel,
-        bottom: FilledButton(
-          onPressed: !state.canSubmit ? null : save,
-          child: StudioActionLabel(
-            editing ? 'Save changes' : 'Create task',
-            busy: saving,
+        bottom: StudioButtonPress(
+          child: FilledButton(
+            onPressed: !state.canSubmit ? null : save,
+            child: StudioActionLabel(
+              editing ? 'Save changes' : 'Create task',
+              busy: saving,
+            ),
           ),
         ),
         child: ListView(
@@ -136,48 +139,56 @@ class _AdminScheduledTaskEditorPageState
                 error!,
                 error: true,
                 action: state.canReview || state.reviewing
-                    ? TextButton(
-                        onPressed: state.canReview ? reviewChanges : null,
-                        child: StudioActionLabel(
-                          'Review changes',
-                          busy: state.reviewing,
+                    ? StudioButtonPress(
+                        child: TextButton(
+                          onPressed: state.canReview ? reviewChanges : null,
+                          child: StudioActionLabel(
+                            'Review changes',
+                            busy: state.reviewing,
+                          ),
                         ),
                       )
                     : null,
               ),
             if (controller.savedUnregisteredId != null)
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    allowPop = true;
-                  });
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) Navigator.pop(context);
-                  });
-                },
-                child: const Text('Return to tasks to review the saved task'),
+              StudioButtonPress(
+                child: TextButton(
+                  onPressed: () {
+                    setState(() {
+                      allowPop = true;
+                    });
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) Navigator.pop(context);
+                    });
+                  },
+                  child: const Text('Return to tasks to review the saved task'),
+                ),
               ),
             TaskUncertainty(controller: controller, id: id),
             if (!editing && MediaQuery.viewInsetsOf(context).bottom == 0) ...[
               if (templates?.isNotEmpty == true)
                 TaskSurface(
-                  child: ListTile(
-                    leading: const Icon(Icons.auto_awesome_outlined),
-                    title: Text(template?.title ?? 'Start from a template'),
-                    subtitle: Text(
-                      template?.description ??
-                          'A useful starting point, ready to make yours.',
+                  child: StudioButtonPress(
+                    child: ListTile(
+                      leading: const Icon(Icons.auto_awesome_outlined),
+                      title: Text(template?.title ?? 'Start from a template'),
+                      subtitle: Text(
+                        template?.description ??
+                            'A useful starting point, ready to make yours.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: saving ? null : chooseTemplate,
                     ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: saving ? null : chooseTemplate,
                   ),
                 ),
               if (templateError != null)
                 TaskMessage(
                   'Templates could not be loaded. You can still create your own task.',
-                  action: TextButton(
-                    onPressed: loadTemplates,
-                    child: const Text('Refresh templates'),
+                  action: StudioButtonPress(
+                    child: TextButton(
+                      onPressed: loadTemplates,
+                      child: const Text('Refresh templates'),
+                    ),
                   ),
                 ),
               const SizedBox(height: 24),
@@ -249,10 +260,14 @@ class _AdminScheduledTaskEditorPageState
                     ),
                     const SizedBox(height: 16),
                     if (clock)
-                      OutlinedButton.icon(
-                        onPressed: saving ? null : chooseTime,
-                        icon: const Icon(Icons.schedule_outlined),
-                        label: Text('At ${time.format(context)} · Hermes time'),
+                      StudioButtonPress(
+                        child: OutlinedButton.icon(
+                          onPressed: saving ? null : chooseTime,
+                          icon: const Icon(Icons.schedule_outlined),
+                          label: Text(
+                            'At ${time.format(context)} · Hermes time',
+                          ),
+                        ),
                       ),
                     if (kind == TaskScheduleKind.weekly) ...[
                       const SizedBox(height: 12),
@@ -324,13 +339,15 @@ class _AdminScheduledTaskEditorPageState
                         ),
                       ),
                     if (kind == TaskScheduleKind.once)
-                      OutlinedButton.icon(
-                        onPressed: saving ? null : chooseDate,
-                        icon: const Icon(Icons.calendar_today_outlined),
-                        label: Text(
-                          once == null
-                              ? 'Choose date and time · Phone time'
-                              : '${taskTime(context, once)} · Phone time',
+                      StudioButtonPress(
+                        child: OutlinedButton.icon(
+                          onPressed: saving ? null : chooseDate,
+                          icon: const Icon(Icons.calendar_today_outlined),
+                          label: Text(
+                            once == null
+                                ? 'Choose date and time · Phone time'
+                                : '${taskTime(context, once)} · Phone time',
+                          ),
                         ),
                       ),
                     if (kind == TaskScheduleKind.custom)
@@ -379,9 +396,11 @@ class _AdminScheduledTaskEditorPageState
                       TaskMessage(
                         targetError!,
                         error: true,
-                        action: TextButton(
-                          onPressed: loadTargets,
-                          child: const Text('Refresh destinations'),
+                        action: StudioButtonPress(
+                          child: TextButton(
+                            onPressed: loadTargets,
+                            child: const Text('Refresh destinations'),
+                          ),
                         ),
                       ),
 
@@ -439,16 +458,22 @@ class _AdminScheduledTaskEditorPageState
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     TaskSurface(
-                      child: ListTile(
-                        leading: const Icon(Icons.auto_awesome_outlined),
-                        title: Text(model.isEmpty ? 'Profile default' : model),
-                        subtitle: model.isEmpty
-                            ? const Text('Follows future profile model changes')
-                            : Text(provider),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: saving || state.customEndpoint
-                            ? null
-                            : chooseModel,
+                      child: StudioButtonPress(
+                        child: ListTile(
+                          leading: const Icon(Icons.auto_awesome_outlined),
+                          title: Text(
+                            model.isEmpty ? 'Profile default' : model,
+                          ),
+                          subtitle: model.isEmpty
+                              ? const Text(
+                                  'Follows future profile model changes',
+                                )
+                              : Text(provider),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: saving || state.customEndpoint
+                              ? null
+                              : chooseModel,
+                        ),
                       ),
                     ),
                     if (state.customEndpoint)
@@ -458,9 +483,11 @@ class _AdminScheduledTaskEditorPageState
                     if (modelError != null)
                       TaskMessage(
                         'Model choices could not be loaded. Your current choice is kept.',
-                        action: TextButton(
-                          onPressed: loadModels,
-                          child: const Text('Refresh models'),
+                        action: StudioButtonPress(
+                          child: TextButton(
+                            onPressed: loadModels,
+                            child: const Text('Refresh models'),
+                          ),
                         ),
                       ),
                   ],
@@ -493,10 +520,12 @@ class _AdminScheduledTaskEditorPageState
                 children: [
                   ListTile(
                     title: const Text('Review task changes'),
-                    trailing: IconButton(
-                      tooltip: 'Close',
-                      onPressed: () => Navigator.pop(sheetContext),
-                      icon: const Icon(Icons.close_rounded),
+                    trailing: StudioButtonPress(
+                      child: IconButton(
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
                     ),
                   ),
                   Expanded(
@@ -573,15 +602,19 @@ class _AdminScheduledTaskEditorPageState
                       overflowAlignment: OverflowBarAlignment.end,
                       spacing: 8,
                       children: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(sheetContext),
-                          child: const Text('Cancel'),
+                        StudioButtonPress(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(sheetContext),
+                            child: const Text('Cancel'),
+                          ),
                         ),
-                        FilledButton(
-                          onPressed: pending.length == review.fields.length
-                              ? () => Navigator.pop(sheetContext, pending)
-                              : null,
-                          child: const Text('Apply decisions'),
+                        StudioButtonPress(
+                          child: FilledButton(
+                            onPressed: pending.length == review.fields.length
+                                ? () => Navigator.pop(sheetContext, pending)
+                                : null,
+                            child: const Text('Apply decisions'),
+                          ),
                         ),
                       ],
                     ),
@@ -661,10 +694,12 @@ class _AdminScheduledTaskEditorPageState
                 children: [
                   ListTile(
                     title: const Text('Task model'),
-                    trailing: IconButton(
-                      tooltip: 'Close',
-                      onPressed: () => Navigator.pop(sheetContext),
-                      icon: const Icon(Icons.close_rounded),
+                    trailing: StudioButtonPress(
+                      child: IconButton(
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
                     ),
                   ),
                   Expanded(
@@ -690,15 +725,19 @@ class _AdminScheduledTaskEditorPageState
                       alignment: MainAxisAlignment.end,
                       spacing: 8,
                       children: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(sheetContext),
-                          child: const Text('Cancel'),
+                        StudioButtonPress(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(sheetContext),
+                            child: const Text('Cancel'),
+                          ),
                         ),
-                        FilledButton(
-                          onPressed: pending == initial
-                              ? null
-                              : () => Navigator.pop(sheetContext, pending),
-                          child: const Text('Use in task'),
+                        StudioButtonPress(
+                          child: FilledButton(
+                            onPressed: pending == initial
+                                ? null
+                                : () => Navigator.pop(sheetContext, pending),
+                            child: const Text('Use in task'),
+                          ),
                         ),
                       ],
                     ),
@@ -731,20 +770,24 @@ class _AdminScheduledTaskEditorPageState
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 16),
-              ListTile(
-                title: const Text('Write my own task'),
-                onTap: () => Navigator.pop(context, ''),
+              StudioButtonPress(
+                child: ListTile(
+                  title: const Text('Write my own task'),
+                  onTap: () => Navigator.pop(context, ''),
+                ),
               ),
               for (final item in templates!)
-                ListTile(
-                  title: Text(item.title),
-                  subtitle: Text(
-                    item.supported
-                        ? item.description
-                        : 'This template uses unsupported fields.',
+                StudioButtonPress(
+                  child: ListTile(
+                    title: Text(item.title),
+                    subtitle: Text(
+                      item.supported
+                          ? item.description
+                          : 'This template uses unsupported fields.',
+                    ),
+                    enabled: item.supported,
+                    onTap: () => Navigator.pop(context, item.key),
                   ),
-                  enabled: item.supported,
-                  onTap: () => Navigator.pop(context, item.key),
                 ),
             ],
           ),

@@ -128,13 +128,17 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         title: Text('Remove criterion ${index + 1}?'),
         content: Text(text),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove'),
+          StudioButtonPress(
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Remove'),
+            ),
           ),
         ],
       ),
@@ -165,13 +169,17 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         title: const Text('Clear all criteria?'),
         content: const Text('This removes every criterion from this goal.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Clear criteria'),
+          StudioButtonPress(
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Clear criteria'),
+            ),
           ),
         ],
       ),
@@ -200,9 +208,11 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         'Hermes updated these criteria. Review the refreshed list before trying again.',
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('OK'),
+        StudioButtonPress(
+          child: TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
         ),
       ],
     ),
@@ -216,13 +226,17 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         title: const Text('Clear goal?'),
         content: const Text('This clears the goal on the Hermes server.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Clear'),
+          StudioButtonPress(
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Clear'),
+            ),
           ),
         ],
       ),
@@ -414,15 +428,19 @@ class _AddCriterionDialogState extends State<_AddCriterionDialog> {
             },
           ),
           actions: [
-            TextButton(
-              onPressed: working ? null : () => Navigator.pop(context),
-              child: const Text('Cancel'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: working ? null : () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
             ),
-            FilledButton(
-              onPressed: working || !widget.editor.canSubmit(_draft.text)
-                  ? null
-                  : _add,
-              child: const Text('Add'),
+            StudioButtonPress(
+              child: FilledButton(
+                onPressed: working || !widget.editor.canSubmit(_draft.text)
+                    ? null
+                    : _add,
+                child: const Text('Add'),
+              ),
             ),
           ],
         ),

@@ -1,4 +1,9 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/connection.dart';
 import 'package:wing/core/services/server_connection_status.dart';
@@ -6,6 +11,138 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 
 void main() {
+  const capture = bool.fromEnvironment('CAPTURE_CONNECTION_BUTTONS');
+  setUpAll(() async {
+    if (!capture) return;
+    for (final entry in {
+      'Roboto': 'roboto-regular.ttf',
+      'MaterialIcons': 'materialicons-regular.otf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            File(
+              '/tmp/wing-header-fonts/${entry.value}',
+            ).readAsBytes().then((b) => b.buffer.asByteData()),
+          ))
+          .load();
+    }
+  });
+
+  Future<void> snapshot(WidgetTester tester, String name) async {
+    if (!capture) return;
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const ValueKey('capture')),
+    );
+    await tester.runAsync(() async {
+      final pixels = await boundary.toImage(pixelRatio: 1.5);
+      final bytes = await pixels.toByteData(format: ui.ImageByteFormat.png);
+      final file = File('build/design-previews/connection-buttons/$name.png');
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes!.buffer.asUint8List());
+      pixels.dispose();
+    });
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final enlarged in [false, true]) {
+      testWidgets(
+        'retry press and held recovery ${brightness.name} $enlarged',
+        (tester) async {
+          final size = Size(enlarged ? 320 : 390, 844);
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          final status = ServerConnectionStatus('Claw');
+          addTearDown(status.dispose);
+          status.liveChanged('chat', false);
+          var retries = 0;
+          status.retry = () async {
+            retries++;
+            status.beginRecovery('chat');
+          };
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: const ValueKey('capture'),
+              child: MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(enlarged ? 2 : 1)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  body: ServerConnectionLabel(label: 'Claw', status: status),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('connection-status-target')),
+          );
+          await tester.pumpAndSettle();
+          final retry = find.byType(OutlinedButton);
+          await tester.ensureVisible(retry);
+          await tester.pumpAndSettle();
+          final motion = find
+              .descendant(
+                of: find.ancestor(
+                  of: retry,
+                  matching: find.byType(StudioButtonPress),
+                ),
+                matching: find.byType(Transform),
+              )
+              .first;
+          double scale() =>
+              tester.widget<Transform>(motion).transform.entry(0, 0);
+          final bounds = tester.getRect(retry);
+          expect(bounds.height, greaterThanOrEqualTo(48));
+          expect(find.text('Retry connection'), findsOneWidget);
+          await snapshot(tester, '${brightness.name}-$enlarged-ready');
+          final gesture = await tester.startGesture(tester.getCenter(retry));
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.pump(const Duration(milliseconds: 120));
+          expect(scale(), closeTo(.97, .001));
+          await snapshot(tester, '${brightness.name}-$enlarged-pressed');
+          await gesture.up();
+          await tester.pump();
+          expect(retries, 1);
+          expect(find.byIcon(Icons.refresh), findsOneWidget);
+          expect(tester.widget<OutlinedButton>(retry).onPressed, isNull);
+          await tester.pump(const Duration(milliseconds: 160));
+          expect(scale(), 1);
+          expect(tester.getRect(retry), bounds);
+          await snapshot(tester, '${brightness.name}-$enlarged-reconnecting');
+          final disabledTap = await tester.startGesture(
+            tester.getCenter(retry),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 120));
+          expect(scale(), closeTo(.97, .001));
+          expect(
+            retries,
+            1,
+            reason: 'Disabled taps acknowledge without retrying',
+          );
+          await snapshot(
+            tester,
+            '${brightness.name}-$enlarged-disabled-pressed',
+          );
+          await disabledTap.up();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 160));
+          expect(retries, 1);
+          status.failRecovery('chat', 'Could not reconnect. Try again.');
+          await tester.pumpAndSettle();
+          expect(find.byIcon(Icons.refresh), findsOneWidget);
+          expect(tester.widget<OutlinedButton>(retry).onPressed, isNotNull);
+          await snapshot(tester, '${brightness.name}-$enlarged-failed');
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   testWidgets('screen header matches the drawer connection identity gap', (
     tester,
   ) async {

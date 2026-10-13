@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 
@@ -88,9 +89,11 @@ class _HtmlPreviewScreenState extends State<HtmlPreviewScreen> {
                         StudioError(observation.error!),
                         const SizedBox(height: 12),
                         if (!observation.hasFile)
-                          OutlinedButton(
-                            onPressed: _reader.load,
-                            child: const Text('Try again'),
+                          StudioButtonPress(
+                            child: OutlinedButton(
+                              onPressed: _reader.load,
+                              child: const Text('Try again'),
+                            ),
                           )
                         else
                           ResourceViewerAction(

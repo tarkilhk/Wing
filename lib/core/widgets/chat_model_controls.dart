@@ -43,146 +43,156 @@ class ChatReasoningControl extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = WingTokens.of(context);
     return Builder(
-      builder: (anchor) => IconButton(
-        key: const Key('chat-reasoning-control'),
-        style: IconButton.styleFrom(
-          minimumSize: const Size(36, 36),
-          padding: const EdgeInsets.all(2),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.standard,
-        ),
-        tooltip: 'Reasoning: ${chatReasoningEffortLabel(effort)}',
-        onPressed: onChanged == null
-            ? null
-            : () async {
-                final box = anchor.findRenderObject() as RenderBox;
-                final origin = box.localToGlobal(Offset.zero);
-                final size = MediaQuery.sizeOf(context);
-                final scale = MediaQuery.textScalerOf(context).scale(1);
-                final width = math.min(
-                  scale > 1.3 ? 272.0 : 218.0,
-                  size.width - 16,
-                );
-                final height = math.max(108.0, 108 * scale / 1.5);
-                final left = (origin.dx - 8).clamp(
-                  8.0,
-                  math.max(8.0, size.width - width - 8),
-                );
-                final top = origin.dy >= height + 8
-                    ? origin.dy - height - 4
-                    : origin.dy + box.size.height + 4;
-                final value = await showDialog<String>(
-                  context: context,
-                  barrierColor: Colors.transparent,
-                  builder: (menuContext) => Stack(
-                    children: [
-                      Positioned(
-                        left: left.toDouble(),
-                        top: top.toDouble().clamp(
-                          8.0,
-                          math.max(8.0, size.height - height - 8),
-                        ),
-                        width: width,
-                        child: Material(
-                          key: const Key('reasoning-menu'),
-                          elevation: 0,
-                          color: tokens.raised,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: WingRadius.card,
-                            side: BorderSide(color: tokens.border),
+      builder: (anchor) => StudioButtonPress(
+        child: IconButton(
+          key: const Key('chat-reasoning-control'),
+          style: IconButton.styleFrom(
+            minimumSize: const Size(36, 36),
+            padding: const EdgeInsets.all(2),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.standard,
+          ),
+          tooltip: 'Reasoning: ${chatReasoningEffortLabel(effort)}',
+          onPressed: onChanged == null
+              ? null
+              : () async {
+                  final box = anchor.findRenderObject() as RenderBox;
+                  final origin = box.localToGlobal(Offset.zero);
+                  final size = MediaQuery.sizeOf(context);
+                  final scale = MediaQuery.textScalerOf(context).scale(1);
+                  final width = math.min(
+                    scale > 1.3 ? 272.0 : 218.0,
+                    size.width - 16,
+                  );
+                  final height = math.max(108.0, 108 * scale / 1.5);
+                  final left = (origin.dx - 8).clamp(
+                    8.0,
+                    math.max(8.0, size.width - width - 8),
+                  );
+                  final top = origin.dy >= height + 8
+                      ? origin.dy - height - 4
+                      : origin.dy + box.size.height + 4;
+                  final value = await showDialog<String>(
+                    context: context,
+                    barrierColor: Colors.transparent,
+                    builder: (menuContext) => Stack(
+                      children: [
+                        Positioned(
+                          left: left.toDouble(),
+                          top: top.toDouble().clamp(
+                            8.0,
+                            math.max(8.0, size.height - height - 8),
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: FocusTraversalGroup(
-                              child: Wrap(
-                                children: [
-                                  for (final entry in _shortEfforts.entries)
-                                    if (canDisable || entry.key != 'none')
-                                      SizedBox(
-                                        width: (width - 8) / 4,
-                                        height: (height - 8) / 2,
-                                        child: Semantics(
-                                          selected: entry.key == effort,
-                                          label:
-                                              'Reasoning ${chatReasoningEffortLabel(entry.key)}',
-                                          child: Tooltip(
-                                            message: chatReasoningEffortLabel(
-                                              entry.key,
-                                            ),
-                                            child: TextButton(
-                                              key: Key(
-                                                'reasoning-${entry.key}',
-                                              ),
-                                              autofocus: entry.key == effort,
-                                              style: TextButton.styleFrom(
-                                                padding: EdgeInsets.zero,
-                                                minimumSize: const Size(48, 48),
-                                                foregroundColor:
-                                                    entry.key == effort
-                                                    ? tokens.accent
-                                                    : tokens.onSurface,
-                                                backgroundColor:
-                                                    entry.key == effort
-                                                    ? tokens.accent.withValues(
-                                                        alpha: 0.12,
-                                                      )
-                                                    : Colors.transparent,
-                                                textStyle:
-                                                    tokens.typography.label,
-                                              ),
-                                              onPressed: () => Navigator.pop(
-                                                menuContext,
+                          width: width,
+                          child: Material(
+                            key: const Key('reasoning-menu'),
+                            elevation: 0,
+                            color: tokens.raised,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: WingRadius.card,
+                              side: BorderSide(color: tokens.border),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: FocusTraversalGroup(
+                                child: Wrap(
+                                  children: [
+                                    for (final entry in _shortEfforts.entries)
+                                      if (canDisable || entry.key != 'none')
+                                        SizedBox(
+                                          width: (width - 8) / 4,
+                                          height: (height - 8) / 2,
+                                          child: Semantics(
+                                            selected: entry.key == effort,
+                                            label:
+                                                'Reasoning ${chatReasoningEffortLabel(entry.key)}',
+                                            child: Tooltip(
+                                              message: chatReasoningEffortLabel(
                                                 entry.key,
                                               ),
-                                              child: Text(
-                                                scale > 1.3 &&
-                                                        entry.key == 'xhigh'
-                                                    ? 'XHi'
-                                                    : entry.value,
+                                              child: StudioButtonPress(
+                                                child: TextButton(
+                                                  key: Key(
+                                                    'reasoning-${entry.key}',
+                                                  ),
+                                                  autofocus:
+                                                      entry.key == effort,
+                                                  style: TextButton.styleFrom(
+                                                    padding: EdgeInsets.zero,
+                                                    minimumSize: const Size(
+                                                      48,
+                                                      48,
+                                                    ),
+                                                    foregroundColor:
+                                                        entry.key == effort
+                                                        ? tokens.accent
+                                                        : tokens.onSurface,
+                                                    backgroundColor:
+                                                        entry.key == effort
+                                                        ? tokens.accent
+                                                              .withValues(
+                                                                alpha: 0.12,
+                                                              )
+                                                        : Colors.transparent,
+                                                    textStyle:
+                                                        tokens.typography.label,
+                                                  ),
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                        menuContext,
+                                                        entry.key,
+                                                      ),
+                                                  child: Text(
+                                                    scale > 1.3 &&
+                                                            entry.key == 'xhigh'
+                                                        ? 'XHi'
+                                                        : entry.value,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  );
+                  if (value != null) onChanged?.call(value);
+                },
+          icon: SizedBox.square(
+            dimension: 32,
+            child: Stack(
+              children: [
+                Center(
+                  child: CircuitBrainIcon(
+                    color: onChanged == null ? tokens.muted : tokens.accent,
                   ),
-                );
-                if (value != null) onChanged?.call(value);
-              },
-        icon: SizedBox.square(
-          dimension: 32,
-          child: Stack(
-            children: [
-              Center(
-                child: CircuitBrainIcon(
-                  color: onChanged == null ? tokens.muted : tokens.accent,
                 ),
-              ),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  decoration: BoxDecoration(
-                    color: tokens.raised,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                  child: Text(
-                    _effortBadges[effort] ?? '',
-                    style: tokens.typography.label.copyWith(
-                      fontSize: 10,
-                      color: tokens.accent,
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      color: tokens.raised,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      _effortBadges[effort] ?? '',
+                      style: tokens.typography.label.copyWith(
+                        fontSize: 10,
+                        color: tokens.accent,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -224,20 +234,22 @@ class ChatFastControl extends StatelessWidget {
       child: Semantics(
         toggled: mode.enabled,
         label: 'Fast mode',
-        child: TextButton(
-          key: const Key('chat-fast-control'),
-          onPressed: onChanged == null ? null : toggle,
-          style: style,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              icon,
-              if (showLabel)
-                Text(
-                  mode.enabled ? 'On' : 'Off',
-                  style: tokens.typography.label,
-                ),
-            ],
+        child: StudioButtonPress(
+          child: TextButton(
+            key: const Key('chat-fast-control'),
+            onPressed: onChanged == null ? null : toggle,
+            style: style,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                icon,
+                if (showLabel)
+                  Text(
+                    mode.enabled ? 'On' : 'Off',
+                    style: tokens.typography.label,
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -331,7 +343,7 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
       position: RelativeRect.fromRect(anchor, Offset.zero & overlayBox.size),
       items: [
         for (final effort in _efforts)
-          PopupMenuItem(
+          StudioPopupMenuItem(
             value: effort,
             child: Text(chatReasoningEffortLabel(effort)),
           ),
@@ -498,35 +510,37 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
           }
           return KeyEventResult.ignored;
         },
-        child: GestureDetector(
-          key: const Key('composer-reasoning-control'),
-          behavior: HitTestBehavior.opaque,
-          onLongPressStart: widget.onChanged == null ? null : _open,
-          onLongPressMoveUpdate: _move,
-          onLongPressEnd: _release,
-          onLongPressCancel: _close,
-          child: ExcludeSemantics(
-            child: SizedBox(
-              key: _anchorKey,
-              height: 32,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox.square(
-                      dimension: 14,
-                      child: CircuitBrainIcon(color: tokens.muted),
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      compactChatReasoningLabel(widget.effort),
-                      style: tokens.typography.label.copyWith(
-                        fontSize: 12,
-                        height: 1.25,
+        child: StudioButtonPress(
+          child: GestureDetector(
+            key: const Key('composer-reasoning-control'),
+            behavior: HitTestBehavior.opaque,
+            onLongPressStart: widget.onChanged == null ? null : _open,
+            onLongPressMoveUpdate: _move,
+            onLongPressEnd: _release,
+            onLongPressCancel: _close,
+            child: ExcludeSemantics(
+              child: SizedBox(
+                key: _anchorKey,
+                height: 32,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox.square(
+                        dimension: 14,
+                        child: CircuitBrainIcon(color: tokens.muted),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 3),
+                      Text(
+                        compactChatReasoningLabel(widget.effort),
+                        style: tokens.typography.label.copyWith(
+                          fontSize: 12,
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

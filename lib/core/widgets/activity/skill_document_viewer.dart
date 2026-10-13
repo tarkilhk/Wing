@@ -391,32 +391,34 @@ class _SkillDocumentViewerState extends State<SkillDocumentViewer> {
         resourceLabel: document.name,
         actions: [
           if (widget.actions.isNotEmpty)
-            PopupMenuButton<void>(
-              tooltip: 'Skill actions',
-              icon: const Icon(Icons.more_vert, size: 18),
-              itemBuilder: (_) => [
-                PopupMenuItem<void>(
-                  enabled: false,
-                  child: Builder(
-                    builder: (menuContext) => Wrap(
-                      children: [
-                        for (final action in widget.actions)
-                          ActivityDetailAction(
-                            label: action.label,
-                            icon: action.icon,
-                            busy: action.busy,
-                            onPressed: action.onPressed == null
-                                ? null
-                                : () {
-                                    Navigator.pop(menuContext);
-                                    action.onPressed!();
-                                  },
-                          ),
-                      ],
+            StudioButtonPress(
+              child: PopupMenuButton<void>(
+                tooltip: 'Skill actions',
+                icon: const Icon(Icons.more_vert, size: 18),
+                itemBuilder: (_) => [
+                  StudioPopupMenuItem<void>(
+                    enabled: false,
+                    child: Builder(
+                      builder: (menuContext) => Wrap(
+                        children: [
+                          for (final action in widget.actions)
+                            ActivityDetailAction(
+                              label: action.label,
+                              icon: action.icon,
+                              busy: action.busy,
+                              onPressed: action.onPressed == null
+                                  ? null
+                                  : () {
+                                      Navigator.pop(menuContext);
+                                      action.onPressed!();
+                                    },
+                            ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ToolDetailCopyButton(label: 'Copy skill name', text: document.name),
         ],

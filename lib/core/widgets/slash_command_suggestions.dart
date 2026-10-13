@@ -319,11 +319,13 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
           ),
         ),
         TextFieldTapRegion(
-          child: IconButton(
-            tooltip: 'Refresh skills',
-            constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-            onPressed: _refreshing ? null : _refresh,
-            icon: const Icon(Icons.refresh, size: 20),
+          child: StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Refresh skills',
+              constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+              onPressed: _refreshing ? null : _refresh,
+              icon: const Icon(Icons.refresh, size: 20),
+            ),
           ),
         ),
       ],
@@ -360,36 +362,41 @@ class _SlashCommandSuggestionsState extends State<SlashCommandSuggestions> {
                         ),
                       if (completion != null && !_loading)
                         for (final item in completion.items)
-                          ListTile(
-                            dense: true,
-                            title: Text(item.text),
-                            subtitle: Text(
-                              '${item.isSkill
-                                  ? 'Skill'
-                                  : item.category.isNotEmpty
-                                  ? 'Command'
-                                  : 'Argument'}'
-                              '${item.description.isEmpty ? '' : ' · ${item.description}'}',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                          StudioButtonPress(
+                            child: ListTile(
+                              dense: true,
+                              title: Text(item.text),
+                              subtitle: Text(
+                                '${item.isSkill
+                                    ? 'Skill'
+                                    : item.category.isNotEmpty
+                                    ? 'Command'
+                                    : 'Argument'}'
+                                '${item.description.isEmpty ? '' : ' · ${item.description}'}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: item.isSkill
+                                  ? StudioButtonPress(
+                                      child: IconButton(
+                                        tooltip: 'Inspect ${item.text}',
+                                        constraints:
+                                            const BoxConstraints.tightFor(
+                                              width: 48,
+                                              height: 48,
+                                            ),
+                                        onPressed: _inspecting == null
+                                            ? () => _inspect(item)
+                                            : null,
+                                        icon: const Icon(
+                                          Icons.visibility_outlined,
+                                          size: 20,
+                                        ),
+                                      ),
+                                    )
+                                  : null,
+                              onTap: () => _select(completion, item),
                             ),
-                            trailing: item.isSkill
-                                ? IconButton(
-                                    tooltip: 'Inspect ${item.text}',
-                                    constraints: const BoxConstraints.tightFor(
-                                      width: 48,
-                                      height: 48,
-                                    ),
-                                    onPressed: _inspecting == null
-                                        ? () => _inspect(item)
-                                        : null,
-                                    icon: const Icon(
-                                      Icons.visibility_outlined,
-                                      size: 20,
-                                    ),
-                                  )
-                                : null,
-                            onTap: () => _select(completion, item),
                           ),
                     ],
                   ),

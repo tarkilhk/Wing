@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../models/profile_plugins.dart';
@@ -86,9 +87,11 @@ class _AdminPluginsPageState extends State<AdminPluginsPage> {
                       ),
                   ],
                 ),
-                TextButton(
-                  onPressed: state.canRefresh ? _session.refresh : null,
-                  child: const Text('Refresh'),
+                StudioButtonPress(
+                  child: TextButton(
+                    onPressed: state.canRefresh ? _session.refresh : null,
+                    child: const Text('Refresh'),
+                  ),
                 ),
               ],
             ),

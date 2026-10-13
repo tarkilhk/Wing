@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 import '../models/model_choice.dart';
 import 'model_chooser.dart';
@@ -30,10 +31,12 @@ Future<ModelSelection?> chooseAdminModel(
               children: [
                 ListTile(
                   title: const Text('Choose model'),
-                  trailing: IconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.pop(sheetContext),
-                    icon: const Icon(Icons.close_rounded),
+                  trailing: StudioButtonPress(
+                    child: IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
                   ),
                 ),
                 Expanded(
@@ -62,16 +65,20 @@ Future<ModelSelection?> chooseAdminModel(
                     alignment: MainAxisAlignment.end,
                     spacing: 8,
                     children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(sheetContext),
-                        child: const Text('Cancel'),
+                      StudioButtonPress(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(sheetContext),
+                          child: const Text('Cancel'),
+                        ),
                       ),
-                      FilledButton(
-                        onPressed:
-                            selected == null || selected == initialSelection
-                            ? null
-                            : () => Navigator.pop(sheetContext, selected),
-                        child: Text(actionLabel),
+                      StudioButtonPress(
+                        child: FilledButton(
+                          onPressed:
+                              selected == null || selected == initialSelection
+                              ? null
+                              : () => Navigator.pop(sheetContext, selected),
+                          child: Text(actionLabel),
+                        ),
                       ),
                     ],
                   ),

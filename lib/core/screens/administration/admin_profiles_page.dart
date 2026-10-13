@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 
@@ -134,74 +135,87 @@ class _AdminProfilesPageState extends State<AdminProfilesPage> {
                 spacing: 8,
                 children: [
                   if (state.draft!.canSubmit)
-                    TextButton(
-                      onPressed: () => unawaited(_session.submit(pending)),
-                      child: const Text('Try again'),
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: () => unawaited(_session.submit(pending)),
+                        child: const Text('Try again'),
+                      ),
                     ),
                   if (state.draft!.canCancel)
-                    TextButton(
-                      onPressed: () => _session.cancel(pending),
-                      child: const Text('Cancel change'),
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: () => _session.cancel(pending),
+                        child: const Text('Cancel change'),
+                      ),
                     ),
                 ],
               ),
             Align(
               alignment: Alignment.centerLeft,
-              child: FilledButton.icon(
-                onPressed: state.canCreate
-                    ? () => unawaited(_edit(_session.beginCreate()))
-                    : null,
-                icon: const Icon(Icons.add),
-                label: const Text('Create profile'),
+              child: StudioButtonPress(
+                child: FilledButton.icon(
+                  onPressed: state.canCreate
+                      ? () => unawaited(_edit(_session.beginCreate()))
+                      : null,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Create profile'),
+                ),
               ),
             ),
             const SizedBox(height: 16),
             AdminGroup(
               children: [
                 for (final row in state.rows)
-                  ListTile(
-                    title: Text(row.title),
-                    subtitle: Text(row.subtitle),
-                    onTap: state.canOpen
-                        ? () => unawaited(_open(row.name))
-                        : null,
-                    trailing: PopupMenuButton<String>(
-                      enabled: row.canClone || row.canRename || row.canDelete,
-                      tooltip: 'Manage ${row.title}',
-                      itemBuilder: (_) => [
-                        if (row.canClone)
-                          const PopupMenuItem(
-                            value: 'clone',
-                            child: Text('Clone configuration'),
+                  StudioButtonPress(
+                    child: ListTile(
+                      title: Text(row.title),
+                      subtitle: Text(row.subtitle),
+                      onTap: state.canOpen
+                          ? () => unawaited(_open(row.name))
+                          : null,
+                      trailing: StudioButtonPress(
+                        child: PopupMenuButton<String>(
+                          enabled:
+                              row.canClone || row.canRename || row.canDelete,
+                          tooltip: 'Manage ${row.title}',
+                          itemBuilder: (_) => [
+                            if (row.canClone)
+                              const StudioPopupMenuItem(
+                                value: 'clone',
+                                child: Text('Clone configuration'),
+                              ),
+                            if (row.canRename)
+                              const StudioPopupMenuItem(
+                                value: 'rename',
+                                child: Text('Rename'),
+                              ),
+                            if (row.canDelete)
+                              const StudioPopupMenuItem(
+                                value: 'delete',
+                                child: Text('Delete'),
+                              ),
+                          ],
+                          onSelected: (action) => unawaited(
+                            _edit(switch (action) {
+                              'clone' => _session.beginClone(row.name),
+                              'rename' => _session.beginRename(row.name),
+                              'delete' => _session.beginDelete(row.name),
+                              _ => null,
+                            }),
                           ),
-                        if (row.canRename)
-                          const PopupMenuItem(
-                            value: 'rename',
-                            child: Text('Rename'),
-                          ),
-                        if (row.canDelete)
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Delete'),
-                          ),
-                      ],
-                      onSelected: (action) => unawaited(
-                        _edit(switch (action) {
-                          'clone' => _session.beginClone(row.name),
-                          'rename' => _session.beginRename(row.name),
-                          'delete' => _session.beginDelete(row.name),
-                          _ => null,
-                        }),
+                        ),
                       ),
                     ),
                   ),
               ],
             ),
-            TextButton(
-              onPressed: state.canRefresh
-                  ? () => unawaited(_session.reload())
-                  : null,
-              child: const Text('Refresh'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: state.canRefresh
+                    ? () => unawaited(_session.reload())
+                    : null,
+                child: const Text('Refresh'),
+              ),
             ),
           ],
         ),
@@ -240,15 +254,19 @@ class _ProfileNameDialogState extends State<_ProfileNameDialog> {
           onChanged: (value) => widget.session.updateName(widget.intent, value),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
           ),
-          FilledButton(
-            onPressed: draft.canContinue
-                ? () => Navigator.pop(context, true)
-                : null,
-            child: const Text('Continue'),
+          StudioButtonPress(
+            child: FilledButton(
+              onPressed: draft.canContinue
+                  ? () => Navigator.pop(context, true)
+                  : null,
+              child: const Text('Continue'),
+            ),
           ),
         ],
       );

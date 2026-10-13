@@ -68,17 +68,19 @@ class ProfileMessage extends StatelessWidget {
   }
 
   static Widget copyAction(BuildContext context, TranscriptMessage message) =>
-      IconButton(
-        tooltip: 'Copy message',
-        constraints: const BoxConstraints.tightFor(width: 44, height: 48),
-        style: IconButton.styleFrom(
-          minimumSize: const Size(44, 48),
-          maximumSize: const Size(44, 48),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.standard,
+      StudioButtonPress(
+        child: IconButton(
+          tooltip: 'Copy message',
+          constraints: const BoxConstraints.tightFor(width: 44, height: 48),
+          style: IconButton.styleFrom(
+            minimumSize: const Size(44, 48),
+            maximumSize: const Size(44, 48),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.standard,
+          ),
+          icon: const Icon(Icons.copy_outlined, size: 17),
+          onPressed: () => _copyMessage(context, message.copyText),
         ),
-        icon: const Icon(Icons.copy_outlined, size: 17),
-        onPressed: () => _copyMessage(context, message.copyText),
       );
 
   Widget _speakerHeader(BuildContext context, String name, Color color) =>
@@ -341,29 +343,35 @@ class ProfileMessage extends StatelessWidget {
     );
     final controls = [
       if (user && showEditAction)
-        IconButton(
-          key: ValueKey('edit-message-${message.id}'),
-          tooltip: 'Edit message',
-          style: compactActionStyle,
-          onPressed: streaming ? null : onEdit,
-          icon: const Icon(Icons.edit_outlined, size: 18),
+        StudioButtonPress(
+          child: IconButton(
+            key: ValueKey('edit-message-${message.id}'),
+            tooltip: 'Edit message',
+            style: compactActionStyle,
+            onPressed: streaming ? null : onEdit,
+            icon: const Icon(Icons.edit_outlined, size: 18),
+          ),
         ),
       if (user && showRestoreAction)
-        IconButton(
-          key: ValueKey('restore-message-${message.id}'),
-          tooltip: 'Restore checkpoint',
-          style: compactActionStyle,
-          onPressed: streaming ? null : onRestore,
-          icon: const Icon(Icons.undo, size: 18),
+        StudioButtonPress(
+          child: IconButton(
+            key: ValueKey('restore-message-${message.id}'),
+            tooltip: 'Restore checkpoint',
+            style: compactActionStyle,
+            onPressed: streaming ? null : onRestore,
+            icon: const Icon(Icons.undo, size: 18),
+          ),
         ),
       if (!user && actions != null) actions!,
       if (!user && actions == null && onReadAloud != null)
-        IconButton(
-          tooltip: readingAloud ? 'Stop reading aloud' : 'Read aloud',
-          onPressed: streaming ? null : onReadAloud,
-          icon: Icon(
-            readingAloud ? Icons.stop : Icons.volume_up_outlined,
-            size: 18,
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: readingAloud ? 'Stop reading aloud' : 'Read aloud',
+            onPressed: streaming ? null : onReadAloud,
+            icon: Icon(
+              readingAloud ? Icons.stop : Icons.volume_up_outlined,
+              size: 18,
+            ),
           ),
         ),
     ];

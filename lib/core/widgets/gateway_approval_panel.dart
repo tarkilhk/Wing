@@ -86,23 +86,27 @@ class _GatewayApprovalPanelState extends State<GatewayApprovalPanel> {
               children: [
                 for (final choice in request.choices)
                   if (choice == GatewayApprovalChoice.deny)
-                    OutlinedButton(
-                      onPressed: widget.enabled
-                          ? () => widget.onRespond(choice)
-                          : null,
-                      child: const Text('Deny'),
+                    StudioButtonPress(
+                      child: OutlinedButton(
+                        onPressed: widget.enabled
+                            ? () => widget.onRespond(choice)
+                            : null,
+                        child: const Text('Deny'),
+                      ),
                     )
                   else
-                    FilledButton(
-                      onPressed: widget.enabled
-                          ? () => widget.onRespond(choice)
-                          : null,
-                      child: Text(switch (choice) {
-                        GatewayApprovalChoice.once => 'Allow once',
-                        GatewayApprovalChoice.session => 'Allow for session',
-                        GatewayApprovalChoice.always => 'Always allow',
-                        GatewayApprovalChoice.deny => 'Deny',
-                      }),
+                    StudioButtonPress(
+                      child: FilledButton(
+                        onPressed: widget.enabled
+                            ? () => widget.onRespond(choice)
+                            : null,
+                        child: Text(switch (choice) {
+                          GatewayApprovalChoice.once => 'Allow once',
+                          GatewayApprovalChoice.session => 'Allow for session',
+                          GatewayApprovalChoice.always => 'Always allow',
+                          GatewayApprovalChoice.deny => 'Deny',
+                        }),
+                      ),
                     ),
               ],
             ),

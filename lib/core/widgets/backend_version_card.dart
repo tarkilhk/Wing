@@ -70,13 +70,17 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
           'This updates the whole Hermes host. All profiles on $host may disconnect while the backend restarts.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Update backend'),
+          StudioButtonPress(
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Update backend'),
+            ),
           ),
         ],
       ),
@@ -129,19 +133,21 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
               if (check?.canApply == false)
                 const Text('Updates must be applied from the server host.'),
               if (check?.updateAvailable == true)
-                IconButton(
-                  tooltip: 'Changes in this update',
-                  onPressed: controller.checking || controller.starting
-                      ? null
-                      : () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => BackendUpdateChangesScreen(
-                              check: check!,
-                              connectionLabel: connectionLabel,
+                StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Changes in this update',
+                    onPressed: controller.checking || controller.starting
+                        ? null
+                        : () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => BackendUpdateChangesScreen(
+                                check: check!,
+                                connectionLabel: connectionLabel,
+                              ),
                             ),
                           ),
-                        ),
-                  icon: const Icon(Icons.notes_outlined, size: 18),
+                    icon: const Icon(Icons.notes_outlined, size: 18),
+                  ),
                 ),
               if (controller.phase != BackendUpdatePhase.idle &&
                   controller.phase != BackendUpdatePhase.ready &&
@@ -181,27 +187,34 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                 spacing: 8,
                 runSpacing: 4,
                 children: [
-                  IconButton(
-                    tooltip: 'Check for updates',
-                    onPressed: busy || controller.requestOutstanding
-                        ? null
-                        : controller.checkForUpdate,
-                    icon: const Icon(Icons.search, size: 18),
+                  StudioButtonPress(
+                    child: IconButton(
+                      tooltip: 'Check for updates',
+                      onPressed: busy || controller.requestOutstanding
+                          ? null
+                          : controller.checkForUpdate,
+                      icon: const Icon(Icons.search, size: 18),
+                    ),
                   ),
                   if (controller.canStart)
-                    IconButton.filled(
-                      tooltip: 'Update backend',
-                      onPressed: _confirmAndStart,
-                      icon: const Icon(Icons.system_update_alt, size: 18),
+                    StudioButtonPress(
+                      child: IconButton.filled(
+                        tooltip: 'Update backend',
+                        onPressed: _confirmAndStart,
+                        icon: const Icon(Icons.system_update_alt, size: 18),
+                      ),
                     ),
                   if (controller.requestOutstanding ||
                       controller.status != null)
-                    IconButton(
-                      tooltip: 'Check update progress',
-                      onPressed: controller.statusLoading || controller.starting
-                          ? null
-                          : controller.refreshStatus,
-                      icon: const Icon(Icons.refresh, size: 18),
+                    StudioButtonPress(
+                      child: IconButton(
+                        tooltip: 'Check update progress',
+                        onPressed:
+                            controller.statusLoading || controller.starting
+                            ? null
+                            : controller.refreshStatus,
+                        icon: const Icon(Icons.refresh, size: 18),
+                      ),
                     ),
                 ],
               ),

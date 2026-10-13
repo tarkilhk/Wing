@@ -215,41 +215,45 @@ class _GatewaySensitivePromptPanelState
             spacing: 12,
             overflowSpacing: 8,
             children: [
-              TextButton(
-                key: const Key('sensitive-prompt-cancel'),
-                onPressed: _enabled ? () => _respond('') : null,
-                child: Text(switch (request.kind) {
-                  GatewaySensitivePromptKind.vaultUnlock => 'Keep locked',
-                  GatewaySensitivePromptKind.vaultSaveLogin => 'Don\'t save',
-                  GatewaySensitivePromptKind.vaultCode => 'Skip',
-                  _ => 'Cancel',
-                }),
+              StudioButtonPress(
+                child: TextButton(
+                  key: const Key('sensitive-prompt-cancel'),
+                  onPressed: _enabled ? () => _respond('') : null,
+                  child: Text(switch (request.kind) {
+                    GatewaySensitivePromptKind.vaultUnlock => 'Keep locked',
+                    GatewaySensitivePromptKind.vaultSaveLogin => 'Don\'t save',
+                    GatewaySensitivePromptKind.vaultCode => 'Skip',
+                    _ => 'Cancel',
+                  }),
+                ),
               ),
               ListenableBuilder(
                 listenable: Listenable.merge([
                   _controller,
                   _passwordController,
                 ]),
-                builder: (context, _) => FilledButton(
-                  key: const Key('sensitive-prompt-submit'),
-                  onPressed:
-                      _enabled &&
-                          widget.request.canRespond(
-                            value: _controller.text,
-                            password: _passwordController.text,
+                builder: (context, _) => StudioButtonPress(
+                  child: FilledButton(
+                    key: const Key('sensitive-prompt-submit'),
+                    onPressed:
+                        _enabled &&
+                            widget.request.canRespond(
+                              value: _controller.text,
+                              password: _passwordController.text,
+                            )
+                        ? () => _respond(
+                            widget.request.responseValue(
+                              value: _controller.text,
+                              password: _passwordController.text,
+                            ),
                           )
-                      ? () => _respond(
-                          widget.request.responseValue(
-                            value: _controller.text,
-                            password: _passwordController.text,
-                          ),
-                        )
-                      : null,
-                  child: StudioActionLabel(
-                    request.kind == GatewaySensitivePromptKind.vaultSaveLogin
-                        ? 'Save login'
-                        : 'Continue',
-                    busy: _submitting,
+                        : null,
+                    child: StudioActionLabel(
+                      request.kind == GatewaySensitivePromptKind.vaultSaveLogin
+                          ? 'Save login'
+                          : 'Continue',
+                      busy: _submitting,
+                    ),
                   ),
                 ),
               ),

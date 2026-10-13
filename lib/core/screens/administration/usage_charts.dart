@@ -245,36 +245,38 @@ class _UsageCalendarState extends State<UsageCalendar> {
           child: Builder(
             builder: (tooltipContext) => Material(
               color: Colors.transparent,
-              child: InkWell(
-                key: ValueKey('usage-day-${day.id}'),
-                borderRadius: BorderRadius.circular(2),
-                onTap: () {
-                  Tooltip.dismissAllToolTips();
-                  tooltipContext
-                      .findAncestorStateOfType<TooltipState>()!
-                      .ensureTooltipVisible();
-                  if (!day.isPlaceholder) widget.onSelected(day);
-                },
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: AnimatedContainer(
-                    duration: _motion(context),
-                    width: square,
-                    height: square,
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(2),
-                      border: selected
-                          ? Border.all(color: tokens.onSurface, width: 1.5)
+              child: StudioButtonPress(
+                child: InkWell(
+                  key: ValueKey('usage-day-${day.id}'),
+                  borderRadius: BorderRadius.circular(2),
+                  onTap: () {
+                    Tooltip.dismissAllToolTips();
+                    tooltipContext
+                        .findAncestorStateOfType<TooltipState>()!
+                        .ensureTooltipVisible();
+                    if (!day.isPlaceholder) widget.onSelected(day);
+                  },
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: AnimatedContainer(
+                      duration: _motion(context),
+                      width: square,
+                      height: square,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(2),
+                        border: selected
+                            ? Border.all(color: tokens.onSurface, width: 1.5)
+                            : null,
+                      ),
+                      child: count == null && !day.isPlaceholder
+                          ? Icon(
+                              Icons.question_mark,
+                              size: math.min(square, 9),
+                              color: tokens.muted,
+                            )
                           : null,
                     ),
-                    child: count == null && !day.isPlaceholder
-                        ? Icon(
-                            Icons.question_mark,
-                            size: math.min(square, 9),
-                            color: tokens.muted,
-                          )
-                        : null,
                   ),
                 ),
               ),

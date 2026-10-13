@@ -156,65 +156,83 @@ class _AdminProviderDetailState extends State<AdminProviderDetail> {
               Text(access.detail, style: TextStyle(color: tokens.muted)),
               const SizedBox(height: 24),
               if (canRenew) ...[
-                FilledButton(
-                  onPressed: _isBusy ? null : _renew,
-                  child: StudioActionLabel('Renew access', busy: _isRenewing),
+                StudioButtonPress(
+                  child: FilledButton(
+                    onPressed: _isBusy ? null : _renew,
+                    child: StudioActionLabel('Renew access', busy: _isRenewing),
+                  ),
                 ),
                 const SizedBox(height: 8),
               ],
               if (key)
-                FilledButton(
-                  onPressed: _isBusy ? null : _keys,
-                  child: const Text('Manage API keys'),
+                StudioButtonPress(
+                  child: FilledButton(
+                    onPressed: _isBusy ? null : _keys,
+                    child: const Text('Manage API keys'),
+                  ),
                 )
               else if (!canRenew)
-                FilledButton(
-                  onPressed: _isBusy ? null : _signIn,
-                  child: Text(access.signInLabel),
+                StudioButtonPress(
+                  child: FilledButton(
+                    onPressed: _isBusy ? null : _signIn,
+                    child: Text(access.signInLabel),
+                  ),
                 )
               else
-                OutlinedButton(
-                  onPressed: _isBusy ? null : _signIn,
-                  child: Text(access.signInLabel),
+                StudioButtonPress(
+                  child: OutlinedButton(
+                    onPressed: _isBusy ? null : _signIn,
+                    child: Text(access.signInLabel),
+                  ),
                 ),
               const SizedBox(height: 8),
-              TextButton(
-                onPressed: _isBusy ? null : _check,
-                child: const Text('Check status'),
+              StudioButtonPress(
+                child: TextButton(
+                  onPressed: _isBusy ? null : _check,
+                  child: const Text('Check status'),
+                ),
               ),
               const SizedBox(height: 16),
               const Divider(),
               if (access.canRemove)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    'Remove saved sign-in',
-                    style: TextStyle(color: tokens.danger),
+                StudioButtonPress(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Remove saved sign-in',
+                      style: TextStyle(color: tokens.danger),
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _isBusy ? null : _remove,
                   ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _isBusy ? null : _remove,
                 )
               else if (access.canReviewFile)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Delete saved credentials'),
-                  subtitle: const Text('Shared file on the server'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _isBusy ? null : _fileRemoval,
+                StudioButtonPress(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Delete saved credentials'),
+                    subtitle: const Text('Shared file on the server'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _isBusy ? null : _fileRemoval,
+                  ),
                 )
               else if (access.hasRemovalInstructions)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Removal options'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _isBusy
-                      ? null
-                      : () => adminPush(
-                          context,
-                          (context) => AdminProviderInstructions(
-                            instructions: _recovery.instructions(removal: true),
+                StudioButtonPress(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Removal options'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _isBusy
+                        ? null
+                        : () => adminPush(
+                            context,
+                            (context) => AdminProviderInstructions(
+                              instructions: _recovery.instructions(
+                                removal: true,
+                              ),
+                            ),
                           ),
-                        ),
+                  ),
                 ),
               ExpansionTile(
                 tilePadding: EdgeInsets.zero,
@@ -239,7 +257,12 @@ class _AdminProviderDetailState extends State<AdminProviderDetail> {
                 ],
               ),
             ] else if (!_isBusy)
-              TextButton(onPressed: _check, child: const Text('Check status')),
+              StudioButtonPress(
+                child: TextButton(
+                  onPressed: _check,
+                  child: const Text('Check status'),
+                ),
+              ),
           ],
         ),
       ),
@@ -289,25 +312,29 @@ class AdminProviderInstructions extends StatelessWidget {
                   'setup-token prints a token; it does not update the credential file shown in Wing. Use /login to replace the stored Claude Code sign-in.',
                 ),
               ),
-            TextButton.icon(
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: command));
-                if (context.mounted) {
-                  adminMessage(
-                    context,
-                    'Command copied. Run it on the server.',
-                  );
-                }
-              },
-              icon: const Icon(Icons.copy, size: 18),
-              label: const Text('Copy command'),
+            StudioButtonPress(
+              child: TextButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: command));
+                  if (context.mounted) {
+                    adminMessage(
+                      context,
+                      'Command copied. Run it on the server.',
+                    );
+                  }
+                },
+                icon: const Icon(Icons.copy, size: 18),
+                label: const Text('Copy command'),
+              ),
             ),
           ],
           if (instructions.hint != null) Text(instructions.hint!),
           const SizedBox(height: 24),
-          FilledButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Return to check status'),
+          StudioButtonPress(
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Return to check status'),
+            ),
           ),
         ],
       ),
@@ -402,11 +429,13 @@ class _AdminProviderFileRemovalState extends State<AdminProviderFileRemoval> {
               'If the sign-in uses a system keychain, remove it using Claude Code on the server instead.',
             ),
             const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: !_state.canInspectFile ? null : _inspect,
-              child: StudioActionLabel(
-                'Check file',
-                busy: _state.inspectingFile,
+            StudioButtonPress(
+              child: OutlinedButton(
+                onPressed: !_state.canInspectFile ? null : _inspect,
+                child: StudioActionLabel(
+                  'Check file',
+                  busy: _state.inspectingFile,
+                ),
               ),
             ),
             if (_reviewedFile != null) ...[
@@ -420,15 +449,19 @@ class _AdminProviderFileRemovalState extends State<AdminProviderFileRemoval> {
                 'File found. Deletion affects every profile and tool using this file.',
               ),
               const SizedBox(height: 16),
-              FilledButton(
-                onPressed: !_state.canDeleteFile ? null : _delete,
-                child: const Text('Delete credentials'),
+              StudioButtonPress(
+                child: FilledButton(
+                  onPressed: !_state.canDeleteFile ? null : _delete,
+                  child: const Text('Delete credentials'),
+                ),
               ),
             ],
           ],
-          TextButton(
-            onPressed: _isBusy ? null : () => Navigator.pop(context),
-            child: Text(_isDeleted ? 'Done' : 'Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: _isBusy ? null : () => Navigator.pop(context),
+              child: Text(_isDeleted ? 'Done' : 'Cancel'),
+            ),
           ),
         ],
       ),

@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -96,52 +97,66 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
           ),
           if (_error != null) AdminNotice.error(_error!, retry: _edit.load),
           if (_pendingRows != null)
-            TextButton(
-              onPressed: _busy
-                  ? null
-                  : _conflict
-                  ? _reviewPending
-                  : _edit.retry,
-              child: Text(
-                _conflict
-                    ? 'Review pending fallback change'
-                    : 'Retry pending fallback change',
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: _busy
+                    ? null
+                    : _conflict
+                    ? _reviewPending
+                    : _edit.retry,
+                child: Text(
+                  _conflict
+                      ? 'Review pending fallback change'
+                      : 'Retry pending fallback change',
+                ),
               ),
             ),
           if (_rows != null) ...[
             if (_rows!.isEmpty)
               const AdminNotice('No fallback models configured.'),
             for (final entry in _rows!.indexed)
-              ListTile(
-                title: Text(entry.$2.model),
-                subtitle: Text(entry.$2.provider),
-                onTap: _busy ? null : () => _pickFallback(index: entry.$1),
-                trailing: PopupMenuButton<String>(
-                  tooltip: 'Manage fallback ${entry.$1 + 1}',
-                  enabled: !_busy,
-                  itemBuilder: (_) => [
-                    if (entry.$1 > 0)
-                      const PopupMenuItem(value: 'up', child: Text('Move up')),
-                    if (entry.$1 < _rows!.length - 1)
-                      const PopupMenuItem(
-                        value: 'down',
-                        child: Text('Move down'),
-                      ),
-                    const PopupMenuItem(value: 'remove', child: Text('Remove')),
-                  ],
-                  onSelected: (action) {
-                    if (action == 'remove') {
-                      unawaited(_edit.remove(entry.$1));
-                    } else {
-                      unawaited(_edit.move(entry.$1, up: action == 'up'));
-                    }
-                  },
+              StudioButtonPress(
+                child: ListTile(
+                  title: Text(entry.$2.model),
+                  subtitle: Text(entry.$2.provider),
+                  onTap: _busy ? null : () => _pickFallback(index: entry.$1),
+                  trailing: StudioButtonPress(
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Manage fallback ${entry.$1 + 1}',
+                      enabled: !_busy,
+                      itemBuilder: (_) => [
+                        if (entry.$1 > 0)
+                          const StudioPopupMenuItem(
+                            value: 'up',
+                            child: Text('Move up'),
+                          ),
+                        if (entry.$1 < _rows!.length - 1)
+                          const StudioPopupMenuItem(
+                            value: 'down',
+                            child: Text('Move down'),
+                          ),
+                        const StudioPopupMenuItem(
+                          value: 'remove',
+                          child: Text('Remove'),
+                        ),
+                      ],
+                      onSelected: (action) {
+                        if (action == 'remove') {
+                          unawaited(_edit.remove(entry.$1));
+                        } else {
+                          unawaited(_edit.move(entry.$1, up: action == 'up'));
+                        }
+                      },
+                    ),
+                  ),
                 ),
               ),
-            FilledButton.icon(
-              onPressed: _busy ? null : () => _pickFallback(),
-              icon: const Icon(Icons.add),
-              label: const Text('Add fallback'),
+            StudioButtonPress(
+              child: FilledButton.icon(
+                onPressed: _busy ? null : () => _pickFallback(),
+                icon: const Icon(Icons.add),
+                label: const Text('Add fallback'),
+              ),
             ),
           ],
         ],

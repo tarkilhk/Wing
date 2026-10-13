@@ -221,41 +221,46 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
       button: true,
       label:
           '$label filter, ${selected.isEmpty ? 'all' : '${selected.length} selected'}',
-      child: InkWell(
-        key: ValueKey('chat-filter-${label.toLowerCase()}'),
-        onTap: _view.canChoose ? () => _filter(anchor, label) : null,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: selected.isEmpty
-                    ? Colors.transparent
-                    : Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: WingRadius.control,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: Center(
-                  widthFactor: 1,
-                  heightFactor: 1,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          selected.isEmpty
-                              ? label
-                              : '$label ${selected.length}',
-                          style: const TextStyle(fontSize: 11),
-                          textAlign: TextAlign.center,
+      child: StudioButtonPress(
+        child: InkWell(
+          key: ValueKey('chat-filter-${label.toLowerCase()}'),
+          onTap: _view.canChoose ? () => _filter(anchor, label) : null,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: selected.isEmpty
+                      ? Colors.transparent
+                      : Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: WingRadius.control,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  child: Center(
+                    widthFactor: 1,
+                    heightFactor: 1,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            selected.isEmpty
+                                ? label
+                                : '$label ${selected.length}',
+                            style: const TextStyle(fontSize: 11),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
-                      ),
-                      if (MediaQuery.textScalerOf(context).scale(12) < 18)
-                        const Icon(Icons.expand_more, size: 14),
-                    ],
+                        if (MediaQuery.textScalerOf(context).scale(12) < 18)
+                          const Icon(Icons.expand_more, size: 14),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -317,36 +322,38 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
               SizedBox(
                 width: 48,
                 height: 48,
-                child: IconButton(
-                  key: const ValueKey('workspace-clear-filters'),
-                  padding: EdgeInsets.zero,
-                  tooltip: 'Clear all filters',
-                  color: WingTokens.of(context).onSurface,
-                  icon: const SizedBox.square(
-                    dimension: 22,
-                    child: Stack(
-                      children: [
-                        Positioned(
-                          left: 0,
-                          top: 0,
-                          child: Icon(Icons.filter_alt_outlined, size: 19),
-                        ),
-                        Positioned(
-                          right: 0,
-                          bottom: 1,
-                          child: Icon(Icons.close, size: 9),
-                        ),
-                      ],
+                child: StudioButtonPress(
+                  child: IconButton(
+                    key: const ValueKey('workspace-clear-filters'),
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Clear all filters',
+                    color: WingTokens.of(context).onSurface,
+                    icon: const SizedBox.square(
+                      dimension: 22,
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            left: 0,
+                            top: 0,
+                            child: Icon(Icons.filter_alt_outlined, size: 19),
+                          ),
+                          Positioned(
+                            right: 0,
+                            bottom: 1,
+                            child: Icon(Icons.close, size: 9),
+                          ),
+                        ],
+                      ),
                     ),
+                    onPressed:
+                        _statuses.isEmpty &&
+                            _profiles.isEmpty &&
+                            _projects.isEmpty
+                        ? null
+                        : () => _chooseView(
+                            const BrowserPreferenceIntent.clearFilters(),
+                          ),
                   ),
-                  onPressed:
-                      _statuses.isEmpty &&
-                          _profiles.isEmpty &&
-                          _projects.isEmpty
-                      ? null
-                      : () => _chooseView(
-                          const BrowserPreferenceIntent.clearFilters(),
-                        ),
                 ),
               ),
             ],
@@ -597,56 +604,60 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
     return Builder(
       builder: (anchor) => Padding(
         padding: const EdgeInsets.only(left: 28, right: 8),
-        child: ListTile(
-          key: ValueKey('chat-${e.profile}-${e.id}'),
-          contentPadding: EdgeInsets.zero,
-          minTileHeight: 48,
-          minVerticalPadding: largeText ? 6 : 0,
-          horizontalTitleGap: 6,
-          minLeadingWidth: 18,
-          leading: ChatStatusDot(e.status, live: true),
-          title: largeText || !hasMetrics
-              ? title
-              : Row(
-                  children: [
-                    Expanded(child: title),
-                    const SizedBox(width: 8),
-                    if (showTokens) SizedBox(width: 56, child: metrics.first),
-                    if (showTokens && showUpdated) const SizedBox(width: 8),
-                    if (showUpdated) SizedBox(width: 28, child: metrics.last),
-                  ],
-                ),
-          subtitle: detail.isEmpty && !(largeText && hasMetrics)
-              ? null
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (largeText && hasMetrics)
-                      Wrap(spacing: 12, children: metrics),
-                    if (detail.isNotEmpty)
-                      Text(
-                        detail.join(' · '),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: WingTokens.of(context).muted,
+        child: StudioButtonPress(
+          child: ListTile(
+            key: ValueKey('chat-${e.profile}-${e.id}'),
+            contentPadding: EdgeInsets.zero,
+            minTileHeight: 48,
+            minVerticalPadding: largeText ? 6 : 0,
+            horizontalTitleGap: 6,
+            minLeadingWidth: 18,
+            leading: ChatStatusDot(e.status, live: true),
+            title: largeText || !hasMetrics
+                ? title
+                : Row(
+                    children: [
+                      Expanded(child: title),
+                      const SizedBox(width: 8),
+                      if (showTokens) SizedBox(width: 56, child: metrics.first),
+                      if (showTokens && showUpdated) const SizedBox(width: 8),
+                      if (showUpdated) SizedBox(width: 28, child: metrics.last),
+                    ],
+                  ),
+            subtitle: detail.isEmpty && !(largeText && hasMetrics)
+                ? null
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (largeText && hasMetrics)
+                        Wrap(spacing: 12, children: metrics),
+                      if (detail.isNotEmpty)
+                        Text(
+                          detail.join(' · '),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: WingTokens.of(context).muted,
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
+            trailing: Builder(
+              builder: (button) => StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Chat actions',
+                  icon: const Icon(Icons.more_horiz, size: 18),
+                  onPressed: _pending || workspace.switching
+                      ? null
+                      : () => _run(() => _chatActions(button, e)),
                 ),
-          trailing: Builder(
-            builder: (button) => IconButton(
-              tooltip: 'Chat actions',
-              icon: const Icon(Icons.more_horiz, size: 18),
-              onPressed: _pending || workspace.switching
-                  ? null
-                  : () => _run(() => _chatActions(button, e)),
+              ),
             ),
+            onLongPress: _pending || workspace.switching
+                ? null
+                : () => _run(() => _chatActions(anchor, e)),
+            onTap: _pending ? null : () => _openChat(e),
           ),
-          onLongPress: _pending || workspace.switching
-              ? null
-              : () => _run(() => _chatActions(anchor, e)),
-          onTap: _pending ? null : () => _openChat(e),
         ),
       ),
     );
@@ -705,76 +716,79 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
         child: Row(
           children: [
             Expanded(
-              child: InkWell(
-                key: ValueKey('chat-group-$key'),
-                onLongPress: group.project == null || _pending
-                    ? null
-                    : () => _run(() => _projectActions(headingContext, group)),
-                onTap: () => setState(() {
-                  if (!_collapsed.remove(key)) _collapsed.add(key);
-                }),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 16, 0, 0),
-                    child: Row(
-                      children: [
-                        if (group.project != null)
-                          projectAvatar(context, group.project!, size: 20)
-                        else
-                          Icon(
-                            group.key == 'pinned'
-                                ? Icons.push_pin_outlined
-                                : _grouping == ChatGrouping.project
-                                ? Icons.category_outlined
-                                : _grouping == null
-                                ? Icons.chat_bubble_outline
-                                : _groupIcon(_grouping!),
-                            size: 18,
-                            color: WingTokens.of(context).muted,
-                          ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            group.project != null &&
-                                    _groups
-                                            .where(
-                                              (g) => g.label == group.label,
-                                            )
-                                            .length >
-                                        1
-                                ? '${group.label} · ${group.scope!.profileName}'
-                                : group.label,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              fontStyle: isUnassigned
-                                  ? FontStyle.italic
-                                  : FontStyle.normal,
+              child: StudioButtonPress(
+                child: InkWell(
+                  key: ValueKey('chat-group-$key'),
+                  onLongPress: group.project == null || _pending
+                      ? null
+                      : () =>
+                            _run(() => _projectActions(headingContext, group)),
+                  onTap: () => setState(() {
+                    if (!_collapsed.remove(key)) _collapsed.add(key);
+                  }),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 16, 0, 0),
+                      child: Row(
+                        children: [
+                          if (group.project != null)
+                            projectAvatar(context, group.project!, size: 20)
+                          else
+                            Icon(
+                              group.key == 'pinned'
+                                  ? Icons.push_pin_outlined
+                                  : _grouping == ChatGrouping.project
+                                  ? Icons.category_outlined
+                                  : _grouping == null
+                                  ? Icons.chat_bubble_outline
+                                  : _groupIcon(_grouping!),
+                              size: 18,
+                              color: WingTokens.of(context).muted,
                             ),
-                          ),
-                        ),
-                        if (_show.contains(ChatDetail.tokens))
-                          Tooltip(
-                            message: tokensReady
-                                ? '${group.tokens} tokens across ${group.entries.length} matching chats'
-                                : 'Loading the complete group total',
+                          const SizedBox(width: 8),
+                          Expanded(
                             child: Text(
-                              tokensReady ? compactTokens(group.tokens) : '…',
+                              group.project != null &&
+                                      _groups
+                                              .where(
+                                                (g) => g.label == group.label,
+                                              )
+                                              .length >
+                                          1
+                                  ? '${group.label} · ${group.scope!.profileName}'
+                                  : group.label,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 11,
-                                color: WingTokens.of(context).muted,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                fontStyle: isUnassigned
+                                    ? FontStyle.italic
+                                    : FontStyle.normal,
                               ),
                             ),
                           ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          collapsed ? Icons.chevron_right : Icons.expand_more,
-                          size: 16,
-                        ),
-                      ],
+                          if (_show.contains(ChatDetail.tokens))
+                            Tooltip(
+                              message: tokensReady
+                                  ? '${group.tokens} tokens across ${group.entries.length} matching chats'
+                                  : 'Loading the complete group total',
+                              child: Text(
+                                tokensReady ? compactTokens(group.tokens) : '…',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: WingTokens.of(context).muted,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            collapsed ? Icons.chevron_right : Icons.expand_more,
+                            size: 16,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -782,13 +796,15 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
             ),
             if (group.project != null)
               Builder(
-                builder: (anchor) => IconButton(
-                  padding: const EdgeInsets.only(top: 12),
-                  tooltip: 'Project actions',
-                  icon: const Icon(Icons.more_horiz, size: 18),
-                  onPressed: _pending
-                      ? null
-                      : () => _run(() => _projectActions(anchor, group)),
+                builder: (anchor) => StudioButtonPress(
+                  child: IconButton(
+                    padding: const EdgeInsets.only(top: 12),
+                    tooltip: 'Project actions',
+                    icon: const Icon(Icons.more_horiz, size: 18),
+                    onPressed: _pending
+                        ? null
+                        : () => _run(() => _projectActions(anchor, group)),
+                  ),
                 ),
               ),
           ],
@@ -819,15 +835,17 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
               padding: const EdgeInsets.only(left: 46, right: 16),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton(
-                  key: ValueKey('chat-show-more-${_groupKey(group)}'),
-                  onPressed: () => setState(() {
-                    _visibleCounts[_groupKey(group)] =
-                        _visibleCount(group) + 10;
-                  }),
-                  child: const Text(
-                    'Show more',
-                    style: TextStyle(fontSize: 12),
+                child: StudioButtonPress(
+                  child: TextButton(
+                    key: ValueKey('chat-show-more-${_groupKey(group)}'),
+                    onPressed: () => setState(() {
+                      _visibleCounts[_groupKey(group)] =
+                          _visibleCount(group) + 10;
+                    }),
+                    child: const Text(
+                      'Show more',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                 ),
               ),
@@ -858,10 +876,13 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
               if (_projects.isNotEmpty ||
                   _profiles.isNotEmpty ||
                   _statuses.isNotEmpty)
-                TextButton(
-                  onPressed: () =>
-                      _chooseView(const BrowserPreferenceIntent.clearFilters()),
-                  child: const Text('Clear filters'),
+                StudioButtonPress(
+                  child: TextButton(
+                    onPressed: () => _chooseView(
+                      const BrowserPreferenceIntent.clearFilters(),
+                    ),
+                    child: const Text('Clear filters'),
+                  ),
                 ),
             ],
           ),
@@ -887,7 +908,9 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
       style: Theme.of(context).textTheme.bodySmall!.copyWith(fontSize: 12),
       child: StudioError(message),
     );
-    final action = TextButton(onPressed: retry, child: const Text('Retry'));
+    final action = StudioButtonPress(
+      child: TextButton(onPressed: retry, child: const Text('Retry')),
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: largeText
@@ -972,41 +995,48 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
             clipBehavior: Clip.antiAlias,
             child: GestureDetector(
               onSecondaryTap: workspace.switching ? null : actions,
-              child: ListTile(
-                key: ValueKey('saved-draft-${draft.key.sessionId}'),
-                contentPadding: const EdgeInsets.only(left: 16, right: 0),
-                leading: const ChatStatusDot(ChatListStatus.draft, live: false),
-                title: Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 16),
-                ),
-                subtitle: Text(
-                  details.isEmpty
-                      ? 'Draft · Tap to continue'
-                      : details.join(' · '),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12),
-                ),
-                trailing: Builder(
-                  builder: (buttonContext) => IconButton(
-                    tooltip: 'Draft actions',
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(48, 48),
-                      visualDensity: VisualDensity.standard,
-                    ),
-                    icon: const Icon(Icons.more_horiz, size: 20),
-                    onPressed: workspace.switching
-                        ? null
-                        : () => actions(buttonContext),
+              child: StudioButtonPress(
+                child: ListTile(
+                  key: ValueKey('saved-draft-${draft.key.sessionId}'),
+                  contentPadding: const EdgeInsets.only(left: 16, right: 0),
+                  leading: const ChatStatusDot(
+                    ChatListStatus.draft,
+                    live: false,
                   ),
+                  title: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  subtitle: Text(
+                    details.isEmpty
+                        ? 'Draft · Tap to continue'
+                        : details.join(' · '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: Builder(
+                    builder: (buttonContext) => StudioButtonPress(
+                      child: IconButton(
+                        tooltip: 'Draft actions',
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                          visualDensity: VisualDensity.standard,
+                        ),
+                        icon: const Icon(Icons.more_horiz, size: 20),
+                        onPressed: workspace.switching
+                            ? null
+                            : () => actions(buttonContext),
+                      ),
+                    ),
+                  ),
+                  onLongPress: workspace.switching ? null : actions,
+                  onTap: workspace.switching
+                      ? null
+                      : () => _run(() => _data.openDraft(draft)),
                 ),
-                onLongPress: workspace.switching ? null : actions,
-                onTap: workspace.switching
-                    ? null
-                    : () => _run(() => _data.openDraft(draft)),
               ),
             ),
           ),
@@ -1042,20 +1072,24 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
               Wrap(
                 children: [
                   if (_view.validity == BrowserPreferencesValidity.invalid)
-                    TextButton(
-                      onPressed: _view.busy
-                          ? null
-                          : () => _chooseView(
-                              const BrowserPreferenceIntent.reset(),
-                            ),
-                      child: const Text('Reset chat view'),
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: _view.busy
+                            ? null
+                            : () => _chooseView(
+                                const BrowserPreferenceIntent.reset(),
+                              ),
+                        child: const Text('Reset chat view'),
+                      ),
                     ),
                   if (_view.validity == BrowserPreferencesValidity.unverified)
-                    TextButton(
-                      onPressed: _view.busy
-                          ? null
-                          : _data.verifyViewPreferences,
-                      child: const Text('Reload chat view'),
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: _view.busy
+                            ? null
+                            : _data.verifyViewPreferences,
+                        child: const Text('Reload chat view'),
+                      ),
                     ),
                 ],
               ),
@@ -1072,22 +1106,28 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
               Text(notice),
               Wrap(
                 children: [
-                  TextButton(
-                    onPressed: !workspace.canChooseVisibility
-                        ? null
-                        : () => _run(
-                            () =>
-                                _data.chooseVisibility(SessionVisibility.chats),
-                          ),
-                    child: const Text('Chats only'),
+                  StudioButtonPress(
+                    child: TextButton(
+                      onPressed: !workspace.canChooseVisibility
+                          ? null
+                          : () => _run(
+                              () => _data.chooseVisibility(
+                                SessionVisibility.chats,
+                              ),
+                            ),
+                      child: const Text('Chats only'),
+                    ),
                   ),
-                  TextButton(
-                    onPressed: !workspace.canChooseVisibility
-                        ? null
-                        : () => _run(
-                            () => _data.chooseVisibility(SessionVisibility.all),
-                          ),
-                    child: const Text('All sessions'),
+                  StudioButtonPress(
+                    child: TextButton(
+                      onPressed: !workspace.canChooseVisibility
+                          ? null
+                          : () => _run(
+                              () =>
+                                  _data.chooseVisibility(SessionVisibility.all),
+                            ),
+                      child: const Text('All sessions'),
+                    ),
                   ),
                 ],
               ),
@@ -1131,9 +1171,11 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
       else if (workspace.error != null)
         ListTile(
           title: StudioError(workspace.error!),
-          trailing: TextButton(
-            onPressed: () => _run(_data.retryConnection),
-            child: const Text('Retry'),
+          trailing: StudioButtonPress(
+            child: TextButton(
+              onPressed: () => _run(_data.retryConnection),
+              child: const Text('Retry'),
+            ),
           ),
         ),
     ];
@@ -1160,12 +1202,14 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
 
           centerTitle: false,
           leading: _archivedOnly
-              ? IconButton(
-                  tooltip: 'Back to chats',
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () {
-                    unawaited(_data.refresh(archivedOnly: false));
-                  },
+              ? StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Back to chats',
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () {
+                      unawaited(_data.refresh(archivedOnly: false));
+                    },
+                  ),
                 )
               : null,
           title: Text(_archivedOnly ? 'Archived chats' : 'Chats'),
@@ -1279,17 +1323,19 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
             ),
           ),
         ),
-        floatingActionButton: FloatingActionButton(
-          key: const ValueKey('workspace-new-chat'),
-          tooltip: 'New chat',
-          elevation: 2,
-          onPressed: !enabled || workspace.offline || workspace.recovering
-              ? null
-              : () => _run(() async {
-                  final name = await _chooseOwner();
-                  if (name != null) await _data.newChat(name);
-                }),
-          child: const Icon(WingIcons.newChat),
+        floatingActionButton: StudioButtonPress(
+          child: FloatingActionButton(
+            key: const ValueKey('workspace-new-chat'),
+            tooltip: 'New chat',
+            elevation: 2,
+            onPressed: !enabled || workspace.offline || workspace.recovering
+                ? null
+                : () => _run(() async {
+                    final name = await _chooseOwner();
+                    if (name != null) await _data.newChat(name);
+                  }),
+            child: const Icon(WingIcons.newChat),
+          ),
         ),
       ),
     );

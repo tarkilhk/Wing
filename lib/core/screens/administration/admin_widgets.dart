@@ -121,29 +121,33 @@ class AdminEditorActions extends StatelessWidget {
             children: [
               Expanded(
                 flex: 2,
-                child: TextButton(
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                child: StudioButtonPress(
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
+                    onPressed: saving ? null : onClose,
+                    child: const Text('Close'),
                   ),
-                  onPressed: saving ? null : onClose,
-                  child: const Text('Close'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 flex: 3,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                child: StudioButtonPress(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
+                    onPressed: saving ? null : onSave,
+                    child: StudioActionLabel('Save', busy: saving),
                   ),
-                  onPressed: saving ? null : onSave,
-                  child: StudioActionLabel('Save', busy: saving),
                 ),
               ),
             ],
@@ -209,37 +213,39 @@ class _AdminRowState extends State<AdminRow> {
     color: _changed
         ? Theme.of(context).colorScheme.primaryContainer
         : Colors.transparent,
-    child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-      minTileHeight: 64,
-      minVerticalPadding: 8,
-      leading: Icon(widget.icon, size: 22),
-      title: Text(
-        widget.title,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (widget.attention != null) ...[
-            const SizedBox(height: 4),
-            AdminAttention(widget.attention!),
-            const SizedBox(height: 4),
+    child: StudioButtonPress(
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        minTileHeight: 64,
+        minVerticalPadding: 8,
+        leading: Icon(widget.icon, size: 22),
+        title: Text(
+          widget.title,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.attention != null) ...[
+              const SizedBox(height: 4),
+              AdminAttention(widget.attention!),
+              const SizedBox(height: 4),
+            ],
+            if (widget.detail != null)
+              Text(
+                widget.detail!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            Text(widget.subtitle, style: Theme.of(context).textTheme.bodySmall),
           ],
-          if (widget.detail != null)
-            Text(
-              widget.detail!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          Text(widget.subtitle, style: Theme.of(context).textTheme.bodySmall),
-        ],
+        ),
+        trailing: widget.onTap == null
+            ? null
+            : const Icon(Icons.chevron_right, size: 20),
+        onTap: widget.onTap,
       ),
-      trailing: widget.onTap == null
-          ? null
-          : const Icon(Icons.chevron_right, size: 20),
-      onTap: widget.onTap,
     ),
   );
 }
@@ -286,7 +292,9 @@ class AdminNotice extends StatelessWidget {
         else
           Text(text, style: Theme.of(context).textTheme.bodyMedium),
         if (retry != null)
-          TextButton(onPressed: retry, child: const Text('Retry')),
+          StudioButtonPress(
+            child: TextButton(onPressed: retry, child: const Text('Retry')),
+          ),
       ],
     ),
   );
@@ -320,13 +328,17 @@ Future<bool> adminConfirm(
         title: Text(title),
         content: Text(detail),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(action),
+          StudioButtonPress(
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(action),
+            ),
           ),
         ],
       ),

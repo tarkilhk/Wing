@@ -235,10 +235,12 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
   Widget _header(MentionCompletion? completion, {required bool compact}) => Row(
     children: [
       if (completion?.parent case final parent?)
-        IconButton(
-          tooltip: 'Browse parent folder',
-          onPressed: _pending ? null : () => _browse(parent),
-          icon: const Icon(Icons.arrow_back),
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Browse parent folder',
+            onPressed: _pending ? null : () => _browse(parent),
+            icon: const Icon(Icons.arrow_back),
+          ),
         ),
       Expanded(
         child: Padding(
@@ -255,32 +257,38 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
         ),
       ),
       if (completion?.directory case final directory?)
-        IconButton(
-          tooltip: 'Add this folder as context',
-          onPressed: _pending
-              ? null
-              : () => _select(
-                  ComposerReference(
-                    kind: ComposerReferenceKind.folder,
-                    token: composerPathToken(
-                      ComposerReferenceKind.folder,
-                      directory,
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Add this folder as context',
+            onPressed: _pending
+                ? null
+                : () => _select(
+                    ComposerReference(
+                      kind: ComposerReferenceKind.folder,
+                      token: composerPathToken(
+                        ComposerReferenceKind.folder,
+                        directory,
+                      ),
+                      target: directory,
                     ),
-                    target: directory,
                   ),
-                ),
-          icon: const Icon(Icons.create_new_folder_outlined),
+            icon: const Icon(Icons.create_new_folder_outlined),
+          ),
         ),
       if (_error != null)
-        IconButton(
-          tooltip: 'Retry references',
-          onPressed: _pending ? null : () => _browse(_directory),
-          icon: const Icon(Icons.refresh),
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Retry references',
+            onPressed: _pending ? null : () => _browse(_directory),
+            icon: const Icon(Icons.refresh),
+          ),
         ),
-      IconButton(
-        tooltip: 'Close references',
-        onPressed: _close,
-        icon: const Icon(Icons.close),
+      StudioButtonPress(
+        child: IconButton(
+          tooltip: 'Close references',
+          onPressed: _close,
+          icon: const Icon(Icons.close),
+        ),
       ),
     ],
   );
@@ -320,59 +328,63 @@ class _MentionSuggestionsState extends State<MentionSuggestions> {
   Widget _row(MentionCandidate item, int index) {
     final folder = item.reference.kind == ComposerReferenceKind.folder;
     final tokens = WingTokens.of(context);
-    return InkWell(
-      key: _rowKeys.putIfAbsent(index, GlobalKey.new),
-      onTap: _pending
-          ? null
-          : () {
-              if (folder) {
-                _browse(item.reference.target);
-              } else {
-                unawaited(_select(item.reference));
-              }
-            },
-      child: Container(
-        color: index == _highlighted
-            ? Theme.of(context).colorScheme.primaryContainer
-            : null,
-        constraints: const BoxConstraints(minHeight: 48),
-        padding: const EdgeInsetsDirectional.only(start: 12),
-        child: Row(
-          children: [
-            SizedBox.square(
-              dimension: 32,
-              child: Center(child: _leading(item)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.label,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    if (item.detail.isNotEmpty)
+    return StudioButtonPress(
+      child: InkWell(
+        key: _rowKeys.putIfAbsent(index, GlobalKey.new),
+        onTap: _pending
+            ? null
+            : () {
+                if (folder) {
+                  _browse(item.reference.target);
+                } else {
+                  unawaited(_select(item.reference));
+                }
+              },
+        child: Container(
+          color: index == _highlighted
+              ? Theme.of(context).colorScheme.primaryContainer
+              : null,
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsetsDirectional.only(start: 12),
+          child: Row(
+            children: [
+              SizedBox.square(
+                dimension: 32,
+                child: Center(child: _leading(item)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        item.detail,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(color: tokens.muted),
+                        item.label,
+                        style: Theme.of(context).textTheme.bodyMedium,
                       ),
-                  ],
+                      if (item.detail.isNotEmpty)
+                        Text(
+                          item.detail,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(color: tokens.muted),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            if (folder)
-              IconButton(
-                tooltip: 'Add ${item.label} as folder context',
-                onPressed: _pending ? null : () => _select(item.reference),
-                icon: const Icon(Icons.add),
-              ),
-            if (!folder) const SizedBox(width: 12),
-          ],
+              if (folder)
+                StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Add ${item.label} as folder context',
+                    onPressed: _pending ? null : () => _select(item.reference),
+                    icon: const Icon(Icons.add),
+                  ),
+                ),
+              if (!folder) const SizedBox(width: 12),
+            ],
+          ),
         ),
       ),
     );

@@ -123,40 +123,42 @@ class _DrawerVersionsState extends State<DrawerVersions> {
       excludeSemantics: true,
       child: Tooltip(
         message: description,
-        child: InkWell(
-          key: const ValueKey('menu-server-version'),
-          borderRadius: WingRadius.control,
-          onTap: _open,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Align(
-                alignment: Alignment.bottomRight,
-                widthFactor: 1,
-                heightFactor: 1,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontSize: 13,
+        child: StudioButtonPress(
+          child: InkWell(
+            key: const ValueKey('menu-server-version'),
+            borderRadius: WingRadius.control,
+            onTap: _open,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  widthFactor: 1,
+                  heightFactor: 1,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontSize: 13,
+                          ),
                         ),
                       ),
-                    ),
-                    if (updateAvailable) ...[
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.sync,
-                        size: 18,
-                        color: theme.colorScheme.primary,
-                      ),
+                      if (updateAvailable) ...[
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.sync,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),

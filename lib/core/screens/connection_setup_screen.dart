@@ -140,13 +140,17 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         title: const Text('Discard connection setup?'),
         content: const Text('This connection has not been saved.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep editing'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep editing'),
+            ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Discard'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Discard'),
+            ),
           ),
         ],
       ),
@@ -184,7 +188,9 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
       child: Scaffold(
         appBar: WingAppBar(
           context: context,
-          leading: BackButton(onPressed: _saving ? null : _back),
+          leading: StudioButtonPress(
+            child: BackButton(onPressed: _saving ? null : _back),
+          ),
           title: Text(_editing ? 'Edit instance' : 'Add instance'),
           actions: [
             if (_step != ConnectionSetupStep.review)
@@ -323,17 +329,19 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         _panel(
           Material(
             color: Colors.transparent,
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(cloud ? Icons.cloud_outlined : Icons.link),
-              title: Text(cloud ? 'Hermes Cloud' : 'Use an address'),
-              subtitle: Text(
-                cloud
-                    ? 'Find your instances with Nous Portal'
-                    : 'Connect with a dashboard address',
+            child: StudioButtonPress(
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(cloud ? Icons.cloud_outlined : Icons.link),
+                title: Text(cloud ? 'Hermes Cloud' : 'Use an address'),
+                subtitle: Text(
+                  cloud
+                      ? 'Find your instances with Nous Portal'
+                      : 'Connect with a dashboard address',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _session.chooseSource(cloud: cloud),
               ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _session.chooseSource(cloud: cloud),
             ),
           ),
         ),
@@ -384,15 +392,19 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
       if (_cloudError case final message?) ...[
         StudioError(message),
         const SizedBox(height: 16),
-        TextButton(
-          onPressed: _cloudBusy ? null : () => _discoverCloud(),
-          child: const Text('Refresh instances'),
+        StudioButtonPress(
+          child: TextButton(
+            onPressed: _cloudBusy ? null : () => _discoverCloud(),
+            child: const Text('Refresh instances'),
+          ),
         ),
-        TextButton(
-          onPressed: _cloudBusy
-              ? null
-              : () => _discoverCloud(switchAccount: true),
-          child: const Text('Sign in again'),
+        StudioButtonPress(
+          child: TextButton(
+            onPressed: _cloudBusy
+                ? null
+                : () => _discoverCloud(switchAccount: true),
+            child: const Text('Sign in again'),
+          ),
         ),
       ],
       if (_discovery == null)
@@ -467,24 +479,32 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         Wrap(
           spacing: 8,
           children: [
-            TextButton(
-              onPressed: _cloudBusy ? null : () => _discoverCloud(),
-              child: const Text('Refresh'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: _cloudBusy ? null : () => _discoverCloud(),
+                child: const Text('Refresh'),
+              ),
             ),
             if (_organizations.length > 1 && _discovery!.organizations.isEmpty)
-              TextButton(
-                onPressed: _cloudBusy ? null : _session.changeOrganization,
-                child: const Text('Change organization'),
+              StudioButtonPress(
+                child: TextButton(
+                  onPressed: _cloudBusy ? null : _session.changeOrganization,
+                  child: const Text('Change organization'),
+                ),
               ),
-            TextButton(
-              onPressed: _cloudBusy ? null : _openPortal,
-              child: const Text('Open Nous Portal'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: _cloudBusy ? null : _openPortal,
+                child: const Text('Open Nous Portal'),
+              ),
             ),
-            TextButton(
-              onPressed: _cloudBusy
-                  ? null
-                  : () => _discoverCloud(switchAccount: true),
-              child: const Text('Switch account'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: _cloudBusy
+                    ? null
+                    : () => _discoverCloud(switchAccount: true),
+                child: const Text('Switch account'),
+              ),
             ),
           ],
         ),
@@ -548,10 +568,12 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         ),
         Align(
           alignment: AlignmentDirectional.centerStart,
-          child: TextButton.icon(
-            onPressed: _findAddress,
-            icon: const Icon(Icons.help_outline, size: 18),
-            label: const Text('Find my address'),
+          child: StudioButtonPress(
+            child: TextButton.icon(
+              onPressed: _findAddress,
+              icon: const Icon(Icons.help_outline, size: 18),
+              label: const Text('Find my address'),
+            ),
           ),
         ),
       ],
@@ -661,14 +683,18 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
               decoration: InputDecoration(
                 labelText: 'Password',
                 errorMaxLines: 3,
-                suffixIcon: IconButton(
-                  tooltip: _revealPassword ? 'Hide password' : 'Show password',
-                  onPressed: () =>
-                      setState(() => _revealPassword = !_revealPassword),
-                  icon: Icon(
-                    _revealPassword
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
+                suffixIcon: StudioButtonPress(
+                  child: IconButton(
+                    tooltip: _revealPassword
+                        ? 'Hide password'
+                        : 'Show password',
+                    onPressed: () =>
+                        setState(() => _revealPassword = !_revealPassword),
+                    icon: Icon(
+                      _revealPassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                    ),
                   ),
                 ),
               ),
@@ -690,12 +716,14 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
             ),
           ],
           const SizedBox(height: 24),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Custom setup'),
-            subtitle: Text(_accessDescription(_access)),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _customSetup,
+          StudioButtonPress(
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Custom setup'),
+              subtitle: Text(_accessDescription(_access)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _customSetup,
+            ),
           ),
           if (_access.chatUrl.isNotEmpty)
             Text(
@@ -755,12 +783,14 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
             ),
           ],
         ),
-        TextButton(
-          onPressed: _session.editSignIn,
-          child: Text(
-            _cloudRoute
-                ? 'Sign in to Hermes Cloud again'
-                : 'Edit sign-in or custom setup',
+        StudioButtonPress(
+          child: TextButton(
+            onPressed: _session.editSignIn,
+            child: Text(
+              _cloudRoute
+                  ? 'Sign in to Hermes Cloud again'
+                  : 'Edit sign-in or custom setup',
+            ),
           ),
         ),
       ] else
@@ -862,15 +892,17 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           validator: _session.validateName,
         ),
         const SizedBox(height: 24),
-        ListTile(
-          key: const Key('connection-appearance'),
-          contentPadding: EdgeInsets.zero,
-          leading: ConnectionIconBadge(icon: _icon),
-          title: const Text('Instance icon'),
-          subtitle: Text(_icon.label),
-          trailing: const Icon(Icons.chevron_right),
-          enabled: !_saving,
-          onTap: _saving ? null : _pickIcon,
+        StudioButtonPress(
+          child: ListTile(
+            key: const Key('connection-appearance'),
+            contentPadding: EdgeInsets.zero,
+            leading: ConnectionIconBadge(icon: _icon),
+            title: const Text('Instance icon'),
+            subtitle: Text(_icon.label),
+            trailing: const Icon(Icons.chevron_right),
+            enabled: !_saving,
+            onTap: _saving ? null : _pickIcon,
+          ),
         ),
         const SizedBox(height: 16),
         if (!_editing)
@@ -915,11 +947,13 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         _save,
       ),
     };
-    return FilledButton(
-      key: const Key('connection-primary'),
-      style: FilledButton.styleFrom(minimumSize: const Size(48, 52)),
-      onPressed: _state.canAdvance ? action : null,
-      child: StudioActionLabel(label, busy: _saving || _cloudBusy),
+    return StudioButtonPress(
+      child: FilledButton(
+        key: const Key('connection-primary'),
+        style: FilledButton.styleFrom(minimumSize: const Size(48, 52)),
+        onPressed: _state.canAdvance ? action : null,
+        child: StudioActionLabel(label, busy: _saving || _cloudBusy),
+      ),
     );
   }
 
@@ -1087,16 +1121,18 @@ class _CustomSetupScreenState extends State<_CustomSetupScreen> {
                   ),
                 ],
                 const Divider(height: 32),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Access headers'),
-                  subtitle: const Text(
-                    'Extra credentials required by some access proxies',
+                StudioButtonPress(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Access headers'),
+                    subtitle: const Text(
+                      'Extra credentials required by some access proxies',
+                    ),
+                    trailing: Icon(
+                      _showHeaders ? Icons.expand_less : Icons.expand_more,
+                    ),
+                    onTap: () => setState(() => _showHeaders = !_showHeaders),
                   ),
-                  trailing: Icon(
-                    _showHeaders ? Icons.expand_less : Icons.expand_more,
-                  ),
-                  onTap: () => setState(() => _showHeaders = !_showHeaders),
                 ),
                 Visibility(
                   visible: _showHeaders,
@@ -1107,12 +1143,14 @@ class _CustomSetupScreenState extends State<_CustomSetupScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(48, 52),
+                StudioButtonPress(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(48, 52),
+                    ),
+                    onPressed: _done,
+                    child: const Text('Use these settings'),
                   ),
-                  onPressed: _done,
-                  child: const Text('Use these settings'),
                 ),
               ],
             ),

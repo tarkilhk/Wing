@@ -35,10 +35,12 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
       title: 'Logs',
       scope: _session.scopeLabel,
       actions: [
-        IconButton(
-          tooltip: 'Refresh logs',
-          onPressed: _session.refresh,
-          icon: const Icon(Icons.refresh),
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Refresh logs',
+            onPressed: _session.refresh,
+            icon: const Icon(Icons.refresh),
+          ),
         ),
       ],
       child: ReadRecovery(

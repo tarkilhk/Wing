@@ -82,16 +82,18 @@ class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile>
     _image = _load();
   });
 
-  Widget _retryButton() => IconButton(
-    tooltip: 'Retry image preview',
-    style: IconButton.styleFrom(
-      minimumSize: const Size.square(48),
-      maximumSize: const Size.square(48),
-      visualDensity: VisualDensity.standard,
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  Widget _retryButton() => StudioButtonPress(
+    child: IconButton(
+      tooltip: 'Retry image preview',
+      style: IconButton.styleFrom(
+        minimumSize: const Size.square(48),
+        maximumSize: const Size.square(48),
+        visualDensity: VisualDensity.standard,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      onPressed: _retry,
+      icon: const Icon(Icons.refresh, size: 20),
     ),
-    onPressed: _retry,
-    icon: const Icon(Icons.refresh, size: 20),
   );
 
   Future<ImageProvider> _imageProvider() async {
@@ -217,38 +219,40 @@ class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile>
   Widget build(BuildContext context) {
     final preview = _preview(context);
     if (widget.additionalImages == 0) return preview;
-    return InkWell(
-      onTap: widget.onOpen == null
-          ? null
-          : () => widget.onOpen!(_currentProvider),
-      borderRadius: WingRadius.card,
-      child: IgnorePointer(
-        child: Stack(
-          children: [
-            preview,
-            Positioned.fill(
-              child: IgnorePointer(
-                child: ClipRRect(
-                  borderRadius: WingRadius.card,
-                  child: ColoredBox(
-                    color: Colors.black.withValues(alpha: .55),
-                    child: Center(
-                      child: Text(
-                        '+${widget.additionalImages}',
-                        semanticsLabel:
-                            '${widget.additionalImages} more images',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
+    return StudioButtonPress(
+      child: InkWell(
+        onTap: widget.onOpen == null
+            ? null
+            : () => widget.onOpen!(_currentProvider),
+        borderRadius: WingRadius.card,
+        child: IgnorePointer(
+          child: Stack(
+            children: [
+              preview,
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: ClipRRect(
+                    borderRadius: WingRadius.card,
+                    child: ColoredBox(
+                      color: Colors.black.withValues(alpha: .55),
+                      child: Center(
+                        child: Text(
+                          '+${widget.additionalImages}',
+                          semanticsLabel:
+                              '${widget.additionalImages} more images',
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -277,25 +281,27 @@ class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile>
             borderRadius: WingRadius.card,
             child: Material(
               color: Theme.of(context).colorScheme.surfaceContainerHigh,
-              child: InkWell(
-                onTap: () => _open(provider),
-                child: Image(
-                  image: ResizeImage.resizeIfNeeded(720, null, provider),
-                  width: widget.previewSize?.width ?? 240,
-                  height: widget.previewSize?.height,
-                  // Fill the capped preview with the top of a long screenshot.
-                  // The original provider still opens in the full-image viewer.
-                  fit: BoxFit.cover,
-                  alignment: Alignment.topCenter,
-                  semanticLabel: 'Open image: ${widget.attachment.name}',
-                  frameBuilder: (_, child, frame, _) =>
-                      frame == null ? _loading() : child,
-                  errorBuilder: (_, _, _) {
-                    _failed = true;
-                    return _fileCard(unavailable: true);
-                  },
-                  loadingBuilder: (_, child, progress) =>
-                      progress == null ? child : _loading(),
+              child: StudioButtonPress(
+                child: InkWell(
+                  onTap: () => _open(provider),
+                  child: Image(
+                    image: ResizeImage.resizeIfNeeded(720, null, provider),
+                    width: widget.previewSize?.width ?? 240,
+                    height: widget.previewSize?.height,
+                    // Fill the capped preview with the top of a long screenshot.
+                    // The original provider still opens in the full-image viewer.
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                    semanticLabel: 'Open image: ${widget.attachment.name}',
+                    frameBuilder: (_, child, frame, _) =>
+                        frame == null ? _loading() : child,
+                    errorBuilder: (_, _, _) {
+                      _failed = true;
+                      return _fileCard(unavailable: true);
+                    },
+                    loadingBuilder: (_, child, progress) =>
+                        progress == null ? child : _loading(),
+                  ),
                 ),
               ),
             ),
@@ -629,42 +635,44 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
                   ? Duration.zero
                   : WingMotion.fast,
               borderRadius: WingRadius.card,
-              child: InkWell(
-                key: ValueKey('image-thumbnail-$index'),
-                borderRadius: WingRadius.card,
-                onTap: () => _select(index),
-                child: Padding(
-                  padding: const EdgeInsets.all(3),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: ExcludeSemantics(
-                      child: FutureBuilder<ImageProvider>(
-                        future: _provider(index),
-                        builder: (context, snapshot) {
-                          final provider =
-                              snapshot.connectionState == ConnectionState.done
-                              ? snapshot.data
-                              : null;
-                          if (provider != null) {
-                            return Image(
-                              image: ResizeImage(
-                                provider,
-                                width: 144,
-                                height: 144,
-                                policy: ResizeImagePolicy.fit,
-                              ),
-                              fit: BoxFit.cover,
-                              alignment: Alignment.topCenter,
-                              errorBuilder: (_, _, _) =>
-                                  const Icon(Icons.broken_image_outlined),
+              child: StudioButtonPress(
+                child: InkWell(
+                  key: ValueKey('image-thumbnail-$index'),
+                  borderRadius: WingRadius.card,
+                  onTap: () => _select(index),
+                  child: Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: ExcludeSemantics(
+                        child: FutureBuilder<ImageProvider>(
+                          future: _provider(index),
+                          builder: (context, snapshot) {
+                            final provider =
+                                snapshot.connectionState == ConnectionState.done
+                                ? snapshot.data
+                                : null;
+                            if (provider != null) {
+                              return Image(
+                                image: ResizeImage(
+                                  provider,
+                                  width: 144,
+                                  height: 144,
+                                  policy: ResizeImagePolicy.fit,
+                                ),
+                                fit: BoxFit.cover,
+                                alignment: Alignment.topCenter,
+                                errorBuilder: (_, _, _) =>
+                                    const Icon(Icons.broken_image_outlined),
+                              );
+                            }
+                            return Icon(
+                              snapshot.hasError
+                                  ? Icons.broken_image_outlined
+                                  : Icons.image_outlined,
                             );
-                          }
-                          return Icon(
-                            snapshot.hasError
-                                ? Icons.broken_image_outlined
-                                : Icons.image_outlined,
-                          );
-                        },
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -699,14 +707,16 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
           const SizedBox(height: 4),
           Row(
             children: [
-              IconButton(
-                tooltip: 'Previous image',
-                style: IconButton.styleFrom(
-                  minimumSize: const Size.square(48),
-                  visualDensity: VisualDensity.standard,
+              StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Previous image',
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size.square(48),
+                    visualDensity: VisualDensity.standard,
+                  ),
+                  onPressed: _index > 0 ? () => _select(_index - 1) : null,
+                  icon: const Icon(Icons.chevron_left),
                 ),
-                onPressed: _index > 0 ? () => _select(_index - 1) : null,
-                icon: const Icon(Icons.chevron_left),
               ),
               Expanded(
                 child: Text(
@@ -716,16 +726,18 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
                   textAlign: TextAlign.center,
                 ),
               ),
-              IconButton(
-                tooltip: 'Next image',
-                style: IconButton.styleFrom(
-                  minimumSize: const Size.square(48),
-                  visualDensity: VisualDensity.standard,
+              StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Next image',
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size.square(48),
+                    visualDensity: VisualDensity.standard,
+                  ),
+                  onPressed: _index + 1 < widget.images.length
+                      ? () => _select(_index + 1)
+                      : null,
+                  icon: const Icon(Icons.chevron_right),
                 ),
-                onPressed: _index + 1 < widget.images.length
-                    ? () => _select(_index + 1)
-                    : null,
-                icon: const Icon(Icons.chevron_right),
               ),
             ],
           ),
@@ -767,14 +779,16 @@ class _UserMessageImageGalleryState extends State<_UserMessageImageGallery>
         child:
             snapshot.connectionState == ConnectionState.done &&
                 snapshot.hasError
-            ? IconButton(
-                tooltip: 'Retry image preview',
-                style: IconButton.styleFrom(
-                  minimumSize: const Size.square(48),
-                  visualDensity: VisualDensity.standard,
+            ? StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Retry image preview',
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size.square(48),
+                    visualDensity: VisualDensity.standard,
+                  ),
+                  onPressed: () => _retry(index),
+                  icon: const Icon(Icons.refresh),
                 ),
-                onPressed: () => _retry(index),
-                icon: const Icon(Icons.refresh),
               )
             : const StudioLoading(label: 'Loading attachment'),
       );

@@ -116,10 +116,12 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                           ),
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Close',
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close),
+                      StudioButtonPress(
+                        child: IconButton(
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                        ),
                       ),
                     ],
                   ),
@@ -155,12 +157,14 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                   ),
                   child: Align(
                     alignment: AlignmentDirectional.centerEnd,
-                    child: IconButton.filled(
-                      tooltip: 'Generate picture',
-                      onPressed: draft.picturePrompt.trim().isEmpty
-                          ? null
-                          : () => Navigator.pop(context, true),
-                      icon: const Icon(Icons.auto_awesome_outlined),
+                    child: StudioButtonPress(
+                      child: IconButton.filled(
+                        tooltip: 'Generate picture',
+                        onPressed: draft.picturePrompt.trim().isEmpty
+                            ? null
+                            : () => Navigator.pop(context, true),
+                        icon: const Icon(Icons.auto_awesome_outlined),
+                      ),
                     ),
                   ),
                 ),
@@ -201,30 +205,32 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                 ))
                   Semantics(
                     selected: draft.iconColor == color,
-                    child: IconButton.filledTonal(
-                      key: ValueKey('group-color-${color.name}'),
-                      tooltip:
-                          '${color.name[0].toUpperCase()}${color.name.substring(1)}',
-                      isSelected: draft.iconColor == color,
-                      onPressed: () => Navigator.pop(context, color),
-                      icon: BotGroupPicture(
-                        avatars: draft.iconMembers,
-                        color: color,
-                        size: 32,
-                      ),
-                      selectedIcon: Stack(
-                        children: [
-                          BotGroupPicture(
-                            avatars: draft.iconMembers,
-                            color: color,
-                            size: 32,
-                          ),
-                          const Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: Icon(Icons.check_circle, size: 16),
-                          ),
-                        ],
+                    child: StudioButtonPress(
+                      child: IconButton.filledTonal(
+                        key: ValueKey('group-color-${color.name}'),
+                        tooltip:
+                            '${color.name[0].toUpperCase()}${color.name.substring(1)}',
+                        isSelected: draft.iconColor == color,
+                        onPressed: () => Navigator.pop(context, color),
+                        icon: BotGroupPicture(
+                          avatars: draft.iconMembers,
+                          color: color,
+                          size: 32,
+                        ),
+                        selectedIcon: Stack(
+                          children: [
+                            BotGroupPicture(
+                              avatars: draft.iconMembers,
+                              color: color,
+                              size: 32,
+                            ),
+                            const Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Icon(Icons.check_circle, size: 16),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -292,30 +298,38 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
     final pictureActions = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          tooltip: 'Choose icon color',
-          onPressed: editable ? _chooseColor : null,
-          icon: const Icon(Icons.palette_outlined),
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Choose icon color',
+            onPressed: editable ? _chooseColor : null,
+            icon: const Icon(Icons.palette_outlined),
+          ),
         ),
-        IconButton(
-          tooltip: 'Upload room picture',
-          onPressed: editable && !draft.pictureBusy
-              ? () => draft.pickPicture(canUse: _canUse)
-              : null,
-          icon: const Icon(Icons.add_photo_alternate_outlined),
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Upload room picture',
+            onPressed: editable && !draft.pictureBusy
+                ? () => draft.pickPicture(canUse: _canUse)
+                : null,
+            icon: const Icon(Icons.add_photo_alternate_outlined),
+          ),
         ),
-        IconButton(
-          tooltip: 'Generate room picture',
-          onPressed: draft.canGenerate ? _generatePicture : null,
-          icon: const Icon(Icons.auto_awesome_outlined),
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Generate room picture',
+            onPressed: draft.canGenerate ? _generatePicture : null,
+            icon: const Icon(Icons.auto_awesome_outlined),
+          ),
         ),
         if (draft.picture != null)
-          IconButton(
-            tooltip: 'Remove room picture',
-            onPressed: editable && !draft.pictureBusy
-                ? draft.removePicture
-                : null,
-            icon: const Icon(Icons.delete_outline),
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Remove room picture',
+              onPressed: editable && !draft.pictureBusy
+                  ? draft.removePicture
+                  : null,
+              icon: const Icon(Icons.delete_outline),
+            ),
           ),
       ],
     );
@@ -467,15 +481,17 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon: draft.query.isEmpty
                           ? null
-                          : IconButton(
-                              tooltip: 'Clear search',
-                              onPressed: editable
-                                  ? () {
-                                      _search.clear();
-                                      draft.search('');
-                                    }
-                                  : null,
-                              icon: const Icon(Icons.close),
+                          : StudioButtonPress(
+                              child: IconButton(
+                                tooltip: 'Clear search',
+                                onPressed: editable
+                                    ? () {
+                                        _search.clear();
+                                        draft.search('');
+                                      }
+                                    : null,
+                                icon: const Icon(Icons.close),
+                              ),
                             ),
                     ),
                     onChanged: draft.search,
@@ -495,47 +511,50 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                     for (final bot in draft.matches)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: ListTile(
-                          key: ValueKey('group-member-${bot.id}'),
-                          enabled: draft.canSelect(bot),
-                          onTap: draft.canSelect(bot)
-                              ? () => draft.select(bot, true)
-                              : null,
-                          minTileHeight: 48,
-                          minVerticalPadding: 8,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                          ),
-                          title: Row(
-                            children: [
-                              ExcludeSemantics(
-                                child: BotAvatar(
-                                  name: bot.title,
-                                  shape: bot.shape,
-                                  color: bot.color,
-                                  image: bot.avatar,
-                                  size: 32,
+                        child: StudioButtonPress(
+                          child: ListTile(
+                            key: ValueKey('group-member-${bot.id}'),
+                            enabled: draft.canSelect(bot),
+                            onTap: draft.canSelect(bot)
+                                ? () => draft.select(bot, true)
+                                : null,
+                            minTileHeight: 48,
+                            minVerticalPadding: 8,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                            ),
+                            title: Row(
+                              children: [
+                                ExcludeSemantics(
+                                  child: BotAvatar(
+                                    name: bot.title,
+                                    shape: bot.shape,
+                                    color: bot.color,
+                                    image: bot.avatar,
+                                    size: 32,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: WingSpacing.md),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      bot.title,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
+                                const SizedBox(width: WingSpacing.md),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        bot.title,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
-                                    ),
-                                    Text(
-                                      '@bot_${bot.profile.name}',
-                                      style: theme.textTheme.bodySmall,
-                                    ),
-                                  ],
+                                      Text(
+                                        '@bot_${bot.profile.name}',
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -593,14 +612,20 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    IconButton.filled(
-                      key: ValueKey(
-                        draft.editing ? 'group-save' : 'group-create',
-                      ),
-                      tooltip: draft.editing ? 'Save changes' : 'Create group',
-                      onPressed: draft.canSave ? _saveGroup : null,
-                      icon: Icon(
-                        draft.editing ? Icons.check : Icons.group_add_outlined,
+                    StudioButtonPress(
+                      child: IconButton.filled(
+                        key: ValueKey(
+                          draft.editing ? 'group-save' : 'group-create',
+                        ),
+                        tooltip: draft.editing
+                            ? 'Save changes'
+                            : 'Create group',
+                        onPressed: draft.canSave ? _saveGroup : null,
+                        icon: Icon(
+                          draft.editing
+                              ? Icons.check
+                              : Icons.group_add_outlined,
+                        ),
                       ),
                     ),
                   ],
@@ -650,10 +675,12 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
             context: context,
             title: Text(widget.clone == null ? 'New bot' : 'Duplicate bot'),
             actions: [
-              IconButton(
-                tooltip: 'Create bot',
-                onPressed: _busy || _identity == null ? null : _save,
-                icon: const Icon(Icons.check),
+              StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Create bot',
+                  onPressed: _busy || _identity == null ? null : _save,
+                  icon: const Icon(Icons.check),
+                ),
               ),
             ],
           ),
@@ -765,13 +792,15 @@ class _PickedGroupMembers extends StatelessWidget {
                           ),
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Remove ${bot.title}',
-                        onPressed: onRemove == null
-                            ? null
-                            : () => onRemove!(bot),
-                        icon: const Icon(Icons.close, size: 18),
-                        color: colors.onPrimaryContainer,
+                      StudioButtonPress(
+                        child: IconButton(
+                          tooltip: 'Remove ${bot.title}',
+                          onPressed: onRemove == null
+                              ? null
+                              : () => onRemove!(bot),
+                          icon: const Icon(Icons.close, size: 18),
+                          color: colors.onPrimaryContainer,
+                        ),
                       ),
                     ],
                   ),

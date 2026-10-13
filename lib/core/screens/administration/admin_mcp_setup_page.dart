@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/mcp_setup.dart';
@@ -313,31 +314,35 @@ class _AdminMcpSetupPageState extends State<AdminMcpSetupPage> {
                 ),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: _busy || _uncertain
-                        ? null
-                        : () => setState(() {
-                            _credentials.remove(row);
-                            row.dispose();
-                            _sync();
-                          }),
-                    child: Text(
-                      _subprocess
-                          ? 'Remove variable ${index + 1}'
-                          : 'Remove header ${index + 1}',
+                  child: StudioButtonPress(
+                    child: TextButton(
+                      onPressed: _busy || _uncertain
+                          ? null
+                          : () => setState(() {
+                              _credentials.remove(row);
+                              row.dispose();
+                              _sync();
+                            }),
+                      child: Text(
+                        _subprocess
+                            ? 'Remove variable ${index + 1}'
+                            : 'Remove header ${index + 1}',
+                      ),
                     ),
                   ),
                 ),
               ],
-              OutlinedButton(
-                onPressed: _busy || _uncertain
-                    ? null
-                    : () => setState(() {
-                        _credentials.add(_CredentialFields());
-                        _sync();
-                      }),
-                child: Text(
-                  _subprocess ? 'Add environment variable' : 'Add header',
+              StudioButtonPress(
+                child: OutlinedButton(
+                  onPressed: _busy || _uncertain
+                      ? null
+                      : () => setState(() {
+                          _credentials.add(_CredentialFields());
+                          _sync();
+                        }),
+                  child: Text(
+                    _subprocess ? 'Add environment variable' : 'Add header',
+                  ),
                 ),
               ),
             ],
@@ -438,18 +443,22 @@ class _AdminMcpSetupPageState extends State<AdminMcpSetupPage> {
               const AdminNotice(
                 'Some settings may have been saved. Return to the connector list and refresh before trying again.',
               ),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Return to connectors'),
+              StudioButtonPress(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Return to connectors'),
+                ),
               ),
             ] else
-              FilledButton(
-                onPressed: _busy ? null : _save,
-                child: StudioActionLabel(
-                  !_subprocess && _auth == McpAuthentication.browser
-                      ? 'Add and sign in'
-                      : 'Add connector',
-                  busy: _busy,
+              StudioButtonPress(
+                child: FilledButton(
+                  onPressed: _busy ? null : _save,
+                  child: StudioActionLabel(
+                    !_subprocess && _auth == McpAuthentication.browser
+                        ? 'Add and sign in'
+                        : 'Add connector',
+                    busy: _busy,
+                  ),
                 ),
               ),
           ],

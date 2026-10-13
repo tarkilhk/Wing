@@ -578,10 +578,14 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
                                     'Saved appearance settings need repair. Temporary appearance is shown.',
                                   ),
                                 ),
-                                TextButton(
-                                  key: const ValueKey('app-preference-repair'),
-                                  onPressed: _openPreferenceRepair,
-                                  child: const Text('Repair'),
+                                StudioButtonPress(
+                                  child: TextButton(
+                                    key: const ValueKey(
+                                      'app-preference-repair',
+                                    ),
+                                    onPressed: _openPreferenceRepair,
+                                    child: const Text('Repair'),
+                                  ),
                                 ),
                               ],
                             ),
@@ -921,11 +925,13 @@ class HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   for (final connection in offer.connections)
-                    ListTile(
-                      horizontalTitleGap: 0,
-                      leading: _serverIndicator(connection),
-                      title: Text(connection.label),
-                      onTap: () => Navigator.pop(context, connection),
+                    StudioButtonPress(
+                      child: ListTile(
+                        horizontalTitleGap: 0,
+                        leading: _serverIndicator(connection),
+                        title: Text(connection.label),
+                        onTap: () => Navigator.pop(context, connection),
+                      ),
                     ),
                 ],
               ),
@@ -1201,50 +1207,59 @@ class HomeScreenState extends State<HomeScreen> {
   Widget _buildConnectionCard(SavedConnection conn) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: ListTile(
-        horizontalTitleGap: 0,
-        leading: _serverIndicator(conn),
-        title: Text(conn.label),
-        subtitle: Text(
-          '${conn.host}:${conn.dashboardPort}${conn.dashboardPrefix ?? ''}',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+      child: StudioButtonPress(
+        child: ListTile(
+          horizontalTitleGap: 0,
+          leading: _serverIndicator(conn),
+          title: Text(conn.label),
+          subtitle: Text(
+            '${conn.host}:${conn.dashboardPort}${conn.dashboardPrefix ?? ''}',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
-        ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (v) async {
-            if (v == 'delete') {
-              try {
-                await widget.connManager.deleteConnection(conn.id);
-                if (mounted) _refresh();
-              } on CredentialStorageException {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: StudioError(
-                      'The saved instance could not be removed safely.',
+          trailing: StudioButtonPress(
+            child: PopupMenuButton<String>(
+              onSelected: (v) async {
+                if (v == 'delete') {
+                  try {
+                    await widget.connManager.deleteConnection(conn.id);
+                    if (mounted) _refresh();
+                  } on CredentialStorageException {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: StudioError(
+                          'The saved instance could not be removed safely.',
+                        ),
+                      ),
+                    );
+                  }
+                } else if (v == 'edit') {
+                  _editConnection(conn);
+                }
+              },
+              itemBuilder: (_) => [
+                const StudioPopupMenuItem(
+                  value: 'edit',
+                  child: Text('Edit instance'),
+                ),
+                StudioPopupMenuItem(
+                  value: 'delete',
+                  child: Text(
+                    'Remove instance',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
                     ),
                   ),
-                );
-              }
-            } else if (v == 'edit') {
-              _editConnection(conn);
-            }
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit instance')),
-            PopupMenuItem(
-              value: 'delete',
-              child: Text(
-                'Remove instance',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
+          onTap: _opening || _entrySession.state.opening
+              ? null
+              : () => _navigateToWorkspace(conn),
         ),
-        onTap: _opening || _entrySession.state.opening
-            ? null
-            : () => _navigateToWorkspace(conn),
       ),
     );
   }
@@ -1342,19 +1357,23 @@ class HomeScreenState extends State<HomeScreen> {
                             ),
                             Wrap(
                               children: [
-                                TextButton(
-                                  onPressed: !_sharedDraft.state.canReview
-                                      ? null
-                                      : _reviewPendingShare,
-                                  child: const Text('Review'),
+                                StudioButtonPress(
+                                  child: TextButton(
+                                    onPressed: !_sharedDraft.state.canReview
+                                        ? null
+                                        : _reviewPendingShare,
+                                    child: const Text('Review'),
+                                  ),
                                 ),
-                                TextButton(
-                                  onPressed:
-                                      _sharedDraft.state.reviewing ||
-                                          _sharedDraft.state.discarding
-                                      ? null
-                                      : _discardIncomingShare,
-                                  child: const Text('Discard'),
+                                StudioButtonPress(
+                                  child: TextButton(
+                                    onPressed:
+                                        _sharedDraft.state.reviewing ||
+                                            _sharedDraft.state.discarding
+                                        ? null
+                                        : _discardIncomingShare,
+                                    child: const Text('Discard'),
+                                  ),
                                 ),
                               ],
                             ),
@@ -1391,10 +1410,12 @@ class HomeScreenState extends State<HomeScreen> {
         floatingActionButton:
             _destination == AppDestination.connections &&
                 _connections.isNotEmpty
-            ? FloatingActionButton(
-                tooltip: 'Add instance',
-                onPressed: _addConnection,
-                child: const Icon(Icons.add),
+            ? StudioButtonPress(
+                child: FloatingActionButton(
+                  tooltip: 'Add instance',
+                  onPressed: _addConnection,
+                  child: const Icon(Icons.add),
+                ),
               )
             : null,
       ),

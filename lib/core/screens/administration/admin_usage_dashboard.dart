@@ -214,9 +214,11 @@ class _UsageDashboardState extends State<UsageDashboard> {
                         ).formatFullDate(selected.date),
                 ),
                 if (selected != null)
-                  TextButton(
-                    onPressed: () => setState(() => _selected = null),
-                    child: const Text('Selected period'),
+                  StudioButtonPress(
+                    child: TextButton(
+                      onPressed: () => setState(() => _selected = null),
+                      child: const Text('Selected period'),
+                    ),
                   ),
               ],
             ),
@@ -238,10 +240,12 @@ class _UsageDashboardState extends State<UsageDashboard> {
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
-            child: IconButton(
-              tooltip: 'Refresh usage',
-              onPressed: loading ? null : _session.refresh,
-              icon: const Icon(Icons.refresh, size: 18),
+            child: StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Refresh usage',
+                onPressed: loading ? null : _session.refresh,
+                icon: const Icon(Icons.refresh, size: 18),
+              ),
             ),
           ),
         ],
@@ -474,19 +478,21 @@ class _Choice extends StatelessWidget {
     final tokens = WingTokens.of(context);
     return Semantics(
       selected: selected,
-      child: TextButton(
-        style: TextButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          foregroundColor: neutral ? tokens.onSurface : null,
-          backgroundColor: selected
-              ? neutral
-                    ? tokens.border.withValues(alpha: .35)
-                    : Theme.of(context).colorScheme.primaryContainer
-              : Colors.transparent,
+      child: StudioButtonPress(
+        child: TextButton(
+          style: TextButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            foregroundColor: neutral ? tokens.onSurface : null,
+            backgroundColor: selected
+                ? neutral
+                      ? tokens.border.withValues(alpha: .35)
+                      : Theme.of(context).colorScheme.primaryContainer
+                : Colors.transparent,
+          ),
+          onPressed: onPressed,
+          child: Text(label),
         ),
-        onPressed: onPressed,
-        child: Text(label),
       ),
     );
   }
@@ -507,25 +513,27 @@ class _ChartHeader extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    final title = TextButton(
-      key: ValueKey('usage-${section.toLowerCase()}-group'),
-      style: TextButton.styleFrom(
-        padding: EdgeInsets.zero,
-        alignment: Alignment.centerLeft,
-        foregroundColor: WingTokens.of(context).onSurface,
-      ),
-      onPressed: onGroup,
-      child: Row(
-        children: [
-          const Icon(Icons.swap_horiz, size: 18),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              '$section per ${models ? 'model' : 'token type'}',
-              style: Theme.of(context).textTheme.titleMedium,
+    final title = StudioButtonPress(
+      child: TextButton(
+        key: ValueKey('usage-${section.toLowerCase()}-group'),
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.zero,
+          alignment: Alignment.centerLeft,
+          foregroundColor: WingTokens.of(context).onSurface,
+        ),
+        onPressed: onGroup,
+        child: Row(
+          children: [
+            const Icon(Icons.swap_horiz, size: 18),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '$section per ${models ? 'model' : 'token type'}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
     final choices = Wrap(
@@ -609,7 +617,9 @@ class _Unavailable extends StatelessWidget {
         if (action != null)
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(onPressed: onPressed, child: Text(action!)),
+            child: StudioButtonPress(
+              child: TextButton(onPressed: onPressed, child: Text(action!)),
+            ),
           ),
       ],
     ),

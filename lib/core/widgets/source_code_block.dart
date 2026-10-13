@@ -142,26 +142,30 @@ class _SourceCodeBlockState extends State<SourceCodeBlock> {
                 if (widget.headerAction != null) widget.headerAction!,
                 Tooltip(
                   message: _wrap ? 'Scroll horizontally' : 'Wrap lines',
-                  child: IconButton(
-                    icon: Icon(
-                      _wrap ? Icons.swap_horiz : Icons.wrap_text,
-                      size: 18,
-                    ),
-                    onPressed: () => setState(() => _wrap = !_wrap),
-                    constraints: const BoxConstraints.tightFor(
-                      width: 48,
-                      height: 48,
+                  child: StudioButtonPress(
+                    child: IconButton(
+                      icon: Icon(
+                        _wrap ? Icons.swap_horiz : Icons.wrap_text,
+                        size: 18,
+                      ),
+                      onPressed: () => setState(() => _wrap = !_wrap),
+                      constraints: const BoxConstraints.tightFor(
+                        width: 48,
+                        height: 48,
+                      ),
                     ),
                   ),
                 ),
                 Tooltip(
                   message: 'Copy code',
-                  child: IconButton(
-                    icon: const Icon(Icons.copy_outlined, size: 18),
-                    onPressed: _copy,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 48,
-                      height: 48,
+                  child: StudioButtonPress(
+                    child: IconButton(
+                      icon: const Icon(Icons.copy_outlined, size: 18),
+                      onPressed: _copy,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 48,
+                        height: 48,
+                      ),
                     ),
                   ),
                 ),

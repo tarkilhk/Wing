@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/studio_capacity_meter.dart';
 import 'dart:async';
@@ -177,11 +178,13 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
               spacing: 8,
               children: [
                 for (final enabled in [true, false])
-                  OutlinedButton(
-                    onPressed: _saving
-                        ? null
-                        : () => session.setValue(field.key, enabled),
-                    child: Text(enabled ? 'Enable' : 'Disable'),
+                  StudioButtonPress(
+                    child: OutlinedButton(
+                      onPressed: _saving
+                          ? null
+                          : () => session.setValue(field.key, enabled),
+                      child: Text(enabled ? 'Enable' : 'Disable'),
+                    ),
                   ),
               ],
             ),
@@ -282,15 +285,21 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
         Wrap(
           spacing: 8,
           children: [
-            OutlinedButton(
-              onPressed: _saving
-                  ? null
-                  : () => _resolve(item, useServer: false),
-              child: const Text('Keep my value'),
+            StudioButtonPress(
+              child: OutlinedButton(
+                onPressed: _saving
+                    ? null
+                    : () => _resolve(item, useServer: false),
+                child: const Text('Keep my value'),
+              ),
             ),
-            TextButton(
-              onPressed: _saving ? null : () => _resolve(item, useServer: true),
-              child: const Text('Use server value'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: _saving
+                    ? null
+                    : () => _resolve(item, useServer: true),
+                child: const Text('Use server value'),
+              ),
             ),
           ],
         ),
@@ -387,11 +396,13 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                               if (_error != null)
                                 AdminNotice.error(_error!, key: _noticeAnchor),
                               if (state.uncertain)
-                                TextButton(
-                                  onPressed: _loading || _saving
-                                      ? null
-                                      : session.reviewUncertain,
-                                  child: const Text('Refresh and review'),
+                                StudioButtonPress(
+                                  child: TextButton(
+                                    onPressed: _loading || _saving
+                                        ? null
+                                        : session.reviewUncertain,
+                                    child: const Text('Refresh and review'),
+                                  ),
                                 ),
                               if (_fields.length < session.requestedCount)
                                 const AdminNotice(

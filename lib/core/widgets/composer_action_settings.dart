@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 
@@ -39,14 +40,16 @@ class ComposerActionSettings extends StatelessWidget {
                   runSpacing: 8,
                   children: [
                     for (final action in ComposerAction.runningDefaults)
-                      ChoiceChip(
-                        showCheckmark: false,
-                        avatar: Icon(composerActionIcon(action), size: 18),
-                        label: Text(action.label),
-                        selected: action == control.selected,
-                        onSelected: control.choose == null
-                            ? null
-                            : (_) => control.choose!(action),
+                      StudioButtonPress(
+                        child: ChoiceChip(
+                          showCheckmark: false,
+                          avatar: Icon(composerActionIcon(action), size: 18),
+                          label: Text(action.label),
+                          selected: action == control.selected,
+                          onSelected: control.choose == null
+                              ? null
+                              : (_) => control.choose!(action),
+                        ),
                       ),
                   ],
                 ),

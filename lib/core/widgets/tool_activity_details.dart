@@ -587,26 +587,30 @@ class _ToolResourceRowState extends State<_ToolResourceRow> {
         ...widget.leadingActions,
         if (widget.onViewReceipt != null ||
             (output != null && widget.onOpen != null))
-          IconButton(
-            style: activityActionStyle,
-            tooltip:
-                widget.viewLabel ??
-                (image
-                    ? 'Preview image'
-                    : output?.kind == ChatOutputKind.link
-                    ? 'Open link'
-                    : 'Preview file'),
-            onPressed: busy
-                ? null
-                : widget.onViewReceipt ?? () => _run(share: false),
-            icon: const Icon(Icons.visibility_outlined, size: 16),
+          StudioButtonPress(
+            child: IconButton(
+              style: activityActionStyle,
+              tooltip:
+                  widget.viewLabel ??
+                  (image
+                      ? 'Preview image'
+                      : output?.kind == ChatOutputKind.link
+                      ? 'Open link'
+                      : 'Preview file'),
+              onPressed: busy
+                  ? null
+                  : widget.onViewReceipt ?? () => _run(share: false),
+              icon: const Icon(Icons.visibility_outlined, size: 16),
+            ),
           ),
         if (output?.path != null && widget.onShare != null)
-          IconButton(
-            style: activityActionStyle,
-            tooltip: image ? 'Share image' : 'Share file',
-            onPressed: busy ? null : () => _run(share: true),
-            icon: const Icon(Icons.share_outlined, size: 16),
+          StudioButtonPress(
+            child: IconButton(
+              style: activityActionStyle,
+              tooltip: image ? 'Share image' : 'Share file',
+              onPressed: busy ? null : () => _run(share: true),
+              icon: const Icon(Icons.share_outlined, size: 16),
+            ),
           ),
         if (widget.copyText case final text? when text.isNotEmpty)
           ToolDetailCopyButton(label: widget.copyLabel, text: text),

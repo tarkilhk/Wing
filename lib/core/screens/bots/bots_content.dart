@@ -178,13 +178,17 @@ class _BotsContentState extends State<BotsContent> {
             'Stops group work and removes this room. The bots and their private chats stay available.',
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Disband'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Disband'),
+              ),
             ),
           ],
         ),
@@ -260,25 +264,31 @@ class _BotsContentState extends State<BotsContent> {
         child: Scaffold(
           appBar: WingAppBar(
             context: context,
-            leading: IconButton(
-              tooltip: 'Open menu',
-              onPressed: widget.onOpenMenu,
-              icon: const Icon(Icons.menu),
+            leading: StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Open menu',
+                onPressed: widget.onOpenMenu,
+                icon: const Icon(Icons.menu),
+              ),
             ),
             title: const Text('Bots'),
             contextRow: widget.instanceHeader,
             actions: [
-              PopupMenuButton<String>(
-                tooltip: 'Roster options',
-                icon: const Icon(Icons.more_horiz),
-                onSelected: (_) => _change(hidden: !view.showHidden),
-                itemBuilder: (_) => [
-                  CheckedPopupMenuItem(
-                    value: 'hidden',
-                    checked: view.showHidden,
-                    child: const Text('Show hidden bots'),
-                  ),
-                ],
+              StudioButtonPress(
+                child: PopupMenuButton<String>(
+                  tooltip: 'Roster options',
+                  icon: const Icon(Icons.more_horiz),
+                  onSelected: (_) => _change(hidden: !view.showHidden),
+                  itemBuilder: (_) => [
+                    StudioCheckedPopupMenuItem(
+                      entry: CheckedPopupMenuItem(
+                        value: 'hidden',
+                        checked: view.showHidden,
+                        child: const Text('Show hidden bots'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -289,8 +299,8 @@ class _BotsContentState extends State<BotsContent> {
                 TabBar(
                   onTap: (tab) => _change(tab: tab),
                   tabs: const [
-                    Tab(text: 'Bots'),
-                    Tab(text: 'Groups'),
+                    StudioButtonPress(child: Tab(text: 'Bots')),
+                    StudioButtonPress(child: Tab(text: 'Groups')),
                   ],
                 ),
                 Expanded(
@@ -316,13 +326,15 @@ class _BotsContentState extends State<BotsContent> {
                             prefixIcon: const Icon(Icons.search),
                             suffixIcon: view.query.isEmpty
                                 ? null
-                                : IconButton(
-                                    tooltip: 'Clear search',
-                                    onPressed: () {
-                                      _search.clear();
-                                      _change(query: '');
-                                    },
-                                    icon: const Icon(Icons.close),
+                                : StudioButtonPress(
+                                    child: IconButton(
+                                      tooltip: 'Clear search',
+                                      onPressed: () {
+                                        _search.clear();
+                                        _change(query: '');
+                                      },
+                                      icon: const Icon(Icons.close),
+                                    ),
                                   ),
                           ),
                         ),
@@ -361,22 +373,24 @@ class _BotsContentState extends State<BotsContent> {
               ],
             ),
           ),
-          floatingActionButton: FloatingActionButton(
-            key: const ValueKey('bots-create'),
-            tooltip: view.tab == 0 ? 'Create bot' : 'Create group',
-            elevation: 2,
-            onPressed:
-                state.busy ||
-                    state.instances.isEmpty ||
-                    view.tab == 1 && state.groupHosts.isEmpty
-                ? null
-                : () => _push(
-                    BotsCreateScreen(
-                      session: widget.session,
-                      group: view.tab == 1,
+          floatingActionButton: StudioButtonPress(
+            child: FloatingActionButton(
+              key: const ValueKey('bots-create'),
+              tooltip: view.tab == 0 ? 'Create bot' : 'Create group',
+              elevation: 2,
+              onPressed:
+                  state.busy ||
+                      state.instances.isEmpty ||
+                      view.tab == 1 && state.groupHosts.isEmpty
+                  ? null
+                  : () => _push(
+                      BotsCreateScreen(
+                        session: widget.session,
+                        group: view.tab == 1,
+                      ),
                     ),
-                  ),
-            child: const Icon(Icons.add),
+              child: const Icon(Icons.add),
+            ),
           ),
         ),
       );
@@ -469,51 +483,53 @@ class _BotsContentState extends State<BotsContent> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
-              child: InkWell(
-                onTap: busy ? null : () => _open(bot),
-                onLongPress: busy
-                    ? null
-                    : () => _botMenu(key.currentContext!, bot),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 6,
-                      children: [
-                        Text(
-                          bot.title,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            height: 1.25,
-                          ),
-                        ),
-                        if (bot.pinned)
-                          Tooltip(
-                            message: 'Pinned',
-                            child: Icon(
-                              Icons.push_pin_outlined,
-                              size: 13,
-                              color: t.muted,
+              child: StudioButtonPress(
+                child: InkWell(
+                  onTap: busy ? null : () => _open(bot),
+                  onLongPress: busy
+                      ? null
+                      : () => _botMenu(key.currentContext!, bot),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        children: [
+                          Text(
+                            bot.title,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              height: 1.25,
                             ),
                           ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      bot.preview.isEmpty
-                          ? 'Start a conversation'
-                          : bot.preview,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.45,
-                        color: t.muted,
+                          if (bot.pinned)
+                            Tooltip(
+                              message: 'Pinned',
+                              child: Icon(
+                                Icons.push_pin_outlined,
+                                size: 13,
+                                color: t.muted,
+                              ),
+                            ),
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        bot.preview.isEmpty
+                            ? 'Start a conversation'
+                            : bot.preview,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.45,
+                          color: t.muted,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -521,21 +537,23 @@ class _BotsContentState extends State<BotsContent> {
             SizedBox(
               width: 56,
               height: 56,
-              child: IconButton(
-                tooltip: 'Edit name & appearance for ${bot.title}',
-                padding: const EdgeInsets.all(4),
-                onPressed: busy ? null : () => _editAppearance(bot),
-                icon: LiveBotAvatar(
-                  bot: bot,
-                  name: bot.profile.name,
-                  size: 48,
-                  mood:
-                      bot.presence == BotPresence.working ||
-                          bot.presence == BotPresence.groupWorking
-                      ? BotAvatarMood.work
-                      : bot.presence == BotPresence.needsInput
-                      ? BotAvatarMood.think
-                      : BotAvatarMood.idle,
+              child: StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Edit name & appearance for ${bot.title}',
+                  padding: const EdgeInsets.all(4),
+                  onPressed: busy ? null : () => _editAppearance(bot),
+                  icon: LiveBotAvatar(
+                    bot: bot,
+                    name: bot.profile.name,
+                    size: 48,
+                    mood:
+                        bot.presence == BotPresence.working ||
+                            bot.presence == BotPresence.groupWorking
+                        ? BotAvatarMood.work
+                        : bot.presence == BotPresence.needsInput
+                        ? BotAvatarMood.think
+                        : BotAvatarMood.idle,
+                  ),
                 ),
               ),
             ),
@@ -558,11 +576,15 @@ class _BotsContentState extends State<BotsContent> {
                 style: TextStyle(fontSize: 11, color: t.muted),
               ),
             ),
-            IconButton(
-              key: key,
-              tooltip: 'Actions for ${bot.title}',
-              onPressed: busy ? null : () => _botMenu(key.currentContext!, bot),
-              icon: const Icon(Icons.more_horiz),
+            StudioButtonPress(
+              child: IconButton(
+                key: key,
+                tooltip: 'Actions for ${bot.title}',
+                onPressed: busy
+                    ? null
+                    : () => _botMenu(key.currentContext!, bot),
+                icon: const Icon(Icons.more_horiz),
+              ),
             ),
           ],
         ),
@@ -575,73 +597,82 @@ class _BotsContentState extends State<BotsContent> {
     final key = GlobalKey();
     return card(
       identity: 'group-${group.key}',
-      main: InkWell(
-        onTap: busy ? null : () => _openGroup(group),
-        onLongPress: busy ? null : () => _groupMenu(key.currentContext!, group),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          group.name,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            height: 1.25,
-                          ),
-                        ),
-                        if (group.pinned)
-                          Tooltip(
-                            message: 'Pinned',
-                            child: Icon(
-                              Icons.push_pin_outlined,
-                              size: 13,
-                              color: t.muted,
+      main: StudioButtonPress(
+        child: InkWell(
+          onTap: busy ? null : () => _openGroup(group),
+          onLongPress: busy
+              ? null
+              : () => _groupMenu(key.currentContext!, group),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            group.name,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              height: 1.25,
                             ),
                           ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Bot group · ${group.members.length}',
-                      style: TextStyle(fontSize: 11, color: t.muted),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      group.preview,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.45,
-                        color: t.muted,
+                          if (group.pinned)
+                            Tooltip(
+                              message: 'Pinned',
+                              child: Icon(
+                                Icons.push_pin_outlined,
+                                size: 13,
+                                color: t.muted,
+                              ),
+                            ),
+                        ],
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Bot group · ${group.members.length}',
+                        style: TextStyle(fontSize: 11, color: t.muted),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        group.preview,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.45,
+                          color: t.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Edit group ${group.name}',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
                     ),
-                  ],
+                    onPressed: busy ? null : () => _editGroup(group),
+                    icon: BotGroupIdentity(
+                      group: group,
+                      bots: widget.session.state.bots,
+                      size: 48,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              IconButton(
-                tooltip: 'Edit group ${group.name}',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                onPressed: busy ? null : () => _editGroup(group),
-                icon: BotGroupIdentity(
-                  group: group,
-                  bots: widget.session.state.bots,
-                  size: 48,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -669,13 +700,15 @@ class _BotsContentState extends State<BotsContent> {
                 style: TextStyle(fontSize: 11, color: t.muted),
               ),
             ),
-            IconButton(
-              key: key,
-              tooltip: 'Actions for ${group.name}',
-              onPressed: busy
-                  ? null
-                  : () => _groupMenu(key.currentContext!, group),
-              icon: const Icon(Icons.more_horiz),
+            StudioButtonPress(
+              child: IconButton(
+                key: key,
+                tooltip: 'Actions for ${group.name}',
+                onPressed: busy
+                    ? null
+                    : () => _groupMenu(key.currentContext!, group),
+                icon: const Icon(Icons.more_horiz),
+              ),
             ),
           ],
         ),

@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../models/settings_edit.dart';
 import '../../models/retained_memory.dart';
@@ -34,16 +35,18 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
     title: 'Memory',
     scope: session.profile.label,
     actions: [
-      IconButton(
-        tooltip: 'Memory settings',
-        icon: const Icon(Icons.tune),
-        onPressed: () => adminPushProfile(
-          context,
-          session.profile,
-          (context, profile) => AdminSettingsPage(
-            profile: profile,
-            title: 'Memory settings',
-            fields: memoryFields,
+      StudioButtonPress(
+        child: IconButton(
+          tooltip: 'Memory settings',
+          icon: const Icon(Icons.tune),
+          onPressed: () => adminPushProfile(
+            context,
+            session.profile,
+            (context, profile) => AdminSettingsPage(
+              profile: profile,
+              title: 'Memory settings',
+              fields: memoryFields,
+            ),
           ),
         ),
       ),
@@ -77,46 +80,50 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const AdminNotice('No retained memories in this profile.'),
-                  TextButton(
-                    onPressed: () => adminPushProfile(
-                      context,
-                      session.profile,
-                      (context, profile) => AdminSettingsPage(
-                        profile: profile,
-                        title: 'Memory settings',
-                        fields: memoryFields,
+                  StudioButtonPress(
+                    child: TextButton(
+                      onPressed: () => adminPushProfile(
+                        context,
+                        session.profile,
+                        (context, profile) => AdminSettingsPage(
+                          profile: profile,
+                          title: 'Memory settings',
+                          fields: memoryFields,
+                        ),
                       ),
+                      child: const Text('Memory settings'),
                     ),
-                    child: const Text('Memory settings'),
                   ),
                 ],
               ),
             if (rows.isNotEmpty && visible.isEmpty)
               const AdminNotice('No matching memories.'),
             for (final entry in visible)
-              ListTile(
-                title: Text(entry.title),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      entry.preview,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
+              StudioButtonPress(
+                child: ListTile(
+                  title: Text(entry.title),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entry.preview,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'Source: ${entry.source.name}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => adminPushProfile(
+                    context,
+                    session.profile,
+                    (context, profile) => AdminMemoryDetail(
+                      profile: profile,
+                      identity: entry.identity,
                     ),
-                    Text(
-                      'Source: ${entry.source.name}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => adminPushProfile(
-                  context,
-                  session.profile,
-                  (context, profile) => AdminMemoryDetail(
-                    profile: profile,
-                    identity: entry.identity,
                   ),
                 ),
               ),
@@ -124,28 +131,34 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
             Wrap(
               spacing: 8,
               children: [
-                TextButton.icon(
-                  onPressed: session.refresh,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Refresh memories'),
-                ),
-                TextButton(
-                  onPressed: () => showDialog<void>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Why read only?'),
-                      content: const Text(
-                        'You can read and copy these memories. Editing and deleting are unavailable in this Wing view. Retention and character budgets are available in Memory settings.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ],
-                    ),
+                StudioButtonPress(
+                  child: TextButton.icon(
+                    onPressed: session.refresh,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Refresh memories'),
                   ),
-                  child: const Text('Why read only?'),
+                ),
+                StudioButtonPress(
+                  child: TextButton(
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Why read only?'),
+                        content: const Text(
+                          'You can read and copy these memories. Editing and deleting are unavailable in this Wing view. Retention and character budgets are available in Memory settings.',
+                        ),
+                        actions: [
+                          StudioButtonPress(
+                            child: TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Close'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    child: const Text('Why read only?'),
+                  ),
                 ),
               ],
             ),
@@ -201,7 +214,12 @@ class _AdminMemoryDetailState extends State<AdminMemoryDetail> {
           const AdminNotice(
             'Read only. Editing and deleting are unavailable in this Wing view.',
           ),
-          TextButton(onPressed: session.refresh, child: const Text('Refresh')),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: session.refresh,
+              child: const Text('Refresh'),
+            ),
+          ),
         ],
       ),
     ),

@@ -402,9 +402,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               Text(
                 _voiceOutput.preparing ? 'Preparing speech…' : 'Reading aloud',
               ),
-              TextButton(
-                onPressed: _voiceOutput.stop,
-                child: const Text('Stop speech'),
+              StudioButtonPress(
+                child: TextButton(
+                  onPressed: _voiceOutput.stop,
+                  child: const Text('Stop speech'),
+                ),
               ),
             ],
           ),
@@ -1084,21 +1086,25 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         appBar: WingAppBar(
           context: context,
 
-          leading: IconButton(
-            icon: const Icon(Icons.menu),
-            tooltip: 'Open navigation menu',
-            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          leading: StudioButtonPress(
+            child: IconButton(
+              icon: const Icon(Icons.menu),
+              tooltip: 'Open navigation menu',
+              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+            ),
           ),
           title: canOpenBotSettings
               ? Tooltip(
                   message: 'Bot settings',
                   child: Semantics(
                     button: true,
-                    child: InkWell(
-                      onTap: () => _openBotSettings(bot),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
-                        child: title,
+                    child: StudioButtonPress(
+                      child: InkWell(
+                        onTap: () => _openBotSettings(bot),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: title,
+                        ),
                       ),
                     ),
                   ),
@@ -1135,39 +1141,41 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   onTap: canMoveProject ? openProjectPicker : null,
                   label: '$projectLabel. Move to project',
                   excludeSemantics: true,
-                  child: InkWell(
-                    key: const ValueKey('chat-project-picker'),
-                    borderRadius: WingRadius.control,
-                    onTap: canMoveProject ? openProjectPicker : null,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        minHeight: 48,
-                        minWidth: 48,
-                      ),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: 1,
-                        heightFactor: 1,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (projectAppearance != null) ...[
-                              projectAvatar(
-                                context,
-                                projectAppearance,
-                                size: 20,
+                  child: StudioButtonPress(
+                    child: InkWell(
+                      key: const ValueKey('chat-project-picker'),
+                      borderRadius: WingRadius.control,
+                      onTap: canMoveProject ? openProjectPicker : null,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: 48,
+                          minWidth: 48,
+                        ),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: 1,
+                          heightFactor: 1,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (projectAppearance != null) ...[
+                                projectAvatar(
+                                  context,
+                                  projectAppearance,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Flexible(
+                                child: Text(
+                                  projectLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: scopeStyle,
+                                ),
                               ),
-                              const SizedBox(width: 6),
                             ],
-                            Flexible(
-                              child: Text(
-                                projectLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: scopeStyle,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -1204,40 +1212,48 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             },
           ),
           actions: [
-            PopupMenuButton<String>(
-              tooltip: 'Chat actions',
-              icon: const Icon(Icons.more_vert),
-              onSelected: (action) {
-                if (action == 'refresh') {
-                  unawaited(_run(controller.refresh));
-                } else if (action == 'find') {
-                  unawaited(_openFind(chat));
-                } else if (action == 'outputs') {
-                  unawaited(_run(() => _openOutputs(chat)));
-                } else if (action == 'screen') {
-                  unawaited(_run(() => _openScreen(chat)));
-                } else if (action == 'parent') {
-                  unawaited(_run(() => controller.openParentChat(chat)));
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'screen',
-                  child: Text('View screen'),
-                ),
-                const PopupMenuItem(value: 'outputs', child: Text('Outputs')),
-                const PopupMenuItem(value: 'find', child: Text('Find in chat')),
-                if (parentSessionId != null)
-                  const PopupMenuItem(
-                    value: 'parent',
-                    child: Text('Parent chat'),
+            StudioButtonPress(
+              child: PopupMenuButton<String>(
+                tooltip: 'Chat actions',
+                icon: const Icon(Icons.more_vert),
+                onSelected: (action) {
+                  if (action == 'refresh') {
+                    unawaited(_run(controller.refresh));
+                  } else if (action == 'find') {
+                    unawaited(_openFind(chat));
+                  } else if (action == 'outputs') {
+                    unawaited(_run(() => _openOutputs(chat)));
+                  } else if (action == 'screen') {
+                    unawaited(_run(() => _openScreen(chat)));
+                  } else if (action == 'parent') {
+                    unawaited(_run(() => controller.openParentChat(chat)));
+                  }
+                },
+                itemBuilder: (_) => [
+                  const StudioPopupMenuItem(
+                    value: 'screen',
+                    child: Text('View screen'),
                   ),
-                const PopupMenuDivider(),
-                const PopupMenuItem(
-                  value: 'refresh',
-                  child: Text('Refresh workspace'),
-                ),
-              ],
+                  const StudioPopupMenuItem(
+                    value: 'outputs',
+                    child: Text('Outputs'),
+                  ),
+                  const StudioPopupMenuItem(
+                    value: 'find',
+                    child: Text('Find in chat'),
+                  ),
+                  if (parentSessionId != null)
+                    const StudioPopupMenuItem(
+                      value: 'parent',
+                      child: Text('Parent chat'),
+                    ),
+                  const PopupMenuDivider(),
+                  const StudioPopupMenuItem(
+                    value: 'refresh',
+                    child: Text('Refresh workspace'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -1257,9 +1273,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 MaterialBanner(
                   content: StudioError(controller.error!),
                   actions: [
-                    TextButton(
-                      onPressed: () => _run(controller.retry),
-                      child: const Text('Retry'),
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: () => _run(controller.retry),
+                        child: const Text('Retry'),
+                      ),
                     ),
                   ],
                 ),
@@ -1269,9 +1287,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   forceActionsBelow: true,
                   content: StudioError(chat.runtime.openingError!),
                   actions: [
-                    TextButton(
-                      onPressed: () => _run(controller.resumeConnection),
-                      child: const Text('Retry connection'),
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: () => _run(controller.resumeConnection),
+                        child: const Text('Retry connection'),
+                      ),
                     ),
                   ],
                 ),
@@ -1581,19 +1601,23 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             'Everything after this prompt is removed from the conversation, and the prompt runs again from here.',
           ),
           actions: [
-            IconButton(
-              key: const ValueKey('restore-message-cancel'),
-              tooltip: 'Cancel restore',
-              onPressed: () => Navigator.pop(context, false),
-              icon: const Icon(Icons.close),
+            StudioButtonPress(
+              child: IconButton(
+                key: const ValueKey('restore-message-cancel'),
+                tooltip: 'Cancel restore',
+                onPressed: () => Navigator.pop(context, false),
+                icon: const Icon(Icons.close),
+              ),
             ),
-            IconButton(
-              key: const ValueKey('restore-message-confirm'),
-              tooltip: 'Restore and rerun',
-              onPressed: controller.canRestoreSavedPrompt(chat, message)
-                  ? () => Navigator.pop(context, true)
-                  : null,
-              icon: const Icon(Icons.undo),
+            StudioButtonPress(
+              child: IconButton(
+                key: const ValueKey('restore-message-confirm'),
+                tooltip: 'Restore and rerun',
+                onPressed: controller.canRestoreSavedPrompt(chat, message)
+                    ? () => Navigator.pop(context, true)
+                    : null,
+                icon: const Icon(Icons.undo),
+              ),
             ),
           ],
         ),
@@ -1654,12 +1678,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                 ),
                               ),
                             ),
-                            IconButton(
-                              tooltip: 'Cancel editing',
-                              onPressed: submitting
-                                  ? null
-                                  : () => Navigator.pop(dialogContext),
-                              icon: const Icon(Icons.close, size: 20),
+                            StudioButtonPress(
+                              child: IconButton(
+                                tooltip: 'Cancel editing',
+                                onPressed: submitting
+                                    ? null
+                                    : () => Navigator.pop(dialogContext),
+                                icon: const Icon(Icons.close, size: 20),
+                              ),
                             ),
                           ],
                         ),
@@ -1723,40 +1749,42 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(WingSpacing.md),
-                          child: FilledButton(
-                            onPressed: canSubmit
-                                ? () async {
-                                    setDialogState(() {
-                                      submitting = true;
-                                      inlineError = null;
-                                    });
-                                    var accepted = false;
-                                    try {
-                                      accepted = await controller
-                                          .editSavedPrompt(
-                                            chat,
-                                            message,
-                                            input,
-                                          );
-                                    } catch (_) {
-                                      // Retain the correction for a deliberate retry.
+                          child: StudioButtonPress(
+                            child: FilledButton(
+                              onPressed: canSubmit
+                                  ? () async {
+                                      setDialogState(() {
+                                        submitting = true;
+                                        inlineError = null;
+                                      });
+                                      var accepted = false;
+                                      try {
+                                        accepted = await controller
+                                            .editSavedPrompt(
+                                              chat,
+                                              message,
+                                              input,
+                                            );
+                                      } catch (_) {
+                                        // Retain the correction for a deliberate retry.
+                                      }
+                                      if (!dialogContext.mounted) return;
+                                      if (accepted) {
+                                        Navigator.pop(dialogContext);
+                                        return;
+                                      }
+                                      setDialogState(() {
+                                        submitting = false;
+                                        inlineError =
+                                            chat.runtime.error ??
+                                            'Hermes did not accept the edited message.';
+                                      });
                                     }
-                                    if (!dialogContext.mounted) return;
-                                    if (accepted) {
-                                      Navigator.pop(dialogContext);
-                                      return;
-                                    }
-                                    setDialogState(() {
-                                      submitting = false;
-                                      inlineError =
-                                          chat.runtime.error ??
-                                          'Hermes did not accept the edited message.';
-                                    });
-                                  }
-                                : null,
-                            child: StudioActionLabel(
-                              'Replace and resend',
-                              busy: submitting,
+                                  : null,
+                              child: StudioActionLabel(
+                                'Replace and resend',
+                                busy: submitting,
+                              ),
                             ),
                           ),
                         ),
@@ -2282,24 +2310,26 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                 controller.refreshContext(chat),
                                               ),
                                             ),
-                                            TextButton(
-                                              onPressed:
-                                                  chat
-                                                          .composer
-                                                          .observation
-                                                          .saving ||
-                                                      chat
-                                                          .composer
-                                                          .observation
-                                                          .steering
-                                                  ? null
-                                                  : () => _run(
-                                                      () => controller
-                                                          .cancelQueuedPromptEdit(
-                                                            chat,
-                                                          ),
-                                                    ),
-                                              child: const Text('Cancel'),
+                                            StudioButtonPress(
+                                              child: TextButton(
+                                                onPressed:
+                                                    chat
+                                                            .composer
+                                                            .observation
+                                                            .saving ||
+                                                        chat
+                                                            .composer
+                                                            .observation
+                                                            .steering
+                                                    ? null
+                                                    : () => _run(
+                                                        () => controller
+                                                            .cancelQueuedPromptEdit(
+                                                              chat,
+                                                            ),
+                                                      ),
+                                                child: const Text('Cancel'),
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -2532,152 +2562,164 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                           crossAxisAlignment:
                                               CrossAxisAlignment.end,
                                           children: [
-                                            IconButton(
-                                              tooltip: 'Attach file',
-                                              style: IconButton.styleFrom(
-                                                minimumSize: const Size(48, 48),
-                                              ),
-                                              icon: const Icon(Icons.add),
-                                              onPressed:
-                                                  !controller.canAddAttachment(
-                                                        chat,
-                                                      ) ||
-                                                      _launchingCamera
-                                                  ? null
-                                                  : () => _run(() async {
-                                                      final target = chat.key;
-                                                      final choice = await showModalBottomSheet<_AttachmentChoice>(
-                                                        context: context,
-                                                        showDragHandle: true,
-                                                        builder: (context) => SafeArea(
-                                                          child: Column(
-                                                            mainAxisSize:
-                                                                MainAxisSize
-                                                                    .min,
-                                                            children: [
-                                                              ListTile(
-                                                                leading: const Icon(
-                                                                  Icons
-                                                                      .camera_alt_outlined,
-                                                                ),
-                                                                title:
-                                                                    const Text(
+                                            StudioButtonPress(
+                                              child: IconButton(
+                                                tooltip: 'Attach file',
+                                                style: IconButton.styleFrom(
+                                                  minimumSize: const Size(
+                                                    48,
+                                                    48,
+                                                  ),
+                                                ),
+                                                icon: const Icon(Icons.add),
+                                                onPressed:
+                                                    !controller
+                                                            .canAddAttachment(
+                                                              chat,
+                                                            ) ||
+                                                        _launchingCamera
+                                                    ? null
+                                                    : () => _run(() async {
+                                                        final target = chat.key;
+                                                        final choice = await showModalBottomSheet<_AttachmentChoice>(
+                                                          context: context,
+                                                          showDragHandle: true,
+                                                          builder: (context) => SafeArea(
+                                                            child: Column(
+                                                              mainAxisSize:
+                                                                  MainAxisSize
+                                                                      .min,
+                                                              children: [
+                                                                StudioButtonPress(
+                                                                  child: ListTile(
+                                                                    leading:
+                                                                        const Icon(
+                                                                          Icons
+                                                                              .camera_alt_outlined,
+                                                                        ),
+                                                                    title: const Text(
                                                                       'Camera',
                                                                     ),
-                                                                enabled:
-                                                                    widget
-                                                                        .onCapturePhoto !=
-                                                                    null,
-                                                                onTap:
-                                                                    widget.onCapturePhoto ==
-                                                                        null
-                                                                    ? null
-                                                                    : () => Navigator.pop(
-                                                                        context,
-                                                                        _AttachmentChoice
-                                                                            .camera,
-                                                                      ),
-                                                              ),
-                                                              ListTile(
-                                                                leading: const Icon(
-                                                                  Icons
-                                                                      .photo_library_outlined,
+                                                                    enabled:
+                                                                        widget
+                                                                            .onCapturePhoto !=
+                                                                        null,
+                                                                    onTap:
+                                                                        widget.onCapturePhoto ==
+                                                                            null
+                                                                        ? null
+                                                                        : () => Navigator.pop(
+                                                                            context,
+                                                                            _AttachmentChoice.camera,
+                                                                          ),
+                                                                  ),
                                                                 ),
-                                                                title:
-                                                                    const Text(
+                                                                StudioButtonPress(
+                                                                  child: ListTile(
+                                                                    leading:
+                                                                        const Icon(
+                                                                          Icons
+                                                                              .photo_library_outlined,
+                                                                        ),
+                                                                    title: const Text(
                                                                       'Photos',
                                                                     ),
-                                                                onTap: () =>
-                                                                    Navigator.pop(
+                                                                    onTap: () => Navigator.pop(
                                                                       context,
                                                                       _AttachmentChoice
                                                                           .photos,
                                                                     ),
-                                                              ),
-                                                              ListTile(
-                                                                leading: const Icon(
-                                                                  Icons
-                                                                      .insert_drive_file_outlined,
+                                                                  ),
                                                                 ),
-                                                                title:
-                                                                    const Text(
-                                                                      'Files',
-                                                                    ),
-                                                                onTap: () =>
-                                                                    Navigator.pop(
+                                                                StudioButtonPress(
+                                                                  child: ListTile(
+                                                                    leading:
+                                                                        const Icon(
+                                                                          Icons
+                                                                              .insert_drive_file_outlined,
+                                                                        ),
+                                                                    title:
+                                                                        const Text(
+                                                                          'Files',
+                                                                        ),
+                                                                    onTap: () => Navigator.pop(
                                                                       context,
                                                                       _AttachmentChoice
                                                                           .files,
                                                                     ),
-                                                              ),
-                                                            ],
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
                                                           ),
-                                                        ),
-                                                      );
-                                                      if (choice == null) {
-                                                        return;
-                                                      }
-                                                      if (choice ==
-                                                          _AttachmentChoice
-                                                              .camera) {
-                                                        if (_launchingCamera) {
+                                                        );
+                                                        if (choice == null) {
                                                           return;
                                                         }
-                                                        setState(
-                                                          () =>
-                                                              _launchingCamera =
-                                                                  true,
-                                                        );
-                                                        try {
-                                                          await widget
-                                                              .onCapturePhoto!(
-                                                            target,
-                                                          );
-                                                        } finally {
-                                                          if (mounted) {
-                                                            setState(
-                                                              () =>
-                                                                  _launchingCamera =
-                                                                      false,
-                                                            );
+                                                        if (choice ==
+                                                            _AttachmentChoice
+                                                                .camera) {
+                                                          if (_launchingCamera) {
+                                                            return;
                                                           }
+                                                          setState(
+                                                            () =>
+                                                                _launchingCamera =
+                                                                    true,
+                                                          );
+                                                          try {
+                                                            await widget
+                                                                .onCapturePhoto!(
+                                                              target,
+                                                            );
+                                                          } finally {
+                                                            if (mounted) {
+                                                              setState(
+                                                                () =>
+                                                                    _launchingCamera =
+                                                                        false,
+                                                              );
+                                                            }
+                                                          }
+                                                          return;
                                                         }
-                                                        return;
-                                                      }
-                                                      final type =
-                                                          choice ==
-                                                              _AttachmentChoice
-                                                                  .photos
-                                                          ? FileType.image
-                                                          : FileType.any;
-                                                      final files =
-                                                          await FilePicker.pickFiles(
-                                                            type: type,
+                                                        final type =
+                                                            choice ==
+                                                                _AttachmentChoice
+                                                                    .photos
+                                                            ? FileType.image
+                                                            : FileType.any;
+                                                        final files =
+                                                            await FilePicker.pickFiles(
+                                                              type: type,
+                                                            );
+                                                        if (files.isEmpty) {
+                                                          return;
+                                                        }
+                                                        if (files.any(
+                                                          (file) =>
+                                                              file.path == null,
+                                                        )) {
+                                                          throw const AttachmentDraftException(
+                                                            'A selected file could not be opened. Select the files again.',
                                                           );
-                                                      if (files.isEmpty) return;
-                                                      if (files.any(
-                                                        (file) =>
-                                                            file.path == null,
-                                                      )) {
-                                                        throw const AttachmentDraftException(
-                                                          'A selected file could not be opened. Select the files again.',
-                                                        );
-                                                      }
-                                                      await controller
-                                                          .addAttachments(
-                                                            chat,
-                                                            [
-                                                              for (final file
-                                                                  in files)
-                                                                (
-                                                                  path: file
-                                                                      .path!,
-                                                                  name:
-                                                                      file.name,
-                                                                ),
-                                                            ],
-                                                          );
-                                                    }),
+                                                        }
+                                                        await controller
+                                                            .addAttachments(
+                                                              chat,
+                                                              [
+                                                                for (final file
+                                                                    in files)
+                                                                  (
+                                                                    path: file
+                                                                        .path!,
+                                                                    name: file
+                                                                        .name,
+                                                                  ),
+                                                              ],
+                                                            );
+                                                      }),
+                                              ),
                                             ),
                                             ContextRing(
                                               key: ValueKey((
@@ -3023,33 +3065,37 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: saving || !canSteer
-                      ? null
-                      : () => _runQueuedEdit(chat, () async {
-                          final accepted = await controller
-                              .steerQueuedPromptEdit(chat);
-                          if (!accepted) {
-                            throw StateError(
-                              'Hermes rejected the steering message.',
-                            );
-                          }
-                        }),
-                  icon: const Icon(Icons.explore_outlined, size: 18),
-                  label: const Text('Steer'),
+                child: StudioButtonPress(
+                  child: OutlinedButton.icon(
+                    onPressed: saving || !canSteer
+                        ? null
+                        : () => _runQueuedEdit(chat, () async {
+                            final accepted = await controller
+                                .steerQueuedPromptEdit(chat);
+                            if (!accepted) {
+                              throw StateError(
+                                'Hermes rejected the steering message.',
+                              );
+                            }
+                          }),
+                    icon: const Icon(Icons.explore_outlined, size: 18),
+                    label: const Text('Steer'),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: FilledButton.icon(
-                  onPressed: saving || !valid
-                      ? null
-                      : () => _runQueuedEdit(
-                          chat,
-                          () => controller.saveQueuedPromptEdit(chat),
-                        ),
-                  icon: const Icon(Icons.keyboard_return, size: 18),
-                  label: Text(saving ? 'Saving...' : 'Queue'),
+                child: StudioButtonPress(
+                  child: FilledButton.icon(
+                    onPressed: saving || !valid
+                        ? null
+                        : () => _runQueuedEdit(
+                            chat,
+                            () => controller.saveQueuedPromptEdit(chat),
+                          ),
+                    icon: const Icon(Icons.keyboard_return, size: 18),
+                    label: Text(saving ? 'Saving...' : 'Queue'),
+                  ),
                 ),
               ),
             ],
@@ -3076,16 +3122,20 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           ].where((part) => part.isNotEmpty).join('\n\n'),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
             ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+          ),
+          StudioButtonPress(
+            child: TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
           ),
         ],
       ),
@@ -3109,86 +3159,96 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 if (chat.composer.actions().offered.contains(
                   ComposerAction.steer,
                 )) ...[
-                  ListTile(
-                    leading: const Icon(Icons.explore_outlined),
-                    title: const Text('Steer this turn'),
-                    subtitle: const Text(
-                      'Send this text into the running turn',
+                  StudioButtonPress(
+                    child: ListTile(
+                      leading: const Icon(Icons.explore_outlined),
+                      title: const Text('Steer this turn'),
+                      subtitle: const Text(
+                        'Send this text into the running turn',
+                      ),
+                      onTap:
+                          chat.composer
+                                  .actions()
+                                  .unavailable[ComposerAction.steer] ==
+                              null
+                          ? () => Navigator.pop(sheetContext, 'steer')
+                          : null,
                     ),
-                    onTap:
-                        chat.composer
-                                .actions()
-                                .unavailable[ComposerAction.steer] ==
-                            null
-                        ? () => Navigator.pop(sheetContext, 'steer')
-                        : null,
                   ),
                 ],
                 if (chat.composer.actions().offered.contains(
                   ComposerAction.queue,
                 ))
-                  ListTile(
-                    leading: const Icon(Icons.queue),
-                    title: const Text('Queue for the next turn'),
-                    subtitle: Text(
-                      chat.composer.observation.attachments.isEmpty
-                          ? 'Keep this message for when Hermes is idle'
-                          : 'Keep this message and ${chat.composer.observation.attachments.length} attachment${chat.composer.observation.attachments.length == 1 ? '' : 's'} for when Hermes is idle',
+                  StudioButtonPress(
+                    child: ListTile(
+                      leading: const Icon(Icons.queue),
+                      title: const Text('Queue for the next turn'),
+                      subtitle: Text(
+                        chat.composer.observation.attachments.isEmpty
+                            ? 'Keep this message for when Hermes is idle'
+                            : 'Keep this message and ${chat.composer.observation.attachments.length} attachment${chat.composer.observation.attachments.length == 1 ? '' : 's'} for when Hermes is idle',
+                      ),
+                      onTap:
+                          chat.composer
+                                  .actions()
+                                  .unavailable[ComposerAction.queue] !=
+                              null
+                          ? null
+                          : () => Navigator.pop(sheetContext, 'queue'),
                     ),
-                    onTap:
-                        chat.composer
-                                .actions()
-                                .unavailable[ComposerAction.queue] !=
-                            null
-                        ? null
-                        : () => Navigator.pop(sheetContext, 'queue'),
                   ),
                 if (chat.composer.observation.paused)
-                  ListTile(
-                    leading: const Icon(Icons.pause_circle_outline),
-                    title: const Text('Queued messages are paused'),
-                    subtitle: const Text(
-                      'Check history before resuming; a previous send may have reached Hermes.',
+                  StudioButtonPress(
+                    child: ListTile(
+                      leading: const Icon(Icons.pause_circle_outline),
+                      title: const Text('Queued messages are paused'),
+                      subtitle: const Text(
+                        'Check history before resuming; a previous send may have reached Hermes.',
+                      ),
+                      onTap: !chat.composer.actions().canResumeQueue
+                          ? null
+                          : () async {
+                              await _run(() => controller.resumeQueue(chat));
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                            },
+                      trailing: const Icon(Icons.play_arrow),
                     ),
-                    onTap: !chat.composer.actions().canResumeQueue
-                        ? null
-                        : () async {
-                            await _run(() => controller.resumeQueue(chat));
-                            if (sheetContext.mounted) {
-                              Navigator.pop(sheetContext);
-                            }
-                          },
-                    trailing: const Icon(Icons.play_arrow),
                   ),
                 if (chat.composer.observation.queue.isNotEmpty)
                   ...chat.composer.observation.queue.asMap().entries.map(
-                    (entry) => ListTile(
-                      leading: const Icon(Icons.keyboard_return),
-                      title: Text(
-                        'Queued: ${entry.value.text.isEmpty ? 'Attachment' : entry.value.text}',
+                    (entry) => StudioButtonPress(
+                      child: ListTile(
+                        leading: const Icon(Icons.keyboard_return),
+                        title: Text(
+                          'Queued: ${entry.value.text.isEmpty ? 'Attachment' : entry.value.text}',
+                        ),
+                        subtitle: entry.value.attachments.isEmpty
+                            ? null
+                            : Text(
+                                '${entry.value.attachments.length} attachment${entry.value.attachments.length == 1 ? '' : 's'}: ${entry.value.attachments.map((draft) => draft.name).join(', ')}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                        onTap: !chat.composer.actions().canEditQueue
+                            ? null
+                            : () async {
+                                Navigator.pop(sheetContext);
+                                await _beginQueuedEdit(chat, entry.value);
+                              },
                       ),
-                      subtitle: entry.value.attachments.isEmpty
-                          ? null
-                          : Text(
-                              '${entry.value.attachments.length} attachment${entry.value.attachments.length == 1 ? '' : 's'}: ${entry.value.attachments.map((draft) => draft.name).join(', ')}',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                      onTap: !chat.composer.actions().canEditQueue
-                          ? null
-                          : () async {
-                              Navigator.pop(sheetContext);
-                              await _beginQueuedEdit(chat, entry.value);
-                            },
                     ),
                   ),
                 if (chat.composer.actions().offered.contains(
                   ComposerAction.stop,
                 ))
-                  ListTile(
-                    leading: const Icon(Icons.stop),
-                    title: const Text('Stop'),
-                    onTap: () => Navigator.pop(sheetContext, 'stop'),
+                  StudioButtonPress(
+                    child: ListTile(
+                      leading: const Icon(Icons.stop),
+                      title: const Text('Stop'),
+                      onTap: () => Navigator.pop(sheetContext, 'stop'),
+                    ),
                   ),
               ],
             ),
@@ -3382,9 +3442,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 _destination != AppDestination.administration)
               ListTile(
                 title: StudioError(controller.error!),
-                trailing: TextButton(
-                  onPressed: () => _run(controller.retry),
-                  child: const Text('Retry'),
+                trailing: StudioButtonPress(
+                  child: TextButton(
+                    onPressed: () => _run(controller.retry),
+                    child: const Text('Retry'),
+                  ),
                 ),
               ),
             Expanded(
@@ -3477,13 +3539,17 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           decoration: InputDecoration(labelText: label),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, input.trim()),
-            child: const Text('Continue'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, input.trim()),
+              child: const Text('Continue'),
+            ),
           ),
         ],
       ),

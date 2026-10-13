@@ -143,20 +143,22 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                                         16,
                                         8,
                                       ),
-                                      child: TextButton.icon(
-                                        onPressed:
-                                            entry.canSelect && !state.retired
-                                            ? () {
-                                                if (_session.select(entry) &&
-                                                    mounted) {
-                                                  Navigator.of(
-                                                    context,
-                                                  ).pop(true);
+                                      child: StudioButtonPress(
+                                        child: TextButton.icon(
+                                          onPressed:
+                                              entry.canSelect && !state.retired
+                                              ? () {
+                                                  if (_session.select(entry) &&
+                                                      mounted) {
+                                                    Navigator.of(
+                                                      context,
+                                                    ).pop(true);
+                                                  }
                                                 }
-                                              }
-                                            : null,
-                                        icon: const Icon(Icons.open_in_new),
-                                        label: const Text('View in chat'),
+                                              : null,
+                                          icon: const Icon(Icons.open_in_new),
+                                          label: const Text('View in chat'),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -202,25 +204,32 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                                 Wrap(
                                   alignment: WrapAlignment.center,
                                   children: [
-                                    TextButton(
-                                      onPressed: state.loading || state.retired
-                                          ? null
-                                          : _session.retry,
-                                      child: const Text('Try again'),
+                                    StudioButtonPress(
+                                      child: TextButton(
+                                        onPressed:
+                                            state.loading || state.retired
+                                            ? null
+                                            : _session.retry,
+                                        child: const Text('Try again'),
+                                      ),
                                     ),
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.of(context).maybePop(),
-                                      child: const Text('Close'),
+                                    StudioButtonPress(
+                                      child: TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(context).maybePop(),
+                                        child: const Text('Close'),
+                                      ),
                                     ),
                                   ],
                                 )
                               else if (query.isNotEmpty && hasMore)
-                                TextButton(
-                                  onPressed: state.loading || state.retired
-                                      ? null
-                                      : _session.loadOlder,
-                                  child: const Text('Search older messages'),
+                                StudioButtonPress(
+                                  child: TextButton(
+                                    onPressed: state.loading || state.retired
+                                        ? null
+                                        : _session.loadOlder,
+                                    child: const Text('Search older messages'),
+                                  ),
                                 ),
                             ],
                           ),

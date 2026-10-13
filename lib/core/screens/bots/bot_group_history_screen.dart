@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -50,10 +51,12 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
         context: context,
         title: const Text('Working history', maxLines: 2),
         actions: [
-          IconButton(
-            tooltip: 'Refresh working history',
-            onPressed: reader.historyLoading ? null : _session.refresh,
-            icon: const Icon(Icons.refresh),
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Refresh working history',
+              onPressed: reader.historyLoading ? null : _session.refresh,
+              icon: const Icon(Icons.refresh),
+            ),
           ),
         ],
       ),
@@ -78,14 +81,16 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
                   for (final member in _session.group.members)
                     Padding(
                       padding: const EdgeInsetsDirectional.only(end: 8),
-                      child: ChoiceChip(
-                        showCheckmark: false,
-                        label: Text(member.name),
-                        selected: _session.member?.id == member.id,
-                        onSelected: (_) {
-                          if (_session.member?.id == member.id) return;
-                          unawaited(_session.select(member));
-                        },
+                      child: StudioButtonPress(
+                        child: ChoiceChip(
+                          showCheckmark: false,
+                          label: Text(member.name),
+                          selected: _session.member?.id == member.id,
+                          onSelected: (_) {
+                            if (_session.member?.id == member.id) return;
+                            unawaited(_session.select(member));
+                          },
+                        ),
                       ),
                     ),
                 ],

@@ -87,15 +87,19 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
           title: const Text('Confirm model change'),
           content: Text(message),
           actions: [
-            TextButton(
-              key: const Key('profile-model-confirm-cancel'),
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+            StudioButtonPress(
+              child: TextButton(
+                key: const Key('profile-model-confirm-cancel'),
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
             ),
-            FilledButton(
-              key: const Key('profile-model-confirm-accept'),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Confirm'),
+            StudioButtonPress(
+              child: FilledButton(
+                key: const Key('profile-model-confirm-accept'),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Confirm'),
+              ),
             ),
           ],
         ),
@@ -126,19 +130,25 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
           ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(context, ProfileModelReviewDecision.useServer),
-            child: const Text('Use server'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () =>
+                  Navigator.pop(context, ProfileModelReviewDecision.useServer),
+              child: const Text('Use server'),
+            ),
           ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(context, ProfileModelReviewDecision.keepMine),
-            child: const Text('Keep mine'),
+          StudioButtonPress(
+            child: FilledButton(
+              onPressed: () =>
+                  Navigator.pop(context, ProfileModelReviewDecision.keepMine),
+              child: const Text('Keep mine'),
+            ),
           ),
         ],
       ),
@@ -189,12 +199,14 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                trailing: IconButton(
-                  tooltip: 'Close',
-                  onPressed: _saving
-                      ? null
-                      : () => Navigator.pop(context, false),
-                  icon: const Icon(Icons.close_rounded),
+                trailing: StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Close',
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.pop(context, false),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
                 ),
               ),
               Padding(
@@ -223,11 +235,13 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                   ),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: _edit.canReview ? _reviewChanges : null,
-                      child: StudioActionLabel(
-                        'Review changes',
-                        busy: _edit.reviewing,
+                    child: StudioButtonPress(
+                      child: TextButton(
+                        onPressed: _edit.canReview ? _reviewChanges : null,
+                        child: StudioActionLabel(
+                          'Review changes',
+                          busy: _edit.reviewing,
+                        ),
                       ),
                     ),
                   ),
@@ -244,10 +258,12 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                     ? const StudioLoading.page(label: 'Loading models')
                     : _error != null && _choices.isEmpty
                     ? Center(
-                        child: TextButton(
-                          key: const Key('profile-model-retry'),
-                          onPressed: _load,
-                          child: const Text('Retry'),
+                        child: StudioButtonPress(
+                          child: TextButton(
+                            key: const Key('profile-model-retry'),
+                            onPressed: _load,
+                            child: const Text('Retry'),
+                          ),
                         ),
                       )
                     : ModelChooser(
@@ -279,18 +295,22 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                   spacing: 8,
                   overflowSpacing: 8,
                   children: [
-                    TextButton(
-                      onPressed: _saving
-                          ? null
-                          : () => Navigator.pop(context, false),
-                      child: const Text('Cancel'),
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: _saving
+                            ? null
+                            : () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
                     ),
-                    FilledButton(
-                      key: const Key('profile-model-save'),
-                      onPressed: _dirty && !_saving && !_edit.reviewing
-                          ? _save
-                          : null,
-                      child: StudioActionLabel('Save default', busy: _saving),
+                    StudioButtonPress(
+                      child: FilledButton(
+                        key: const Key('profile-model-save'),
+                        onPressed: _dirty && !_saving && !_edit.reviewing
+                            ? _save
+                            : null,
+                        child: StudioActionLabel('Save default', busy: _saving),
+                      ),
                     ),
                   ],
                 ),

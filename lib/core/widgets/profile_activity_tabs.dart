@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 import 'anchored_expansion_tile.dart';
 
@@ -139,40 +140,42 @@ class _ProfileActivityTabsState extends State<ProfileActivityTabs> {
                                   ? colors.primaryContainer
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(4),
-                              child: InkWell(
-                                key: ValueKey(('activity-tab', tab.id)),
-                                borderRadius: BorderRadius.circular(4),
-                                onTap: () {
-                                  if (tab.id == _selected) return;
-                                  final anchor = _anchor.currentContext;
-                                  if (anchor != null) {
-                                    ExpansionAnchorNotification(
-                                      anchor,
-                                      allowBottomGap: true,
-                                    ).dispatch(context);
-                                  }
-                                  setState(() => _activate(tab));
-                                },
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    minHeight: 24,
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                      vertical: 3,
+                              child: StudioButtonPress(
+                                child: InkWell(
+                                  key: ValueKey(('activity-tab', tab.id)),
+                                  borderRadius: BorderRadius.circular(4),
+                                  onTap: () {
+                                    if (tab.id == _selected) return;
+                                    final anchor = _anchor.currentContext;
+                                    if (anchor != null) {
+                                      ExpansionAnchorNotification(
+                                        anchor,
+                                        allowBottomGap: true,
+                                      ).dispatch(context);
+                                    }
+                                    setState(() => _activate(tab));
+                                  },
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: 24,
                                     ),
-                                    child: Text(
-                                      tab.label,
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        height: 1.25,
-                                        fontWeight: FontWeight.w400,
-                                        letterSpacing: 0,
-                                        color: tab.id == _selected
-                                            ? colors.primary
-                                            : colors.onSurfaceVariant,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 3,
+                                      ),
+                                      child: Text(
+                                        tab.label,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          height: 1.25,
+                                          fontWeight: FontWeight.w400,
+                                          letterSpacing: 0,
+                                          color: tab.id == _selected
+                                              ? colors.primary
+                                              : colors.onSurfaceVariant,
+                                        ),
                                       ),
                                     ),
                                   ),

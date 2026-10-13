@@ -111,18 +111,22 @@ class _AdminActionPageState extends State<AdminActionPage> {
       scope: widget.scope,
       actions: [
         if (isDiagnostic)
-          IconButton(
-            tooltip: 'Run ${widget.title} again',
-            onPressed: state.canRunAgain && _draft?.openingFinding == null
-                ? widget.onRunAgain
-                : null,
-            icon: const Icon(Icons.play_arrow),
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Run ${widget.title} again',
+              onPressed: state.canRunAgain && _draft?.openingFinding == null
+                  ? widget.onRunAgain
+                  : null,
+              icon: const Icon(Icons.play_arrow),
+            ),
           ),
         if (!isDiagnostic || !observation.terminal)
-          IconButton(
-            tooltip: 'Refresh result',
-            onPressed: state.canRefresh ? widget.operation.refresh : null,
-            icon: const Icon(Icons.refresh),
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Refresh result',
+              onPressed: state.canRefresh ? widget.operation.refresh : null,
+              icon: const Icon(Icons.refresh),
+            ),
           ),
       ],
       child: StudioLoadingRegion(
@@ -202,10 +206,12 @@ class _AdminActionPageState extends State<AdminActionPage> {
                 widget.onRunAgain != null &&
                 state.canRunAgain) ...[
               const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: widget.onRunAgain,
-                icon: const Icon(Icons.play_arrow),
-                label: Text('Run ${widget.title} again'),
+              StudioButtonPress(
+                child: OutlinedButton.icon(
+                  onPressed: widget.onRunAgain,
+                  icon: const Icon(Icons.play_arrow),
+                  label: Text('Run ${widget.title} again'),
+                ),
               ),
             ],
           ],

@@ -1987,7 +1987,9 @@ void main() {
           expect(
             tester
                 .widgetList<PopupMenuItem<String>>(
-                  find.byType(PopupMenuItem<String>),
+                  find.byWidgetPredicate(
+                    (widget) => widget is PopupMenuItem<String>,
+                  ),
                 )
                 .map((item) => item.value)
                 .whereType<String>()

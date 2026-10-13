@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -68,13 +69,17 @@ class _InstalledAppVersionCardState extends State<InstalledAppVersionCard> {
                   alignment: WrapAlignment.end,
                   spacing: 4,
                   children: [
-                    TextButton(
-                      onPressed: () => _open(_changelogUrl),
-                      child: const Text("What's new"),
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: () => _open(_changelogUrl),
+                        child: const Text("What's new"),
+                      ),
                     ),
-                    TextButton(
-                      onPressed: () => _open(_releasesUrl),
-                      child: const Text('Releases'),
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: () => _open(_releasesUrl),
+                        child: const Text('Releases'),
+                      ),
                     ),
                   ],
                 ),

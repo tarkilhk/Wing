@@ -326,7 +326,9 @@ void main() {
             await tester.pump(const Duration(milliseconds: 300));
             final items = tester
                 .widgetList<PopupMenuItem<String>>(
-                  find.byType(PopupMenuItem<String>),
+                  find.byWidgetPredicate(
+                    (widget) => widget is PopupMenuItem<String>,
+                  ),
                 )
                 .map((item) => item.value)
                 .toList();
@@ -339,7 +341,12 @@ void main() {
               'Refresh workspace',
             ]) {
               final target = tester.getRect(
-                find.widgetWithText(PopupMenuItem<String>, label),
+                find.ancestor(
+                  of: find.text(label),
+                  matching: find.byWidgetPredicate(
+                    (widget) => widget is PopupMenuItem<String>,
+                  ),
+                ),
               );
               expect(target.height, greaterThanOrEqualTo(48));
               expect(target.left, greaterThanOrEqualTo(0));

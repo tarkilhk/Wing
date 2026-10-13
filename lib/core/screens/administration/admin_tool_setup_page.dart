@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/read_recovery.dart';
 import '../../models/profile_tool_setup.dart';
@@ -115,9 +116,11 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
                             AdminNotice(notice),
                           if (state.error case final error?)
                             AdminNotice.error(error),
-                          TextButton(
-                            onPressed: state.busy ? null : _session.refresh,
-                            child: const Text('Refresh readiness'),
+                          StudioButtonPress(
+                            child: TextButton(
+                              onPressed: state.busy ? null : _session.refresh,
+                              child: const Text('Refresh readiness'),
+                            ),
                           ),
                           if (data.providers.isEmpty)
                             const AdminNotice(
@@ -165,63 +168,79 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
                                         if (row.capabilities.isNotEmpty)
                                           for (final capability
                                               in row.capabilities)
-                                            TextButton(
+                                            StudioButtonPress(
+                                              child: TextButton(
+                                                onPressed:
+                                                    state.canChooseProvider
+                                                    ? () => _session
+                                                          .selectProvider(
+                                                            row.name,
+                                                            capability:
+                                                                capability,
+                                                          )
+                                                    : null,
+                                                child: Text(
+                                                  'Use for ${capability.name}',
+                                                ),
+                                              ),
+                                            )
+                                        else if (data.offersProviderSelection)
+                                          StudioButtonPress(
+                                            child: TextButton(
                                               onPressed: state.canChooseProvider
                                                   ? () =>
                                                         _session.selectProvider(
                                                           row.name,
-                                                          capability:
-                                                              capability,
+                                                          capability: null,
                                                         )
                                                   : null,
-                                              child: Text(
-                                                'Use for ${capability.name}',
-                                              ),
-                                            )
-                                        else if (data.offersProviderSelection)
-                                          TextButton(
-                                            onPressed: state.canChooseProvider
-                                                ? () => _session.selectProvider(
-                                                    row.name,
-                                                    capability: null,
-                                                  )
-                                                : null,
-                                            child: const Text('Use provider'),
+                                              child: const Text('Use provider'),
+                                            ),
                                           ),
                                         if (data.hasModelCatalog)
-                                          TextButton(
-                                            onPressed: state.canOpenModels
-                                                ? () => _models(row.name)
-                                                : null,
-                                            child: const Text('Models'),
+                                          StudioButtonPress(
+                                            child: TextButton(
+                                              onPressed: state.canOpenModels
+                                                  ? () => _models(row.name)
+                                                  : null,
+                                              child: const Text('Models'),
+                                            ),
                                           ),
                                         if (row.setupKey case final key?)
-                                          TextButton(
-                                            onPressed: state.canRunSetup
-                                                ? () => _setup(key)
-                                                : null,
-                                            child: const Text(
-                                              'Setup requirements',
+                                          StudioButtonPress(
+                                            child: TextButton(
+                                              onPressed: state.canRunSetup
+                                                  ? () => _setup(key)
+                                                  : null,
+                                              child: const Text(
+                                                'Setup requirements',
+                                              ),
                                             ),
                                           ),
                                       ],
                                     ),
                                   ),
                                   for (final field in row.credentials)
-                                    ListTile(
-                                      title: Text(field.prompt),
-                                      subtitle: Text(
-                                        field.isSet
-                                            ? 'Available to this profile'
-                                            : 'Not available',
+                                    StudioButtonPress(
+                                      child: ListTile(
+                                        title: Text(field.prompt),
+                                        subtitle: Text(
+                                          field.isSet
+                                              ? 'Available to this profile'
+                                              : 'Not available',
+                                        ),
+                                        trailing: const Icon(
+                                          Icons.key_outlined,
+                                        ),
+                                        onTap: state.canReviewCredentials
+                                            ? () => _session.reviewCredentials(
+                                                () => _onCredential(
+                                                  context,
+                                                  field,
+                                                ),
+                                              )
+                                            : null,
                                       ),
-                                      trailing: const Icon(Icons.key_outlined),
-                                      onTap: state.canReviewCredentials
-                                          ? () => _session.reviewCredentials(
-                                              () =>
-                                                  _onCredential(context, field),
-                                            )
-                                          : null,
                                     ),
                                 ],
                               ),
@@ -334,11 +353,13 @@ class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     child: Align(
                       alignment: Alignment.centerRight,
-                      child: FilledButton(
-                        onPressed: state.canSaveModel
-                            ? () => _session.saveModel(_editor)
-                            : null,
-                        child: const Text('Use model'),
+                      child: StudioButtonPress(
+                        child: FilledButton(
+                          onPressed: state.canSaveModel
+                              ? () => _session.saveModel(_editor)
+                              : null,
+                          child: const Text('Use model'),
+                        ),
                       ),
                     ),
                   ),

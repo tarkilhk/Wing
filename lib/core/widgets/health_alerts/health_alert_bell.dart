@@ -86,32 +86,34 @@ class _HealthAlertBellState extends State<HealthAlertBell>
     final color = alerts.first.severity == HealthAlertSeverity.critical
         ? tokens.danger
         : tokens.warning;
-    return IconButton(
-      key: const ValueKey('health-alert-bell'),
-      tooltip:
-          'Health alerts: ${alerts.length} current ${alerts.length == 1 ? 'issue' : 'issues'}',
-      onPressed: () => showHealthAlerts(context, scope),
-      icon: AnimatedBuilder(
-        animation: _motion,
-        builder: (context, _) => Badge(
-          label: ExcludeSemantics(
-            child: Text(
-              alerts.length > 99 ? '99+' : '${alerts.length}',
-              textScaler: TextScaler.noScaling,
-              style: const TextStyle(fontSize: 10),
+    return StudioButtonPress(
+      child: IconButton(
+        key: const ValueKey('health-alert-bell'),
+        tooltip:
+            'Health alerts: ${alerts.length} current ${alerts.length == 1 ? 'issue' : 'issues'}',
+        onPressed: () => showHealthAlerts(context, scope),
+        icon: AnimatedBuilder(
+          animation: _motion,
+          builder: (context, _) => Badge(
+            label: ExcludeSemantics(
+              child: Text(
+                alerts.length > 99 ? '99+' : '${alerts.length}',
+                textScaler: TextScaler.noScaling,
+                style: const TextStyle(fontSize: 10),
+              ),
             ),
-          ),
-          offset: const Offset(2, -4),
-          backgroundColor: color,
-          textColor: tokens.surface,
-          child: Transform.rotate(
-            angle: _motion.isAnimating
-                ? math.sin(_motion.value * math.pi * 8) *
-                      .22 *
-                      (1 - _motion.value)
-                : 0,
-            alignment: Alignment.topCenter,
-            child: Icon(Icons.notifications_none, color: color),
+            offset: const Offset(2, -4),
+            backgroundColor: color,
+            textColor: tokens.surface,
+            child: Transform.rotate(
+              angle: _motion.isAnimating
+                  ? math.sin(_motion.value * math.pi * 8) *
+                        .22 *
+                        (1 - _motion.value)
+                  : 0,
+              alignment: Alignment.topCenter,
+              child: Icon(Icons.notifications_none, color: color),
+            ),
           ),
         ),
       ),

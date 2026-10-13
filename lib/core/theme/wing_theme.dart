@@ -5,6 +5,9 @@
 /// instead of per screen. See `internal/docs/DESIGN_SYSTEM.md` for the Studio charter.
 library;
 
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -34,6 +37,9 @@ abstract final class WingRadius {
 abstract final class WingMotion {
   static const Duration fast = Duration(milliseconds: 120);
   static const Duration standard = Duration(milliseconds: 200);
+  static const Duration buttonPress = Duration(milliseconds: 120);
+  static const Duration buttonRelease = Duration(milliseconds: 160);
+  static const double buttonPressedScale = .97;
 
   static const Curve curve = Curves.easeOutCubic;
 }
@@ -336,7 +342,7 @@ ThemeData wingTheme(Brightness brightness, {Color? accent}) {
       fontSize: 14,
       fontWeight: FontWeight.w600,
     ),
-  );
+  ).copyWith(backgroundBuilder: _studioButtonLayer);
   final fieldBorder = OutlineInputBorder(
     borderRadius: WingRadius.control,
     borderSide: BorderSide(color: tokens.border),
@@ -438,7 +444,10 @@ ThemeData wingTheme(Brightness brightness, {Color? accent}) {
         minimumSize: const Size(48, 48),
         shape: actionShape,
         disabledForegroundColor: tokens.muted,
-      ).copyWith(side: focusBorder),
+      ).copyWith(side: focusBorder, backgroundBuilder: _studioButtonLayer),
+    ),
+    menuButtonTheme: const MenuButtonThemeData(
+      style: ButtonStyle(backgroundBuilder: _studioButtonLayer),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -653,4 +662,157 @@ ThemeData wingTheme(Brightness brightness, {Color? accent}) {
     ),
     extensions: <ThemeExtension<dynamic>>[tokens],
   );
+}
+
+/// One paint-only tap response for Wing controls, including disabled controls.
+/// The child retains activation, semantics, focus and gesture admission.
+class StudioButtonPress extends StatefulWidget {
+  const StudioButtonPress({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<StudioButtonPress> createState() => _StudioButtonPressState();
+}
+
+class _StudioButtonPressState extends State<StudioButtonPress> {
+  // Hit paths dispatch from the innermost target outwards. A nested action
+  // claims its pointer first, so tapping it never compresses the enclosing row.
+  static final Map<int, _StudioButtonPressState> _targets = {};
+  Timer? _hold;
+  int? _pointer;
+  Offset? _origin;
+  bool _compressed = false;
+
+  void _down(PointerDownEvent event) {
+    if (!mounted ||
+        _pointer != null ||
+        _targets.containsKey(event.pointer) ||
+        event.buttons != kPrimaryButton) {
+      return;
+    }
+    _targets[event.pointer] = this;
+    _pointer = event.pointer;
+    _origin = event.position;
+    _hold?.cancel();
+    setState(() => _compressed = true);
+    // Feedback stays visible for short taps; callbacks run on their own timing.
+    _hold = Timer(WingMotion.buttonPress, () {
+      if (mounted && _pointer == null) setState(() => _compressed = false);
+    });
+  }
+
+  void _move(PointerMoveEvent event) {
+    if (_pointer == event.pointer &&
+        (event.position - _origin!).distance > kTouchSlop) {
+      _release(event.pointer, cancelled: true);
+    }
+  }
+
+  void _release(int pointer, {bool cancelled = false}) {
+    if (!mounted || _pointer != pointer) return;
+    _targets.remove(pointer);
+    _pointer = null;
+    _origin = null;
+    if (cancelled) _hold?.cancel();
+    if (cancelled || !(_hold?.isActive ?? false)) {
+      setState(() => _compressed = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_pointer != null) _targets.remove(_pointer);
+    _pointer = null;
+    _origin = null;
+    _hold?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Listener(
+      onPointerDown: _down,
+      onPointerMove: _move,
+      onPointerUp: (event) => _release(event.pointer),
+      onPointerCancel: (event) => _release(event.pointer, cancelled: true),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(
+          end: _compressed && !reduceMotion ? WingMotion.buttonPressedScale : 1,
+        ),
+        duration: reduceMotion
+            ? Duration.zero
+            : _compressed
+            ? WingMotion.buttonPress
+            : WingMotion.buttonRelease,
+        curve: WingMotion.curve,
+        child: widget.child,
+        builder: (context, scale, child) => Transform.scale(
+          key: const ValueKey('studio-button-press-transform'),
+          scale: scale,
+          transformHitTests: false,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Menu entries preserve PopupMenuEntry's value, height and dismissal contract.
+class StudioPopupMenuItem<T> extends PopupMenuItem<T> {
+  const StudioPopupMenuItem({
+    super.key,
+    super.value,
+    super.onTap,
+    super.enabled,
+    super.height,
+    super.padding,
+    super.textStyle,
+    super.labelTextStyle,
+    super.mouseCursor,
+    required super.child,
+  });
+
+  @override
+  PopupMenuItemState<T, StudioPopupMenuItem<T>> createState() =>
+      _StudioPopupMenuItemState<T>();
+}
+
+class _StudioPopupMenuItemState<T>
+    extends PopupMenuItemState<T, StudioPopupMenuItem<T>> {
+  @override
+  Widget build(BuildContext context) =>
+      StudioButtonPress(child: super.build(context));
+}
+
+// Framework-generated Back, dropdown and menu buttons receive the same press.
+// Explicit action wrappers already cover their full control, so do not nest it.
+Widget _studioButtonLayer(
+  BuildContext context,
+  Set<WidgetState> states,
+  Widget? child,
+) {
+  final contents = child ?? const SizedBox.shrink();
+  return context.findAncestorWidgetOfExactType<StudioButtonPress>() != null
+      ? contents
+      : StudioButtonPress(child: contents);
+}
+
+/// Checked menu entries retain their native checkmark and selection behavior.
+class StudioCheckedPopupMenuItem<T> extends PopupMenuEntry<T> {
+  const StudioCheckedPopupMenuItem({super.key, required this.entry});
+  final CheckedPopupMenuItem<T> entry;
+  @override
+  double get height => entry.height;
+  @override
+  bool represents(T? value) => entry.represents(value);
+  @override
+  State<StudioCheckedPopupMenuItem<T>> createState() =>
+      _StudioCheckedMenuState<T>();
+}
+
+class _StudioCheckedMenuState<T> extends State<StudioCheckedPopupMenuItem<T>> {
+  @override
+  Widget build(BuildContext context) => StudioButtonPress(child: widget.entry);
 }

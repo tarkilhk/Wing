@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -122,7 +123,7 @@ class _ComposerActionButtonState extends State<ComposerActionButton>
       position: RelativeRect.fromRect(anchor, Offset.zero & overlayBox.size),
       items: [
         for (final action in widget.unavailable.keys)
-          PopupMenuItem<ComposerAction>(
+          StudioPopupMenuItem<ComposerAction>(
             key: ValueKey('composer-keyboard-${action.name}'),
             value: action,
             enabled: _enabled(action),

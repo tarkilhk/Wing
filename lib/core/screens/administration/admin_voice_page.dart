@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../controllers/profile_voice_controller.dart';
@@ -77,9 +78,11 @@ class _AdminVoicePageState extends State<AdminVoicePage> {
                       ),
                     ],
                   ),
-                  TextButton(
-                    onPressed: state.busy ? null : _session.loadDefaults,
-                    child: const Text('Refresh configured providers'),
+                  StudioButtonPress(
+                    child: TextButton(
+                      onPressed: state.busy ? null : _session.loadDefaults,
+                      child: const Text('Refresh configured providers'),
+                    ),
                   ),
                 ],
               ],

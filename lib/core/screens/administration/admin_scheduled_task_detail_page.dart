@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../models/profile_session_key.dart';
 import 'package:flutter/material.dart';
@@ -105,36 +106,40 @@ class _AdminScheduledTaskDetailPageState
                 alignment: WrapAlignment.end,
                 children: [
                   if (toggle != null)
-                    OutlinedButton.icon(
-                      onPressed: !toggle.enabled
+                    StudioButtonPress(
+                      child: OutlinedButton.icon(
+                        onPressed: !toggle.enabled
+                            ? null
+                            : () => performTaskAction(
+                                context,
+                                controller,
+                                task,
+                                toggle.kind,
+                              ),
+                        icon: Icon(
+                          toggle.kind == TaskAction.resume
+                              ? Icons.play_arrow_rounded
+                              : Icons.pause_rounded,
+                        ),
+                        label: Text(
+                          toggle.kind == TaskAction.resume ? 'Resume' : 'Pause',
+                        ),
+                      ),
+                    ),
+                  StudioButtonPress(
+                    child: FilledButton(
+                      onPressed: !trigger.enabled
                           ? null
                           : () => performTaskAction(
                               context,
                               controller,
                               task,
-                              toggle.kind,
+                              TaskAction.trigger,
                             ),
-                      icon: Icon(
-                        toggle.kind == TaskAction.resume
-                            ? Icons.play_arrow_rounded
-                            : Icons.pause_rounded,
+                      child: StudioActionLabel(
+                        trigger.label,
+                        busy: controller.busy.contains(task.id),
                       ),
-                      label: Text(
-                        toggle.kind == TaskAction.resume ? 'Resume' : 'Pause',
-                      ),
-                    ),
-                  FilledButton(
-                    onPressed: !trigger.enabled
-                        ? null
-                        : () => performTaskAction(
-                            context,
-                            controller,
-                            task,
-                            TaskAction.trigger,
-                          ),
-                    child: StudioActionLabel(
-                      trigger.label,
-                      busy: controller.busy.contains(task.id),
                     ),
                   ),
                 ],
@@ -261,9 +266,11 @@ class _AdminScheduledTaskDetailPageState
                         TaskMessage(
                           runError!,
                           error: true,
-                          action: TextButton(
-                            onPressed: loading ? null : refresh,
-                            child: const Text('Refresh runs'),
+                          action: StudioButtonPress(
+                            child: TextButton(
+                              onPressed: loading ? null : refresh,
+                              child: const Text('Refresh runs'),
+                            ),
                           ),
                         ),
                       if (runs?.isEmpty == true)
@@ -283,9 +290,11 @@ class _AdminScheduledTaskDetailPageState
                           ),
                         ),
                       if (state.canShowMore)
-                        TextButton(
-                          onPressed: loading ? null : session.showMore,
-                          child: const Text('Show more runs'),
+                        StudioButtonPress(
+                          child: TextButton(
+                            onPressed: loading ? null : session.showMore,
+                            child: const Text('Show more runs'),
+                          ),
                         ),
                       if (state.atLimit)
                         const Text('Showing the latest 100 runs.'),
@@ -299,46 +308,48 @@ class _AdminScheduledTaskDetailPageState
       );
     },
   );
-  Widget _runTile(TaskRun run) => ListTile(
-    key: ValueKey('task-run-${run.id}'),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-    leading: Icon(
-      run.isConversation
-          ? run.active
-                ? Icons.play_arrow_rounded
-                : Icons.chat_bubble_outline
-          : Icons.description_outlined,
-      size: 20,
-    ),
-    title: Text(
-      run.title.isNotEmpty
-          ? run.title
-          : run.isConversation
-          ? 'Task conversation'
-          : run.isScriptOutput
-          ? 'Script run'
-          : 'Run record',
-    ),
-    subtitle: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '${run.isConversation
-              ? 'Conversation'
-              : run.isScriptOutput
-              ? 'Script output'
-              : 'Run record'} · ${taskTime(context, run.started)}${run.active ? ' · Active' : ''}',
-        ),
-        if (run.preview.isNotEmpty && !run.title.contains(run.preview)) ...[
-          const SizedBox(height: 4),
-          SelectableText(run.preview),
+  Widget _runTile(TaskRun run) => StudioButtonPress(
+    child: ListTile(
+      key: ValueKey('task-run-${run.id}'),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      leading: Icon(
+        run.isConversation
+            ? run.active
+                  ? Icons.play_arrow_rounded
+                  : Icons.chat_bubble_outline
+            : Icons.description_outlined,
+        size: 20,
+      ),
+      title: Text(
+        run.title.isNotEmpty
+            ? run.title
+            : run.isConversation
+            ? 'Task conversation'
+            : run.isScriptOutput
+            ? 'Script run'
+            : 'Run record',
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${run.isConversation
+                ? 'Conversation'
+                : run.isScriptOutput
+                ? 'Script output'
+                : 'Run record'} · ${taskTime(context, run.started)}${run.active ? ' · Active' : ''}',
+          ),
+          if (run.preview.isNotEmpty && !run.title.contains(run.preview)) ...[
+            const SizedBox(height: 4),
+            SelectableText(run.preview),
+          ],
         ],
-      ],
+      ),
+      trailing: run.isConversation
+          ? const Icon(Icons.chevron_right, size: 18)
+          : null,
+      onTap: run.isConversation && !opening ? () => session.open(run) : null,
     ),
-    trailing: run.isConversation
-        ? const Icon(Icons.chevron_right, size: 18)
-        : null,
-    onTap: run.isConversation && !opening ? () => session.open(run) : null,
   );
   Widget _fact(String label, String value) => Padding(
     padding: const EdgeInsets.only(bottom: 12),

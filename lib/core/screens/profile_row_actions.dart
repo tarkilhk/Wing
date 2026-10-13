@@ -48,17 +48,21 @@ Future<void> showSavedDraftActions(
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: Theme.of(context).colorScheme.error,
-            foregroundColor: Theme.of(context).colorScheme.onError,
+        StudioButtonPress(
+          child: TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
           ),
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('Discard'),
+        ),
+        StudioButtonPress(
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Discard'),
+          ),
         ),
       ],
     ),
@@ -125,13 +129,17 @@ Future<void> showChatActions(
           decoration: const InputDecoration(labelText: 'Chat title'),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, value),
-            child: const Text('Save'),
+          StudioButtonPress(
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, value),
+              child: const Text('Save'),
+            ),
           ),
         ],
       ),
@@ -149,16 +157,20 @@ Future<void> showChatActions(
           'Permanently delete "$title" from ${session.scope.profileName}? Its stored history cannot be recovered. Archive it instead to keep the conversation.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
             ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+          ),
+          StudioButtonPress(
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
           ),
         ],
       ),
@@ -340,15 +352,17 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                                 prefixIcon: const Icon(Icons.search),
                                 suffixIcon: search.text.isEmpty
                                     ? null
-                                    : IconButton(
-                                        tooltip: 'Clear search',
-                                        onPressed: _moving == null
-                                            ? () {
-                                                search.clear();
-                                                setState(() {});
-                                              }
-                                            : null,
-                                        icon: const Icon(Icons.close),
+                                    : StudioButtonPress(
+                                        child: IconButton(
+                                          tooltip: 'Clear search',
+                                          onPressed: _moving == null
+                                              ? () {
+                                                  search.clear();
+                                                  setState(() {});
+                                                }
+                                              : null,
+                                          icon: const Icon(Icons.close),
+                                        ),
                                       ),
                               ),
                             ),
@@ -383,39 +397,41 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                                 children: [
                                   for (var i = 0; i < projects.length; i++) ...[
                                     if (i > 0) const Divider(height: 1),
-                                    ListTile(
-                                      key: ValueKey(
-                                        'move-project-${projects[i].id}',
+                                    StudioButtonPress(
+                                      child: ListTile(
+                                        key: ValueKey(
+                                          'move-project-${projects[i].id}',
+                                        ),
+                                        enabled: _moving == null,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 4,
+                                            ),
+                                        minTileHeight: 64,
+                                        leading: projectAvatar(
+                                          context,
+                                          projects[i],
+                                          size: 32,
+                                        ),
+                                        title: Text(projects[i].name),
+                                        subtitle: Text(
+                                          projects[i].directory,
+                                          style: theme.textTheme.bodySmall,
+                                        ),
+                                        trailing: _moving == projects[i]
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child: StudioLoading(
+                                                  label: 'Moving chat',
+                                                ),
+                                              )
+                                            : null,
+                                        onTap: _moving == null
+                                            ? () => move(projects[i])
+                                            : null,
                                       ),
-                                      enabled: _moving == null,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 4,
-                                          ),
-                                      minTileHeight: 64,
-                                      leading: projectAvatar(
-                                        context,
-                                        projects[i],
-                                        size: 32,
-                                      ),
-                                      title: Text(projects[i].name),
-                                      subtitle: Text(
-                                        projects[i].directory,
-                                        style: theme.textTheme.bodySmall,
-                                      ),
-                                      trailing: _moving == projects[i]
-                                          ? const SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: StudioLoading(
-                                                label: 'Moving chat',
-                                              ),
-                                            )
-                                          : null,
-                                      onTap: _moving == null
-                                          ? () => move(projects[i])
-                                          : null,
                                     ),
                                   ],
                                 ],
@@ -428,11 +444,13 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _moving == null
-                          ? () => Navigator.pop(context)
-                          : null,
-                      child: const Text('Cancel'),
+                    child: StudioButtonPress(
+                      child: TextButton(
+                        onPressed: _moving == null
+                            ? () => Navigator.pop(context)
+                            : null,
+                        child: const Text('Cancel'),
+                      ),
                     ),
                   ),
                 ],

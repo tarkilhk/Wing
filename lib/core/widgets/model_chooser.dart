@@ -235,22 +235,24 @@ class _ModelChooserState extends State<ModelChooser> {
               ),
             ),
           ),
-          IconButton(
-            key: Key('info-${choice.provider}-${choice.model}'),
-            style: IconButton.styleFrom(
-              minimumSize: const Size(36, 36),
-              padding: EdgeInsets.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.standard,
-            ),
-            tooltip: 'About ${choice.label}',
-            onPressed: widget.enabled
-                ? () => showModelCard(context, choice)
-                : null,
-            icon: Icon(
-              Icons.info_outline_rounded,
-              size: 17,
-              color: tokens.muted,
+          StudioButtonPress(
+            child: IconButton(
+              key: Key('info-${choice.provider}-${choice.model}'),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(36, 36),
+                padding: EdgeInsets.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.standard,
+              ),
+              tooltip: 'About ${choice.label}',
+              onPressed: widget.enabled
+                  ? () => showModelCard(context, choice)
+                  : null,
+              icon: Icon(
+                Icons.info_outline_rounded,
+                size: 17,
+                color: tokens.muted,
+              ),
             ),
           ),
         ],
@@ -355,22 +357,25 @@ class _ModelChooserState extends State<ModelChooser> {
                       prefixIcon: const Icon(Icons.search_rounded, size: 18),
                       suffixIcon: _query.isEmpty
                           ? null
-                          : IconButton(
-                              style: IconButton.styleFrom(
-                                minimumSize: const Size(36, 36),
-                                padding: EdgeInsets.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.standard,
+                          : StudioButtonPress(
+                              child: IconButton(
+                                style: IconButton.styleFrom(
+                                  minimumSize: const Size(36, 36),
+                                  padding: EdgeInsets.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.standard,
+                                ),
+                                tooltip: 'Clear model search',
+                                onPressed: () {
+                                  _search.clear();
+                                  setState(() {
+                                    _query = '';
+                                    _provider = _selectedProvider();
+                                  });
+                                },
+                                icon: const Icon(Icons.close_rounded),
                               ),
-                              tooltip: 'Clear model search',
-                              onPressed: () {
-                                _search.clear();
-                                setState(() {
-                                  _query = '';
-                                  _provider = _selectedProvider();
-                                });
-                              },
-                              icon: const Icon(Icons.close_rounded),
                             ),
                       isDense: true,
                     ),
@@ -383,19 +388,23 @@ class _ModelChooserState extends State<ModelChooser> {
                   ),
                 ),
                 if (widget.onRefresh != null)
-                  IconButton(
-                    key:
-                        widget.refreshKey ??
-                        Key('refresh-${widget.keyPrefix}s'),
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(36, 36),
-                      padding: EdgeInsets.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.standard,
+                  StudioButtonPress(
+                    child: IconButton(
+                      key:
+                          widget.refreshKey ??
+                          Key('refresh-${widget.keyPrefix}s'),
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(36, 36),
+                        padding: EdgeInsets.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.standard,
+                      ),
+                      tooltip: 'Refresh models',
+                      onPressed: widget.enabled && !_refreshing
+                          ? _refresh
+                          : null,
+                      icon: const Icon(Icons.refresh_rounded, size: 20),
                     ),
-                    tooltip: 'Refresh models',
-                    onPressed: widget.enabled && !_refreshing ? _refresh : null,
-                    icon: const Icon(Icons.refresh_rounded, size: 20),
                   ),
               ],
             ),
@@ -419,35 +428,37 @@ class _ModelChooserState extends State<ModelChooser> {
                         ),
                         child: Semantics(
                           selected: _provider == entry.key,
-                          child: TextButton(
-                            style: TextButton.styleFrom(
-                              minimumSize: const Size(36, 32),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.standard,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                              foregroundColor: _provider == entry.key
-                                  ? tokens.accent
-                                  : tokens.muted,
-                              backgroundColor: _provider == entry.key
-                                  ? tokens.accent.withValues(alpha: .12)
-                                  : Colors.transparent,
-                              textStyle: tokens.typography.label,
-                            ),
-                            onPressed: widget.enabled
-                                ? () => setState(() => _provider = entry.key)
-                                : null,
-                            child: Tooltip(
-                              message: entry.value,
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: enlarged ? 230 : 180,
+                          child: StudioButtonPress(
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(36, 32),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.standard,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
                                 ),
-                                child: Text(
-                                  entry.value,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                foregroundColor: _provider == entry.key
+                                    ? tokens.accent
+                                    : tokens.muted,
+                                backgroundColor: _provider == entry.key
+                                    ? tokens.accent.withValues(alpha: .12)
+                                    : Colors.transparent,
+                                textStyle: tokens.typography.label,
+                              ),
+                              onPressed: widget.enabled
+                                  ? () => setState(() => _provider = entry.key)
+                                  : null,
+                              child: Tooltip(
+                                message: entry.value,
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxWidth: enlarged ? 230 : 180,
+                                  ),
+                                  child: Text(
+                                    entry.value,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ),
                             ),
@@ -466,12 +477,14 @@ class _ModelChooserState extends State<ModelChooser> {
           if (_refreshed && widget.onReviewProviderAccess != null)
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton(
-                key: const Key('review-model-provider-access'),
-                onPressed: widget.enabled
-                    ? widget.onReviewProviderAccess
-                    : null,
-                child: const Text('Review provider access'),
+              child: StudioButtonPress(
+                child: TextButton(
+                  key: const Key('review-model-provider-access'),
+                  onPressed: widget.enabled
+                      ? widget.onReviewProviderAccess
+                      : null,
+                  child: const Text('Review provider access'),
+                ),
               ),
             ),
           Flexible(

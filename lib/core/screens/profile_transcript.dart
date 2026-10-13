@@ -826,9 +826,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                   const Text('Nearby messages'),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: widget.onBackToLatest,
-                      child: const Text('Back to latest'),
+                    child: StudioButtonPress(
+                      child: TextButton(
+                        onPressed: widget.onBackToLatest,
+                        child: const Text('Back to latest'),
+                      ),
                     ),
                   ),
                 ],
@@ -890,9 +892,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   }
 
   Widget _missingSearchResult() => Center(
-    child: TextButton(
-      onPressed: widget.onBackToLatest,
-      child: const Text('Back to latest'),
+    child: StudioButtonPress(
+      child: TextButton(
+        onPressed: widget.onBackToLatest,
+        child: const Text('Back to latest'),
+      ),
     ),
   );
 
@@ -924,14 +928,18 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       return Column(
         children: [
           StudioError(reader.historyError!),
-          TextButton(
-            onPressed: widget.onRefreshHistory,
-            child: const Text('Refresh history'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: widget.onRefreshHistory,
+              child: const Text('Refresh history'),
+            ),
           ),
           if (reader.nextHistoryOffset != null)
-            TextButton(
-              onPressed: () => widget.onLoadOlder(),
-              child: const Text('Retry older messages'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: () => widget.onLoadOlder(),
+                child: const Text('Retry older messages'),
+              ),
             ),
         ],
       );
@@ -949,9 +957,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               ),
             ),
           )
-        : TextButton(
-            onPressed: reader.historyLoading ? null : widget.onLoadOlder,
-            child: const Text('Load older messages'),
+        : StudioButtonPress(
+            child: TextButton(
+              onPressed: reader.historyLoading ? null : widget.onLoadOlder,
+              child: const Text('Load older messages'),
+            ),
           );
   }
 }
@@ -991,9 +1001,11 @@ class ProfileTranscriptOpening extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           if (!waiting)
-            TextButton(
-              onPressed: onRetry,
-              child: const Text('Retry connection'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: onRetry,
+                child: const Text('Retry connection'),
+              ),
             ),
         ],
       );

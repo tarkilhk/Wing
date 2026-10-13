@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/studio_error.dart';
 import 'dart:async';
@@ -64,9 +65,11 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
                       children: [
                         StudioError(observation.error!),
                         const SizedBox(height: 12),
-                        OutlinedButton(
-                          onPressed: () => _reader.load(),
-                          child: const Text('Retry'),
+                        StudioButtonPress(
+                          child: OutlinedButton(
+                            onPressed: () => _reader.load(),
+                            child: const Text('Retry'),
+                          ),
                         ),
                       ],
                     ),

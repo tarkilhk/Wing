@@ -235,47 +235,49 @@ class TaskMenu extends StatelessWidget {
   final VoidCallback onEdit;
   @override
   Widget build(BuildContext context) => Builder(
-    builder: (anchor) => IconButton(
-      tooltip: 'Actions for ${task.title}',
-      icon: const Icon(Icons.more_horiz),
-      onPressed: controller.blocked(task.id)
-          ? null
-          : () async {
-              final result = await showWorkspaceActionMenu(
-                anchor,
-                task.title,
-                controller.repository.profile.label,
-                [
-                  for (final choice in controller.actions(task))
-                    (
-                      choice.kind.name,
-                      choice.label,
-                      switch (choice.kind) {
-                        TaskAction.edit => Icons.edit_outlined,
-                        TaskAction.pause => Icons.pause_rounded,
-                        TaskAction.resume => Icons.play_arrow_rounded,
-                        TaskAction.trigger => Icons.bolt_outlined,
-                        TaskAction.remove => Icons.delete_outline,
-                      },
-                      choice.enabled,
-                    ),
-                ],
-                keyPrefix: 'task',
-              );
-              if (!context.mounted || result == null) return;
-              if (result == 'edit') {
-                onEdit();
-              } else {
-                await performTaskAction(
-                  context,
-                  controller,
-                  task,
-                  TaskAction.values.singleWhere(
-                    (action) => action.name == result,
-                  ),
+    builder: (anchor) => StudioButtonPress(
+      child: IconButton(
+        tooltip: 'Actions for ${task.title}',
+        icon: const Icon(Icons.more_horiz),
+        onPressed: controller.blocked(task.id)
+            ? null
+            : () async {
+                final result = await showWorkspaceActionMenu(
+                  anchor,
+                  task.title,
+                  controller.repository.profile.label,
+                  [
+                    for (final choice in controller.actions(task))
+                      (
+                        choice.kind.name,
+                        choice.label,
+                        switch (choice.kind) {
+                          TaskAction.edit => Icons.edit_outlined,
+                          TaskAction.pause => Icons.pause_rounded,
+                          TaskAction.resume => Icons.play_arrow_rounded,
+                          TaskAction.trigger => Icons.bolt_outlined,
+                          TaskAction.remove => Icons.delete_outline,
+                        },
+                        choice.enabled,
+                      ),
+                  ],
+                  keyPrefix: 'task',
                 );
-              }
-            },
+                if (!context.mounted || result == null) return;
+                if (result == 'edit') {
+                  onEdit();
+                } else {
+                  await performTaskAction(
+                    context,
+                    controller,
+                    task,
+                    TaskAction.values.singleWhere(
+                      (action) => action.name == result,
+                    ),
+                  );
+                }
+              },
+      ),
     ),
   );
 }
@@ -295,27 +297,29 @@ class TaskUncertainty extends StatelessWidget {
     return TaskMessage(
       notice,
       error: true,
-      action: TextButton(
-        child: const Text('Review request'),
-        onPressed: () async {
-          final prompt = await controller.reviewPrompt(id);
-          if (!context.mounted || prompt == null) return;
-          final acknowledged = await adminConfirm(
-            context,
-            prompt.title,
-            prompt.message,
-            action: prompt.buttonLabel,
-          );
-          if (acknowledged) {
-            try {
-              await controller.acknowledgeUncertainty(id);
-            } catch (e) {
-              if (context.mounted) {
-                adminMessage(context, taskFailure(e), isError: true);
+      action: StudioButtonPress(
+        child: TextButton(
+          child: const Text('Review request'),
+          onPressed: () async {
+            final prompt = await controller.reviewPrompt(id);
+            if (!context.mounted || prompt == null) return;
+            final acknowledged = await adminConfirm(
+              context,
+              prompt.title,
+              prompt.message,
+              action: prompt.buttonLabel,
+            );
+            if (acknowledged) {
+              try {
+                await controller.acknowledgeUncertainty(id);
+              } catch (e) {
+                if (context.mounted) {
+                  adminMessage(context, taskFailure(e), isError: true);
+                }
               }
             }
-          }
-        },
+          },
+        ),
       ),
     );
   }
@@ -379,9 +383,11 @@ class _AdminTaskRouteState extends State<AdminTaskRoute> {
                     controller.error ??
                         'This task is not available in this profile.',
                   ),
-                  TextButton(
-                    onPressed: controller.refresh,
-                    child: const Text('Refresh'),
+                  StudioButtonPress(
+                    child: TextButton(
+                      onPressed: controller.refresh,
+                      child: const Text('Refresh'),
+                    ),
                   ),
                 ],
               ),

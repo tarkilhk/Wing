@@ -473,59 +473,69 @@ class _SubagentRow extends StatelessWidget {
       if (activity.toolCount case final count?)
         '$count ${count == 1 ? 'tool call' : 'tool calls'}',
     ].join(' · ');
-    return ListTile(
-      contentPadding: const EdgeInsets.all(WingSpacing.sm),
-      minVerticalPadding: 0,
-      minTileHeight: 48,
-      minLeadingWidth: 16,
-      horizontalTitleGap: 8,
-      leading: StudioActivityIndicator(
-        active:
-            !unconfirmed && activity.status == GatewaySubagentStatus.running,
-        label: 'Subagent running',
-        icon: unconfirmed ? Icons.help_outline : _statusIcon(activity.status),
-        size: 16,
-        color: unconfirmed
-            ? colors.muted
-            : activity.status == GatewaySubagentStatus.failed
-            ? colors.danger
-            : activity.status == GatewaySubagentStatus.running
-            ? colors.accent
-            : colors.muted,
-      ),
-      title: Text(
-        agentTaskHeading(_goal(activity)),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          height: 1.3,
-          color: colors.onSurface,
+    return StudioButtonPress(
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(WingSpacing.sm),
+        minVerticalPadding: 0,
+        minTileHeight: 48,
+        minLeadingWidth: 16,
+        horizontalTitleGap: 8,
+        leading: StudioActivityIndicator(
+          active:
+              !unconfirmed && activity.status == GatewaySubagentStatus.running,
+          label: 'Subagent running',
+          icon: unconfirmed ? Icons.help_outline : _statusIcon(activity.status),
+          size: 16,
+          color: unconfirmed
+              ? colors.muted
+              : activity.status == GatewaySubagentStatus.failed
+              ? colors.danger
+              : activity.status == GatewaySubagentStatus.running
+              ? colors.accent
+              : colors.muted,
         ),
+        title: Text(
+          agentTaskHeading(_goal(activity)),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            height: 1.3,
+            color: colors.onSurface,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SubagentStatusLine(activity: activity, unconfirmed: unconfirmed),
+            if (_activityText(activity) case final text?)
+              Text(
+                text,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.5,
+                  color: colors.muted,
+                ),
+              ),
+            if (metadata.isNotEmpty)
+              Text(
+                metadata,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.5,
+                  color: colors.muted,
+                ),
+              ),
+          ],
+        ),
+        trailing: Icon(Icons.chevron_right, size: 16, color: colors.muted),
+        onTap: onTap,
       ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _SubagentStatusLine(activity: activity, unconfirmed: unconfirmed),
-          if (_activityText(activity) case final text?)
-            Text(
-              text,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, height: 1.5, color: colors.muted),
-            ),
-          if (metadata.isNotEmpty)
-            Text(
-              metadata,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, height: 1.5, color: colors.muted),
-            ),
-        ],
-      ),
-      trailing: Icon(Icons.chevron_right, size: 16, color: colors.muted),
-      onTap: onTap,
     );
   }
 }

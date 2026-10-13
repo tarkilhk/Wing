@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 import '../../models/bots.dart';
 import '../../models/profiles_management.dart';
@@ -140,12 +141,14 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
         children: [
           Text(profile.label, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 16),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Edit name & appearance'),
-            subtitle: const Text('Display name, shape, color and avatar'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _appearance,
+          StudioButtonPress(
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Edit name & appearance'),
+              subtitle: const Text('Display name, shape, color and avatar'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _appearance,
+            ),
           ),
           for (final (title, subtitle, icon, page)
               in <(String, String, IconData, Widget Function())>[
@@ -182,26 +185,30 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
                   () => profileConnectorsPage(profile),
                 ),
               ])
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(icon),
-              title: Text(title),
-              subtitle: Text(subtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _push(context, page()),
+            StudioButtonPress(
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(icon),
+                title: Text(title),
+                subtitle: Text(subtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _push(context, page()),
+              ),
             ),
           const Divider(),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Duplicate bot'),
-            subtitle: const Text('Create a bot from this configuration'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _push(
-              context,
-              BotsCreateScreen(
-                session: widget.session,
-                group: false,
-                clone: _bot,
+          StudioButtonPress(
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Duplicate bot'),
+              subtitle: const Text('Create a bot from this configuration'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _push(
+                context,
+                BotsCreateScreen(
+                  session: widget.session,
+                  group: false,
+                  clone: _bot,
+                ),
               ),
             ),
           ),
@@ -209,16 +216,18 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
             tilePadding: EdgeInsets.zero,
             title: const Text('Advanced'),
             children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Rename profile'),
-                subtitle: Text(
-                  profile.name == 'default'
-                      ? 'Change the default profile’s display name'
-                      : 'Change the underlying profile name',
+              StudioButtonPress(
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Rename profile'),
+                  subtitle: Text(
+                    profile.name == 'default'
+                        ? 'Change the default profile’s display name'
+                        : 'Change the underlying profile name',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _manage(ProfileManagementEntry.rename),
                 ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _manage(ProfileManagementEntry.rename),
               ),
             ],
           ),
@@ -234,13 +243,15 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
                   ? 'The default profile cannot be deleted'
                   : 'Delete this profile. Confirmation required.',
             ),
-            trailing: IconButton(
-              tooltip: 'Delete bot',
-              icon: const Icon(Icons.delete_outline),
-              color: Theme.of(context).colorScheme.error,
-              onPressed: profile.name == 'default'
-                  ? null
-                  : () => _manage(ProfileManagementEntry.delete),
+            trailing: StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Delete bot',
+                icon: const Icon(Icons.delete_outline),
+                color: Theme.of(context).colorScheme.error,
+                onPressed: profile.name == 'default'
+                    ? null
+                    : () => _manage(ProfileManagementEntry.delete),
+              ),
             ),
           ),
         ],

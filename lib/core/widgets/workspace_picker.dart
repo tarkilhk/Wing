@@ -44,7 +44,7 @@ Future<WorkspaceChoice?> showWorkspacePicker(
   }
 
   var lastPosition = position();
-  PopupMenuItem<WorkspaceChoice> heading(String label) => PopupMenuItem(
+  PopupMenuItem<WorkspaceChoice> heading(String label) => StudioPopupMenuItem(
     enabled: false,
     height: 32,
     child: Text(label, style: Theme.of(context).textTheme.labelSmall),
@@ -54,7 +54,7 @@ Future<WorkspaceChoice?> showWorkspacePicker(
     String label,
     bool selected, {
     IconData? icon,
-  }) => PopupMenuItem(
+  }) => StudioPopupMenuItem(
     key: ValueKey(
       'workspace-${value.isConnection ? 'connection' : 'profile'}-${value.id}',
     ),

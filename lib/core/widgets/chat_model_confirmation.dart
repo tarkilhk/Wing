@@ -53,13 +53,17 @@ class _ModelConfirmationDialogState extends State<_ModelConfirmationDialog> {
       ),
     ),
     actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context, false),
-        child: const Text('Cancel'),
+      StudioButtonPress(
+        child: TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
       ),
-      FilledButton(
-        onPressed: () => Navigator.pop(context, true),
-        child: const Text('Switch model'),
+      StudioButtonPress(
+        child: FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Switch model'),
+        ),
       ),
     ],
   );

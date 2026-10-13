@@ -177,154 +177,162 @@ class RecentIdentityCard extends StatelessWidget {
           side: BorderSide(color: border),
         ),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                constraints: BoxConstraints(minHeight: bodyHeight + 16),
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Row(
-                  crossAxisAlignment: row.bot != null || row.group != null
-                      ? CrossAxisAlignment.center
-                      : CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            row.group?.name ??
-                                row.bot?.title ??
-                                row.chat!.title,
-                            style: TextStyle(
-                              fontSize: 16,
-                              height: 1.25,
-                              letterSpacing: -.192,
-                              fontWeight: row.unread
-                                  ? FontWeight.w700
-                                  : FontWeight.w400,
-                            ),
-                          ),
-                          if (row.group != null) ...[
-                            const SizedBox(height: 3),
+        child: StudioButtonPress(
+          child: InkWell(
+            onTap: onTap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  constraints: BoxConstraints(minHeight: bodyHeight + 16),
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: row.bot != null || row.group != null
+                        ? CrossAxisAlignment.center
+                        : CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              'Bot group',
+                              row.group?.name ??
+                                  row.bot?.title ??
+                                  row.chat!.title,
                               style: TextStyle(
-                                fontSize: 12,
-                                height: 1.2,
-                                color: t.muted,
+                                fontSize: 16,
+                                height: 1.25,
+                                letterSpacing: -.192,
+                                fontWeight: row.unread
+                                    ? FontWeight.w700
+                                    : FontWeight.w400,
                               ),
                             ),
-                          ],
-                          if (row.bot == null && row.group == null) ...[
-                            const SizedBox(height: 6),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(minHeight: 20),
-                              child: Row(
-                                children: [
-                                  if (row.chat!.project != null) ...[
-                                    projectAvatar(
-                                      context,
-                                      row.chat!.project!,
-                                      size: 20,
+                            if (row.group != null) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                'Bot group',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  height: 1.2,
+                                  color: t.muted,
+                                ),
+                              ),
+                            ],
+                            if (row.bot == null && row.group == null) ...[
+                              const SizedBox(height: 6),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 20,
+                                ),
+                                child: Row(
+                                  children: [
+                                    if (row.chat!.project != null) ...[
+                                      projectAvatar(
+                                        context,
+                                        row.chat!.project!,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 6),
+                                    ],
+                                    Flexible(
+                                      child: Text(
+                                        row.chat!.project?.name ?? 'No project',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          height: 1.2,
+                                          color: t.muted,
+                                        ),
+                                      ),
                                     ),
-                                    const SizedBox(width: 6),
                                   ],
-                                  Flexible(
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      if (row.bot != null)
+                        BotAvatar(
+                          name: row.bot!.title,
+                          shape: row.bot!.shape,
+                          color: row.bot!.color,
+                          image: row.bot!.avatar,
+                          size: 46,
+                        )
+                      else if (row.group != null)
+                        BotGroupIdentity(
+                          group: row.group!,
+                          bots: bots,
+                          size: 46,
+                        )
+                      else
+                        _profileMarker(
+                          context,
+                          row.chat!.key.workspace.profileName,
+                        ),
+                    ],
+                  ),
+                ),
+                Container(
+                  constraints: const BoxConstraints(minHeight: 26),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: band,
+                    border: Border(
+                      top: BorderSide(color: border.withValues(alpha: .5)),
+                    ),
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final boundedRight = ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: constraints.maxWidth,
+                        ),
+                        child: right,
+                      );
+                      return large && row.unread && active
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                status,
+                                const SizedBox(height: 4),
+                                boundedRight,
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                if (active)
+                                  Expanded(child: status)
+                                else if (!row.unread)
+                                  Expanded(
                                     child: Text(
-                                      row.chat!.project?.name ?? 'No project',
+                                      'Read',
                                       style: TextStyle(
-                                        fontSize: 12,
-                                        height: 1.2,
+                                        fontSize: 13,
+                                        height: 1.3,
                                         color: t.muted,
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    if (row.bot != null)
-                      BotAvatar(
-                        name: row.bot!.title,
-                        shape: row.bot!.shape,
-                        color: row.bot!.color,
-                        image: row.bot!.avatar,
-                        size: 46,
-                      )
-                    else if (row.group != null)
-                      BotGroupIdentity(group: row.group!, bots: bots, size: 46)
-                    else
-                      _profileMarker(
-                        context,
-                        row.chat!.key.workspace.profileName,
-                      ),
-                  ],
-                ),
-              ),
-              Container(
-                constraints: const BoxConstraints(minHeight: 26),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: band,
-                  border: Border(
-                    top: BorderSide(color: border.withValues(alpha: .5)),
+                                  )
+                                else
+                                  const Spacer(),
+                                boundedRight,
+                              ],
+                            );
+                    },
                   ),
                 ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final boundedRight = ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: constraints.maxWidth,
-                      ),
-                      child: right,
-                    );
-                    return large && row.unread && active
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              status,
-                              const SizedBox(height: 4),
-                              boundedRight,
-                            ],
-                          )
-                        : Row(
-                            children: [
-                              if (active)
-                                Expanded(child: status)
-                              else if (!row.unread)
-                                Expanded(
-                                  child: Text(
-                                    'Read',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      height: 1.3,
-                                      color: t.muted,
-                                    ),
-                                  ),
-                                )
-                              else
-                                const Spacer(),
-                              boundedRight,
-                            ],
-                          );
-                  },
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

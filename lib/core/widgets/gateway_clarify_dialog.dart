@@ -199,21 +199,25 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
       ),
     );
     final actions = [
-      TextButton(
-        key: const Key('clarify-skip'),
-        onPressed: _submitting ? null : () => _respond(''),
-        child: const Text('Skip'),
+      StudioButtonPress(
+        child: TextButton(
+          key: const Key('clarify-skip'),
+          onPressed: _submitting ? null : () => _respond(''),
+          child: const Text('Skip'),
+        ),
       ),
-      FilledButton(
-        key: const Key('clarify-continue'),
-        onPressed: _submitting || answer.isEmpty
-            ? null
-            : () => _respond(answer),
-        child: StudioActionLabel(
-          widget.number < widget.total
-              ? 'Confirm & next'
-              : 'Confirm & continue',
-          busy: _submitting,
+      StudioButtonPress(
+        child: FilledButton(
+          key: const Key('clarify-continue'),
+          onPressed: _submitting || answer.isEmpty
+              ? null
+              : () => _respond(answer),
+          child: StudioActionLabel(
+            widget.number < widget.total
+                ? 'Confirm & next'
+                : 'Confirm & continue',
+            busy: _submitting,
+          ),
         ),
       ),
     ];

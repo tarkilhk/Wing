@@ -124,7 +124,9 @@ class ProfileModelAccessRow extends StatelessWidget {
                     Text(result.message, style: theme.textTheme.bodySmall),
                   ],
                   if (!checking && action != null)
-                    TextButton(onPressed: action, child: Text(label)),
+                    StudioButtonPress(
+                      child: TextButton(onPressed: action, child: Text(label)),
+                    ),
                 ],
               ),
             ),

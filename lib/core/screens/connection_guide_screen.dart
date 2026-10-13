@@ -173,25 +173,27 @@ class ConnectionGuideScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          final opened = await openWebPreview(
-                            Uri.parse(
-                              'https://github.com/tarkilhk/Wing/blob/main/docs/GETTING_STARTED.md',
-                            ),
-                          );
-                          if (!opened && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: StudioError(
-                                  'Could not open the guide',
-                                ),
+                      StudioButtonPress(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final opened = await openWebPreview(
+                              Uri.parse(
+                                'https://github.com/tarkilhk/Wing/blob/main/docs/GETTING_STARTED.md',
                               ),
                             );
-                          }
-                        },
-                        icon: const Icon(Icons.open_in_new, size: 18),
-                        label: const Text('Full setup instructions'),
+                            if (!opened && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: StudioError(
+                                    'Could not open the guide',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.open_in_new, size: 18),
+                          label: const Text('Full setup instructions'),
+                        ),
                       ),
                     ],
                   ),

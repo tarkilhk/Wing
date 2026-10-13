@@ -206,10 +206,16 @@ Future<void> showChatListMenu(
                                                 ),
                                               ),
                                       ),
-                                      IconButton(
-                                        tooltip: 'Close $title',
-                                        icon: const Icon(Icons.close, size: 16),
-                                        onPressed: () => Navigator.pop(context),
+                                      StudioButtonPress(
+                                        child: IconButton(
+                                          tooltip: 'Close $title',
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 16,
+                                          ),
+                                          onPressed: () =>
+                                              Navigator.pop(context),
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -251,115 +257,114 @@ Future<void> showChatListMenu(
                                                           : Colors.transparent,
                                                       borderRadius:
                                                           WingRadius.control,
-                                                      child: InkWell(
-                                                        autofocus: index == 0,
-                                                        key: ValueKey(
-                                                          'chat-menu-${option.id}',
-                                                        ),
-                                                        borderRadius:
-                                                            WingRadius.control,
-                                                        onTap: !option.enabled
-                                                            ? null
-                                                            : () {
-                                                                if (!multiple) {
-                                                                  Navigator.pop(
-                                                                    context,
+                                                      child: StudioButtonPress(
+                                                        child: InkWell(
+                                                          autofocus: index == 0,
+                                                          key: ValueKey(
+                                                            'chat-menu-${option.id}',
+                                                          ),
+                                                          borderRadius:
+                                                              WingRadius
+                                                                  .control,
+                                                          onTap: !option.enabled
+                                                              ? null
+                                                              : () {
+                                                                  if (!multiple) {
+                                                                    Navigator.pop(
+                                                                      context,
+                                                                    );
+                                                                  }
+                                                                  onSelected(
+                                                                    option.id,
                                                                   );
-                                                                }
-                                                                onSelected(
-                                                                  option.id,
-                                                                );
-                                                                if (multiple &&
-                                                                    context
-                                                                        .mounted) {
-                                                                  update(() {});
-                                                                }
-                                                              },
-                                                        child: ConstrainedBox(
-                                                          constraints:
-                                                              BoxConstraints(
-                                                                minHeight:
-                                                                    heights[index],
-                                                              ),
-                                                          child: Padding(
-                                                            padding:
-                                                                const EdgeInsets.symmetric(
-                                                                  horizontal: 8,
-                                                                  vertical: 6,
+                                                                  if (multiple &&
+                                                                      context
+                                                                          .mounted) {
+                                                                    update(
+                                                                      () {},
+                                                                    );
+                                                                  }
+                                                                },
+                                                          child: ConstrainedBox(
+                                                            constraints:
+                                                                BoxConstraints(
+                                                                  minHeight:
+                                                                      heights[index],
                                                                 ),
-                                                            child: Row(
-                                                              children: [
-                                                                IconTheme(
-                                                                  data: IconThemeData(
-                                                                    size: 18,
-                                                                    color:
-                                                                        option
-                                                                            .enabled
-                                                                        ? tokens
-                                                                              .muted
-                                                                        : Theme.of(
-                                                                            context,
-                                                                          ).disabledColor,
+                                                            child: Padding(
+                                                              padding:
+                                                                  const EdgeInsets.symmetric(
+                                                                    horizontal:
+                                                                        8,
+                                                                    vertical: 6,
                                                                   ),
-                                                                  child: SizedBox(
-                                                                    width: 22,
-                                                                    child: option
-                                                                        .icon,
-                                                                  ),
-                                                                ),
-                                                                const SizedBox(
-                                                                  width: 8,
-                                                                ),
-                                                                Expanded(
-                                                                  child: Text(
-                                                                    option
-                                                                        .label,
-                                                                    maxLines:
-                                                                        option.toggle ==
-                                                                            null
-                                                                        ? 2
-                                                                        : null,
-                                                                    overflow:
-                                                                        option.toggle ==
-                                                                            null
-                                                                        ? TextOverflow
-                                                                              .ellipsis
-                                                                        : TextOverflow
-                                                                              .clip,
-                                                                    style: TextStyle(
-                                                                      fontStyle:
-                                                                          option
-                                                                              .fontStyle,
-                                                                      fontSize:
-                                                                          14,
-                                                                      height:
-                                                                          1.3,
+                                                              child: Row(
+                                                                children: [
+                                                                  IconTheme(
+                                                                    data: IconThemeData(
+                                                                      size: 18,
                                                                       color:
                                                                           option
                                                                               .enabled
-                                                                          ? tokens.onSurface
+                                                                          ? tokens.muted
                                                                           : Theme.of(
                                                                               context,
                                                                             ).disabledColor,
                                                                     ),
+                                                                    child: SizedBox(
+                                                                      width: 22,
+                                                                      child: option
+                                                                          .icon,
+                                                                    ),
                                                                   ),
-                                                                ),
-                                                                if (option
-                                                                        .toggle !=
-                                                                    null)
-                                                                  ExcludeSemantics(
-                                                                    child: IgnorePointer(
-                                                                      child: CompactSwitch(
-                                                                        value: option
-                                                                            .toggle!,
-                                                                        onChanged:
-                                                                            (
-                                                                              _,
-                                                                            ) {},
+                                                                  const SizedBox(
+                                                                    width: 8,
+                                                                  ),
+                                                                  Expanded(
+                                                                    child: Text(
+                                                                      option
+                                                                          .label,
+                                                                      maxLines:
+                                                                          option.toggle ==
+                                                                              null
+                                                                          ? 2
+                                                                          : null,
+                                                                      overflow:
+                                                                          option.toggle ==
+                                                                              null
+                                                                          ? TextOverflow.ellipsis
+                                                                          : TextOverflow.clip,
+                                                                      style: TextStyle(
+                                                                        fontStyle:
+                                                                            option.fontStyle,
+                                                                        fontSize:
+                                                                            14,
+                                                                        height:
+                                                                            1.3,
+                                                                        color:
+                                                                            option.enabled
+                                                                            ? tokens.onSurface
+                                                                            : Theme.of(
+                                                                                context,
+                                                                              ).disabledColor,
                                                                       ),
                                                                     ),
                                                                   ),
-                                                              ],
+                                                                  if (option
+                                                                          .toggle !=
+                                                                      null)
+                                                                    ExcludeSemantics(
+                                                                      child: IgnorePointer(
+                                                                        child: CompactSwitch(
+                                                                          value:
+                                                                              option.toggle!,
+                                                                          onChanged:
+                                                                              (_) {},
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                ],
+                                                              ),
                                                             ),
                                                           ),
                                                         ),
@@ -378,29 +383,34 @@ Future<void> showChatListMenu(
                                     child: Row(
                                       children: [
                                         if (onClear != null)
-                                          TextButton(
+                                          StudioButtonPress(
+                                            child: TextButton(
+                                              style: TextButton.styleFrom(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                    ),
+                                              ),
+                                              onPressed: () {
+                                                onClear();
+                                                update(() {});
+                                              },
+                                              child: const Text('Clear'),
+                                            ),
+                                          ),
+                                        const Spacer(),
+                                        StudioButtonPress(
+                                          child: TextButton(
                                             style: TextButton.styleFrom(
                                               padding:
                                                   const EdgeInsets.symmetric(
                                                     horizontal: 8,
                                                   ),
                                             ),
-                                            onPressed: () {
-                                              onClear();
-                                              update(() {});
-                                            },
-                                            child: const Text('Clear'),
+                                            onPressed: () =>
+                                                Navigator.pop(context),
+                                            child: const Text('Done'),
                                           ),
-                                        const Spacer(),
-                                        TextButton(
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                            ),
-                                          ),
-                                          onPressed: () =>
-                                              Navigator.pop(context),
-                                          child: const Text('Done'),
                                         ),
                                       ],
                                     ),

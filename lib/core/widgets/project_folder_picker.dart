@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 
@@ -71,11 +72,13 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
             decoration: const InputDecoration(labelText: 'Absolute path'),
           ),
           const SizedBox(height: 12),
-          OutlinedButton.icon(
-            key: const ValueKey('project-folder-find'),
-            onPressed: _loading ? null : _findFolders,
-            icon: const Icon(Icons.search),
-            label: const Text('Find folders'),
+          StudioButtonPress(
+            child: OutlinedButton.icon(
+              key: const ValueKey('project-folder-find'),
+              onPressed: _loading ? null : _findFolders,
+              icon: const Icon(Icons.search),
+              label: const Text('Find folders'),
+            ),
           ),
           if (_failed) ...[
             const SizedBox(height: 8),
@@ -95,11 +98,13 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
                   itemCount: suggestions.length,
                   itemBuilder: (context, index) {
                     final suggestion = suggestions[index];
-                    return ListTile(
-                      key: ValueKey('project-folder-${suggestion.path}'),
-                      title: Text(suggestion.label),
-                      subtitle: Text(suggestion.path),
-                      onTap: () => _select(suggestion),
+                    return StudioButtonPress(
+                      child: ListTile(
+                        key: ValueKey('project-folder-${suggestion.path}'),
+                        title: Text(suggestion.label),
+                        subtitle: Text(suggestion.path),
+                        onTap: () => _select(suggestion),
+                      ),
                     );
                   },
                 ),
@@ -109,16 +114,20 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
       ),
     ),
     actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
+      StudioButtonPress(
+        child: TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
       ),
-      TextButton(
-        key: const ValueKey('project-folder-continue'),
-        onPressed: _hasPath
-            ? () => Navigator.pop(context, _path.text.trim())
-            : null,
-        child: const Text('Continue'),
+      StudioButtonPress(
+        child: TextButton(
+          key: const ValueKey('project-folder-continue'),
+          onPressed: _hasPath
+              ? () => Navigator.pop(context, _path.text.trim())
+              : null,
+          child: const Text('Continue'),
+        ),
       ),
     ],
   );

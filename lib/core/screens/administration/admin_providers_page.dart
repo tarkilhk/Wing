@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 import '../../models/provider_inventory.dart';
 import '../../services/administration_repository.dart';
@@ -73,11 +74,13 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
             runSpacing: 4,
             children: [
               for (final filter in ProviderInventoryFilter.values)
-                ChoiceChip(
-                  showCheckmark: false,
-                  label: Text('${filter.label} (${data.count(filter)})'),
-                  selected: session.filter == filter,
-                  onSelected: (_) => session.selectFilter(filter),
+                StudioButtonPress(
+                  child: ChoiceChip(
+                    showCheckmark: false,
+                    label: Text('${filter.label} (${data.count(filter)})'),
+                    selected: session.filter == filter,
+                    onSelected: (_) => session.selectFilter(filter),
+                  ),
                 ),
             ],
           ),
@@ -85,10 +88,12 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 8,
             children: [
-              TextButton.icon(
-                onPressed: session.refresh,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Check status'),
+              StudioButtonPress(
+                child: TextButton.icon(
+                  onPressed: session.refresh,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Check status'),
+                ),
               ),
               Text(
                 'Checked ${TimeOfDay.fromDateTime(data.checkedAt).format(context)}',
@@ -105,37 +110,41 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
           AdminGroup(
             children: [
               for (final access in session.providers)
-                ListTile(
-                  key: ValueKey('provider-${access.id}'),
-                  title: Text(
-                    access.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(
-                    '${access.statusLabel} · ${access.sourceLabel}${access.hasCredential ? '\n${_expiry(access)}' : ''}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (access.canSignInAgain)
-                        IconButton(
-                          tooltip: 'Sign in to ${access.name} again',
-                          icon: const Icon(Icons.login),
-                          onPressed: () => _open(
-                            (context, profile) => AdminProviderSignIn(
-                              profile: profile,
-                              target: access.signIn!,
+                StudioButtonPress(
+                  child: ListTile(
+                    key: ValueKey('provider-${access.id}'),
+                    title: Text(
+                      access.name,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      '${access.statusLabel} · ${access.sourceLabel}${access.hasCredential ? '\n${_expiry(access)}' : ''}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (access.canSignInAgain)
+                          StudioButtonPress(
+                            child: IconButton(
+                              tooltip: 'Sign in to ${access.name} again',
+                              icon: const Icon(Icons.login),
+                              onPressed: () => _open(
+                                (context, profile) => AdminProviderSignIn(
+                                  profile: profile,
+                                  target: access.signIn!,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      const Icon(Icons.chevron_right),
-                    ],
-                  ),
-                  onTap: () => _open(
-                    (context, profile) => providerRecoveryPage(
-                      profile: profile,
-                      providerId: access.id,
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                    onTap: () => _open(
+                      (context, profile) => providerRecoveryPage(
+                        profile: profile,
+                        providerId: access.id,
+                      ),
                     ),
                   ),
                 ),
@@ -145,26 +154,31 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
           Text('Service keys', style: Theme.of(context).textTheme.titleMedium),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () => _open(
-                (context, profile) => AdminServiceKeyCatalog(profile: profile),
+            child: StudioButtonPress(
+              child: TextButton.icon(
+                onPressed: () => _open(
+                  (context, profile) =>
+                      AdminServiceKeyCatalog(profile: profile),
+                ),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add service key'),
               ),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add service key'),
             ),
           ),
           for (final field in session.keys)
-            ListTile(
-              title: Text(field.key),
-              subtitle: Text(
-                field.isSet ? 'Stored for this owner' : 'Not stored here',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _open(
-                (context, profile) => AdminSecretPage(
-                  profile: profile,
-                  name: field.key,
-                  isSet: field.isSet,
+            StudioButtonPress(
+              child: ListTile(
+                title: Text(field.key),
+                subtitle: Text(
+                  field.isSet ? 'Stored for this owner' : 'Not stored here',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _open(
+                  (context, profile) => AdminSecretPage(
+                    profile: profile,
+                    name: field.key,
+                    isSet: field.isSet,
+                  ),
                 ),
               ),
             ),

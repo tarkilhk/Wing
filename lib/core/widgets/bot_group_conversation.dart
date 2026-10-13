@@ -39,7 +39,7 @@ class BotGroupConversation extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
     appBar: WingAppBar(
       context: context,
-      leading: BackButton(onPressed: onBack),
+      leading: StudioButtonPress(child: BackButton(onPressed: onBack)),
       title: WingConversationTitle(
         title: group.name,
         avatar: BotGroupIdentity(group: group, bots: appearances, size: 32),
@@ -50,11 +50,13 @@ class BotGroupConversation extends StatelessWidget {
         if (showMembers)
           SizedBox(
             key: membersAnchor,
-            child: IconButton(
-              key: const ValueKey('group-members-entry'),
-              tooltip: 'Show group members · ${group.members.length} bots',
-              onPressed: onMembers,
-              icon: const Icon(Icons.group_outlined, size: 18),
+            child: StudioButtonPress(
+              child: IconButton(
+                key: const ValueKey('group-members-entry'),
+                tooltip: 'Show group members · ${group.members.length} bots',
+                onPressed: onMembers,
+                icon: const Icon(Icons.group_outlined, size: 18),
+              ),
             ),
           ),
       ],

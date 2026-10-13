@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 
@@ -116,13 +117,17 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
           title: const Text('Discard unsaved changes?'),
           content: const Text('Edits that were not saved will be lost.'),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Keep editing'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Keep editing'),
+              ),
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Discard'),
+            StudioButtonPress(
+              child: FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Discard'),
+              ),
             ),
           ],
         ),
@@ -155,17 +160,21 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
         Wrap(
           spacing: 8,
           children: [
-            OutlinedButton(
-              onPressed: _state.saving
-                  ? null
-                  : () => _session.resolve(field, useServer: false),
-              child: const Text('Keep my value'),
+            StudioButtonPress(
+              child: OutlinedButton(
+                onPressed: _state.saving
+                    ? null
+                    : () => _session.resolve(field, useServer: false),
+                child: const Text('Keep my value'),
+              ),
             ),
-            TextButton(
-              onPressed: _state.saving
-                  ? null
-                  : () => _session.resolve(field, useServer: true),
-              child: const Text('Use server value'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: _state.saving
+                    ? null
+                    : () => _session.resolve(field, useServer: true),
+                child: const Text('Use server value'),
+              ),
             ),
           ],
         ),

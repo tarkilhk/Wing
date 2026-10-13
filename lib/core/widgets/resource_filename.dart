@@ -51,7 +51,7 @@ class ResourceFilename extends StatelessWidget {
         ),
         menuPadding: const EdgeInsets.all(WingSpacing.sm),
         items: [
-          PopupMenuItem<void>(
+          StudioPopupMenuItem<void>(
             enabled: false,
             height: 0,
             padding: EdgeInsets.zero,
@@ -66,16 +66,18 @@ class ResourceFilename extends StatelessWidget {
 
     return Tooltip(
       message: address ? 'Show resource address' : 'Show file path',
-      child: InkWell(
-        onTapDown: (details) => tapPosition = details.globalPosition,
-        onTap: showPath,
-        borderRadius: WingRadius.control,
-        child: Text(
-          label ?? resourceFileName(target),
-          maxLines: 1,
-          softWrap: false,
-          overflow: TextOverflow.ellipsis,
-          style: style,
+      child: StudioButtonPress(
+        child: InkWell(
+          onTapDown: (details) => tapPosition = details.globalPosition,
+          onTap: showPath,
+          borderRadius: WingRadius.control,
+          child: Text(
+            label ?? resourceFileName(target),
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
         ),
       ),
     );
@@ -96,17 +98,19 @@ class ResourceViewerAction extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => IconButton(
-    tooltip: label,
-    onPressed: onPressed,
-    constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-    padding: const EdgeInsets.all(WingSpacing.sm),
-    style: IconButton.styleFrom(
-      minimumSize: const Size(32, 32),
-      maximumSize: const Size(32, 32),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  Widget build(BuildContext context) => StudioButtonPress(
+    child: IconButton(
+      tooltip: label,
+      onPressed: onPressed,
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      padding: const EdgeInsets.all(WingSpacing.sm),
+      style: IconButton.styleFrom(
+        minimumSize: const Size(32, 32),
+        maximumSize: const Size(32, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      icon: Icon(icon, size: 16),
     ),
-    icon: Icon(icon, size: 16),
   );
 }
 

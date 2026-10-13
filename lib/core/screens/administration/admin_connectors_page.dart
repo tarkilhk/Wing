@@ -126,14 +126,18 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
                         const AdminNotice(
                           'Manage the external tools available to this profile.',
                         ),
-                        FilledButton.icon(
-                          onPressed: state.canMutate ? _add : null,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add connector'),
+                        StudioButtonPress(
+                          child: FilledButton.icon(
+                            onPressed: state.canMutate ? _add : null,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add connector'),
+                          ),
                         ),
-                        TextButton(
-                          onPressed: state.busy ? null : _session.refresh,
-                          child: const Text('Refresh list'),
+                        StudioButtonPress(
+                          child: TextButton(
+                            onPressed: state.busy ? null : _session.refresh,
+                            child: const Text('Refresh list'),
+                          ),
                         ),
                         if (state.connectors.isEmpty)
                           const AdminNotice(
@@ -142,39 +146,44 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
                         AdminGroup(
                           children: [
                             for (final row in state.connectors)
-                              ListTile(
-                                minTileHeight: 56,
-                                minVerticalPadding: 4,
-                                horizontalTitleGap: 12,
-                                title: Text(row.name),
-                                subtitle: Text(
-                                  widget.failedConnectorNames.contains(row.name)
-                                      ? 'Failed health check · ${row.transport}'
-                                      : row.transport,
-                                ),
-                                leading:
+                              StudioButtonPress(
+                                child: ListTile(
+                                  minTileHeight: 56,
+                                  minVerticalPadding: 4,
+                                  horizontalTitleGap: 12,
+                                  title: Text(row.name),
+                                  subtitle: Text(
                                     widget.failedConnectorNames.contains(
-                                      row.name,
-                                    )
-                                    ? Icon(
-                                        Icons.warning_amber_rounded,
-                                        color: WingTokens.of(context).warning,
+                                          row.name,
+                                        )
+                                        ? 'Failed health check · ${row.transport}'
+                                        : row.transport,
+                                  ),
+                                  leading:
+                                      widget.failedConnectorNames.contains(
+                                        row.name,
                                       )
-                                    : null,
-                                trailing: CompactSwitch(
-                                  semanticLabel: 'Enable ${row.name}',
-                                  value: row.enabled,
-                                  onChanged: state.canMutate && row.canConfigure
-                                      ? (value) => _toggle(row, value)
+                                      ? Icon(
+                                          Icons.warning_amber_rounded,
+                                          color: WingTokens.of(context).warning,
+                                        )
+                                      : null,
+                                  trailing: CompactSwitch(
+                                    semanticLabel: 'Enable ${row.name}',
+                                    value: row.enabled,
+                                    onChanged:
+                                        state.canMutate && row.canConfigure
+                                        ? (value) => _toggle(row, value)
+                                        : null,
+                                  ),
+                                  onTap: state.canMutate
+                                      ? () => _open(
+                                          row.name,
+                                          profileName: _session.profileName,
+                                          signInOnOpen: false,
+                                        )
                                       : null,
                                 ),
-                                onTap: state.canMutate
-                                    ? () => _open(
-                                        row.name,
-                                        profileName: _session.profileName,
-                                        signInOnOpen: false,
-                                      )
-                                    : null,
                               ),
                           ],
                         ),
@@ -308,7 +317,12 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
                       _error ??
                           'This connector is not available in this profile.',
                     ),
-                    TextButton(onPressed: _load, child: const Text('Refresh')),
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: _load,
+                        child: const Text('Refresh'),
+                      ),
+                    ),
                   ],
                 ),
         );
@@ -370,14 +384,18 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                FilledButton(
-                  onPressed: _session.state.canMutate ? _test : null,
-                  child: const Text('Test connection'),
+                StudioButtonPress(
+                  child: FilledButton(
+                    onPressed: _session.state.canMutate ? _test : null,
+                    child: const Text('Test connection'),
+                  ),
                 ),
                 if (_configuration?.canSignIn == true)
-                  OutlinedButton(
-                    onPressed: _session.canSignIn(_route) ? _signIn : null,
-                    child: const Text('Sign in'),
+                  StudioButtonPress(
+                    child: OutlinedButton(
+                      onPressed: _session.canSignIn(_route) ? _signIn : null,
+                      child: const Text('Sign in'),
+                    ),
                   ),
               ],
             ),
@@ -409,9 +427,11 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
             if (_error != null)
               AdminNotice.error(_error!, retry: _busy ? null : _load),
             const SizedBox(height: 16),
-            TextButton(
-              onPressed: _session.canConfigure(_route) ? _remove : null,
-              child: const Text('Remove connector'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: _session.canConfigure(_route) ? _remove : null,
+                child: const Text('Remove connector'),
+              ),
             ),
           ],
         ),
@@ -523,9 +543,11 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
             const AdminNotice(
               'Sign in through your browser. Your account access is saved on Hermes for this profile.',
             ),
-            FilledButton(
-              onPressed: _flow.busy ? null : _start,
-              child: StudioActionLabel('Start sign-in', busy: _flow.busy),
+            StudioButtonPress(
+              child: FilledButton(
+                onPressed: _flow.busy ? null : _start,
+                child: StudioActionLabel('Start sign-in', busy: _flow.busy),
+              ),
             ),
           ],
           if (_flow.error != null) AdminNotice.error(_flow.error!),
@@ -536,9 +558,11 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
             ),
           if (_flow.pending) ...[
             if (_flow.authUrl != null && !_flow.callbackAccepted) ...[
-              FilledButton(
-                onPressed: _flow.busy ? null : _openBrowser,
-                child: const Text('Open sign-in page'),
+              StudioButtonPress(
+                child: FilledButton(
+                  onPressed: _flow.busy ? null : _openBrowser,
+                  child: const Text('Open sign-in page'),
+                ),
               ),
               AdminNotice(
                 _flow.manualOnly
@@ -557,18 +581,25 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
                 onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _flow.busy ? null : _submit,
-                child: StudioActionLabel('Complete sign-in', busy: _flow.busy),
+              StudioButtonPress(
+                child: OutlinedButton(
+                  onPressed: _flow.busy ? null : _submit,
+                  child: StudioActionLabel(
+                    'Complete sign-in',
+                    busy: _flow.busy,
+                  ),
+                ),
               ),
             ],
             if (_flow.callbackAccepted)
               const AdminNotice(
                 'Authorization received. Waiting for Hermes to finish sign-in.',
               ),
-            TextButton(
-              onPressed: _flow.busy ? null : _flow.poll,
-              child: const Text('Check status'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: _flow.busy ? null : _flow.poll,
+                child: const Text('Check status'),
+              ),
             ),
           ],
           if (!_flow.pending && _flow.status != 'approved')
@@ -588,9 +619,11 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
                 ),
               ],
             ),
-          TextButton(
-            onPressed: _flow.busy ? null : _close,
-            child: Text(_flow.pending ? 'Cancel sign-in' : 'Close'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: _flow.busy ? null : _close,
+              child: Text(_flow.pending ? 'Cancel sign-in' : 'Close'),
+            ),
           ),
         ],
       ),
@@ -618,13 +651,17 @@ class AdminReloadConnectorsButton extends StatelessWidget {
             'Reconnect tools for all profiles on this server using the latest settings and sign-ins.\n\nExisting chats may use more tokens on their next message as their history is resent.',
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Reconnect'),
+            StudioButtonPress(
+              child: FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Reconnect'),
+              ),
             ),
           ],
         ),
@@ -634,22 +671,24 @@ class AdminReloadConnectorsButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: session,
-    builder: (context, _) => OutlinedButton.icon(
-      onPressed: session.state.busy
-          ? null
-          : () async {
-              await session.reconnect(() => _confirmReconnect(context));
-              if (!context.mounted) return;
-              if (session.state.error case final error?) {
-                adminMessage(context, error, isError: true);
-              } else if (session.state.notice case final notice?) {
-                adminMessage(context, notice);
-              }
-            },
-      icon: const Icon(Icons.refresh),
-      label: StudioActionLabel(
-        'Reconnect MCP tools',
-        busy: session.state.phase == ConnectorPhase.reconnecting,
+    builder: (context, _) => StudioButtonPress(
+      child: OutlinedButton.icon(
+        onPressed: session.state.busy
+            ? null
+            : () async {
+                await session.reconnect(() => _confirmReconnect(context));
+                if (!context.mounted) return;
+                if (session.state.error case final error?) {
+                  adminMessage(context, error, isError: true);
+                } else if (session.state.notice case final notice?) {
+                  adminMessage(context, notice);
+                }
+              },
+        icon: const Icon(Icons.refresh),
+        label: StudioActionLabel(
+          'Reconnect MCP tools',
+          busy: session.state.phase == ConnectorPhase.reconnecting,
+        ),
       ),
     ),
   );

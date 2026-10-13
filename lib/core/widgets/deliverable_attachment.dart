@@ -97,13 +97,15 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
               target: widget.output.target,
               title: widget.output.label,
               loadImage: widget.loadImage,
-              downloadAction: IconButton.filledTonal(
-                tooltip: _downloading ? 'Saving image' : 'Download image',
-                style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-                onPressed: widget.onDownload == null || _downloading
-                    ? null
-                    : () => _run(download: true),
-                icon: const Icon(Icons.download_outlined, size: 20),
+              downloadAction: StudioButtonPress(
+                child: IconButton.filledTonal(
+                  tooltip: _downloading ? 'Saving image' : 'Download image',
+                  style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+                  onPressed: widget.onDownload == null || _downloading
+                      ? null
+                      : () => _run(download: true),
+                  icon: const Icon(Icons.download_outlined, size: 20),
+                ),
               ),
             ),
             if (_error != null) ...[
@@ -142,27 +144,31 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
                 ),
               ),
               const SizedBox(width: WingSpacing.xs),
-              IconButton(
-                tooltip: 'Download',
-                style: IconButton.styleFrom(
-                  minimumSize: const Size(48, 48),
-                  foregroundColor: theme.colorScheme.primary,
+              StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Download',
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    foregroundColor: theme.colorScheme.primary,
+                  ),
+                  onPressed: widget.onDownload == null || _downloading
+                      ? null
+                      : () => _run(download: true),
+                  icon: const Icon(Icons.download_outlined, size: 20),
                 ),
-                onPressed: widget.onDownload == null || _downloading
-                    ? null
-                    : () => _run(download: true),
-                icon: const Icon(Icons.download_outlined, size: 20),
               ),
-              IconButton(
-                tooltip: 'Open preview',
-                style: IconButton.styleFrom(
-                  minimumSize: const Size(48, 48),
-                  foregroundColor: theme.colorScheme.primary,
+              StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Open preview',
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    foregroundColor: theme.colorScheme.primary,
+                  ),
+                  onPressed: widget.onOpen == null || _opening
+                      ? null
+                      : () => _run(download: false),
+                  icon: const Icon(Icons.visibility_outlined, size: 20),
                 ),
-                onPressed: widget.onOpen == null || _opening
-                    ? null
-                    : () => _run(download: false),
-                icon: const Icon(Icons.visibility_outlined, size: 20),
               ),
             ],
           ),

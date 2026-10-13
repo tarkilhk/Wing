@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 
 /// Shared normal/group composer action surface, without execution policy.
@@ -14,21 +15,23 @@ class ComposerIconButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool focused;
   @override
-  Widget build(BuildContext context) => IconButton.filled(
-    tooltip: label,
-    icon: icon,
-    onPressed: onPressed,
-    style: IconButton.styleFrom(
-      minimumSize: const Size(48, 48),
-      side: focused
-          ? BorderSide(
-              color: onPressed != null
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : Theme.of(context).colorScheme.primary,
-              width: 2,
-            )
-          : null,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+  Widget build(BuildContext context) => StudioButtonPress(
+    child: IconButton.filled(
+      tooltip: label,
+      icon: icon,
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        side: focused
+            ? BorderSide(
+                color: onPressed != null
+                    ? Theme.of(context).colorScheme.onPrimary
+                    : Theme.of(context).colorScheme.primary,
+                width: 2,
+              )
+            : null,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
     ),
   );
 }

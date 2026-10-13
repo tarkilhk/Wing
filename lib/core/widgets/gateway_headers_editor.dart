@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../models/connection.dart';
@@ -140,10 +141,12 @@ class _GatewayHeadersEditorState extends State<GatewayHeadersEditor> {
               ),
               Align(
                 alignment: AlignmentDirectional.centerEnd,
-                child: IconButton(
-                  tooltip: 'Remove header',
-                  onPressed: widget.enabled ? () => _remove(entry.$1) : null,
-                  icon: const Icon(Icons.close),
+                child: StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Remove header',
+                    onPressed: widget.enabled ? () => _remove(entry.$1) : null,
+                    icon: const Icon(Icons.close),
+                  ),
                 ),
               ),
             ],
@@ -151,10 +154,12 @@ class _GatewayHeadersEditorState extends State<GatewayHeadersEditor> {
         ),
       Align(
         alignment: AlignmentDirectional.centerStart,
-        child: OutlinedButton.icon(
-          onPressed: widget.enabled ? _add : null,
-          icon: const Icon(Icons.add),
-          label: const Text('Add header'),
+        child: StudioButtonPress(
+          child: OutlinedButton.icon(
+            onPressed: widget.enabled ? _add : null,
+            icon: const Icon(Icons.add),
+            label: const Text('Add header'),
+          ),
         ),
       ),
     ],

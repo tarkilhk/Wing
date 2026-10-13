@@ -86,32 +86,35 @@ class AppDrawer extends StatelessWidget {
                             padding: EdgeInsets.symmetric(vertical: 12),
                             child: Divider(),
                           ),
-                        ListTile(
-                          key: ValueKey('nav-${destination.name}'),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: WingRadius.control,
+                        StudioButtonPress(
+                          child: ListTile(
+                            key: ValueKey('nav-${destination.name}'),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: WingRadius.control,
+                            ),
+                            selected: selected == destination,
+                            selectedTileColor: colors.primaryContainer,
+                            leading: largeText ? null : Icon(destination.icon),
+                            title: largeText
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(destination.icon),
+                                      const SizedBox(height: 4),
+                                      Text(destination.label),
+                                    ],
+                                  )
+                                : Text(destination.label),
+                            enabled:
+                                hasConnection ||
+                                destination == AppDestination.connections ||
+                                destination == AppDestination.settings,
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              onSelected(destination);
+                            },
                           ),
-                          selected: selected == destination,
-                          selectedTileColor: colors.primaryContainer,
-                          leading: largeText ? null : Icon(destination.icon),
-                          title: largeText
-                              ? Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Icon(destination.icon),
-                                    const SizedBox(height: 4),
-                                    Text(destination.label),
-                                  ],
-                                )
-                              : Text(destination.label),
-                          enabled:
-                              hasConnection ||
-                              destination == AppDestination.connections ||
-                              destination == AppDestination.settings,
-                          onTap: () {
-                            Navigator.of(context).pop();
-                            onSelected(destination);
-                          },
                         ),
                       ],
                     ],

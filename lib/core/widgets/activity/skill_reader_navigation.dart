@@ -315,41 +315,44 @@ class _SkillReaderNavigationState extends State<_SkillReaderNavigation>
                                           ).colorScheme.primaryContainer
                                         : Colors.transparent,
                                     borderRadius: WingRadius.control,
-                                    child: InkWell(
-                                      borderRadius: WingRadius.control,
-                                      onTap: () {
-                                        Navigator.pop(sheet);
-                                        _jump(i);
-                                      },
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(12),
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            SizedBox(
-                                              width: 24,
-                                              child: Text(
-                                                (i + 1).toString(),
-                                                style: WingTokens.of(sheet)
-                                                    .typography
-                                                    .label
-                                                    .copyWith(
-                                                      color: WingTokens.of(
-                                                        sheet,
-                                                      ).muted,
-                                                    ),
+                                    child: StudioButtonPress(
+                                      child: InkWell(
+                                        borderRadius: WingRadius.control,
+                                        onTap: () {
+                                          Navigator.pop(sheet);
+                                          _jump(i);
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(12),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              SizedBox(
+                                                width: 24,
+                                                child: Text(
+                                                  (i + 1).toString(),
+                                                  style: WingTokens.of(sheet)
+                                                      .typography
+                                                      .label
+                                                      .copyWith(
+                                                        color: WingTokens.of(
+                                                          sheet,
+                                                        ).muted,
+                                                      ),
+                                                ),
                                               ),
-                                            ),
-                                            Expanded(
-                                              child: Text(
-                                                widget.headings[i].label,
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: style,
+                                              Expanded(
+                                                child: Text(
+                                                  widget.headings[i].label,
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: style,
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -438,10 +441,12 @@ class _SkillReaderNavigationState extends State<_SkillReaderNavigation>
           SizedBox(
             width: 44,
             height: 48,
-            child: IconButton(
-              tooltip: label,
-              icon: Icon(icon, size: 18),
-              onPressed: command,
+            child: StudioButtonPress(
+              child: IconButton(
+                tooltip: label,
+                icon: Icon(icon, size: 18),
+                onPressed: command,
+              ),
             ),
           );
       return Stack(
@@ -599,43 +604,46 @@ class _SkillReaderNavigationState extends State<_SkillReaderNavigation>
                       active == 0 ? null : () => _jump(active - 1),
                     ),
                     Expanded(
-                      child: InkWell(
-                        onTap: _contents,
-                        borderRadius: WingRadius.control,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 4,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.format_list_numbered,
-                                size: 16,
-                                color: colors.muted,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      widget.headings[active].label,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: colors.typography.label,
-                                    ),
-                                    Text(
-                                      '${active + 1} / $count',
-                                      style: colors.typography.label.copyWith(
-                                        fontSize: 11,
-                                        color: colors.muted,
-                                      ),
-                                    ),
-                                  ],
+                      child: StudioButtonPress(
+                        child: InkWell(
+                          onTap: _contents,
+                          borderRadius: WingRadius.control,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 8,
+                              horizontal: 4,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.format_list_numbered,
+                                  size: 16,
+                                  color: colors.muted,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        widget.headings[active].label,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: colors.typography.label,
+                                      ),
+                                      Text(
+                                        '${active + 1} / $count',
+                                        style: colors.typography.label.copyWith(
+                                          fontSize: 11,
+                                          color: colors.muted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

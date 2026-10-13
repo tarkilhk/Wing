@@ -272,21 +272,25 @@ class _SourceCodeTextState extends State<SourceCodeText> {
                     }) => AdaptiveTextSelectionToolbar(
                       anchors: anchors,
                       children: [
-                        IconButton(
-                          tooltip: 'Copy selection',
-                          icon: const Icon(Icons.copy_outlined),
-                          onPressed: () {
-                            controller.copy();
-                            onDismiss();
-                          },
+                        StudioButtonPress(
+                          child: IconButton(
+                            tooltip: 'Copy selection',
+                            icon: const Icon(Icons.copy_outlined),
+                            onPressed: () {
+                              controller.copy();
+                              onDismiss();
+                            },
+                          ),
                         ),
-                        IconButton(
-                          tooltip: 'Select all',
-                          icon: const Icon(Icons.select_all),
-                          onPressed: () {
-                            controller.selectAll();
-                            onRefresh();
-                          },
+                        StudioButtonPress(
+                          child: IconButton(
+                            tooltip: 'Select all',
+                            icon: const Icon(Icons.select_all),
+                            onPressed: () {
+                              controller.selectAll();
+                              onRefresh();
+                            },
+                          ),
                         ),
                       ],
                     ),

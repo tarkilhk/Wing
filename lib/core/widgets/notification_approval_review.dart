@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../models/gateway_approval.dart';
@@ -112,21 +113,25 @@ class _ReviewState extends State<NotificationApprovalReview> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: sending ? null : () => Navigator.pop(context),
-              child: Text(pending ? 'Cancel' : 'Close'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: sending ? null : () => Navigator.pop(context),
+                child: Text(pending ? 'Cancel' : 'Close'),
+              ),
             ),
-            FilledButton(
-              onPressed: sending || offline || !pending ? null : send,
-              child: Text(
-                sending
-                    ? 'Sending…'
-                    : switch (widget.choice) {
-                        'always' => 'Always allow',
-                        'session' => 'Allow for session',
-                        'deny' => 'Deny',
-                        _ => 'Allow once',
-                      },
+            StudioButtonPress(
+              child: FilledButton(
+                onPressed: sending || offline || !pending ? null : send,
+                child: Text(
+                  sending
+                      ? 'Sending…'
+                      : switch (widget.choice) {
+                          'always' => 'Always allow',
+                          'session' => 'Allow for session',
+                          'deny' => 'Deny',
+                          _ => 'Allow once',
+                        },
+                ),
               ),
             ),
           ],

@@ -1,4 +1,11 @@
 import 'dart:io';
+import 'dart:convert';
+
+import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
+import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:analyzer/dart/element/type.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,8 +17,165 @@ import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/studio_task_marker.dart';
 
 import 'helpers/pump_markdown_widget.dart';
+import '../tools/architecture/dart_sdk.dart';
+
+class _ButtonPressCoverage extends RecursiveAstVisitor<void> {
+  final missing = <String>[];
+  static const controls = {
+    'ButtonStyleButton',
+    'IconButton',
+    'TextButton',
+    'OutlinedButton',
+    'FilledButton',
+    'ElevatedButton',
+    'FloatingActionButton',
+    'CupertinoButton',
+    'InkWell',
+    'InkResponse',
+    'PopupMenuButton',
+    'PopupMenuItem',
+    'ActionChip',
+    'ChoiceChip',
+    'FilterChip',
+    'InputChip',
+    'Tab',
+    'BackButton',
+    'CloseButton',
+    'DropdownButtonFormField',
+  };
+
+  bool studio(InstanceCreationExpression node, String name) {
+    final type = node.staticType;
+    return type is InterfaceType &&
+        type.element.name == name &&
+        type.element.library.firstFragment.source.fullName ==
+            '${Directory.current.absolute.path}/lib/core/theme/wing_theme.dart';
+  }
+
+  @override
+  void visitInstanceCreationExpression(InstanceCreationExpression node) {
+    final type = node.staticType;
+    if (type is InterfaceType &&
+        !(studio(node, 'StudioPopupMenuItem') ||
+            studio(node, 'StudioCheckedPopupMenuItem'))) {
+      final classes = [type, ...type.element.allSupertypes];
+      final native = classes
+          .where(
+            (t) =>
+                t.element.library.uri.toString().startsWith(
+                  'package:flutter/',
+                ) &&
+                (controls.contains(t.element.name) ||
+                    t.element.name == 'ListTile'),
+          )
+          .toList();
+      if (native.isNotEmpty) {
+        final callbacks = node.argumentList.arguments
+            .whereType<NamedExpression>()
+            .map((arg) => arg.name.label.name)
+            .toSet();
+        final passiveRow =
+            native.first.element.name == 'ListTile' &&
+            callbacks.intersection({'onTap', 'onLongPress'}).isEmpty;
+        final argument = node.parent;
+        final parent = argument?.parent?.parent;
+        final wrapped =
+            argument is NamedExpression &&
+            {'child', 'entry'}.contains(argument.name.label.name) &&
+            parent is InstanceCreationExpression &&
+            (studio(parent, 'StudioButtonPress') ||
+                studio(parent, 'StudioCheckedPopupMenuItem'));
+        if (!passiveRow && !wrapped) {
+          missing.add('${native.first.element.name}@${node.offset}');
+        }
+      }
+    }
+    super.visitInstanceCreationExpression(node);
+  }
+}
 
 void main() {
+  test(
+    'all authored action controls use the shared Studio press',
+    () async {
+      final root = Directory.current.absolute.path;
+      final roles =
+          (jsonDecode(
+                    File(
+                      '$root/tools/architecture/roles.json',
+                    ).readAsStringSync(),
+                  )
+                  as Map<String, dynamic>)['files']
+              as Map<String, dynamic>;
+      final fixture = File(
+        '$root/build/button-migration/coverage_fixture.dart',
+      );
+      fixture.parent.createSync(recursive: true);
+      fixture.writeAsStringSync('''
+import 'package:flutter/material.dart' as m;
+import 'package:wing/core/theme/wing_theme.dart';
+typedef AliasButton = m.IconButton;
+class IconButton {}
+class HiddenButton extends m.IconButton {
+  const HiddenButton() : super(onPressed: null, icon: const m.Icon(m.Icons.close));
+}
+void examples() {
+  AliasButton(onPressed: null, icon: const m.Icon(m.Icons.close));
+  const HiddenButton();
+  StudioButtonPress(child: m.IconButton(onPressed: null, icon: const m.Icon(m.Icons.close)));
+  IconButton();
+}
+''');
+      final contexts = AnalysisContextCollection(
+        includedPaths: ['$root/lib', fixture.path],
+        sdkPath: dartSdkPath(root),
+      );
+      try {
+        final probe = await contexts
+            .contextFor(fixture.path)
+            .currentSession
+            .getResolvedUnit(fixture.path);
+        expect(probe, isA<ResolvedUnitResult>());
+        final proof = _ButtonPressCoverage();
+        (probe as ResolvedUnitResult).unit.accept(proof);
+        expect(
+          proof.missing.length,
+          2,
+          reason:
+              'Detect aliases and subclasses; accept prefixed wrapped controls and unrelated names',
+        );
+        final files = Directory('$root/lib')
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.dart'))
+            .where(
+              (file) =>
+                  roles[file.path.substring(root.length + 1)]?['role'] ==
+                  'view',
+            );
+        for (final file in files) {
+          final result = await contexts
+              .contextFor(file.path)
+              .currentSession
+              .getResolvedUnit(file.path);
+          expect(result, isA<ResolvedUnitResult>(), reason: file.path);
+          final visitor = _ButtonPressCoverage();
+          (result as ResolvedUnitResult).unit.accept(visitor);
+          expect(
+            visitor.missing,
+            isEmpty,
+            reason:
+                '${file.path}: STUDIO_BUTTON_PRESS requires the shared wrapper',
+          );
+        }
+      } finally {
+        await contexts.dispose();
+        fixture.deleteSync();
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
   test('all app selection controls suppress automatic ticks', () {
     for (final file in Directory(
       'lib',

@@ -93,12 +93,14 @@ class AdminHealthContent extends StatelessWidget {
             checkedAt: profileCheckedAt,
             checking: checkingProfile,
             incomplete: health.profileCheckIncomplete,
-            refresh: IconButton(
-              tooltip: 'Refresh profile status',
-              onPressed: profile == null || checkingProfile
-                  ? null
-                  : onCheckProfile,
-              icon: const Icon(Icons.refresh),
+            refresh: StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Refresh profile status',
+                onPressed: profile == null || checkingProfile
+                    ? null
+                    : onCheckProfile,
+                icon: const Icon(Icons.refresh),
+              ),
             ),
           ),
           if (profile == null)
@@ -140,10 +142,12 @@ class AdminHealthContent extends StatelessWidget {
             ),
             Align(
               alignment: Alignment.centerLeft,
-              child: IconButton(
-                tooltip: 'What’s checked?',
-                onPressed: () => showHealthCheckExplanation(context),
-                icon: const Icon(Icons.info_outline, size: 18),
+              child: StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'What’s checked?',
+                  onPressed: () => showHealthCheckExplanation(context),
+                  icon: const Icon(Icons.info_outline, size: 18),
+                ),
               ),
             ),
           ],
@@ -158,29 +162,33 @@ class AdminHealthContent extends StatelessWidget {
     AdministrationHealthFinding? finding,
     IconData icon,
     VoidCallback onTap,
-  ) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-    minTileHeight: 64,
-    minVerticalPadding: 8,
-    leading: Icon(
-      finding?.status == AdministrationHealthStatus.failure ||
-              finding?.status == AdministrationHealthStatus.warning
-          ? Icons.error_outline
-          : icon,
-      color: finding == null
-          ? Theme.of(context).colorScheme.onSurfaceVariant
-          : administrationHealthColor(context, finding.status),
-      size: 22,
+  ) => StudioButtonPress(
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      minTileHeight: 64,
+      minVerticalPadding: 8,
+      leading: Icon(
+        finding?.status == AdministrationHealthStatus.failure ||
+                finding?.status == AdministrationHealthStatus.warning
+            ? Icons.error_outline
+            : icon,
+        color: finding == null
+            ? Theme.of(context).colorScheme.onSurfaceVariant
+            : administrationHealthColor(context, finding.status),
+        size: 22,
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(
+        finding?.detail ?? 'Not checked',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      trailing: finding?.status == AdministrationHealthStatus.healthy
+          ? null
+          : const Icon(Icons.chevron_right, size: 20),
+      onTap: finding?.status == AdministrationHealthStatus.healthy
+          ? null
+          : onTap,
     ),
-    title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-    subtitle: Text(
-      finding?.detail ?? 'Not checked',
-      style: Theme.of(context).textTheme.bodySmall,
-    ),
-    trailing: finding?.status == AdministrationHealthStatus.healthy
-        ? null
-        : const Icon(Icons.chevron_right, size: 20),
-    onTap: finding?.status == AdministrationHealthStatus.healthy ? null : onTap,
   );
 
   Widget _observation(

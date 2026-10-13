@@ -147,10 +147,12 @@ class _ContextRingState extends State<ContextRing>
                                       ),
                                     ),
                                   ),
-                                  IconButton(
-                                    tooltip: 'Close context window',
-                                    onPressed: _close,
-                                    icon: const Icon(Icons.close, size: 18),
+                                  StudioButtonPress(
+                                    child: IconButton(
+                                      tooltip: 'Close context window',
+                                      onPressed: _close,
+                                      icon: const Icon(Icons.close, size: 18),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -220,9 +222,11 @@ class _ContextRingState extends State<ContextRing>
                               if (widget.error != null &&
                                   !widget.loading &&
                                   widget.onRefresh != null)
-                                TextButton(
-                                  onPressed: widget.onRefresh,
-                                  child: const Text('Retry'),
+                                StudioButtonPress(
+                                  child: TextButton(
+                                    onPressed: widget.onRefresh,
+                                    child: const Text('Retry'),
+                                  ),
                                 ),
                               if (value != null ||
                                   widget.compressions != null) ...[
@@ -335,32 +339,34 @@ class _ContextRingState extends State<ContextRing>
                   onTap: _toggle,
                   excludeSemantics: true,
                   expanded: _portal.isShowing,
-                  child: IconButton(
-                    key: const ValueKey('context-ring-details'),
-                    padding: const EdgeInsets.all(WingSpacing.xs),
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    focusNode: _buttonFocus,
-                    onPressed: _toggle,
-                    icon: CompositedTransformTarget(
-                      key: _anchor,
-                      link: _link,
-                      child: CustomPaint(
-                        key: const ValueKey('context-ring-paint'),
-                        size: Size.square(diameter),
-                        painter: ContextRingPainter(
-                          progress: value == null
-                              ? null
-                              : value.percent.clamp(0, 100) / 100,
-                          color: color,
-                          track: tokens.muted.withValues(alpha: .5),
-                          label: value == null
-                              ? '—'
-                              : '${value.percent.round()}%',
-                          labelColor: tokens.onSurface,
-                          labelFontSize: scaler.scale(10),
+                  child: StudioButtonPress(
+                    child: IconButton(
+                      key: const ValueKey('context-ring-details'),
+                      padding: const EdgeInsets.all(WingSpacing.xs),
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      focusNode: _buttonFocus,
+                      onPressed: _toggle,
+                      icon: CompositedTransformTarget(
+                        key: _anchor,
+                        link: _link,
+                        child: CustomPaint(
+                          key: const ValueKey('context-ring-paint'),
+                          size: Size.square(diameter),
+                          painter: ContextRingPainter(
+                            progress: value == null
+                                ? null
+                                : value.percent.clamp(0, 100) / 100,
+                            color: color,
+                            track: tokens.muted.withValues(alpha: .5),
+                            label: value == null
+                                ? '—'
+                                : '${value.percent.round()}%',
+                            labelColor: tokens.onSurface,
+                            labelFontSize: scaler.scale(10),
+                          ),
                         ),
                       ),
                     ),

@@ -79,10 +79,12 @@ class ConversationPreview extends StatelessWidget {
       child: Scaffold(
         appBar: WingAppBar(
           context: context,
-          leading: const IconButton(
-            onPressed: null,
-            icon: Icon(Icons.menu),
-            tooltip: 'Open navigation menu',
+          leading: const StudioButtonPress(
+            child: IconButton(
+              onPressed: null,
+              icon: Icon(Icons.menu),
+              tooltip: 'Open navigation menu',
+            ),
           ),
           title: BotConversationTitle(
             title: preview?.entry.title ?? card.entry.title,
@@ -122,10 +124,12 @@ class ConversationPreview extends StatelessWidget {
                   ),
                 ),
           actions: const [
-            IconButton(
-              onPressed: null,
-              icon: Icon(Icons.more_vert),
-              tooltip: 'Chat actions',
+            StudioButtonPress(
+              child: IconButton(
+                onPressed: null,
+                icon: Icon(Icons.more_vert),
+                tooltip: 'Chat actions',
+              ),
             ),
           ],
         ),
@@ -190,17 +194,21 @@ class ConversationPreview extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            const IconButton(
-                              onPressed: null,
-                              icon: Icon(Icons.mic_none, size: 18),
+                            const StudioButtonPress(
+                              child: IconButton(
+                                onPressed: null,
+                                icon: Icon(Icons.mic_none, size: 18),
+                              ),
                             ),
                           ],
                         ),
                         Row(
                           children: [
-                            const IconButton(
-                              onPressed: null,
-                              icon: Icon(Icons.add),
+                            const StudioButtonPress(
+                              child: IconButton(
+                                onPressed: null,
+                                icon: Icon(Icons.add),
+                              ),
                             ),
                             Expanded(
                               child: Text(
@@ -210,9 +218,11 @@ class ConversationPreview extends StatelessWidget {
                                 style: Theme.of(context).textTheme.labelSmall,
                               ),
                             ),
-                            const IconButton(
-                              onPressed: null,
-                              icon: Icon(Icons.arrow_upward),
+                            const StudioButtonPress(
+                              child: IconButton(
+                                onPressed: null,
+                                icon: Icon(Icons.arrow_upward),
+                              ),
                             ),
                           ],
                         ),
@@ -299,10 +309,12 @@ class _SavedGroupPageState extends State<_SavedGroupPage> {
       appearances: widget.card.groupAppearance.byHandle.values,
       onBack: () {},
       actions: [
-        IconButton(
-          onPressed: () {},
-          tooltip: 'Group options',
-          icon: const Icon(Icons.more_horiz),
+        StudioButtonPress(
+          child: IconButton(
+            onPressed: () {},
+            tooltip: 'Group options',
+            icon: const Icon(Icons.more_horiz),
+          ),
         ),
       ],
       transcript: ListView.builder(

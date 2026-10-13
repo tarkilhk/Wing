@@ -56,7 +56,9 @@ void main() {
       await tester.tapAt(tap);
       await tester.pumpAndSettle();
       expect(find.text(target), findsOneWidget);
-      final popup = tester.getRect(find.byType(PopupMenuItem<void>));
+      final popup = tester.getRect(
+        find.byWidgetPredicate((widget) => widget is PopupMenuItem<void>),
+      );
       expect((popup.top - tap.dy).abs(), lessThan(40));
       expect(popup.width, lessThanOrEqualTo(360));
       expect(tester.takeException(), isNull);

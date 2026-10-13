@@ -78,10 +78,12 @@ class ModelCard extends StatelessWidget {
                       style: tokens.typography.title,
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Close model card',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
+                  StudioButtonPress(
+                    child: IconButton(
+                      tooltip: 'Close model card',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
                   ),
                 ],
               ),

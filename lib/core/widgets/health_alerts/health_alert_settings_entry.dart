@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 import '../../models/host_thresholds.dart';
 import '../../presentation/health_alert_presentation.dart';
@@ -28,19 +29,21 @@ class HealthAlertSettingsEntry extends StatelessWidget {
               ].join(' · ');
         return Column(
           children: [
-            ListTile(
-              key: const ValueKey('health-alert-settings-entry'),
-              contentPadding: EdgeInsets.zero,
-              minVerticalPadding: 4,
-              leading: const Icon(Icons.notifications_none),
-              title: const Text('Alert settings'),
-              subtitle: Text(
-                'This device${summary.isEmpty ? '' : ' · $summary'}',
-              ),
-              trailing: const Icon(Icons.chevron_right, size: 20),
-              onTap: () => Navigator.of(context).push<void>(
-                MaterialPageRoute(
-                  builder: (_) => HealthAlertSettingsScreen(session: session),
+            StudioButtonPress(
+              child: ListTile(
+                key: const ValueKey('health-alert-settings-entry'),
+                contentPadding: EdgeInsets.zero,
+                minVerticalPadding: 4,
+                leading: const Icon(Icons.notifications_none),
+                title: const Text('Alert settings'),
+                subtitle: Text(
+                  'This device${summary.isEmpty ? '' : ' · $summary'}',
+                ),
+                trailing: const Icon(Icons.chevron_right, size: 20),
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => HealthAlertSettingsScreen(session: session),
+                  ),
                 ),
               ),
             ),

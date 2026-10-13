@@ -135,35 +135,39 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
         : warning
         ? WingTokens.of(context).warning
         : null;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-      minTileHeight: 64,
-      minVerticalPadding: 8,
-      leading: Icon(
-        title == 'Doctor'
-            ? Icons.medical_services_outlined
-            : Icons.shield_outlined,
-        color: color,
-        size: 22,
+    return StudioButtonPress(
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        minTileHeight: 64,
+        minVerticalPadding: 8,
+        leading: Icon(
+          title == 'Doctor'
+              ? Icons.medical_services_outlined
+              : Icons.shield_outlined,
+          color: color,
+          size: 22,
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+        ),
+        trailing: observation == null
+            ? StudioButtonPress(
+                child: TextButton(
+                  onPressed: health.starting.contains(path)
+                      ? null
+                      : () => _run(kind, scope, openResult: false),
+                  child: const Text('Run'),
+                ),
+              )
+            : const Icon(Icons.chevron_right, size: 20),
+        onTap: health.starting.contains(path)
+            ? null
+            : () => observation == null
+                  ? _run(kind, scope, openResult: true)
+                  : _result(kind, scope),
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(
-        label,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
-      ),
-      trailing: observation == null
-          ? TextButton(
-              onPressed: health.starting.contains(path)
-                  ? null
-                  : () => _run(kind, scope, openResult: false),
-              child: const Text('Run'),
-            )
-          : const Icon(Icons.chevron_right, size: 20),
-      onTap: health.starting.contains(path)
-          ? null
-          : () => observation == null
-                ? _run(kind, scope, openResult: true)
-                : _result(kind, scope),
     );
   }
 
@@ -183,10 +187,12 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
           checking: running,
           incomplete: health.serverCheckIncomplete,
           attempted: health.serverAttemptedAt != null,
-          refresh: IconButton(
-            tooltip: 'Run all diagnostics',
-            onPressed: canRunAll ? _runAll : null,
-            icon: const Icon(Icons.refresh),
+          refresh: StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Run all diagnostics',
+              onPressed: canRunAll ? _runAll : null,
+              icon: const Icon(Icons.refresh),
+            ),
           ),
         ),
         AdminGroup(

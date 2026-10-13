@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import '../widgets/activity/skill_document_viewer.dart';
@@ -67,13 +68,17 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
             'This toolset still needs setup. Hermes may start its existing setup process on the server. Enabling it does not guarantee it is ready.',
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Enable'),
+            StudioButtonPress(
+              child: FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Enable'),
+              ),
             ),
           ],
         ),
@@ -125,30 +130,43 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
 
         title: const Text('Skills and tools', maxLines: 6, softWrap: true),
         actions: [
-          PopupMenuButton<String>(
-            tooltip: 'Browse and manage skills',
-            onSelected: (value) {
-              switch (value) {
-                case 'discover':
-                  widget.onHub();
-                case 'library':
-                  widget.onLibrary();
-                case 'plugins':
-                  widget.onPlugins();
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'discover', child: Text('Discover skills')),
-              PopupMenuItem(value: 'library', child: Text('Skill library')),
-              PopupMenuItem(value: 'plugins', child: Text('Agent plugins')),
-            ],
+          StudioButtonPress(
+            child: PopupMenuButton<String>(
+              tooltip: 'Browse and manage skills',
+              onSelected: (value) {
+                switch (value) {
+                  case 'discover':
+                    widget.onHub();
+                  case 'library':
+                    widget.onLibrary();
+                  case 'plugins':
+                    widget.onPlugins();
+                }
+              },
+              itemBuilder: (_) => const [
+                StudioPopupMenuItem(
+                  value: 'discover',
+                  child: Text('Discover skills'),
+                ),
+                StudioPopupMenuItem(
+                  value: 'library',
+                  child: Text('Skill library'),
+                ),
+                StudioPopupMenuItem(
+                  value: 'plugins',
+                  child: Text('Agent plugins'),
+                ),
+              ],
+            ),
           ),
-          IconButton(
-            tooltip: 'Refresh capabilities',
-            onPressed: _state.loading || _state.busy
-                ? null
-                : () => _session.load(_kind),
-            icon: const Icon(Icons.refresh),
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Refresh capabilities',
+              onPressed: _state.loading || _state.busy
+                  ? null
+                  : () => _session.load(_kind),
+              icon: const Icon(Icons.refresh),
+            ),
           ),
         ],
       ),
@@ -230,11 +248,13 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                       child: Column(
                         children: [
                           StudioError(_state.error!),
-                          TextButton(
-                            onPressed: _state.loading || _state.busy
-                                ? null
-                                : () => _session.load(_kind),
-                            child: const Text('Retry'),
+                          StudioButtonPress(
+                            child: TextButton(
+                              onPressed: _state.loading || _state.busy
+                                  ? null
+                                  : () => _session.load(_kind),
+                              child: const Text('Retry'),
+                            ),
                           ),
                         ],
                       ),
@@ -295,10 +315,12 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                           if (_skills)
                             SizedBox.square(
                               dimension: 48,
-                              child: IconButton(
-                                tooltip: 'Read instructions for $title',
-                                onPressed: () => _readSkill(name),
-                                icon: const Icon(Icons.visibility_outlined),
+                              child: StudioButtonPress(
+                                child: IconButton(
+                                  tooltip: 'Read instructions for $title',
+                                  onPressed: () => _readSkill(name),
+                                  icon: const Icon(Icons.visibility_outlined),
+                                ),
                               ),
                             ),
                           CompactSwitch(
@@ -319,15 +341,17 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                       children: [
                         Text(row.description),
                         if (!_skills)
-                          TextButton.icon(
-                            onPressed: _state.busy
-                                ? null
-                                : () => _session.reviewSetup(
-                                    name,
-                                    widget.onToolSetup,
-                                  ),
-                            icon: const Icon(Icons.tune, size: 18),
-                            label: const Text('Setup and providers'),
+                          StudioButtonPress(
+                            child: TextButton.icon(
+                              onPressed: _state.busy
+                                  ? null
+                                  : () => _session.reviewSetup(
+                                      name,
+                                      widget.onToolSetup,
+                                    ),
+                              icon: const Icon(Icons.tune, size: 18),
+                              label: const Text('Setup and providers'),
+                            ),
                           ),
                         if (!_skills && row.hasTools) ...[
                           const SizedBox(height: 8),

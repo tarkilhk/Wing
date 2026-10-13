@@ -195,14 +195,16 @@ class ComposerAttachmentTile extends StatelessWidget {
             child: const Icon(Icons.warning_amber_rounded, size: 18),
           );
     if (kind != AttachmentDraftKind.image) {
-      return InputChip(
-        showCheckmark: false,
-        avatar: warning,
-        label: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 180),
-          child: Text(name, overflow: TextOverflow.ellipsis),
+      return StudioButtonPress(
+        child: InputChip(
+          showCheckmark: false,
+          avatar: warning,
+          label: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: Text(name, overflow: TextOverflow.ellipsis),
+          ),
+          onDeleted: onRemove,
         ),
-        onDeleted: onRemove,
       );
     }
 
@@ -217,18 +219,20 @@ class ComposerAttachmentTile extends StatelessWidget {
           ClipRRect(
             borderRadius: WingRadius.card,
             child: Material(
-              child: InkWell(
-                onTap: onPreview,
-                child: Tooltip(
-                  message: 'Preview $name',
-                  child: Image(
-                    image: previewImage!,
-                    fit: BoxFit.cover,
-                    semanticLabel: 'Preview $name',
-                    errorBuilder: (context, error, stackTrace) => ColoredBox(
-                      color: colors.surfaceContainerHighest,
-                      child: const Center(
-                        child: Icon(Icons.broken_image_outlined),
+              child: StudioButtonPress(
+                child: InkWell(
+                  onTap: onPreview,
+                  child: Tooltip(
+                    message: 'Preview $name',
+                    child: Image(
+                      image: previewImage!,
+                      fit: BoxFit.cover,
+                      semanticLabel: 'Preview $name',
+                      errorBuilder: (context, error, stackTrace) => ColoredBox(
+                        color: colors.surfaceContainerHighest,
+                        child: const Center(
+                          child: Icon(Icons.broken_image_outlined),
+                        ),
                       ),
                     ),
                   ),
@@ -240,16 +244,18 @@ class ComposerAttachmentTile extends StatelessWidget {
             Positioned(
               top: 0,
               right: 0,
-              child: IconButton(
-                tooltip: 'Remove $name',
-                onPressed: onRemove,
-                icon: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: colors.surfaceContainerHigh,
-                    borderRadius: WingRadius.control,
+              child: StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Remove $name',
+                  onPressed: onRemove,
+                  icon: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerHigh,
+                      borderRadius: WingRadius.control,
+                    ),
+                    child: Icon(Icons.close, color: colors.onSurface, size: 16),
                   ),
-                  child: Icon(Icons.close, color: colors.onSurface, size: 16),
                 ),
               ),
             ),

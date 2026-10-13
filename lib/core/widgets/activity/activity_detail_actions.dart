@@ -27,11 +27,13 @@ class ActivityDetailAction extends StatelessWidget {
   final bool busy;
 
   @override
-  Widget build(BuildContext context) => IconButton(
-    style: activityActionStyle,
-    tooltip: label,
-    onPressed: busy ? null : onPressed,
-    icon: Icon(icon, size: 16),
+  Widget build(BuildContext context) => StudioButtonPress(
+    child: IconButton(
+      style: activityActionStyle,
+      tooltip: label,
+      onPressed: busy ? null : onPressed,
+      icon: Icon(icon, size: 16),
+    ),
   );
 }
 
@@ -67,30 +69,32 @@ class _ToolDetailCopyButtonState extends State<ToolDetailCopyButton> {
   }
 
   @override
-  Widget build(BuildContext context) => IconButton(
-    style: activityActionStyle,
-    tooltip: _copied ? '${widget.label}: copied' : widget.label,
-    icon: Icon(_copied ? Icons.check : Icons.copy_outlined, size: 16),
-    onPressed: () async {
-      final text = widget.text;
-      try {
-        await Clipboard.setData(ClipboardData(text: text));
-      } catch (_) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: StudioError('Could not copy this text. Try again.'),
-            ),
-          );
+  Widget build(BuildContext context) => StudioButtonPress(
+    child: IconButton(
+      style: activityActionStyle,
+      tooltip: _copied ? '${widget.label}: copied' : widget.label,
+      icon: Icon(_copied ? Icons.check : Icons.copy_outlined, size: 16),
+      onPressed: () async {
+        final text = widget.text;
+        try {
+          await Clipboard.setData(ClipboardData(text: text));
+        } catch (_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: StudioError('Could not copy this text. Try again.'),
+              ),
+            );
+          }
+          return;
         }
-        return;
-      }
-      if (!mounted || widget.text != text) return;
-      _reset?.cancel();
-      setState(() => _copied = true);
-      _reset = Timer(const Duration(seconds: 2), () {
-        if (mounted) setState(() => _copied = false);
-      });
-    },
+        if (!mounted || widget.text != text) return;
+        _reset?.cancel();
+        setState(() => _copied = true);
+        _reset = Timer(const Duration(seconds: 2), () {
+          if (mounted) setState(() => _copied = false);
+        });
+      },
+    ),
   );
 }

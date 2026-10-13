@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -72,13 +73,15 @@ class _AdminServiceKeyCatalogState extends State<AdminServiceKeyCatalog> {
           AdminGroup(
             children: [
               for (final field in session.keys)
-                ListTile(
-                  title: Text(field.label),
-                  subtitle: Text(
-                    '${field.key}${field.isSet ? ' · Key stored' : ''}',
+                StudioButtonPress(
+                  child: ListTile(
+                    title: Text(field.label),
+                    subtitle: Text(
+                      '${field.key}${field.isSet ? ' · Key stored' : ''}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _open(field),
                   ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _open(field),
                 ),
             ],
           ),
@@ -228,9 +231,11 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
             ),
             if (session.error case final error?) AdminNotice.error(error),
             if (session.reviewRequired)
-              TextButton(
-                onPressed: session.busy ? null : session.review,
-                child: const Text('Refresh and review'),
+              StudioButtonPress(
+                child: TextButton(
+                  onPressed: session.busy ? null : session.review,
+                  child: const Text('Refresh and review'),
+                ),
               ),
             TextField(
               controller: _input,
@@ -243,14 +248,20 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
               onChanged: session.setDraft,
             ),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: session.canSave ? () => _save(remove: false) : null,
-              child: StudioActionLabel('Save credential', busy: session.busy),
+            StudioButtonPress(
+              child: FilledButton(
+                onPressed: session.canSave ? () => _save(remove: false) : null,
+                child: StudioActionLabel('Save credential', busy: session.busy),
+              ),
             ),
             if (session.isSet)
-              TextButton(
-                onPressed: session.canRemove ? () => _save(remove: true) : null,
-                child: const Text('Remove stored credential'),
+              StudioButtonPress(
+                child: TextButton(
+                  onPressed: session.canRemove
+                      ? () => _save(remove: true)
+                      : null,
+                  child: const Text('Remove stored credential'),
+                ),
               ),
           ],
         ),
@@ -328,11 +339,13 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
               ),
               if (session.error case final error?) AdminNotice.error(error),
               if (session.showStart)
-                FilledButton(
-                  onPressed: session.canStart ? session.start : null,
-                  child: StudioActionLabel(
-                    session.session == null ? 'Start sign-in' : 'Start again',
-                    busy: session.busy,
+                StudioButtonPress(
+                  child: FilledButton(
+                    onPressed: session.canStart ? session.start : null,
+                    child: StudioActionLabel(
+                      session.session == null ? 'Start sign-in' : 'Start again',
+                      busy: session.busy,
+                    ),
                   ),
                 ),
               if (session.session case final attempt?) ...[
@@ -350,33 +363,41 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
                     attempt.userCode,
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
-                  TextButton.icon(
-                    onPressed: () async {
-                      await Clipboard.setData(
-                        ClipboardData(text: attempt.userCode),
-                      );
-                      if (context.mounted) {
-                        adminMessage(context, 'Code copied.');
-                      }
-                    },
-                    icon: const Icon(Icons.copy, size: 18),
-                    label: const Text('Copy code'),
+                  StudioButtonPress(
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: attempt.userCode),
+                        );
+                        if (context.mounted) {
+                          adminMessage(context, 'Code copied.');
+                        }
+                      },
+                      icon: const Icon(Icons.copy, size: 18),
+                      label: const Text('Copy code'),
+                    ),
                   ),
                   if (session.error != null)
                     SelectableText(attempt.verificationUrl.toString()),
-                  FilledButton(
-                    onPressed: _openBrowser,
-                    child: const Text('Open sign-in page'),
+                  StudioButtonPress(
+                    child: FilledButton(
+                      onPressed: _openBrowser,
+                      child: const Text('Open sign-in page'),
+                    ),
                   ),
-                  TextButton(
-                    onPressed: session.busy ? null : session.poll,
-                    child: const Text('Check status'),
+                  StudioButtonPress(
+                    child: TextButton(
+                      onPressed: session.busy ? null : session.poll,
+                      child: const Text('Check status'),
+                    ),
                   ),
                 ],
               ],
-              TextButton(
-                onPressed: session.canClose ? _close : null,
-                child: Text(session.pending ? 'Cancel sign-in' : 'Close'),
+              StudioButtonPress(
+                child: TextButton(
+                  onPressed: session.canClose ? _close : null,
+                  child: Text(session.pending ? 'Cancel sign-in' : 'Close'),
+                ),
               ),
             ],
           ),

@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../models/bots.dart';
@@ -62,13 +63,17 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
         builder: (context) => AlertDialog(
           title: const Text('Discard edits?'),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Keep editing'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Keep editing'),
+              ),
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Discard'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Discard'),
+              ),
             ),
           ],
         ),
@@ -84,12 +89,14 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
         context: context,
         title: const Text('Edit bot'),
         actions: [
-          IconButton(
-            tooltip: 'Reload saved appearance',
-            onPressed: _session.busy || _session.saving
-                ? null
-                : _session.reload,
-            icon: const Icon(Icons.refresh),
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Reload saved appearance',
+              onPressed: _session.busy || _session.saving
+                  ? null
+                  : _session.reload,
+              icon: const Icon(Icons.refresh),
+            ),
           ),
         ],
       ),
@@ -113,12 +120,14 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
                   children: [
                     StudioError(_session.error!),
                     if (!_session.conflicted && _session.dirty)
-                      IconButton(
-                        tooltip: 'Retry saving appearance',
-                        onPressed: _session.busy || _session.saving
-                            ? null
-                            : _session.flush,
-                        icon: const Icon(Icons.replay),
+                      StudioButtonPress(
+                        child: IconButton(
+                          tooltip: 'Retry saving appearance',
+                          onPressed: _session.busy || _session.saving
+                              ? null
+                              : _session.flush,
+                          icon: const Icon(Icons.replay),
+                        ),
                       ),
                   ],
                 ),
@@ -131,12 +140,14 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
                     const Expanded(
                       child: Text('Review your edits before retrying.'),
                     ),
-                    IconButton(
-                      tooltip: 'Retry saving appearance',
-                      onPressed: _session.busy || _session.saving
-                          ? null
-                          : _session.flush,
-                      icon: const Icon(Icons.replay),
+                    StudioButtonPress(
+                      child: IconButton(
+                        tooltip: 'Retry saving appearance',
+                        onPressed: _session.busy || _session.saving
+                            ? null
+                            : _session.flush,
+                        icon: const Icon(Icons.replay),
+                      ),
                     ),
                   ],
                 ),
@@ -173,22 +184,24 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
               runSpacing: 8,
               children: [
                 for (final shape in botShapes)
-                  IconButton(
-                    tooltip: shape,
-                    isSelected: _session.shape == shape,
-                    style: IconButton.styleFrom(
-                      backgroundColor: _session.shape == shape
-                          ? Theme.of(context).colorScheme.primaryContainer
-                          : null,
-                    ),
-                    onPressed: _session.busy
-                        ? null
-                        : () => _session.change(shape: shape),
-                    icon: BotAvatar(
-                      name: _session.bot.profile.name,
-                      shape: shape,
-                      color: _session.color,
-                      size: 32,
+                  StudioButtonPress(
+                    child: IconButton(
+                      tooltip: shape,
+                      isSelected: _session.shape == shape,
+                      style: IconButton.styleFrom(
+                        backgroundColor: _session.shape == shape
+                            ? Theme.of(context).colorScheme.primaryContainer
+                            : null,
+                      ),
+                      onPressed: _session.busy
+                          ? null
+                          : () => _session.change(shape: shape),
+                      icon: BotAvatar(
+                        name: _session.bot.profile.name,
+                        shape: shape,
+                        color: _session.color,
+                        size: 32,
+                      ),
                     ),
                   ),
               ],
@@ -200,50 +213,55 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
               spacing: 4,
               children: [
                 for (var i = 0; i < desktopProfileSwatches.length; i++)
-                  IconButton(
-                    tooltip: 'Color ${i + 1}',
-                    isSelected:
-                        BotAvatar.resolveColor(
-                          _session.color,
-                          _session.bot.profile.name,
-                        ) ==
-                        desktopProfileSwatches[i],
-                    onPressed: _session.busy
-                        ? null
-                        : () => _session.change(
-                            color:
-                                '#${desktopProfileSwatches[i].toARGB32().toRadixString(16).substring(2)}',
+                  StudioButtonPress(
+                    child: IconButton(
+                      tooltip: 'Color ${i + 1}',
+                      isSelected:
+                          BotAvatar.resolveColor(
+                            _session.color,
+                            _session.bot.profile.name,
+                          ) ==
+                          desktopProfileSwatches[i],
+                      onPressed: _session.busy
+                          ? null
+                          : () => _session.change(
+                              color:
+                                  '#${desktopProfileSwatches[i].toARGB32().toRadixString(16).substring(2)}',
+                            ),
+                      icon: Icon(
+                        Icons.circle,
+                        color: desktopProfileSwatches[i],
+                        size: 28,
+                      ),
+                      selectedIcon: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Icon(
+                            Icons.circle,
+                            color: desktopProfileSwatches[i],
+                            size: 28,
                           ),
-                    icon: Icon(
-                      Icons.circle,
-                      color: desktopProfileSwatches[i],
-                      size: 28,
-                    ),
-                    selectedIcon: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Icon(
-                          Icons.circle,
-                          color: desktopProfileSwatches[i],
-                          size: 28,
-                        ),
-                        Icon(
-                          Icons.check,
-                          size: 18,
-                          color:
-                              desktopProfileSwatches[i].computeLuminance() > .4
-                              ? Colors.black
-                              : Colors.white,
-                        ),
-                      ],
+                          Icon(
+                            Icons.check,
+                            size: 18,
+                            color:
+                                desktopProfileSwatches[i].computeLuminance() >
+                                    .4
+                                ? Colors.black
+                                : Colors.white,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                IconButton(
-                  tooltip: 'Match profile color',
-                  onPressed: _session.busy
-                      ? null
-                      : () => _session.change(color: ''),
-                  icon: const Icon(Icons.restart_alt),
+                StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Match profile color',
+                    onPressed: _session.busy
+                        ? null
+                        : () => _session.change(color: ''),
+                    icon: const Icon(Icons.restart_alt),
+                  ),
                 ),
               ],
             ),
@@ -256,17 +274,21 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Upload avatar',
-                  onPressed: _session.busy || _session.saving
-                      ? null
-                      : _session.pickImage,
-                  icon: const Icon(Icons.upload_outlined),
+                StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Upload avatar',
+                    onPressed: _session.busy || _session.saving
+                        ? null
+                        : _session.pickImage,
+                    icon: const Icon(Icons.upload_outlined),
+                  ),
                 ),
-                IconButton(
-                  tooltip: 'Remove avatar',
-                  onPressed: _session.busy ? null : _session.removeImage,
-                  icon: const Icon(Icons.image_not_supported_outlined),
+                StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Remove avatar',
+                    onPressed: _session.busy ? null : _session.removeImage,
+                    icon: const Icon(Icons.image_not_supported_outlined),
+                  ),
                 ),
               ],
             ),
@@ -278,12 +300,14 @@ class _BotProfileEditorState extends State<BotProfileEditor> {
               decoration: InputDecoration(
                 labelText: 'Describe an avatar',
                 hintText: 'A friendly midnight-blue owl',
-                suffixIcon: IconButton(
-                  tooltip: 'Generate avatar',
-                  onPressed: _session.busy || _session.saving
-                      ? null
-                      : () => _session.generate(_prompt.text),
-                  icon: const Icon(Icons.auto_awesome_outlined),
+                suffixIcon: StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Generate avatar',
+                    onPressed: _session.busy || _session.saving
+                        ? null
+                        : () => _session.generate(_prompt.text),
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                  ),
                 ),
               ),
             ),

@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/voice_input_controller.dart';
@@ -12,10 +13,12 @@ class VoiceInputButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onPressed;
   @override
-  Widget build(BuildContext context) => IconButton(
-    tooltip: 'Dictate message',
-    icon: const Icon(Icons.mic_none),
-    onPressed: enabled ? onPressed : null,
+  Widget build(BuildContext context) => StudioButtonPress(
+    child: IconButton(
+      tooltip: 'Dictate message',
+      icon: const Icon(Icons.mic_none),
+      onPressed: enabled ? onPressed : null,
+    ),
   );
 }
 
@@ -65,15 +68,19 @@ class VoiceInputActivity extends StatelessWidget {
                 spacing: 8,
                 children: [
                   if (controller.phase == VoiceInputPhase.recording)
-                    IconButton(
-                      tooltip: 'Stop recording',
-                      onPressed: controller.stop,
-                      icon: const Icon(Icons.stop),
+                    StudioButtonPress(
+                      child: IconButton(
+                        tooltip: 'Stop recording',
+                        onPressed: controller.stop,
+                        icon: const Icon(Icons.stop),
+                      ),
                     ),
-                  IconButton(
-                    tooltip: 'Cancel recording',
-                    onPressed: controller.cancel,
-                    icon: const Icon(Icons.close),
+                  StudioButtonPress(
+                    child: IconButton(
+                      tooltip: 'Cancel recording',
+                      onPressed: controller.cancel,
+                      icon: const Icon(Icons.close),
+                    ),
                   ),
                 ],
               ),

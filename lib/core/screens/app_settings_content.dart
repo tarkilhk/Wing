@@ -101,13 +101,15 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                       label: 'Reloading settings',
                       child: Column(
                         children: [
-                          ListTile(
-                            leading: const Icon(Icons.refresh),
-                            title: const Text('Reload settings'),
-                            subtitle: state.reloadControl.error == null
-                                ? null
-                                : StudioError(state.reloadControl.error!),
-                            onTap: state.reloadControl.invoke,
+                          StudioButtonPress(
+                            child: ListTile(
+                              leading: const Icon(Icons.refresh),
+                              title: const Text('Reload settings'),
+                              subtitle: state.reloadControl.error == null
+                                  ? null
+                                  : StudioError(state.reloadControl.error!),
+                              onTap: state.reloadControl.invoke,
+                            ),
                           ),
                         ],
                       ),
@@ -165,19 +167,21 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                                         Icons.dark_mode_outlined,
                                       ),
                                     ])
-                                      ChoiceChip(
-                                        showCheckmark: false,
-                                        key: ValueKey(
-                                          'theme-${option.$1.name}',
+                                      StudioButtonPress(
+                                        child: ChoiceChip(
+                                          showCheckmark: false,
+                                          key: ValueKey(
+                                            'theme-${option.$1.name}',
+                                          ),
+                                          avatar: Icon(option.$3, size: 18),
+                                          label: Text(option.$2),
+                                          selected: mode == option.$1,
+                                          onSelected: state.theme.choose == null
+                                              ? null
+                                              : (_) => state.theme.choose!(
+                                                  option.$1,
+                                                ),
                                         ),
-                                        avatar: Icon(option.$3, size: 18),
-                                        label: Text(option.$2),
-                                        selected: mode == option.$1,
-                                        onSelected: state.theme.choose == null
-                                            ? null
-                                            : (_) => state.theme.choose!(
-                                                option.$1,
-                                              ),
                                       ),
                                   ],
                                 ),
@@ -198,24 +202,30 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                                   children: [
                                     for (final choice
                                         in AppAccentPreference.values)
-                                      ChoiceChip(
-                                        showCheckmark: false,
-                                        key: ValueKey('accent-${choice.name}'),
-                                        label: Text(choice.appearance.label),
-                                        selected:
-                                            state.accent.selected == choice,
-                                        avatar: CircleAvatar(
-                                          radius: 8,
-                                          backgroundColor:
-                                              Theme.of(context).brightness ==
-                                                  Brightness.dark
-                                              ? choice.appearance.dark
-                                              : choice.appearance.light,
+                                      StudioButtonPress(
+                                        child: ChoiceChip(
+                                          showCheckmark: false,
+                                          key: ValueKey(
+                                            'accent-${choice.name}',
+                                          ),
+                                          label: Text(choice.appearance.label),
+                                          selected:
+                                              state.accent.selected == choice,
+                                          avatar: CircleAvatar(
+                                            radius: 8,
+                                            backgroundColor:
+                                                Theme.of(context).brightness ==
+                                                    Brightness.dark
+                                                ? choice.appearance.dark
+                                                : choice.appearance.light,
+                                          ),
+                                          onSelected:
+                                              state.accent.choose == null
+                                              ? null
+                                              : (_) => state.accent.choose!(
+                                                  choice,
+                                                ),
                                         ),
-                                        onSelected: state.accent.choose == null
-                                            ? null
-                                            : (_) =>
-                                                  state.accent.choose!(choice),
                                       ),
                                   ],
                                 ),
@@ -294,29 +304,33 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                                                   .batteryRestricted &&
                                           widget.openMonitoringBatterySettings !=
                                               null)
-                                        TextButton(
-                                          onPressed: () async {
-                                            try {
-                                              await widget
-                                                  .openMonitoringBatterySettings!();
-                                            } catch (_) {
-                                              if (context.mounted) {
-                                                showStudioError(
-                                                  context,
-                                                  'Could not open battery settings.',
-                                                );
+                                        StudioButtonPress(
+                                          child: TextButton(
+                                            onPressed: () async {
+                                              try {
+                                                await widget
+                                                    .openMonitoringBatterySettings!();
+                                              } catch (_) {
+                                                if (context.mounted) {
+                                                  showStudioError(
+                                                    context,
+                                                    'Could not open battery settings.',
+                                                  );
+                                                }
                                               }
-                                            }
-                                          },
-                                          child: const Text(
-                                            'Allow background activity',
+                                            },
+                                            child: const Text(
+                                              'Allow background activity',
+                                            ),
                                           ),
                                         ),
                                       if (state ==
                                           BackgroundMonitoringState.failed)
-                                        TextButton(
-                                          onPressed: widget.onChanged,
-                                          child: const Text('Retry'),
+                                        StudioButtonPress(
+                                          child: TextButton(
+                                            onPressed: widget.onChanged,
+                                            child: const Text('Retry'),
+                                          ),
                                         ),
                                     ],
                                   ),
@@ -325,25 +339,27 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                             ),
                           ],
                           const Divider(height: 1),
-                          ListTile(
-                            leading: const Icon(Icons.notifications_outlined),
-                            title: widget.backgroundMonitoringState == null
-                                ? const Text('Test notification')
-                                : ValueListenableBuilder<
-                                    BackgroundMonitoringState
-                                  >(
-                                    valueListenable:
-                                        widget.backgroundMonitoringState!,
-                                    builder: (_, state, _) => Text(
-                                      state ==
-                                              BackgroundMonitoringState
-                                                  .permissionRequired
-                                          ? 'Enable notifications'
-                                          : 'Test notification',
+                          StudioButtonPress(
+                            child: ListTile(
+                              leading: const Icon(Icons.notifications_outlined),
+                              title: widget.backgroundMonitoringState == null
+                                  ? const Text('Test notification')
+                                  : ValueListenableBuilder<
+                                      BackgroundMonitoringState
+                                    >(
+                                      valueListenable:
+                                          widget.backgroundMonitoringState!,
+                                      builder: (_, state, _) => Text(
+                                        state ==
+                                                BackgroundMonitoringState
+                                                    .permissionRequired
+                                            ? 'Enable notifications'
+                                            : 'Test notification',
+                                      ),
                                     ),
-                                  ),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: _requesting ? null : _notifications,
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: _requesting ? null : _notifications,
+                            ),
                           ),
                           const NotificationChannelDiagnostics(),
                         ],
@@ -354,18 +370,20 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                 _SettingsSection(
                   title: 'Voice',
                   child: Card(
-                    child: ListTile(
-                      key: const ValueKey('voice-settings'),
-                      leading: const Icon(Icons.mic_none),
-                      title: const Text('Voice input and output'),
-                      subtitle: const Text(
-                        'Processing, Android voices and read-aloud.',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => Navigator.of(context).push<void>(
-                        MaterialPageRoute(
-                          builder: (_) => VoicePreferencesPage(
-                            createSession: widget.createVoiceSession,
+                    child: StudioButtonPress(
+                      child: ListTile(
+                        key: const ValueKey('voice-settings'),
+                        leading: const Icon(Icons.mic_none),
+                        title: const Text('Voice input and output'),
+                        subtitle: const Text(
+                          'Processing, Android voices and read-aloud.',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) => VoicePreferencesPage(
+                              createSession: widget.createVoiceSession,
+                            ),
                           ),
                         ),
                       ),
@@ -379,17 +397,19 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                       children: [
                         const InstalledAppVersionCard(),
                         const Divider(height: 1),
-                        ListTile(
-                          key: const ValueKey('privacy-policy'),
-                          leading: const Icon(Icons.privacy_tip_outlined),
-                          title: const Text('Privacy policy'),
-                          subtitle: const Text(
-                            'How your data is stored and used.',
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.of(context).push<void>(
-                            MaterialPageRoute(
-                              builder: (_) => const PrivacyPolicyScreen(),
+                        StudioButtonPress(
+                          child: ListTile(
+                            key: const ValueKey('privacy-policy'),
+                            leading: const Icon(Icons.privacy_tip_outlined),
+                            title: const Text('Privacy policy'),
+                            subtitle: const Text(
+                              'How your data is stored and used.',
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.of(context).push<void>(
+                              MaterialPageRoute(
+                                builder: (_) => const PrivacyPolicyScreen(),
+                              ),
                             ),
                           ),
                         ),
@@ -541,13 +561,15 @@ class _PreferenceSwitch extends StatelessWidget {
               spacing: 8,
               children: [
                 for (final option in [(true, 'On'), (false, 'Off')])
-                  ChoiceChip(
-                    showCheckmark: false,
-                    selected: false,
-                    label: Text(option.$2),
-                    onSelected: control.choose == null
-                        ? null
-                        : (_) => control.choose!(option.$1),
+                  StudioButtonPress(
+                    child: ChoiceChip(
+                      showCheckmark: false,
+                      selected: false,
+                      label: Text(option.$2),
+                      onSelected: control.choose == null
+                          ? null
+                          : (_) => control.choose!(option.$1),
+                    ),
                   ),
               ],
             ),

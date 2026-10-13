@@ -23,49 +23,51 @@ class AdminHostHealth extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                InkWell(
-                  onTap: () => adminPush(
-                    context,
-                    (_) => AdminHostDetailsPage(resources: resources),
-                  ),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.dns_outlined, size: 22),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  state.stats.value?.hostname ??
-                                      'Host resources',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                                if (state.stats.value case final stats?)
+                StudioButtonPress(
+                  child: InkWell(
+                    onTap: () => adminPush(
+                      context,
+                      (_) => AdminHostDetailsPage(resources: resources),
+                    ),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.dns_outlined, size: 22),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
                                   Text(
-                                    '${stats.os} ${stats.osRelease} · ${stats.architecture} · v${stats.hermesVersion}',
+                                    state.stats.value?.hostname ??
+                                        'Host resources',
                                     style: Theme.of(
                                       context,
-                                    ).textTheme.bodySmall,
-                                  )
-                                else if (!state.refreshing)
-                                  Text(
-                                    'Machine details unavailable',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall,
+                                    ).textTheme.titleMedium,
                                   ),
-                              ],
+                                  if (state.stats.value case final stats?)
+                                    Text(
+                                      '${stats.os} ${stats.osRelease} · ${stats.architecture} · v${stats.hermesVersion}',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                    )
+                                  else if (!state.refreshing)
+                                    Text(
+                                      'Machine details unavailable',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const Icon(Icons.chevron_right, size: 20),
-                        ],
+                            const Icon(Icons.chevron_right, size: 20),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -314,10 +316,12 @@ class _HostHeading extends StatelessWidget {
               ],
             ),
           ),
-          IconButton(
-            tooltip: 'Refresh host resources',
-            onPressed: state.refreshing ? null : resources.refresh,
-            icon: const Icon(Icons.refresh),
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Refresh host resources',
+              onPressed: state.refreshing ? null : resources.refresh,
+              icon: const Icon(Icons.refresh),
+            ),
           ),
         ],
       ),

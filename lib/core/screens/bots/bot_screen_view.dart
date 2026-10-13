@@ -108,13 +108,17 @@ class _BotScreenViewState extends State<BotScreenView>
           'This releases the current human controller, including another device, and lets the bot use its screen.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Hand back'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Hand back'),
+            ),
           ),
         ],
       ),
@@ -132,13 +136,17 @@ class _BotScreenViewState extends State<BotScreenView>
             'The current controller will return to watching the screen.',
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Take control'),
+            StudioButtonPress(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Take control'),
+              ),
             ),
           ],
         ),
@@ -274,16 +282,20 @@ class _BotScreenViewState extends State<BotScreenView>
     bool selected = false,
   }) => Semantics(
     selected: selected,
-    child: IconButton(
-      tooltip: label,
-      onPressed: action,
-      style: selected
-          ? IconButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-            )
-          : null,
-      icon: Icon(icon),
-      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+    child: StudioButtonPress(
+      child: IconButton(
+        tooltip: label,
+        onPressed: action,
+        style: selected
+            ? IconButton.styleFrom(
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.secondaryContainer,
+              )
+            : null,
+        icon: Icon(icon),
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      ),
     ),
   );
 

@@ -506,16 +506,21 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                 else ...[
                   StudioError(_initialError!),
                   const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: _initialOpening
-                        ? null
-                        : () => unawaited(_openInitial(widget.initialOutput!)),
-                    child: const Text('Try again'),
+                  StudioButtonPress(
+                    child: TextButton(
+                      onPressed: _initialOpening
+                          ? null
+                          : () =>
+                                unawaited(_openInitial(widget.initialOutput!)),
+                      child: const Text('Try again'),
+                    ),
                   ),
                 ],
-                TextButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  child: const Text('Back to chat'),
+                StudioButtonPress(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    child: const Text('Back to chat'),
+                  ),
                 ),
               ],
             ),
@@ -533,12 +538,14 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
-          IconButton(
-            tooltip: 'Refresh outputs',
-            icon: const Icon(Icons.refresh),
-            onPressed: _working || _observation.loading
-                ? null
-                : () => _load(refresh: true),
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Refresh outputs',
+              icon: const Icon(Icons.refresh),
+              onPressed: _working || _observation.loading
+                  ? null
+                  : () => _load(refresh: true),
+            ),
           ),
         ],
       ),
@@ -572,45 +579,49 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                       itemCount: outputs.length,
                       itemBuilder: (context, index) {
                         final output = outputs[index];
-                        return ListTile(
-                          leading: Icon(switch (output.kind) {
-                            ChatOutputKind.image => Icons.image_outlined,
-                            ChatOutputKind.file =>
-                              Icons.insert_drive_file_outlined,
-                            ChatOutputKind.link => Icons.link,
-                          }),
-                          title: Text(
-                            output.label,
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            output.target,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          onTap: _working
-                              ? null
-                              : () => _run(
-                                  () => _preview(output),
-                                  offerRetry: true,
-                                ),
-                          trailing: output.path == null
-                              ? null
-                              : IconButton(
-                                  tooltip: 'Save or share ${output.label}',
-                                  icon: const Icon(Icons.ios_share),
-                                  onPressed: _working
-                                      ? null
-                                      : () => _run(
-                                          () async => _share(
-                                            await _session.download(
-                                              output.path!,
+                        return StudioButtonPress(
+                          child: ListTile(
+                            leading: Icon(switch (output.kind) {
+                              ChatOutputKind.image => Icons.image_outlined,
+                              ChatOutputKind.file =>
+                                Icons.insert_drive_file_outlined,
+                              ChatOutputKind.link => Icons.link,
+                            }),
+                            title: Text(
+                              output.label,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              output.target,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            onTap: _working
+                                ? null
+                                : () => _run(
+                                    () => _preview(output),
+                                    offerRetry: true,
+                                  ),
+                            trailing: output.path == null
+                                ? null
+                                : StudioButtonPress(
+                                    child: IconButton(
+                                      tooltip: 'Save or share ${output.label}',
+                                      icon: const Icon(Icons.ios_share),
+                                      onPressed: _working
+                                          ? null
+                                          : () => _run(
+                                              () async => _share(
+                                                await _session.download(
+                                                  output.path!,
+                                                ),
+                                              ),
                                             ),
-                                          ),
-                                        ),
-                                ),
+                                    ),
+                                  ),
+                          ),
                         );
                       },
                     ),
@@ -631,23 +642,30 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                                 'Recent outputs shown. Load older outputs to look further back.',
                               ),
                       if (_observation.error != null)
-                        TextButton(
-                          onPressed: _working || _observation.loading
-                              ? null
-                              : () => _load(refresh: _observation.retryRefresh),
-                          child: const Text('Try again'),
+                        StudioButtonPress(
+                          child: TextButton(
+                            onPressed: _working || _observation.loading
+                                ? null
+                                : () =>
+                                      _load(refresh: _observation.retryRefresh),
+                            child: const Text('Try again'),
+                          ),
                         )
                       else if (_observation.hasMore)
-                        TextButton(
-                          onPressed: _working || _observation.loading
-                              ? null
-                              : () => _load(),
-                          child: const Text('Load older outputs'),
+                        StudioButtonPress(
+                          child: TextButton(
+                            onPressed: _working || _observation.loading
+                                ? null
+                                : () => _load(),
+                            child: const Text('Load older outputs'),
+                          ),
                         ),
                       if (_observation.error != null && outputs.isEmpty)
-                        TextButton(
-                          onPressed: () => Navigator.of(context).maybePop(),
-                          child: const Text('Back to chat'),
+                        StudioButtonPress(
+                          child: TextButton(
+                            onPressed: () => Navigator.of(context).maybePop(),
+                            child: const Text('Back to chat'),
+                          ),
                         ),
                     ],
                   ),

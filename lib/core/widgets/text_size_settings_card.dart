@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 
@@ -93,15 +94,17 @@ class TextSizeSettingsCard extends StatelessWidget {
       button: true,
       onTap: () => _showPicker(context),
       child: ExcludeSemantics(
-        child: ListTile(
-          leading: const Icon(Icons.format_size),
-          title: const Text('Text size'),
-          subtitle: Text(
-            state.textSize.selected?.label ??
-                'Choose a value to repair the saved setting',
+        child: StudioButtonPress(
+          child: ListTile(
+            leading: const Icon(Icons.format_size),
+            title: const Text('Text size'),
+            subtitle: Text(
+              state.textSize.selected?.label ??
+                  'Choose a value to repair the saved setting',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showPicker(context),
           ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _showPicker(context),
         ),
       ),
     ),

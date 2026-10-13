@@ -460,13 +460,17 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           'The previous attempt has an uncertain outcome. Retrying may repeat work that already completed.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Retry'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Retry'),
+            ),
           ),
         ],
       ),
@@ -530,52 +534,57 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       onMembers: _showMembers,
       showMembers: !_showReferences && (!keyboardOpen || !enlargedText),
       actions: [
-        PopupMenuButton<String>(
-          tooltip: 'Group options',
-          icon: const Icon(Icons.more_horiz),
-          onSelected: (action) async {
-            switch (action) {
-              case 'histories':
-                await _openWorkingHistories();
-              case 'refresh':
-                await _session.refresh();
-              case 'stop':
-                await _session.stop();
-              case 'edit':
-                _focus.unfocus();
-                _inspectingDetails = true;
-                _syncVisibility();
-                try {
-                  final updated = await widget.onEdit!(_session.group);
-                  if (mounted && updated != null) {
-                    _session.updateDetails(updated);
+        StudioButtonPress(
+          child: PopupMenuButton<String>(
+            tooltip: 'Group options',
+            icon: const Icon(Icons.more_horiz),
+            onSelected: (action) async {
+              switch (action) {
+                case 'histories':
+                  await _openWorkingHistories();
+                case 'refresh':
+                  await _session.refresh();
+                case 'stop':
+                  await _session.stop();
+                case 'edit':
+                  _focus.unfocus();
+                  _inspectingDetails = true;
+                  _syncVisibility();
+                  try {
+                    final updated = await widget.onEdit!(_session.group);
+                    if (mounted && updated != null) {
+                      _session.updateDetails(updated);
+                    }
+                  } finally {
+                    _inspectingDetails = false;
+                    if (mounted) {
+                      _syncVisibility();
+                    }
                   }
-                } finally {
-                  _inspectingDetails = false;
-                  if (mounted) {
-                    _syncVisibility();
-                  }
-                }
-            }
-          },
-          itemBuilder: (_) => [
-            if (widget.onEdit != null)
-              const PopupMenuItem(value: 'edit', child: Text('Edit group')),
-            const PopupMenuItem(
-              value: 'histories',
-              child: Text('Bot working histories'),
-            ),
-            PopupMenuItem(
-              value: 'refresh',
-              enabled: !_session.loading,
-              child: const Text('Refresh group'),
-            ),
-            if (canStop)
-              const PopupMenuItem(
-                value: 'stop',
-                child: Text('Stop group work'),
+              }
+            },
+            itemBuilder: (_) => [
+              if (widget.onEdit != null)
+                const StudioPopupMenuItem(
+                  value: 'edit',
+                  child: Text('Edit group'),
+                ),
+              const StudioPopupMenuItem(
+                value: 'histories',
+                child: Text('Bot working histories'),
               ),
-          ],
+              StudioPopupMenuItem(
+                value: 'refresh',
+                enabled: !_session.loading,
+                child: const Text('Refresh group'),
+              ),
+              if (canStop)
+                const StudioPopupMenuItem(
+                  value: 'stop',
+                  child: Text('Stop group work'),
+                ),
+            ],
+          ),
         ),
       ],
       transcript: Stack(
@@ -658,28 +667,32 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                                       Wrap(
                                         children: [
                                           if (action.kind == 'retry')
-                                            IconButton(
-                                              tooltip: 'Review retry',
-                                              onPressed: _session.acting
-                                                  ? null
-                                                  : () => _retry(action),
-                                              icon: const Icon(Icons.refresh),
+                                            StudioButtonPress(
+                                              child: IconButton(
+                                                tooltip: 'Review retry',
+                                                onPressed: _session.acting
+                                                    ? null
+                                                    : () => _retry(action),
+                                                icon: const Icon(Icons.refresh),
+                                              ),
                                             ),
                                           for (final choice in action.choices)
-                                            IconButton(
-                                              tooltip: choice == 'once'
-                                                  ? 'Allow once'
-                                                  : 'Deny',
-                                              onPressed: _session.acting
-                                                  ? null
-                                                  : () => _session.resolve(
-                                                      action,
-                                                      choice: choice,
-                                                    ),
-                                              icon: Icon(
-                                                choice == 'once'
-                                                    ? Icons.check
-                                                    : Icons.close,
+                                            StudioButtonPress(
+                                              child: IconButton(
+                                                tooltip: choice == 'once'
+                                                    ? 'Allow once'
+                                                    : 'Deny',
+                                                onPressed: _session.acting
+                                                    ? null
+                                                    : () => _session.resolve(
+                                                        action,
+                                                        choice: choice,
+                                                      ),
+                                                icon: Icon(
+                                                  choice == 'once'
+                                                      ? Icons.check
+                                                      : Icons.close,
+                                                ),
                                               ),
                                             ),
                                         ],

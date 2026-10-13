@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 
 /// The same reachable, icon-only transcript navigation control in every chat.
@@ -15,13 +16,15 @@ class TranscriptLatestButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Tooltip(
     message: label,
-    child: FilledButton.tonal(
-      onPressed: onPressed,
-      style: FilledButton.styleFrom(
-        minimumSize: const Size(48, 36),
-        tapTargetSize: MaterialTapTargetSize.padded,
+    child: StudioButtonPress(
+      child: FilledButton.tonal(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(48, 36),
+          tapTargetSize: MaterialTapTargetSize.padded,
+        ),
+        child: Icon(icon, size: 18),
       ),
-      child: Icon(icon, size: 18),
     ),
   );
 }

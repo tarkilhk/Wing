@@ -26,10 +26,12 @@ class DeletedChatRecoveryNotice extends StatelessWidget {
             liveRegion: true,
             child: Text(summary, style: Theme.of(context).textTheme.bodySmall),
           );
-          final review = TextButton(
-            key: const ValueKey('deleted-chat-review'),
-            onPressed: () => _review(context),
-            child: const Text('Review'),
+          final review = StudioButtonPress(
+            child: TextButton(
+              key: const ValueKey('deleted-chat-review'),
+              onPressed: () => _review(context),
+              child: const Text('Review'),
+            ),
           );
           return Padding(
             key: const ValueKey('deleted-chat-recovery-notice'),
@@ -105,10 +107,12 @@ class DeletedChatRecoverySheet extends StatelessWidget {
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Close chat recovery',
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close),
+                      StudioButtonPress(
+                        child: IconButton(
+                          tooltip: 'Close chat recovery',
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                        ),
                       ),
                     ],
                   ),
@@ -192,9 +196,11 @@ class _RecoveryEntry extends StatelessWidget {
                   alignment: WrapAlignment.end,
                   children: [
                     for (final action in entry.actions)
-                      TextButton(
-                        onPressed: action.invoke,
-                        child: Text(action.label),
+                      StudioButtonPress(
+                        child: TextButton(
+                          onPressed: action.invoke,
+                          child: Text(action.label),
+                        ),
                       ),
                   ],
                 ),

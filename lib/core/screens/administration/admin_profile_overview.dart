@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 
@@ -84,43 +85,46 @@ class _AdminProfileOverviewState extends State<AdminProfileOverview> {
     final metadata = _text(summary.modelMetadata);
     final attention = summary.modelAttention;
     return _group([
-      InkWell(
-        key: const ValueKey('Models and reasoning'),
-        onTap: widget.destinations[ProfileOverviewDestination.models] == null
-            ? null
-            : () => _openDestination(ProfileOverviewDestination.models),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Models and reasoning',
-                      style: theme.textTheme.bodySmall,
+      StudioButtonPress(
+        child: InkWell(
+          key: const ValueKey('Models and reasoning'),
+          onTap: widget.destinations[ProfileOverviewDestination.models] == null
+              ? null
+              : () => _openDestination(ProfileOverviewDestination.models),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Models and reasoning',
+                        style: theme.textTheme.bodySmall,
+                      ),
                     ),
-                  ),
-                  if (widget.destinations[ProfileOverviewDestination.models] !=
-                      null)
-                    const Icon(Icons.chevron_right, size: 20),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                model,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
+                    if (widget.destinations[ProfileOverviewDestination
+                            .models] !=
+                        null)
+                      const Icon(Icons.chevron_right, size: 20),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(metadata, style: theme.textTheme.bodySmall),
-              if (attention != null) ...[
                 const SizedBox(height: 4),
-                AdminAttention(attention),
+                Text(
+                  model,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(metadata, style: theme.textTheme.bodySmall),
+                if (attention != null) ...[
+                  const SizedBox(height: 4),
+                  AdminAttention(attention),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -270,28 +274,30 @@ class _ProfileOverviewRowState extends State<_ProfileOverviewRow> {
           ? Duration.zero
           : const Duration(milliseconds: 180),
       color: _changed ? theme.colorScheme.primaryContainer : Colors.transparent,
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-        minTileHeight: 56,
-        minVerticalPadding: 8,
-        title: Text(widget.title, style: theme.textTheme.titleSmall),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.attention case final attention?) ...[
-              const SizedBox(height: 4),
-              AdminAttention(attention),
-              const SizedBox(height: 4),
+      child: StudioButtonPress(
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          minTileHeight: 56,
+          minVerticalPadding: 8,
+          title: Text(widget.title, style: theme.textTheme.titleSmall),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.attention case final attention?) ...[
+                const SizedBox(height: 4),
+                AdminAttention(attention),
+                const SizedBox(height: 4),
+              ],
+              if (widget.detail case final detail?)
+                Text(detail, style: theme.textTheme.bodySmall),
+              Text(widget.subtitle, style: theme.textTheme.bodySmall),
             ],
-            if (widget.detail case final detail?)
-              Text(detail, style: theme.textTheme.bodySmall),
-            Text(widget.subtitle, style: theme.textTheme.bodySmall),
-          ],
+          ),
+          trailing: widget.onTap == null
+              ? null
+              : const Icon(Icons.chevron_right, size: 20),
+          onTap: widget.onTap,
         ),
-        trailing: widget.onTap == null
-            ? null
-            : const Icon(Icons.chevron_right, size: 20),
-        onTap: widget.onTap,
       ),
     );
   }

@@ -40,6 +40,10 @@ class AdminGroup { const AdminGroup(); }
     await put('lib/core/widgets/studio_loading.dart', '''
 class StudioLoadingRegion { const StudioLoadingRegion(); }
 ''');
+    await put('lib/core/theme/wing_theme.dart', '''
+class StudioButtonPress { const StudioButtonPress({required this.child}); final Object child; }
+class StudioPopupMenuItem { const StudioPopupMenuItem(); }
+''');
     await put('lib/core/services/administration_repository.dart', '''
 part 'repository_part.dart';
 class AdministrationRepository { AdministrationRepository(); void request() {} }
@@ -195,6 +199,10 @@ class AdminProfilesPage {
       view('void f() { final make = ProfilesManagementSession.new; make(); }'),
     );
     final valid = <String>[
+      view(
+        'void f() { const StudioButtonPress(child: StudioPopupMenuItem()); }',
+        imports: '${sessionImport}import "../../theme/wing_theme.dart";\n',
+      ),
       view(
         'void f() { const StudioLoadingRegion(); }',
         imports:

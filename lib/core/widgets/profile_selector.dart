@@ -74,14 +74,18 @@ class _ProfileSelectorState extends State<ProfileSelector> {
                   if (fact.error ?? fact.notice case final feedback?)
                     Text(feedback),
                   if (fact.reloadVisible)
-                    TextButton(
-                      onPressed: fact.reload == null
-                          ? null
-                          : () async {
-                              await fact.reload!();
-                            },
-                      child: Text(
-                        fact.reloading ? 'Reloading colors…' : 'Reload colors',
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: fact.reload == null
+                            ? null
+                            : () async {
+                                await fact.reload!();
+                              },
+                        child: Text(
+                          fact.reloading
+                              ? 'Reloading colors…'
+                              : 'Reload colors',
+                        ),
                       ),
                     ),
                   const SizedBox(height: 16),
@@ -111,44 +115,46 @@ class _ProfileSelectorState extends State<ProfileSelector> {
                         child: Opacity(
                           opacity: fact.canChoose ? 1 : .45,
                           child: ExcludeSemantics(
-                            child: TextButton(
-                              key: ValueKey('profile-color-$index'),
-                              onPressed: fact.canChoose
-                                  ? () => Navigator.pop(sheetContext, choice)
-                                  : null,
-                              style: TextButton.styleFrom(
-                                padding: EdgeInsets.zero,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: WingRadius.control,
-                                  side: BorderSide(
-                                    color: isSelected
-                                        ? tokens.accent
-                                        : tokens.border,
-                                    width: isSelected ? 2 : 1,
+                            child: StudioButtonPress(
+                              child: TextButton(
+                                key: ValueKey('profile-color-$index'),
+                                onPressed: fact.canChoose
+                                    ? () => Navigator.pop(sheetContext, choice)
+                                    : null,
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: WingRadius.control,
+                                    side: BorderSide(
+                                      color: isSelected
+                                          ? tokens.accent
+                                          : tokens.border,
+                                      width: isSelected ? 2 : 1,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              child: Center(
-                                child: Container(
-                                  width: 32,
-                                  height: 32,
-                                  decoration: BoxDecoration(
-                                    color: color,
-                                    shape: BoxShape.circle,
+                                child: Center(
+                                  child: Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: color,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: isSelected
+                                        ? Icon(
+                                            Icons.check,
+                                            size: 18,
+                                            color:
+                                                ThemeData.estimateBrightnessForColor(
+                                                      color,
+                                                    ) ==
+                                                    Brightness.dark
+                                                ? Colors.white
+                                                : Colors.black,
+                                          )
+                                        : null,
                                   ),
-                                  child: isSelected
-                                      ? Icon(
-                                          Icons.check,
-                                          size: 18,
-                                          color:
-                                              ThemeData.estimateBrightnessForColor(
-                                                    color,
-                                                  ) ==
-                                                  Brightness.dark
-                                              ? Colors.white
-                                              : Colors.black,
-                                        )
-                                      : null,
                                 ),
                               ),
                             ),
@@ -158,24 +164,26 @@ class _ProfileSelectorState extends State<ProfileSelector> {
                     },
                   ),
                   const SizedBox(height: 12),
-                  ListTile(
-                    key: const ValueKey('profile-color-automatic'),
-                    enabled: fact.canChoose,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      Icons.auto_awesome_outlined,
-                      color: tokens.muted,
+                  StudioButtonPress(
+                    child: ListTile(
+                      key: const ValueKey('profile-color-automatic'),
+                      enabled: fact.canChoose,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        Icons.auto_awesome_outlined,
+                        color: tokens.muted,
+                      ),
+                      title: const Text('Automatic color'),
+                      trailing: fact.selected == ProfileColorChoice.automatic
+                          ? const Icon(Icons.check)
+                          : null,
+                      onTap: fact.canChoose
+                          ? () => Navigator.pop(
+                              sheetContext,
+                              ProfileColorChoice.automatic,
+                            )
+                          : null,
                     ),
-                    title: const Text('Automatic color'),
-                    trailing: fact.selected == ProfileColorChoice.automatic
-                        ? const Icon(Icons.check)
-                        : null,
-                    onTap: fact.canChoose
-                        ? () => Navigator.pop(
-                            sheetContext,
-                            ProfileColorChoice.automatic,
-                          )
-                        : null,
                   ),
                 ],
               ),
@@ -256,52 +264,59 @@ class _ProfileSelectorState extends State<ProfileSelector> {
                 child: Center(
                   child: GestureDetector(
                     onLongPress: () => _chooseColor(profile),
-                    child: TextButton(
-                      key: ValueKey('profile-${profile.name}'),
-                      style:
-                          TextButton.styleFrom(
-                            minimumSize: const Size(48, 36),
-                            tapTargetSize: MaterialTapTargetSize.padded,
-                            visualDensity: VisualDensity.standard,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            foregroundColor: _profileColor(profile.name),
-                            backgroundColor: _profileColor(profile.name)
-                                .withValues(
-                                  alpha: widget.selectedProfile == profile.name
-                                      ? 0.22
-                                      : 0.09,
-                                ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: WingRadius.control,
-                            ),
-                          ).copyWith(
-                            side: WidgetStateProperty.resolveWith((states) {
-                              if (states.contains(WidgetState.focused)) {
+                    child: StudioButtonPress(
+                      child: TextButton(
+                        key: ValueKey('profile-${profile.name}'),
+                        style:
+                            TextButton.styleFrom(
+                              minimumSize: const Size(48, 36),
+                              tapTargetSize: MaterialTapTargetSize.padded,
+                              visualDensity: VisualDensity.standard,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              foregroundColor: _profileColor(profile.name),
+                              backgroundColor: _profileColor(profile.name)
+                                  .withValues(
+                                    alpha:
+                                        widget.selectedProfile == profile.name
+                                        ? 0.22
+                                        : 0.09,
+                                  ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: WingRadius.control,
+                              ),
+                            ).copyWith(
+                              side: WidgetStateProperty.resolveWith((states) {
+                                if (states.contains(WidgetState.focused)) {
+                                  return BorderSide(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    width: 3,
+                                  );
+                                }
                                 return BorderSide(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  width: 3,
+                                  color: _profileColor(
+                                    profile.name,
+                                  ).withValues(alpha: 0.28),
                                 );
-                              }
-                              return BorderSide(
-                                color: _profileColor(
-                                  profile.name,
-                                ).withValues(alpha: 0.28),
-                              );
-                            }),
-                          ),
-                      onPressed: widget.onSelected == null
-                          ? null
-                          : () => widget.onSelected!(profile.name),
-                      child: Semantics(
-                        key: widget.selectedProfile == profile.name
-                            ? _selected
-                            : null,
-                        selected: widget.selectedProfile == profile.name,
-                        child: Text(
-                          profile.label,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
+                              }),
+                            ),
+                        onPressed: widget.onSelected == null
+                            ? null
+                            : () => widget.onSelected!(profile.name),
+                        child: Semantics(
+                          key: widget.selectedProfile == profile.name
+                              ? _selected
+                              : null,
+                          selected: widget.selectedProfile == profile.name,
+                          child: Text(
+                            profile.label,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
                       ),

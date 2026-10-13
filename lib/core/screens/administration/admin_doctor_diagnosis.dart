@@ -92,13 +92,15 @@ class AdminDoctorDiagnosis extends StatelessWidget {
                         const SizedBox(height: WingSpacing.xs),
                         Align(
                           alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            onPressed:
-                                onAskHermes == null || openingFinding != null
-                                ? null
-                                : () => onAskHermes!(index),
-                            icon: const Icon(WingIcons.newChat, size: 18),
-                            label: const Text('Ask Hermes'),
+                          child: StudioButtonPress(
+                            child: TextButton.icon(
+                              onPressed:
+                                  onAskHermes == null || openingFinding != null
+                                  ? null
+                                  : () => onAskHermes!(index),
+                              icon: const Icon(WingIcons.newChat, size: 18),
+                              label: const Text('Ask Hermes'),
+                            ),
                           ),
                         ),
                       ],

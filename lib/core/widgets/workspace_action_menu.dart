@@ -54,7 +54,7 @@ Future<String?> showWorkspaceActionMenu(
         ? AnimationStyle.noAnimation
         : const AnimationStyle(duration: Duration(milliseconds: 160)),
     items: [
-      PopupMenuItem<String>(
+      StudioPopupMenuItem<String>(
         enabled: false,
         child: Padding(
           padding: const EdgeInsets.only(top: 4, bottom: 8),
@@ -89,7 +89,7 @@ Future<String?> showWorkspaceActionMenu(
       for (final (id, label, icon, enabled) in actions) ...[
         if (id == 'archive' || id == 'delete')
           const PopupMenuDivider(height: 9),
-        PopupMenuItem<String>(
+        StudioPopupMenuItem<String>(
           key: ValueKey('$keyPrefix-$id'),
           value: id,
           enabled: enabled,

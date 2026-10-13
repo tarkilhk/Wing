@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../services/markdown_segments.dart';
@@ -57,21 +58,26 @@ class MarkdownCodeBlock extends StatelessWidget {
       language: language,
       headerAction:
           diagramFormat != null && previewEnabled && code.length <= diagramLimit
-          ? IconButton(
-              tooltip: diagramFormat == WebOutputFormat.svg
-                  ? 'Open SVG'
-                  : 'Open diagram',
-              icon: Icon(
-                diagramFormat == WebOutputFormat.svg
-                    ? Icons.image_outlined
-                    : Icons.account_tree_outlined,
-                size: 18,
-              ),
-              constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      WebOutputPreview(source: code, format: diagramFormat),
+          ? StudioButtonPress(
+              child: IconButton(
+                tooltip: diagramFormat == WebOutputFormat.svg
+                    ? 'Open SVG'
+                    : 'Open diagram',
+                icon: Icon(
+                  diagramFormat == WebOutputFormat.svg
+                      ? Icons.image_outlined
+                      : Icons.account_tree_outlined,
+                  size: 18,
+                ),
+                constraints: const BoxConstraints.tightFor(
+                  width: 48,
+                  height: 48,
+                ),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        WebOutputPreview(source: code, format: diagramFormat),
+                  ),
                 ),
               ),
             )

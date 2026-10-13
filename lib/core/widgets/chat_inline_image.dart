@@ -94,20 +94,22 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
       children: [
         const StudioError('This image could not be previewed.'),
         const SizedBox(height: WingSpacing.xs),
-        IconButton(
-          tooltip: 'Retry image',
-          constraints: widget.toolReceipt
-              ? const BoxConstraints.tightFor(width: 32, height: 32)
-              : null,
-          padding: widget.toolReceipt
-              ? EdgeInsets.zero
-              : const EdgeInsets.all(8),
-          visualDensity: widget.toolReceipt ? VisualDensity.compact : null,
-          onPressed: () => setState(() {
-            _attempt++;
-            _image = _imageProvider();
-          }),
-          icon: Icon(Icons.refresh, size: widget.toolReceipt ? 16 : null),
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Retry image',
+            constraints: widget.toolReceipt
+                ? const BoxConstraints.tightFor(width: 32, height: 32)
+                : null,
+            padding: widget.toolReceipt
+                ? EdgeInsets.zero
+                : const EdgeInsets.all(8),
+            visualDensity: widget.toolReceipt ? VisualDensity.compact : null,
+            onPressed: () => setState(() {
+              _attempt++;
+              _image = _imageProvider();
+            }),
+            icon: Icon(Icons.refresh, size: widget.toolReceipt ? 16 : null),
+          ),
         ),
       ],
     ),
@@ -166,28 +168,30 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
                   if (snapshot.hasError) return _unavailable();
                   final provider = snapshot.data;
                   if (provider == null) return _loading(width);
-                  return InkWell(
-                    onTap: () => _open(provider),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: width,
-                        maxHeight: 320,
-                      ),
-                      child: Image(
-                        key: ValueKey((widget.target, _attempt)),
-                        image: ResizeImage(
-                          provider,
-                          width: (width * ratio).ceil(),
-                          height: (320 * ratio).ceil(),
-                          policy: ResizeImagePolicy.fit,
+                  return StudioButtonPress(
+                    child: InkWell(
+                      onTap: () => _open(provider),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: width,
+                          maxHeight: 320,
                         ),
-                        fit: BoxFit.scaleDown,
-                        semanticLabel: 'Open image: ${widget.title}',
-                        frameBuilder: (_, child, frame, _) =>
-                            frame == null ? _loading(width) : child,
-                        errorBuilder: (_, _, _) => _unavailable(),
-                        loadingBuilder: (_, child, progress) =>
-                            progress == null ? child : _loading(width),
+                        child: Image(
+                          key: ValueKey((widget.target, _attempt)),
+                          image: ResizeImage(
+                            provider,
+                            width: (width * ratio).ceil(),
+                            height: (320 * ratio).ceil(),
+                            policy: ResizeImagePolicy.fit,
+                          ),
+                          fit: BoxFit.scaleDown,
+                          semanticLabel: 'Open image: ${widget.title}',
+                          frameBuilder: (_, child, frame, _) =>
+                              frame == null ? _loading(width) : child,
+                          errorBuilder: (_, _, _) => _unavailable(),
+                          loadingBuilder: (_, child, progress) =>
+                              progress == null ? child : _loading(width),
+                        ),
                       ),
                     ),
                   );

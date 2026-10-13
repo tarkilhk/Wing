@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import '../widgets/studio_task_marker.dart';
@@ -38,13 +39,15 @@ class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const StudioError('Could not load the privacy policy.'),
-                  TextButton(
-                    onPressed: () => setState(() {
-                      _policy = DefaultAssetBundle.of(
-                        context,
-                      ).loadString('PRIVACY.md');
-                    }),
-                    child: const Text('Retry'),
+                  StudioButtonPress(
+                    child: TextButton(
+                      onPressed: () => setState(() {
+                        _policy = DefaultAssetBundle.of(
+                          context,
+                        ).loadString('PRIVACY.md');
+                      }),
+                      child: const Text('Retry'),
+                    ),
                   ),
                 ],
               ),

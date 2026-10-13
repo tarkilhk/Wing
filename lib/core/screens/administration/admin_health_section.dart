@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 
 /// A section has one check time; row colors describe the individual results.
@@ -98,9 +99,11 @@ Future<void> showHealthCheckExplanation(
       ],
     ),
     actions: [
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('Close'),
+      StudioButtonPress(
+        child: TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
       ),
     ],
   ),

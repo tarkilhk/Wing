@@ -56,54 +56,58 @@ class ProfileQueuedMessages extends StatelessWidget {
                         ? theme.colorScheme.surfaceContainerHighest
                         : Colors.transparent,
                     borderRadius: WingRadius.card,
-                    child: InkWell(
-                      onTap: onOpenActions,
-                      onLongPress: onEdit == null
-                          ? null
-                          : () => onEdit!(prompt),
-                      borderRadius: WingRadius.card,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 4, 0, 4),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                Icons.keyboard_return,
-                                size: 16,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  [
-                                        prompt.text,
-                                        prompt.attachments
-                                            .map((file) => file.name)
-                                            .join(', '),
-                                      ]
-                                      .where((part) => part.isNotEmpty)
-                                      .join(' · '),
-                                  style: style,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                    child: StudioButtonPress(
+                      child: InkWell(
+                        onTap: onOpenActions,
+                        onLongPress: onEdit == null
+                            ? null
+                            : () => onEdit!(prompt),
+                        borderRadius: WingRadius.card,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 4, 0, 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.keyboard_return,
+                                  size: 16,
+                                  color: theme.colorScheme.onSurfaceVariant,
                                 ),
-                              ),
-                              if (identical(prompt.id, work.editing))
-                                IconButton(
-                                  tooltip: 'Delete queued message',
-                                  onPressed: onDelete == null
-                                      ? null
-                                      : () => onDelete!(prompt),
-                                  icon: const Icon(Icons.close, size: 18),
-                                  color: theme.colorScheme.error,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 48,
-                                    minHeight: 48,
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    [
+                                          prompt.text,
+                                          prompt.attachments
+                                              .map((file) => file.name)
+                                              .join(', '),
+                                        ]
+                                        .where((part) => part.isNotEmpty)
+                                        .join(' · '),
+                                    style: style,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                            ],
+                                if (identical(prompt.id, work.editing))
+                                  StudioButtonPress(
+                                    child: IconButton(
+                                      tooltip: 'Delete queued message',
+                                      onPressed: onDelete == null
+                                          ? null
+                                          : () => onDelete!(prompt),
+                                      icon: const Icon(Icons.close, size: 18),
+                                      color: theme.colorScheme.error,
+                                      constraints: const BoxConstraints(
+                                        minWidth: 48,
+                                        minHeight: 48,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

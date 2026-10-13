@@ -22,7 +22,7 @@ class HealthAlertSettingsScreen extends StatelessWidget {
         appBar: WingAppBar(
           context: context,
           title: const Text('Alert settings'),
-          leading: const BackButton(),
+          leading: const StudioButtonPress(child: BackButton()),
         ),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(
@@ -61,28 +61,30 @@ class HealthAlertSettingsScreen extends StatelessWidget {
             _SaveError(session: session),
             _section(context, 'Host thresholds', [
               for (final metric in hostAlertMetrics)
-                ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: WingSpacing.md,
-                  ),
-                  minTileHeight: 56,
-                  visualDensity: VisualDensity.standard,
-                  minVerticalPadding: WingSpacing.sm,
-                  horizontalTitleGap: WingSpacing.md,
-                  leading: Icon(switch (metric) {
-                    HostMetric.memoryUsedPercent => Icons.memory,
-                    HostMetric.diskUsedPercent => Icons.storage_outlined,
-                    _ => Icons.developer_board_outlined,
-                  }, size: 20),
-                  title: Text(healthAlertMetricLabel(metric)),
-                  subtitle: Text(
-                    healthAlertRuleSummary(metric, settings.rules[metric]!),
-                  ),
-                  trailing: const Icon(Icons.chevron_right, size: 18),
-                  onTap: () => showDialog<void>(
-                    context: context,
-                    builder: (_) =>
-                        _RuleEditor(metric: metric, session: session),
+                StudioButtonPress(
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: WingSpacing.md,
+                    ),
+                    minTileHeight: 56,
+                    visualDensity: VisualDensity.standard,
+                    minVerticalPadding: WingSpacing.sm,
+                    horizontalTitleGap: WingSpacing.md,
+                    leading: Icon(switch (metric) {
+                      HostMetric.memoryUsedPercent => Icons.memory,
+                      HostMetric.diskUsedPercent => Icons.storage_outlined,
+                      _ => Icons.developer_board_outlined,
+                    }, size: 20),
+                    title: Text(healthAlertMetricLabel(metric)),
+                    subtitle: Text(
+                      healthAlertRuleSummary(metric, settings.rules[metric]!),
+                    ),
+                    trailing: const Icon(Icons.chevron_right, size: 18),
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (_) =>
+                          _RuleEditor(metric: metric, session: session),
+                    ),
                   ),
                 ),
             ]),
@@ -167,10 +169,12 @@ class _SaveError extends StatelessWidget {
       : Row(
           children: [
             Expanded(child: StudioError(session.error!)),
-            IconButton(
-              tooltip: 'Retry saving alert settings',
-              onPressed: () => session.retry(),
-              icon: const Icon(Icons.refresh),
+            StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Retry saving alert settings',
+                onPressed: () => session.retry(),
+                icon: const Icon(Icons.refresh),
+              ),
             ),
           ],
         );
@@ -257,10 +261,12 @@ class _RuleEditorState extends State<_RuleEditor> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Close rule editor',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
+                StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Close rule editor',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
                 ),
               ],
             ),

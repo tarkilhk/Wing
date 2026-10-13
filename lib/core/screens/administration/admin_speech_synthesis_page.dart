@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -170,23 +171,27 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
     final ready = state.ready;
     final rows = state.displayChoices;
     final playing = state.playing;
-    final play = TextButton.icon(
-      onPressed: state.canPlay ? _session.play : null,
-      icon: Icon(playing ? Icons.stop : Icons.play_arrow),
-      label: Text(playing ? 'Stop' : 'Play'),
+    final play = StudioButtonPress(
+      child: TextButton.icon(
+        onPressed: state.canPlay ? _session.play : null,
+        icon: Icon(playing ? Icons.stop : Icons.play_arrow),
+        label: Text(playing ? 'Stop' : 'Play'),
+      ),
     );
     final voice = Semantics(
       button: true,
-      child: InkWell(
-        onTap: state.canPickVoice ? () => _pickVoice(rows) : null,
-        borderRadius: BorderRadius.circular(6),
-        child: InputDecorator(
-          decoration: InputDecoration(
-            labelText: 'Voice',
-            enabled: state.canEnterVoice,
-            suffixIcon: const Icon(Icons.expand_more),
+      child: StudioButtonPress(
+        child: InkWell(
+          onTap: state.canPickVoice ? () => _pickVoice(rows) : null,
+          borderRadius: BorderRadius.circular(6),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'Voice',
+              enabled: state.canEnterVoice,
+              suffixIcon: const Icon(Icons.expand_more),
+            ),
+            child: Text(state.selectedName),
           ),
-          child: Text(state.selectedName),
         ),
       ),
     );
@@ -194,10 +199,12 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
       title: 'Speech synthesis',
       scope: _session.scopeLabel,
       actions: [
-        IconButton(
-          tooltip: 'Refresh speech settings',
-          onPressed: state.canRefresh ? _refresh : null,
-          icon: const Icon(Icons.refresh),
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Refresh speech settings',
+            onPressed: state.canRefresh ? _refresh : null,
+            icon: const Icon(Icons.refresh),
+          ),
         ),
       ],
       child: StudioLoadingRegion(
@@ -226,11 +233,13 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
               AdminNotice(state.readinessNotice!),
               ..._credentials(provider),
               if (provider.setupKey != null)
-                TextButton(
-                  onPressed: !state.enabled
-                      ? null
-                      : () => _setup(provider.setupKey!),
-                  child: const Text('Setup requirements'),
+                StudioButtonPress(
+                  child: TextButton(
+                    onPressed: !state.enabled
+                        ? null
+                        : () => _setup(provider.setupKey!),
+                    child: const Text('Setup requirements'),
+                  ),
                 ),
             ],
             if (ready && settings != null) ...[
@@ -294,11 +303,13 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
                     ),
                   if (ready) ..._credentials(provider),
                   if (ready && provider.setupKey != null)
-                    TextButton(
-                      onPressed: !state.enabled
-                          ? null
-                          : () => _setup(provider.setupKey!),
-                      child: const Text('Setup requirements'),
+                    StudioButtonPress(
+                      child: TextButton(
+                        onPressed: !state.enabled
+                            ? null
+                            : () => _setup(provider.setupKey!),
+                        child: const Text('Setup requirements'),
+                      ),
                     ),
                 ],
               ),
@@ -311,14 +322,16 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
 
   List<Widget> _credentials(ToolSetupProvider provider) => [
     for (final field in provider.credentials)
-      ListTile(
-        contentPadding: EdgeInsets.zero,
-        title: Text(field.prompt),
-        subtitle: Text(field.isSet ? 'Configured' : 'Not configured'),
-        trailing: const Icon(Icons.key_outlined),
-        onTap: _session.state.canReviewCredentials
-            ? () => _secret(field)
-            : null,
+      StudioButtonPress(
+        child: ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(field.prompt),
+          subtitle: Text(field.isSet ? 'Configured' : 'Not configured'),
+          trailing: const Icon(Icons.key_outlined),
+          onTap: _session.state.canReviewCredentials
+              ? () => _secret(field)
+              : null,
+        ),
       ),
   ];
 }

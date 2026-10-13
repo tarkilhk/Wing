@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import '../services/shared_draft_session.dart';
@@ -188,13 +189,15 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                       ),
                       if (state.canLoadMore) ...[
                         const SizedBox(height: 4),
-                        TextButton.icon(
-                          key: const Key('share-load-more'),
-                          onPressed: state.working || state.loadingMore
-                              ? null
-                              : () => widget.session.loadMore(widget.offer),
-                          icon: const Icon(Icons.expand_more),
-                          label: Text(state.loadMoreLabel),
+                        StudioButtonPress(
+                          child: TextButton.icon(
+                            key: const Key('share-load-more'),
+                            onPressed: state.working || state.loadingMore
+                                ? null
+                                : () => widget.session.loadMore(widget.offer),
+                            icon: const Icon(Icons.expand_more),
+                            label: Text(state.loadMoreLabel),
+                          ),
                         ),
                       ],
                     ],
@@ -212,10 +215,12 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   child: SizedBox(
                     width: double.infinity,
-                    child: FilledButton(
-                      key: const Key('share-add-to-draft'),
-                      onPressed: state.working ? null : _commit,
-                      child: Text(state.addLabel),
+                    child: StudioButtonPress(
+                      child: FilledButton(
+                        key: const Key('share-add-to-draft'),
+                        onPressed: state.working ? null : _commit,
+                        child: Text(state.addLabel),
+                      ),
                     ),
                   ),
                 ),

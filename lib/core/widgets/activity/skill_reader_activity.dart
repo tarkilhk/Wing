@@ -73,79 +73,81 @@ class _SkillActivitySummary extends StatelessWidget {
     return _SkillSurface(
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
-          onTap: available
-              ? () => showDialog<void>(
-                  context: context,
-                  builder: (_) => _SkillActivityDialog(observation: received),
-                )
-              : null,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.insights_outlined,
-                      size: 16,
-                      color: colors.muted,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text('Activity', style: colors.typography.label),
-                    ),
-                    Visibility(
-                      visible: available,
-                      maintainSize: true,
-                      maintainAnimation: true,
-                      maintainState: true,
-                      child: Icon(
-                        Icons.chevron_right,
+        child: StudioButtonPress(
+          child: InkWell(
+            onTap: available
+                ? () => showDialog<void>(
+                    context: context,
+                    builder: (_) => _SkillActivityDialog(observation: received),
+                  )
+                : null,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.insights_outlined,
                         size: 16,
                         color: colors.muted,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: metric(received?.uses, 'recorded uses')),
-                    Expanded(
-                      child: metric(received?.patches, 'patches / edits'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Keep the date/status line even when no date was supplied.
-                // Loading, confirmed zero and unavailable data share geometry.
-                Semantics(
-                  liveRegion: true,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      if (date != null) ...[
-                        Icon(Icons.schedule, size: 12, color: colors.muted),
-                        const SizedBox(width: 4),
-                      ],
-                      Flexible(
-                        child: Text(
-                          status.isEmpty ? '\u00a0' : status,
-                          textAlign: TextAlign.right,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: colors.typography.label.copyWith(
-                            color: colors.muted,
-                          ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text('Activity', style: colors.typography.label),
+                      ),
+                      Visibility(
+                        visible: available,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        maintainState: true,
+                        child: Icon(
+                          Icons.chevron_right,
+                          size: 16,
+                          color: colors.muted,
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: metric(received?.uses, 'recorded uses')),
+                      Expanded(
+                        child: metric(received?.patches, 'patches / edits'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Keep the date/status line even when no date was supplied.
+                  // Loading, confirmed zero and unavailable data share geometry.
+                  Semantics(
+                    liveRegion: true,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (date != null) ...[
+                          Icon(Icons.schedule, size: 12, color: colors.muted),
+                          const SizedBox(width: 4),
+                        ],
+                        Flexible(
+                          child: Text(
+                            status.isEmpty ? '\u00a0' : status,
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: colors.typography.label.copyWith(
+                              color: colors.muted,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -289,30 +291,32 @@ class _SkillActivityDialogState extends State<_SkillActivityDialog> {
                     if (observation.readRequests case final requests?) ...[
                       const SizedBox(height: 12),
                       const _SkillRule(),
-                      InkWell(
-                        onTap: () => setState(() => _requests = !_requests),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Read requests · ${observation.readPeriodDays} days',
+                      StudioButtonPress(
+                        child: InkWell(
+                          onTap: () => setState(() => _requests = !_requests),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Read requests · ${observation.readPeriodDays} days',
+                                    style: colors.typography.label,
+                                  ),
+                                ),
+                                Text(
+                                  requests.toString(),
                                   style: colors.typography.label,
                                 ),
-                              ),
-                              Text(
-                                requests.toString(),
-                                style: colors.typography.label,
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                _requests
-                                    ? Icons.expand_less
-                                    : Icons.expand_more,
-                                size: 16,
-                              ),
-                            ],
+                                const SizedBox(width: 4),
+                                Icon(
+                                  _requests
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  size: 16,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

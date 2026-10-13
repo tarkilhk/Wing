@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'wing_app_bar.dart';
 import 'package:flutter/material.dart';
@@ -139,11 +140,13 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
         if (state.language.error case final error?) StudioError(error),
         Align(
           alignment: Alignment.centerLeft,
-          child: TextButton(
-            onPressed: state.saveManualLanguage == null
-                ? null
-                : () => state.saveManualLanguage!(_language.text),
-            child: const Text('Save language'),
+          child: StudioButtonPress(
+            child: TextButton(
+              onPressed: state.saveManualLanguage == null
+                  ? null
+                  : () => state.saveManualLanguage!(_language.text),
+              child: const Text('Save language'),
+            ),
           ),
         ),
       ],
@@ -198,15 +201,17 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
             ], 'voice-rate'),
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: state.preview,
-                icon: Icon(
-                  state.previewActive ? Icons.stop : Icons.volume_up_outlined,
-                ),
-                label: Text(
-                  state.previewActive
-                      ? 'Stop preview'
-                      : 'Preview Android voice',
+              child: StudioButtonPress(
+                child: TextButton.icon(
+                  onPressed: state.preview,
+                  icon: Icon(
+                    state.previewActive ? Icons.stop : Icons.volume_up_outlined,
+                  ),
+                  label: Text(
+                    state.previewActive
+                        ? 'Stop preview'
+                        : 'Preview Android voice',
+                  ),
                 ),
               ),
             ),
@@ -218,9 +223,11 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
             if (state.openHermesSettings case final open?)
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: open,
-                  child: const Text('Open speech synthesis'),
+                child: StudioButtonPress(
+                  child: TextButton(
+                    onPressed: open,
+                    child: const Text('Open speech synthesis'),
+                  ),
                 ),
               ),
           ],
@@ -233,9 +240,11 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
           if (state.operationError case final error?) StudioError(error),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: state.refresh,
-              child: const Text('Refresh Android voices and languages'),
+            child: StudioButtonPress(
+              child: TextButton(
+                onPressed: state.refresh,
+                child: const Text('Refresh Android voices and languages'),
+              ),
             ),
           ),
         ],

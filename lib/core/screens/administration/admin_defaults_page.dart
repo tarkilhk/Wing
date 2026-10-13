@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 
@@ -87,18 +88,22 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
   Widget _pendingActions(String? task) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      TextButton(
-        onPressed: _edit.busy
-            ? null
-            : () async => _savedNotice(
-                await _edit.retryHelper(task, confirm: _confirm),
-              ),
-        child: const Text('Retry'),
+      StudioButtonPress(
+        child: TextButton(
+          onPressed: _edit.busy
+              ? null
+              : () async => _savedNotice(
+                  await _edit.retryHelper(task, confirm: _confirm),
+                ),
+          child: const Text('Retry'),
+        ),
       ),
-      IconButton(
-        tooltip: 'Discard pending helper change',
-        onPressed: _edit.busy ? null : () => _edit.discardPending(task),
-        icon: const Icon(Icons.close_rounded),
+      StudioButtonPress(
+        child: IconButton(
+          tooltip: 'Discard pending helper change',
+          onPressed: _edit.busy ? null : () => _edit.discardPending(task),
+          icon: const Icon(Icons.close_rounded),
+        ),
       ),
     ],
   );
@@ -233,15 +238,17 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
           AdminGroup(
             children: [
               for (final row in _edit.helperRows)
-                ListTile(
-                  title: Text(row.assignment.task.replaceAll('_', ' ')),
-                  subtitle: Text(_helperSummary(row)),
-                  trailing: row.pending == null
-                      ? const Icon(Icons.chevron_right)
-                      : _pendingActions(row.assignment.task),
-                  onTap: row.canChoose
-                      ? () => _chooseHelper(row.assignment.task)
-                      : null,
+                StudioButtonPress(
+                  child: ListTile(
+                    title: Text(row.assignment.task.replaceAll('_', ' ')),
+                    subtitle: Text(_helperSummary(row)),
+                    trailing: row.pending == null
+                        ? const Icon(Icons.chevron_right)
+                        : _pendingActions(row.assignment.task),
+                    onTap: row.canChoose
+                        ? () => _chooseHelper(row.assignment.task)
+                        : null,
+                  ),
                 ),
             ],
           ),
@@ -250,12 +257,15 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
               title: const Text('Pending helper reset'),
               trailing: _pendingActions(null),
             ),
-          TextButton(
-            onPressed: _edit.canReset
-                ? () async =>
-                      _savedNotice(await _edit.resetHelpers(confirm: _confirm))
-                : null,
-            child: const Text('Reset all helper models'),
+          StudioButtonPress(
+            child: TextButton(
+              onPressed: _edit.canReset
+                  ? () async => _savedNotice(
+                      await _edit.resetHelpers(confirm: _confirm),
+                    )
+                  : null,
+              child: const Text('Reset all helper models'),
+            ),
           ),
         ],
       ),

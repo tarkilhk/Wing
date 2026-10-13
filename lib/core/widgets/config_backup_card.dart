@@ -74,12 +74,14 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
                 border: const OutlineInputBorder(
                   borderRadius: WingRadius.control,
                 ),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscure ? Icons.visibility : Icons.visibility_off,
+                suffixIcon: StudioButtonPress(
+                  child: IconButton(
+                    icon: Icon(
+                      _obscure ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                    tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
                   ),
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                  tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
                 ),
               ),
             ),
@@ -106,15 +108,19 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
               spacing: 8,
               overflowSpacing: 8,
               children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                StudioButtonPress(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
                 ),
-                FilledButton.icon(
-                  key: const Key('export_confirm_button'),
-                  onPressed: _submit,
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text('Export'),
+                StudioButtonPress(
+                  child: FilledButton.icon(
+                    key: const Key('export_confirm_button'),
+                    onPressed: _submit,
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Export'),
+                  ),
                 ),
               ],
             ),
@@ -176,12 +182,14 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
                 border: const OutlineInputBorder(
                   borderRadius: WingRadius.control,
                 ),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscure ? Icons.visibility : Icons.visibility_off,
+                suffixIcon: StudioButtonPress(
+                  child: IconButton(
+                    icon: Icon(
+                      _obscure ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                    tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
                   ),
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                  tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
                 ),
               ),
               onSubmitted: (_) => _submit(),
@@ -226,15 +234,19 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
               spacing: 8,
               overflowSpacing: 8,
               children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                StudioButtonPress(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
                 ),
-                FilledButton.icon(
-                  key: const Key('import_confirm_button'),
-                  onPressed: _submit,
-                  icon: const Icon(Icons.restore),
-                  label: const Text('Restore'),
+                StudioButtonPress(
+                  child: FilledButton.icon(
+                    key: const Key('import_confirm_button'),
+                    onPressed: _submit,
+                    icon: const Icon(Icons.restore),
+                    label: const Text('Restore'),
+                  ),
                 ),
               ],
             ),

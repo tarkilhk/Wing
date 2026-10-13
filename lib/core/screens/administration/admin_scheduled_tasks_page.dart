@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../models/profile_session_key.dart';
 import 'package:flutter/material.dart';
@@ -85,22 +86,26 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
         title: 'Scheduled tasks',
         scope: widget.profile.label,
         actions: [
-          IconButton(
-            tooltip: 'Refresh tasks',
-            onPressed: controller.loading ? null : controller.refresh,
-            icon: const Icon(Icons.refresh),
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Refresh tasks',
+              onPressed: controller.loading ? null : controller.refresh,
+              icon: const Icon(Icons.refresh),
+            ),
           ),
         ],
         bottom: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             Flexible(
-              child: FilledButton.icon(
-                onPressed: controller.blocked('__create__')
-                    ? null
-                    : () => edit(),
-                icon: const Icon(Icons.add),
-                label: const Text('New task'),
+              child: StudioButtonPress(
+                child: FilledButton.icon(
+                  onPressed: controller.blocked('__create__')
+                      ? null
+                      : () => edit(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('New task'),
+                ),
               ),
             ),
           ],
@@ -150,11 +155,13 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
                       for (final value in TaskListFilter.values)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            showCheckmark: false,
-                            label: Text(value.label),
-                            selected: filter == value,
-                            onSelected: (_) => setState(() => filter = value),
+                          child: StudioButtonPress(
+                            child: ChoiceChip(
+                              showCheckmark: false,
+                              label: Text(value.label),
+                              selected: filter == value,
+                              onSelected: (_) => setState(() => filter = value),
+                            ),
                           ),
                         ),
                     ],
@@ -195,12 +202,14 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
                               : 'Try another search or clear your filters.',
                         ),
                         if (controller.tasks!.isNotEmpty)
-                          TextButton(
-                            onPressed: () => setState(() {
-                              search.clear();
-                              filter = TaskListFilter.all;
-                            }),
-                            child: const Text('Clear filters'),
+                          StudioButtonPress(
+                            child: TextButton(
+                              onPressed: () => setState(() {
+                                search.clear();
+                                filter = TaskListFilter.all;
+                              }),
+                              child: const Text('Clear filters'),
+                            ),
                           ),
                       ],
                     ),
@@ -231,75 +240,78 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
       );
     },
   );
-  Widget _row(BuildContext context, ScheduledTask task) => InkWell(
-    onTap: () => adminPushProfile(
-      context,
-      widget.profile,
-      (context, profile) => AdminTaskRoute(
-        profile: profile,
-        acquireController: controller.acquireLease,
-        title: 'Task details',
-        taskId: task.id,
-        builder: (controller, selectedTask) => AdminScheduledTaskDetailPage(
-          controller: controller,
-          initial: selectedTask!,
-          onOpenSession: widget.onOpenSession,
+  Widget _row(BuildContext context, ScheduledTask task) => StudioButtonPress(
+    child: InkWell(
+      onTap: () => adminPushProfile(
+        context,
+        widget.profile,
+        (context, profile) => AdminTaskRoute(
+          profile: profile,
+          acquireController: controller.acquireLease,
+          title: 'Task details',
+          taskId: task.id,
+          builder: (controller, selectedTask) => AdminScheduledTaskDetailPage(
+            controller: controller,
+            initial: selectedTask!,
+            onOpenSession: widget.onOpenSession,
+          ),
         ),
       ),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 4, 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  task.title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 4, 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  task.listStatusText ?? taskTime(context, task.nextRun),
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: Theme.of(context).colorScheme.primary,
+                  const SizedBox(height: 8),
+                  Text(
+                    task.listStatusText ?? taskTime(context, task.nextRun),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  task.scheduleLabel,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 10),
-                TaskStatus(
-                  task,
-                  confirmed:
-                      controller.checkedAt != null && controller.error == null,
-                ),
-                if (controller.busy.contains(task.id))
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text('Request in progress…'),
+                  const SizedBox(height: 6),
+                  Text(
+                    task.scheduleLabel,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                if (controller.uncertain.containsKey(task.id) &&
-                    !controller.busy.contains(task.id))
-                  const Text('Request outcome unknown'),
-              ],
+                  const SizedBox(height: 10),
+                  TaskStatus(
+                    task,
+                    confirmed:
+                        controller.checkedAt != null &&
+                        controller.error == null,
+                  ),
+                  if (controller.busy.contains(task.id))
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text('Request in progress…'),
+                    ),
+                  if (controller.uncertain.containsKey(task.id) &&
+                      !controller.busy.contains(task.id))
+                    const Text('Request outcome unknown'),
+                ],
+              ),
             ),
-          ),
-          TaskMenu(
-            task: task,
-            controller: controller,
-            onEdit: () => edit(task),
-          ),
-        ],
+            TaskMenu(
+              task: task,
+              controller: controller,
+              onEdit: () => edit(task),
+            ),
+          ],
+        ),
       ),
     ),
   );

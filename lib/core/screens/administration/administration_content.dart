@@ -251,19 +251,23 @@ class _HermesAdministrationContentState
     final manageAction = manage
         ? Tooltip(
             message: 'Manage profiles',
-            child: TextButton(
-              style: TextButton.styleFrom(
-                minimumSize: const Size(48, 36),
-                tapTargetSize: MaterialTapTargetSize.padded,
-                visualDensity: VisualDensity.standard,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                foregroundColor: colors.onSurfaceVariant,
-                backgroundColor: colors.surfaceContainerLow,
-                side: BorderSide(color: colors.outlineVariant),
-                shape: RoundedRectangleBorder(borderRadius: WingRadius.control),
+            child: StudioButtonPress(
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(48, 36),
+                  tapTargetSize: MaterialTapTargetSize.padded,
+                  visualDensity: VisualDensity.standard,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  foregroundColor: colors.onSurfaceVariant,
+                  backgroundColor: colors.surfaceContainerLow,
+                  side: BorderSide(color: colors.outlineVariant),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: WingRadius.control,
+                  ),
+                ),
+                onPressed: _manageProfiles,
+                child: const Icon(Icons.manage_accounts_outlined),
               ),
-              onPressed: _manageProfiles,
-              child: const Icon(Icons.manage_accounts_outlined),
             ),
           )
         : null;
@@ -633,14 +637,16 @@ class _HermesAdministrationContentState
       prefixIcon: const Icon(Icons.search),
       suffixIcon: _search.isEmpty
           ? null
-          : IconButton(
-              tooltip: 'Clear search',
-              icon: const Icon(Icons.close),
-              onPressed: () {
-                _searchInput.clear();
-                setState(() => _search = '');
-                FocusScope.of(context).unfocus();
-              },
+          : StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Clear search',
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  _searchInput.clear();
+                  setState(() => _search = '');
+                  FocusScope.of(context).unfocus();
+                },
+              ),
             ),
     ),
     onChanged: (value) => setState(() => _search = value),
@@ -721,21 +727,25 @@ class _HermesAdministrationContentState
     return Scaffold(
       appBar: WingAppBar(
         context: context,
-        leading: IconButton(
-          tooltip: 'Open navigation menu',
-          icon: const Icon(Icons.menu),
-          onPressed: widget.onOpenMenu,
+        leading: StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Open navigation menu',
+            icon: const Icon(Icons.menu),
+            onPressed: widget.onOpenMenu,
+          ),
         ),
         title: const Text('Administration'),
         actions: [
-          IconButton(
-            tooltip: 'Refresh administration',
-            icon: const Icon(Icons.refresh),
-            onPressed:
-                _overviewSession?.refreshing == true ||
-                    widget.controller.switching
-                ? null
-                : _refresh,
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Refresh administration',
+              icon: const Icon(Icons.refresh),
+              onPressed:
+                  _overviewSession?.refreshing == true ||
+                      widget.controller.switching
+                  ? null
+                  : _refresh,
+            ),
           ),
           const SizedBox(width: 8),
         ],
@@ -753,9 +763,11 @@ class _HermesAdministrationContentState
             if (widget.controller.error != null)
               ListTile(
                 title: StudioError(widget.controller.error!),
-                trailing: TextButton(
-                  onPressed: widget.controller.retry,
-                  child: const Text('Retry'),
+                trailing: StudioButtonPress(
+                  child: TextButton(
+                    onPressed: widget.controller.retry,
+                    child: const Text('Retry'),
+                  ),
                 ),
               ),
             Padding(

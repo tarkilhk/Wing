@@ -143,43 +143,47 @@ class _HealthAlertNoticeState extends State<HealthAlertNotice> {
     );
     final openArea = Tooltip(
       message: healthAlertActionLabel(notice),
-      child: InkWell(
-        onTap: () {
-          _expiry?.cancel();
-          _hide();
-          _scope?.openAlert(notice);
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(WingSpacing.md),
-          child: largeText
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    statusIcon,
-                    const SizedBox(height: WingSpacing.sm),
-                    labels,
-                  ],
-                )
-              : Row(
-                  children: [
-                    statusIcon,
-                    const SizedBox(width: WingSpacing.md),
-                    Expanded(child: labels),
-                  ],
-                ),
+      child: StudioButtonPress(
+        child: InkWell(
+          onTap: () {
+            _expiry?.cancel();
+            _hide();
+            _scope?.openAlert(notice);
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(WingSpacing.md),
+            child: largeText
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      statusIcon,
+                      const SizedBox(height: WingSpacing.sm),
+                      labels,
+                    ],
+                  )
+                : Row(
+                    children: [
+                      statusIcon,
+                      const SizedBox(width: WingSpacing.md),
+                      Expanded(child: labels),
+                    ],
+                  ),
+          ),
         ),
       ),
     );
-    final dismiss = IconButton(
-      tooltip: 'Dismiss health notice',
-      color: tokens.muted,
-      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-      onPressed: () {
-        _expiry?.cancel();
-        _hide();
-      },
-      icon: const Icon(Icons.close, size: 20),
+    final dismiss = StudioButtonPress(
+      child: IconButton(
+        tooltip: 'Dismiss health notice',
+        color: tokens.muted,
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        onPressed: () {
+          _expiry?.cancel();
+          _hide();
+        },
+        icon: const Icon(Icons.close, size: 20),
+      ),
     );
     return Positioned(
       // Leave a generous gap below the compact toolbar, growing with text.

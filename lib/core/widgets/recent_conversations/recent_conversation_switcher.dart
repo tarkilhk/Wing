@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -1363,10 +1364,12 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                             Positioned(
                               top: MediaQuery.paddingOf(context).top + 8,
                               left: 8,
-                              child: IconButton.filledTonal(
-                                tooltip: 'Return to conversation',
-                                onPressed: _selecting ? null : _returnToChat,
-                                icon: const Icon(Icons.close),
+                              child: StudioButtonPress(
+                                child: IconButton.filledTonal(
+                                  tooltip: 'Return to conversation',
+                                  onPressed: _selecting ? null : _returnToChat,
+                                  icon: const Icon(Icons.close),
+                                ),
                               ),
                             ),
                           if (_stack)
@@ -1383,13 +1386,15 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                                     Row(
                                       children: [
                                         Expanded(child: StudioError(error)),
-                                        IconButton(
-                                          tooltip: 'Retry recent chats',
-                                          onPressed:
-                                              widget.session.catalogLoading
-                                              ? null
-                                              : widget.session.retryCatalog,
-                                          icon: const Icon(Icons.refresh),
+                                        StudioButtonPress(
+                                          child: IconButton(
+                                            tooltip: 'Retry recent chats',
+                                            onPressed:
+                                                widget.session.catalogLoading
+                                                ? null
+                                                : widget.session.retryCatalog,
+                                            icon: const Icon(Icons.refresh),
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -1426,34 +1431,46 @@ class RecentConversationSwitcherState extends State<RecentConversationSwitcher>
                                     Wrap(
                                       alignment: WrapAlignment.center,
                                       children: [
-                                        IconButton(
-                                          tooltip: 'Previous conversation',
-                                          onPressed: _selecting || !_canBrowse
-                                              ? null
-                                              : () => _settleStack(
-                                                  _motion.position
-                                                          .roundToDouble() +
-                                                      1,
-                                                ),
-                                          icon: const Icon(Icons.chevron_left),
+                                        StudioButtonPress(
+                                          child: IconButton(
+                                            tooltip: 'Previous conversation',
+                                            onPressed: _selecting || !_canBrowse
+                                                ? null
+                                                : () => _settleStack(
+                                                    _motion.position
+                                                            .roundToDouble() +
+                                                        1,
+                                                  ),
+                                            icon: const Icon(
+                                              Icons.chevron_left,
+                                            ),
+                                          ),
                                         ),
-                                        IconButton(
-                                          tooltip: 'Open conversation',
-                                          onPressed: _selecting
-                                              ? null
-                                              : () => _select(_focusedIndex),
-                                          icon: const Icon(Icons.open_in_full),
+                                        StudioButtonPress(
+                                          child: IconButton(
+                                            tooltip: 'Open conversation',
+                                            onPressed: _selecting
+                                                ? null
+                                                : () => _select(_focusedIndex),
+                                            icon: const Icon(
+                                              Icons.open_in_full,
+                                            ),
+                                          ),
                                         ),
-                                        IconButton(
-                                          tooltip: 'Next conversation',
-                                          onPressed: _selecting || !_canBrowse
-                                              ? null
-                                              : () => _settleStack(
-                                                  _motion.position
-                                                          .roundToDouble() -
-                                                      1,
-                                                ),
-                                          icon: const Icon(Icons.chevron_right),
+                                        StudioButtonPress(
+                                          child: IconButton(
+                                            tooltip: 'Next conversation',
+                                            onPressed: _selecting || !_canBrowse
+                                                ? null
+                                                : () => _settleStack(
+                                                    _motion.position
+                                                            .roundToDouble() -
+                                                        1,
+                                                  ),
+                                            icon: const Icon(
+                                              Icons.chevron_right,
+                                            ),
+                                          ),
                                         ),
                                       ],
                                     ),
