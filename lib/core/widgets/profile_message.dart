@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
+import '../theme/bot_bubble_colors.dart';
 import 'anchored_expansion_tile.dart';
 import 'package:flutter/services.dart';
 
@@ -22,6 +23,7 @@ class ProfileMessage extends StatelessWidget {
   final bool streaming;
   final bool showCopyHeader;
   final BotRecord? senderAppearance;
+  final BotBubbleColors? botBubbleColors;
   final void Function(BuildContext anchor)? onSenderTap;
 
   /// Passive snapshots render resource labels without acquiring image bytes.
@@ -44,6 +46,7 @@ class ProfileMessage extends StatelessWidget {
     this.streaming = false,
     this.showCopyHeader = true,
     this.senderAppearance,
+    this.botBubbleColors,
     this.onSenderTap,
     this.loadImages = true,
     this.attachmentImagesAvailable = true,
@@ -211,8 +214,13 @@ class ProfileMessage extends StatelessWidget {
     final colors = theme.colorScheme;
     final appearance = senderAppearance;
     final name = appearance?.title ?? message.sender!;
-    final bubbleColor = colors.surfaceContainerHigh;
-    final date = _timestamp(context, color: colors.onSurfaceVariant);
+    final bubbleColor = botBubbleColors?.fill ?? colors.surfaceContainerHigh;
+    final footerColor =
+        botBubbleColors?.footer ?? Color.lerp(colors.surface, bubbleColor, .5)!;
+    final date = _timestamp(
+      context,
+      color: botBubbleColors?.timestamp ?? colors.onSurfaceVariant,
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: WingSpacing.md),
       child: LayoutBuilder(
@@ -283,24 +291,30 @@ class ProfileMessage extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _speakerHeader(context, name, colors.onSurface),
+                          _speakerHeader(
+                            context,
+                            name,
+                            botBubbleColors?.text ?? colors.onSurface,
+                          ),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
-                            child: MarkdownMessageContent(
-                              data: message.text,
-                              loadImages: loadImages,
-                              loadImage: loadAttachmentImage,
-                              onOpenRemoteFile: onOpenRemoteFile,
-                              onDownloadRemoteFile: onDownloadRemoteFile,
+                            child: Theme(
+                              data:
+                                  botBubbleColors?.markdownTheme(theme) ??
+                                  theme,
+                              child: MarkdownMessageContent(
+                                data: message.text,
+                                loadImages: loadImages,
+                                loadImage: loadAttachmentImage,
+                                onOpenRemoteFile: onOpenRemoteFile,
+                                onDownloadRemoteFile: onDownloadRemoteFile,
+                              ),
                             ),
                           ),
                           if (date != null)
                             ColoredBox(
-                              color: Color.lerp(
-                                colors.surface,
-                                bubbleColor,
-                                .5,
-                              )!,
+                              key: ValueKey(('bot-message-footer', message.id)),
+                              color: footerColor,
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/bots.dart';
 import '../models/transcript_message.dart';
 import '../theme/wing_theme.dart';
+import '../theme/bot_bubble_colors.dart';
+import 'bot_avatar.dart';
 import 'bot_group_identity.dart';
 import 'bot_mention_scope.dart';
 import 'profile_message.dart';
@@ -37,62 +39,91 @@ class BotGroupConversation extends StatelessWidget {
   final bool showMembers;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: WingAppBar(
-      context: context,
-      leading: StudioButtonPress(child: BackButton(onPressed: onBack)),
-      title: Builder(
-        builder: (context) {
-          final title = WingConversationTitle(
-            title: group.name,
-            avatar: BotGroupIdentity(group: group, bots: appearances, size: 32),
-          );
-          return onEdit == null
-              ? title
-              : Tooltip(
-                  message: 'Edit group',
-                  child: Semantics(
-                    button: true,
-                    child: StudioButtonPress(
-                      child: InkWell(
-                        onTap: onEdit,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 48),
-                          child: title,
+  Widget build(BuildContext context) {
+    final bots = {for (final bot in appearances) bot.scope.profileName: bot};
+    final palette = botBubblePalette({
+      for (final member in group.members)
+        member.handle: BotAvatar.resolveColor(
+          bots[member.profile]?.color ?? '',
+          bots[member.profile]?.title ?? member.name,
+        ),
+    }, Theme.of(context));
+    return Scaffold(
+      appBar: WingAppBar(
+        context: context,
+        leading: StudioButtonPress(child: BackButton(onPressed: onBack)),
+        title: Builder(
+          builder: (context) {
+            final title = WingConversationTitle(
+              title: group.name,
+              avatar: BotGroupIdentity(
+                group: group,
+                bots: appearances,
+                size: 32,
+              ),
+            );
+            return onEdit == null
+                ? title
+                : Tooltip(
+                    message: 'Edit group',
+                    child: Semantics(
+                      button: true,
+                      child: StudioButtonPress(
+                        child: InkWell(
+                          onTap: onEdit,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minHeight: 48),
+                            child: title,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-        },
-      ),
-      actions: actions,
-      contextRow: instanceHeader,
-      contextActions: [
-        if (showMembers)
-          SizedBox(
-            key: membersAnchor,
-            child: StudioButtonPress(
-              child: IconButton(
-                key: const ValueKey('group-members-entry'),
-                tooltip: 'Show group members · ${group.members.length} bots',
-                onPressed: onMembers,
-                icon: const Icon(Icons.group_outlined, size: 18),
+                  );
+          },
+        ),
+        actions: actions,
+        contextRow: instanceHeader,
+        contextActions: [
+          if (showMembers)
+            SizedBox(
+              key: membersAnchor,
+              child: StudioButtonPress(
+                child: IconButton(
+                  key: const ValueKey('group-members-entry'),
+                  tooltip: 'Show group members · ${group.members.length} bots',
+                  onPressed: onMembers,
+                  icon: const Icon(Icons.group_outlined, size: 18),
+                ),
               ),
             ),
-          ),
-      ],
-    ),
-    body: SafeArea(
-      child: Column(
-        children: [
-          Expanded(child: transcript),
-          ...beforeComposer,
-          composer,
         ],
       ),
-    ),
-  );
+      body: _GroupBubblePalette(
+        colors: palette,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Expanded(child: transcript),
+              ...beforeComposer,
+              composer,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupBubblePalette extends InheritedWidget {
+  const _GroupBubblePalette({required this.colors, required super.child});
+  final Map<String, BotBubbleColors> colors;
+  static BotBubbleColors? forMessage(BuildContext context, String? handle) =>
+      context
+          .dependOnInheritedWidgetOfExactType<_GroupBubblePalette>()
+          ?.colors[handle];
+  @override
+  bool updateShouldNotify(_GroupBubblePalette oldWidget) =>
+      colors != oldWidget.colors;
 }
 
 /// Shared discussion message, including the room's resolved mention styling.
@@ -117,6 +148,16 @@ class BotGroupMessage extends StatelessWidget {
     child: ProfileMessage(
       message: message,
       senderAppearance: appearance,
+      botBubbleColors: message.sender == null
+          ? null
+          : _GroupBubblePalette.forMessage(context, message.senderHandle) ??
+                BotBubbleColors.fromAvatar(
+                  BotAvatar.resolveColor(
+                    appearance?.color ?? '',
+                    appearance?.title ?? message.sender!,
+                  ),
+                  Theme.of(context),
+                ),
       onSenderTap: onSenderTap,
       loadImages: loadImages,
     ),

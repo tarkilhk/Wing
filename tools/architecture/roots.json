@@ -6341,6 +6341,15 @@
       "purpose": "Queued steering durable uncertainty, acknowledgement and restart regressions",
       "source": "internal/docs/DRAFTS_OUTBOX.md; internal/docs/SUPERVISION_AND_QUEUES.md",
       "status": "supported"
+    },
+    {
+      "id": "host-test-test/bot_bubble_colors_test.dart",
+      "kind": "host-test",
+      "path": "test/bot_bubble_colors_test.dart",
+      "purpose": "Bot bubble palette readability, avatar collisions and theme isolation",
+      "source": "internal/docs/DESIGN_SYSTEM.md; test/bot_bubble_colors_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -9350,6 +9359,16 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/theme/bot_bubble_colors.dart",
+      "area": "lib",
+      "provenance": "task-authored"
+    },
+    {
+      "path": "lib/core/theme/oklch_color.dart",
+      "area": "lib",
+      "provenance": "task-authored"
+    },
+    {
       "path": "lib/core/theme/profile_colors.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -10593,6 +10612,11 @@
       "path": "test/bot_avatar_cache_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_bubble_colors_test.dart",
+      "area": "test",
+      "provenance": "task-authored"
     },
     {
       "path": "test/bot_display_client_test.dart",

@@ -1726,6 +1726,16 @@
       "feature": "app-preferences-backup",
       "library": "lib/core/theme/app_preferences_rendering.dart"
     },
+    "lib/core/theme/bot_bubble_colors.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/theme/bot_bubble_colors.dart"
+    },
+    "lib/core/theme/oklch_color.dart": {
+      "role": "view",
+      "feature": "ui-foundations",
+      "library": "lib/core/theme/oklch_color.dart"
+    },
     "lib/core/theme/profile_colors.dart": {
       "role": "view",
       "feature": "profiles",

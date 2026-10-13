@@ -17,6 +17,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/oklch_color.dart';
 import 'package:wing/core/widgets/bot_avatar.dart';
 import 'package:wing/core/widgets/bot_group_picture.dart';
 import 'package:wing/core/widgets/bot_group_identity.dart';
@@ -1681,6 +1682,73 @@ void main() {
           await tester.settleMarkdown();
           expect(find.byType(ProfileMessage), findsNWidgets(2));
           expect(find.text('User'), findsNothing);
+          final botMessage = tester
+              .widgetList<ProfileMessage>(find.byType(ProfileMessage))
+              .firstWhere((widget) => widget.message.sender != null);
+          final bubbleColors = botMessage.botBubbleColors!;
+          final theme = wingTheme(brightness);
+          expect(
+            bubbleColors.fill,
+            isNot(theme.colorScheme.surfaceContainerHigh),
+          );
+          final botBubble = find.byKey(
+            const ValueKey<(String, Object?)>((
+              'bot-message-bubble',
+              'room-1:1',
+            )),
+          );
+          expect(
+            tester
+                .widget<ColoredBox>(
+                  find
+                      .descendant(
+                        of: botBubble,
+                        matching: find.byType(ColoredBox),
+                      )
+                      .first,
+                )
+                .color,
+            bubbleColors.fill,
+          );
+          final botFooter = tester.widget<ColoredBox>(
+            find.byKey(
+              const ValueKey<(String, Object?)>((
+                'bot-message-footer',
+                'room-1:1',
+              )),
+            ),
+          );
+          expect(
+            botFooter.color,
+            Color.lerp(theme.colorScheme.surface, bubbleColors.fill, .5),
+          );
+          final userBubble = find.byKey(
+            const ValueKey<(String, Object?)>((
+              'user-message-bubble',
+              'room-1:2',
+            )),
+          );
+          expect(
+            tester
+                .widget<ColoredBox>(
+                  find
+                      .descendant(
+                        of: userBubble,
+                        matching: find.byType(ColoredBox),
+                      )
+                      .first,
+                )
+                .color,
+            theme.colorScheme.primaryContainer,
+          );
+          expect(
+            colorContrast(bubbleColors.text, bubbleColors.fill),
+            greaterThanOrEqualTo(7),
+          );
+          expect(
+            colorContrast(bubbleColors.link, bubbleColors.fill),
+            greaterThanOrEqualTo(4.5),
+          );
           final userText = tester
               .widgetList<SelectableText>(find.byType(SelectableText))
               .firstWhere(
@@ -1831,6 +1899,17 @@ void main() {
           );
           await tester.pumpAndSettle();
           await _settleGroupMarkdown(tester);
+          final botMessages = tester
+              .widgetList<ProfileMessage>(find.byType(ProfileMessage))
+              .where((widget) => widget.message.sender != null)
+              .toList();
+          // Enlarged text lazily mounts only the latest bot at this scroll position.
+          if (scale == 1) {
+            expect(
+              botMessages.map((widget) => widget.botBubbleColors!.fill).toSet(),
+              hasLength(2),
+            );
+          }
           expect(
             tester.widget<BotGroupPicture>(find.byType(BotGroupPicture)).image,
             group.picture,

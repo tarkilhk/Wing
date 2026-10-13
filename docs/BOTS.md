@@ -65,6 +65,11 @@ message formatting and composer in the chat and its Recents preview. Swipe
 sideways with two fingers to switch conversations, or pinch inward to browse
 Recents cards. Neither gesture requires opening Recents first.
 
+Each bot's message bubble uses a soft shade of its saved avatar color, with a
+pastel fill in light mode and a muted dark fill in dark mode. Matching bot colors
+receive slightly different shades. Your messages keep the selected theme color.
+Sender names and avatars identify each bot alongside its bubble color.
+
 Beneath the title, the instance uses the same saved icon and status LED as the
 other screens. Tap the icon/LED for connection details or the instance name to
 switch instances. The people icon opens the group members. The instance icon and
