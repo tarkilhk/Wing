@@ -1286,6 +1286,62 @@ class ProfileWorkspaceController extends ChangeNotifier {
               }
               offset = hasRecent ? page.nextOffset : null;
             }
+            // Stock session lists omit hidden canonical Bot Chats. Their
+            // retained transcript is not a read receipt: fetch the exact owner
+            // and compare its watermark with current saved message freshness.
+            final unlisted = resource._chats.values
+                .where(
+                  (chat) =>
+                      SessionVisibility.chats.includes(chat.source) &&
+                      !resource.blocksSession(chat.key.sessionId) &&
+                      !checkedSessions.contains(chat.key.sessionId),
+                )
+                .map((chat) => chat.key)
+                .toList();
+            for (var start = 0; start < unlisted.length; start += 4) {
+              final observations = await Future.wait(
+                unlisted.skip(start).take(4).map((key) async {
+                  final row = await resource.gateway.sessionMetadata(
+                    key.sessionId,
+                  );
+                  if (row == null) return null;
+                  final history = await resource.gateway.history(
+                    key.sessionId,
+                    limit: 1,
+                  );
+                  return (
+                    key: key,
+                    row: row,
+                    time: _latestMessageTime(history.rows),
+                  );
+                }),
+              );
+              if (_closed || generation != _recentsGeneration) break;
+              for (final observation in observations) {
+                if (observation == null) continue;
+                final time = observation.time;
+                if (time == null || time < cutoff) continue;
+                final row = observation.row;
+                if (!SessionVisibility.chats.includes(
+                  row['source'] as String?,
+                )) {
+                  continue;
+                }
+                final lastRead = row['last_read_at'];
+                rows[observation.key] = {
+                  ...row,
+                  'unread':
+                      lastRead is! num || !lastRead.isFinite || time > lastRead,
+                };
+                _recentMessageTimes[observation.key] = time;
+                items[observation.key] = ProfileRecentChat(
+                  key: observation.key,
+                  title: row['title'] as String? ?? 'Chat',
+                  source: row['source'] as String?,
+                  lastActive: time,
+                );
+              }
+            }
           } catch (_) {
             profileError = 'Recent chats unavailable for ${profile.label}.';
           }

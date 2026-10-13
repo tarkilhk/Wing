@@ -22,7 +22,7 @@ Search finds chat titles and server message matches across profiles, including a
 
 **Show automated chats** starts off. It hides scheduled, tool, subagent, kanban and one-shot chats from Chats until enabled, including hidden Bot Chats. Recents always excludes these automated sources while keeping user conversations that have background work.
 
-Unread status comes from Hermes. Opening a chat and loading its history marks it read; reconnecting alone does not. Filters and display choices are saved per connection on this device.
+Unread status comes from Hermes. Hidden Bot Chats compare the latest saved message with the server read timestamp; a missing timestamp keeps the chat unread. Opening a chat and loading its history marks it read; reconnecting alone does not. Filters and display choices are saved per connection on this device.
 
 ## Projects
 

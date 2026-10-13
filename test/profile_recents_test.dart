@@ -26,6 +26,9 @@ class _RecentsFixture extends ProfileBrowserFixture {
   Completer<void>? heldResume;
   Completer<void>? resumeStarted;
   bool unread = false;
+  bool hiddenChat = false;
+  int readWrites = 0;
+  bool failHiddenMetadata = false;
   bool failDiscovery = false;
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
@@ -36,7 +39,12 @@ class _RecentsFixture extends ProfileBrowserFixture {
         if (failDiscovery) throw http.ClientException('Discovery interrupted');
         return delegate.discover();
       },
-      get: delegate.read,
+      get: (path, query) async {
+        if (failHiddenMetadata && path == 'sessions/shared-id') {
+          throw StateError('Metadata interrupted');
+        }
+        return delegate.read(path, query);
+      },
       rpc: (method, params) async {
         if (method == 'session.resume' && heldResume != null) {
           if (resumeStarted?.isCompleted == false) resumeStarted!.complete();
@@ -51,6 +59,11 @@ class _RecentsFixture extends ProfileBrowserFixture {
         expect(body['unread'], false);
         onDispatched();
         unread = false;
+        readWrites++;
+        for (final row
+            in hiddenSessions[scope.profileName] ?? <Map<String, dynamic>>[]) {
+          if (row['id'] == 'shared-id') row['last_read_at'] = now;
+        }
         return {'ok': true};
       },
     );
@@ -65,7 +78,7 @@ class _RecentsFixture extends ProfileBrowserFixture {
         'content': 'Saved reply',
         'timestamp': id == 'heartbeat'
             ? now - 90000
-            : sessions(profile)
+            : [...sessions(profile), ...?hiddenSessions[profile]]
                       .where((row) => row['id'] == id)
                       .firstOrNull?['last_active'] ??
                   now - 90000,
@@ -92,14 +105,15 @@ class _RecentsFixture extends ProfileBrowserFixture {
           'last_active': now - i * 60,
           'pinned': i == 0,
         },
-    {
-      'id': 'shared-id',
-      'title': '$profile conversation',
-      'profile': profile,
-      'last_active': now - 600,
-      'archived': profile == 'work',
-      'unread': unread,
-    },
+    if (!hiddenChat)
+      {
+        'id': 'shared-id',
+        'title': '$profile conversation',
+        'profile': profile,
+        'last_active': now - 600,
+        'archived': profile == 'work',
+        'unread': unread,
+      },
     {
       'id': 'old',
       'title': 'Old pinned chat',
@@ -213,6 +227,75 @@ void main() {
       expect(after.lastActive, before.lastActive);
     },
   );
+
+  for (final tracked in [true, false]) {
+    test(
+      'hidden bot reply stays unread before opening, tracked=$tracked',
+      () async {
+        await controller.refreshRecents();
+        final key = controller
+            .recentChats()
+            .singleWhere(
+              (c) =>
+                  c.key.workspace.profileName == 'personal' &&
+                  c.key.sessionId == 'shared-id',
+            )
+            .key;
+        await controller.openSession(key);
+        fixture.hiddenChat = true;
+        fixture.hiddenSessions['personal'] = [
+          {
+            'id': 'shared-id',
+            'title': 'Bot Chat',
+            'profile': 'personal',
+            'source': 'desktop',
+            'hidden': 1,
+            'last_read_at': tracked ? fixture.now - 300 : null,
+            'last_activity_at': fixture.now - 30,
+            'last_active': fixture.now - 30,
+          },
+        ];
+
+        final writes = fixture.readWrites;
+        await controller.refreshRecents();
+        final before = controller.recentChats().singleWhere(
+          (c) => c.key == key,
+        );
+        expect(
+          before.unread,
+          isTrue,
+          reason: 'A hidden chat omitted from the list is not proof of reading',
+        );
+        expect(
+          fixture.readWrites,
+          writes,
+          reason: 'Passive refresh must not change server read state',
+        );
+        fixture.failHiddenMetadata = true;
+        await controller.refreshRecents();
+        expect(controller.recentsProfileErrors, contains('personal'));
+        expect(
+          controller.recentChats().singleWhere((c) => c.key == key).unread,
+          isTrue,
+        );
+        fixture.failHiddenMetadata = false;
+        await controller.refreshRecents();
+        expect(controller.recentsProfileErrors, isNot(contains('personal')));
+        expect(fixture.readWrites, writes);
+        await controller.openSession(key);
+        expect(fixture.readWrites, writes + 1);
+        expect(
+          controller.recentChats().singleWhere((c) => c.key == key).unread,
+          isFalse,
+        );
+        await controller.refreshRecents();
+        expect(
+          controller.recentChats().singleWhere((c) => c.key == key).unread,
+          isFalse,
+        );
+      },
+    );
+  }
 
   test('group workers stay out of saved, opened and active Recents', () async {
     await controller.setSessionVisibility(SessionVisibility.all);
