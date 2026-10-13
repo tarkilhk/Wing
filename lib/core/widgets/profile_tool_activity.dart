@@ -70,7 +70,6 @@ class ProfileToolActivitySection extends StatelessWidget {
     required this.section,
     this.expandedMessageId,
     this.focusedMessageKey,
-    this.showLatestReview = false,
     this.trailing,
     this.currentActivity = const [],
     this.tabs = const [],
@@ -82,7 +81,6 @@ class ProfileToolActivitySection extends StatelessWidget {
   final TranscriptTimelineSection section;
   final int? expandedMessageId;
   final GlobalKey? focusedMessageKey;
-  final bool showLatestReview;
   final Widget? trailing;
   final List<Widget> currentActivity;
   final List<ProfileActivityTab> tabs;
@@ -93,22 +91,6 @@ class ProfileToolActivitySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final latestReview = section.latestReview;
-    if (showLatestReview && latestReview != null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (section.precedingLatestReview case final preceding?)
-            ProfileToolActivitySection(
-              section: preceding,
-              loadImage: loadImage,
-              onOpenResource: onOpenResource,
-              onShareResource: onShareResource,
-            ),
-          ProfileReviewNoticeRow(text: latestReview),
-        ],
-      );
-    }
     final count = section.toolCount;
     final total = count + liveToolCount;
     final reviews = section.reviewCount;
@@ -184,6 +166,9 @@ class ProfileToolActivitySection extends StatelessWidget {
                         ? focusedMessageKey
                         : null,
                     text: review,
+                    initiallyExpanded:
+                        expandedMessageId != null &&
+                        group.containsMessage(expandedMessageId!),
                   )
                 else
                   ProfileToolActivity(

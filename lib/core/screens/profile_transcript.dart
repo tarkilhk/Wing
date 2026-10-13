@@ -446,7 +446,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final timeline = widget.timeline;
     final rows = timeline.sections.reversed.toList();
     // Join adjacent saved calls and live work without crossing visible prose
-    // or hiding the latest review's standalone detail button.
+    // or moving a completed review across the next turn's live work.
     final joinCurrentActivity = timeline.joinsCurrentActivity;
     final hasCurrentActivity =
         widget.currentActivity.isNotEmpty || widget.activityTabs.isNotEmpty;
@@ -651,8 +651,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                               loadImage: widget.loadImage,
                               onOpenResource: widget.onOpenResource,
                               onShareResource: widget.onShareResource,
-                              showLatestReview:
-                                  rowIndex == 0 && reader.streaming.isEmpty,
                               tabs: rowIndex == 0 && joinCurrentActivity
                                   ? widget.activityTabs
                                   : const [],

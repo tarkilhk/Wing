@@ -1,4 +1,12 @@
 import 'package:wing/core/models/transcript_timeline.dart';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
+import 'package:wing/core/widgets/tool_activity_details.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -58,6 +66,29 @@ class _ReviewFixture extends ProfileHistoryFixture {
 }
 
 void main() {
+  Future<void> expandReview(WidgetTester tester) async {
+    final title = find.text('Memory and skills review');
+    await Scrollable.ensureVisible(tester.element(title), alignment: .5);
+    await tester.pumpAndSettle();
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+  }
+
+  setUpAll(() async {
+    if (!const bool.fromEnvironment('CAPTURE_MEMORY_ACTIVITY')) return;
+    const root = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final font in {
+      'Roboto': 'Roboto-Regular.ttf',
+      'MaterialIcons': 'MaterialIcons-Regular.otf',
+    }.entries) {
+      await (FontLoader(font.key)..addFont(
+            File(
+              '$root/${font.value}',
+            ).readAsBytes().then((bytes) => bytes.buffer.asByteData()),
+          ))
+          .load();
+    }
+  });
   late _ReviewFixture fixture;
   late SharedPreferences preferences;
   late ProfileWorkspaceController controller;
@@ -91,6 +122,226 @@ void main() {
     appPreferences.dispose();
   });
 
+  testWidgets('review retains supplied previews and exact raw summary', (
+    tester,
+  ) async {
+    const summary =
+        '💾 Self-improvement review: Memory ➕ Prefers icon-only actions · '
+        'Memory ✏️ Uses Wing on Android… · Skill \'UI review\' patched';
+    final scope = controller.current!.scope;
+    await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
+    final chat = controller.current!.chat!;
+    fixture.event('personal', chat.runtime.runtimeId, {'text': summary});
+    expect(chat.reading.messages.single['content'], 'review:$summary');
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Activity'));
+    await tester.pumpAndSettle();
+    await expandReview(tester);
+    final reported = tester
+        .widgetList<ActivityDetailSection>(find.byType(ActivityDetailSection))
+        .singleWhere((section) => section.block.label == 'Reported changes');
+    expect(reported.block.text, summary.substring(summary.indexOf(':') + 2));
+    expect(reported.block.copyText, reported.block.text);
+    expect(
+      find.textContaining('Individual changes were not included'),
+      findsNothing,
+    );
+    await Scrollable.ensureVisible(
+      tester.element(find.text('Raw details')),
+      alignment: .5,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Raw details'));
+    await tester.pumpAndSettle();
+    final raw = tester
+        .widgetList<ActivityDetailSection>(find.byType(ActivityDetailSection))
+        .singleWhere((section) => section.block.label == 'Review summary');
+    expect(raw.block.copyText, summary);
+    expect(find.byType(BottomSheet), findsNothing);
+  });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('memory activity renders ${brightness.name} at $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final boundary = GlobalKey();
+        const submitted =
+            'The user prefers icon-only actions.\nKeep full names in tooltips.';
+        const generic = '💾 Self-improvement review: Memory updated';
+        final source = <Map<String, dynamic>>[
+          {
+            'id': 1,
+            'role': 'assistant',
+            'content': '',
+            'tool_calls': [
+              {
+                'id': 'retain-example',
+                'type': 'function',
+                'function': {
+                  'name': 'hindsight_retain',
+                  'arguments':
+                      '{"content":"The user prefers icon-only actions.\\nKeep full names in tooltips."}',
+                },
+              },
+            ],
+          },
+          {
+            'id': 2,
+            'role': 'tool',
+            'tool_name': 'hindsight_retain',
+            'tool_call_id': 'retain-example',
+            'content': 'Memory stored successfully.',
+          },
+          {'id': 3, 'role': 'system', 'content': 'review:$generic'},
+        ];
+        Future<void> show(String state, {int? expandedMessageId}) async {
+          final timeline = TranscriptTimeline.project(
+            source,
+            presentationId: (row) => row['id']!,
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: boundary,
+                child: Scaffold(
+                  body: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      ProfileToolActivitySection(
+                        key: ValueKey(state),
+                        section: timeline.sections.single,
+                        expandedMessageId: expandedMessageId,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        await show('generic');
+        Future<void> capture(String state) async {
+          if (!const bool.fromEnvironment('CAPTURE_MEMORY_ACTIVITY')) return;
+          await tester.runAsync(() async {
+            final render =
+                boundary.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary;
+            final picture = await render.toImage();
+            final bytes = await picture.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final file = File(
+              'build/design-previews/memory-activity/site/renders/${brightness.name}-${scale.toInt()}-$state.png',
+            );
+            await file.parent.create(recursive: true);
+            await file.writeAsBytes(bytes!.buffer.asUint8List());
+            picture.dispose();
+          });
+        }
+
+        expect(find.text('Memory and skills review'), findsNothing);
+        await capture('activity');
+        await tester.tap(find.text('Activity · 1 tool'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ProfileReviewNoticeRow), findsOneWidget);
+        expect(find.byType(ProfileToolCall), findsOneWidget);
+        expect(find.byIcon(Icons.lightbulb_outline), findsOneWidget);
+        expect(
+          find.byIcon(ProfileToolCall.iconFor('hindsight_retain')),
+          findsOneWidget,
+        );
+        expect(
+          ProfileToolCall.iconFor('hindsight_retain'),
+          isNot(Icons.lightbulb_outline),
+        );
+        await capture('timeline');
+        await tester.tap(find.text('Memory and skills review'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Individual changes were not included in this summary.'),
+          findsOneWidget,
+        );
+        expect(find.byType(BottomSheet), findsNothing);
+        await capture('review');
+        await tester.tap(find.text('Memory and skills review'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byType(ProfileToolCall));
+        await tester.pumpAndSettle();
+        final payload = tester
+            .widgetList<ActivityDetailSection>(
+              find.byType(ActivityDetailSection),
+            )
+            .singleWhere(
+              (section) => section.block.label == 'Submitted memory',
+            );
+        expect(payload.block.copyText, submitted);
+        expect(find.text('Retained fact'), findsNothing);
+        await capture('retain');
+        const preview =
+            'Memory ➕ Prefers icon-only action buttons · '
+            'User profile ✏️ Uses Wing on Android…';
+        final longReview =
+            '$preview\n${List.filled(20, "Skill 'UI review' patched with a supplied change preview.").join('\n')}\nLast received change';
+        source.last['content'] =
+            'review:💾 Self-improvement review: $longReview';
+        source[1]['content'] =
+            '{"success":false,"error":"Failed to store memory: service unavailable"}';
+        await show('detailed', expandedMessageId: 3);
+        final changes = tester
+            .widgetList<ActivityDetailSection>(
+              find.byType(ActivityDetailSection),
+            )
+            .singleWhere(
+              (section) => section.block.label == 'Reported changes',
+            );
+        expect(changes.block.copyText, longReview);
+        expect(
+          find.textContaining('Individual changes were not included'),
+          findsNothing,
+        );
+        expect(find.byTooltip('Open Reported changes'), findsOneWidget);
+        expect(
+          tester
+              .widget<ProfileToolCall>(find.byType(ProfileToolCall))
+              .call
+              .activityDetails
+              .response
+              .single
+              .text,
+          contains('service unavailable'),
+        );
+        await capture('previews-and-failure');
+        await tester.tap(find.text('Hindsight retain'));
+        await tester.pumpAndSettle();
+        await capture('previews');
+        await tester.tap(find.byTooltip('Open Reported changes'));
+        await tester.pumpAndSettle();
+        expect(find.text('Reported changes'), findsWidgets);
+        expect(tester.takeException(), isNull);
+        Navigator.of(tester.element(find.text('Reported changes').last)).pop();
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets(
     'review stays before later messages instead of following the chat',
     (tester) async {
@@ -107,7 +358,7 @@ void main() {
         MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Hermes review'), findsOneWidget);
+      expect(find.text('Memory and skills review'), findsNothing);
       chat.reading.installSavedHistory([
         ...chat.reading.messages,
         {'id': 1, 'role': 'user', 'content': 'Continue the conversation'},
@@ -115,7 +366,7 @@ void main() {
       fixture.event('personal', chat.runtime.runtimeId, const {});
       await tester.pumpAndSettle();
 
-      expect(find.text('Hermes review'), findsNothing);
+      expect(find.text('Memory and skills review'), findsNothing);
       expect(find.textContaining('Changes await approval.'), findsNothing);
       final activity = find.textContaining(
         RegExp(r'^Activity(?: · \d+ tools?)?$'),
@@ -127,19 +378,13 @@ void main() {
       );
       await tester.tap(activity);
       await tester.pumpAndSettle();
-      expect(find.text('Hermes review'), findsOneWidget);
-      expect(find.textContaining('Changes await approval.'), findsNothing);
-      await tester.tap(
-        find.descendant(
-          of: find.byType(ProfileReviewNoticeRow),
-          matching: find.byIcon(Icons.psychology_outlined),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final review = find.text(
-        'Self-improvement review: Changes await approval.',
-      );
+      expect(find.text('Memory and skills review'), findsOneWidget);
+      expect(find.text('Changes await approval.'), findsOneWidget);
+      expect(find.text('Reported changes'), findsNothing);
+      await expandReview(tester);
+      final review = find.text('Reported changes');
       expect(review, findsOneWidget);
+      expect(find.byType(BottomSheet), findsNothing);
       expect(
         find.ancestor(of: review, matching: find.byType(Card)),
         findsNothing,
@@ -168,17 +413,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(ProfileReviewNoticeRow), findsOneWidget);
-    expect(find.text('Hermes review'), findsOneWidget);
-    expect(find.text('Two changes need a closer look.'), findsNothing);
-    await tester.tap(
-      find.descendant(
-        of: find.byType(ProfileReviewNoticeRow),
-        matching: find.byIcon(Icons.psychology_outlined),
-      ),
+    expect(find.byType(ProfileReviewNoticeRow), findsNothing);
+    final activity = find.textContaining(
+      RegExp(r'^Activity(?: · \d+ tools?)?$'),
     );
+    expect(activity, findsOneWidget);
+    await tester.tap(activity);
     await tester.pumpAndSettle();
-    expect(find.text('Two changes need a closer look.'), findsOneWidget);
+    expect(find.byType(ProfileReviewNoticeRow), findsOneWidget);
+    expect(find.text('Memory and skills review'), findsOneWidget);
+    expect(find.text('Reported changes'), findsNothing);
+    await expandReview(tester);
+    expect(find.text('Reported changes'), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
   });
 
   test(
@@ -316,21 +563,18 @@ void main() {
           ).copyWith(textScaler: TextScaler.linear(2)),
           child: child!,
         ),
-        home: Scaffold(body: ProfileReviewNoticeRow(text: text)),
+        home: Scaffold(
+          body: ListView(children: [ProfileReviewNoticeRow(text: text)]),
+        ),
       ),
     );
-    await tester.tap(find.byIcon(Icons.psychology_outlined));
+    await tester.tap(find.byIcon(Icons.lightbulb_outline));
     await tester.pumpAndSettle();
-    expect(find.text(text), findsOneWidget);
-    final scroll = tester.state<ScrollableState>(
-      find
-          .descendant(
-            of: find.byType(SingleChildScrollView),
-            matching: find.byType(Scrollable),
-          )
-          .first,
+    expect(find.text('Reported changes'), findsOneWidget);
+    final scrolls = tester.stateList<ScrollableState>(find.byType(Scrollable));
+    final scroll = scrolls.firstWhere(
+      (state) => state.position.maxScrollExtent > 0,
     );
-    expect(scroll.position.maxScrollExtent, greaterThan(0));
     scroll.position.jumpTo(scroll.position.maxScrollExtent);
     await tester.pump();
     expect(tester.takeException(), isNull);

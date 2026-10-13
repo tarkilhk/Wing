@@ -14,6 +14,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/wing_icons.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'support/profile_actions_fixture.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'helpers/pump_markdown_widget.dart';
@@ -302,8 +303,7 @@ void main() {
       );
       expect(section.toolCount, 3);
       expect(section.reviewCount, 1);
-      expect(section.latestReview, 'Details');
-      expect(section.precedingLatestReview!.groups, hasLength(2));
+      expect(section.groups.last.reviewText, 'Details');
       expect(timeline.joinsCurrentActivity, isFalse);
       expect(section.messages.first.presentationId, same(tokens.first));
       source.first['content'] = 'Caller rewrite';
@@ -366,7 +366,7 @@ void main() {
         });
       }
       await show(tester);
-      expect(find.text('Hermes review'), findsOneWidget);
+      expect(find.text('Memory and skills review'), findsNothing);
       final live = find.byKey(ValueKey(('activity', chat.key)));
       expect(live, findsOneWidget);
       await tester.tap(
@@ -388,9 +388,26 @@ void main() {
           findsOneWidget,
         );
       }
-      await tester.tap(find.text('Hermes review'));
+      final saved = find.byType(ProfileToolActivitySection);
+      await tester.tap(
+        find.descendant(
+          of: saved,
+          matching: find.textContaining(
+            RegExp(r'^Activity(?: · \d+ tools?)?$'),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
-      expect(find.text('Saved review context'), findsOneWidget);
+      expect(find.text('Memory and skills review'), findsOneWidget);
+      await Scrollable.ensureVisible(
+        tester.element(find.text('Memory and skills review')),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Memory and skills review'));
+      await tester.pumpAndSettle();
+      expect(find.text('Reported changes'), findsOneWidget);
+      expect(find.byType(BottomSheet), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }

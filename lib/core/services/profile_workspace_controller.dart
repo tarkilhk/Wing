@@ -52,7 +52,6 @@ import '../models/transcript_reading.dart';
 import 'transcript_reading.dart';
 import '../models/chat_reading.dart';
 import 'chat_reading_session.dart';
-import '../models/review_notice.dart';
 import '../models/session_control.dart';
 import '../models/profile_supervision.dart';
 import '../models/side_question_delivery.dart';
@@ -7436,7 +7435,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat._reviewNotices.add(notice);
           chat.reading.appendReviewNotice(
             identity: notice.identity,
-            text: 'review:${normalizeReviewText(notice.text)}',
+            text: 'review:${notice.text}',
             timestamp: event.data['timestamp'] is num
                 ? event.data['timestamp'] as num
                 : null,

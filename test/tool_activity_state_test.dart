@@ -9,6 +9,54 @@ ToolActivityDetails project(
 ) => ToolActivityDetails.project(name: name, input: args, output: result);
 
 void main() {
+  test('Hindsight submitted memory stays distinct from its actual receipt', () {
+    const fact = 'The user prefers\nicon-only action buttons.\n';
+    final details = project('hindsight_retain', {
+      'content': fact,
+      'context': 'UI preferences',
+      'tags': ['wing', 'design'],
+      'occurred_at': '2026-10-13T11:06:00Z',
+    }, 'Memory stored successfully.');
+    expect(details.request.single.label, 'Submitted memory');
+    expect(details.request.single.text, fact);
+    expect(details.request.single.copyText, fact);
+    expect(details.response.single.label, 'Result');
+    expect(details.response.single.text, 'Memory stored successfully.');
+    expect(details.headerFacts, [
+      'Context: UI preferences',
+      'Tags: wing · design',
+      'Occurred: 2026-10-13T11:06:00Z',
+    ]);
+    expect(details.metadata, isEmpty);
+    expect(details.request.single.label, isNot('Retained fact'));
+  });
+
+  test('Hindsight pending, empty and failed receipts preserve uncertainty', () {
+    final pending = project('hindsight_retain', {
+      'content': 'A new fact',
+    }, null);
+    expect(pending.request.single.text, 'A new fact');
+    expect(pending.response, isEmpty);
+    expect(pending.receiptState, isNull);
+    final empty = project(
+      'hindsight_retain',
+      {},
+      'Memory stored successfully.',
+    );
+    expect(empty.request, isEmpty);
+    final failed = project(
+      'hindsight_retain',
+      {'content': 'A new fact'},
+      {
+        'success': false,
+        'error': 'Failed to store memory: service unavailable',
+      },
+    );
+    expect(failed.receiptState, ToolReceiptState.error);
+    expect(failed.response.single.text, contains('service unavailable'));
+    expect(failed.request.single.label, 'Submitted memory');
+  });
+
   test(
     'skill declaration tags match stock across activity and administration',
     () {

@@ -23,6 +23,21 @@ providers supply a short preview or do not save reasoning. Live reasoning and
 saved history may therefore differ. Wing does not reconstruct missing text or
 display encrypted reasoning.
 
+## Memory and learning
+
+Background **Memory and skills review** notices appear inside Activity's Timeline.
+They use a lightbulb icon, distinct from Hindsight's head/brain icon. Expand a
+review to read and copy the changes Hermes reported; Raw details retains the
+original summary. When Hermes only reports "Memory updated", Wing explains that
+individual changes were not included. A summary can contain shortened previews.
+
+Expand **Hindsight retain** to see the exact **Submitted memory** and the separate
+**Result** from Hindsight. The submitted text is what Hermes asked it to store;
+it does not establish which facts Hindsight extracted. Built-in memory calls
+also show supplied new entries, previous or removed entries, and approval or
+failure results when available. Wing displays the received evidence without
+reconstructing missing facts or diffs.
+
 File and web results retain their supplied locations. A filename can be shortened
 on screen; its popup shows the full location and file actions use that original
 target. A search receipt with an unreliable location remains readable in Raw

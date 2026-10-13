@@ -347,10 +347,6 @@ final class TranscriptTimelineSection {
       .fold(0, (count, group) => count + group.messages.length);
   int get reviewCount => messages.where((entry) => entry.isReview).length;
   bool get hasLatestReview => groups.last.messages.last.isReview;
-  String? get latestReview => groups.last.reviewText;
-  TranscriptTimelineSection? get precedingLatestReview => groups.length <= 1
-      ? null
-      : TranscriptTimelineSection._(groups.take(groups.length - 1));
   bool containsMessage(int id) =>
       groups.any((group) => group.containsMessage(id));
 }

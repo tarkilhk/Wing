@@ -181,6 +181,8 @@ final class ToolActivityDetails {
         _drivePreview(p);
       case 'memory':
         _memory(p);
+      case 'hindsight_retain':
+        _hindsightRetain(p);
       case 'skill_view':
         _skillView(p);
       case 'skill_manage':

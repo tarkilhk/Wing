@@ -491,15 +491,23 @@ void main() {
     final chat = harness.controller.current!.chat!;
     harness.fixture.deliverReview('personal', chat.runtime.runtimeId);
     await tester.pump();
-    expect(find.text('Hermes review'), findsOneWidget);
-    expect(find.text('Roadmap review needs a human check.'), findsNothing);
-    await tester.tap(find.text('Hermes review'));
+    expect(find.text('Memory and skills review'), findsNothing);
+    await tester.tap(
+      find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')).first,
+    );
     await _settle(tester);
-    expect(find.text('Roadmap review needs a human check.'), findsOneWidget);
+    expect(find.text('Memory and skills review'), findsOneWidget);
+    expect(find.text('Reported changes'), findsNothing);
+    await Scrollable.ensureVisible(
+      tester.element(find.text('Memory and skills review')),
+      alignment: .5,
+    );
+    await _settle(tester);
+    await tester.tap(find.text('Memory and skills review'));
+    await _settle(tester);
+    expect(find.text('Reported changes'), findsOneWidget);
     await captureJourney(tester, 'review');
-    Navigator.of(
-      tester.element(find.text('Roadmap review needs a human check.')),
-    ).pop();
+    await tester.tap(find.text('Memory and skills review'));
     await _settle(tester);
 
     final transcript = find.byKey(const ValueKey('profile-transcript'));

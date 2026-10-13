@@ -1,5 +1,26 @@
 part of '../tool_activity_details.dart';
 
+void _hindsightRetain(_ToolProjection p) {
+  p.addRequest('Submitted memory', p.args['content'], copyable: true);
+  p.options(p.args, {
+    'context': 'Context',
+    'tags': 'Tags',
+    'occurred_at': 'Occurred',
+  });
+  // The receipt confirms what the provider reported. Submitted prose is not
+  // evidence of which facts Hindsight extracted or consolidated.
+  if (p.output is String) {
+    p.addResponse('Result', p.output, copyable: true);
+  } else {
+    for (final key in ['result', 'text', 'content', 'output', 'message']) {
+      if (p.data[key] is String) {
+        p.addResponse('Result', p.data[key], copyable: true);
+        break;
+      }
+    }
+  }
+}
+
 void _memory(_ToolProjection p) {
   p.options(p.args, {'target': 'Store', 'action': 'Action'});
   final operations = _maps(p.args['operations']);
