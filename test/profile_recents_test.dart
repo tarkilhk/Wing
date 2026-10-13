@@ -26,6 +26,7 @@ class _RecentsFixture extends ProfileBrowserFixture {
   Completer<void>? heldResume;
   Completer<void>? resumeStarted;
   bool unread = false;
+  double? lastRead;
   bool hiddenChat = false;
   int readWrites = 0;
   bool failHiddenMetadata = false;
@@ -115,6 +116,7 @@ class _RecentsFixture extends ProfileBrowserFixture {
         'last_active': now - 600,
         'archived': profile == 'work',
         'unread': unread,
+        'last_read_at': lastRead,
       },
     {
       'id': 'old',
@@ -378,6 +380,171 @@ void main() {
       expect(chats.last.key, empty.key);
     },
   );
+
+  for (final hidden in [false, true]) {
+    test('tool activity has no new answer, hidden=$hidden', () async {
+      final key = ProfileSessionKey(controller.current!.scope, 'shared-id');
+      fixture.messageRows[('personal', 'shared-id')] = [
+        {
+          'id': 1,
+          'role': 'assistant',
+          'content': 'Read answer',
+          'timestamp': fixture.now - 200,
+        },
+        {
+          'id': 2,
+          'role': 'user',
+          'content': 'Next prompt',
+          'timestamp': fixture.now - 80,
+        },
+        {
+          'id': 3,
+          'role': 'assistant',
+          'content': '',
+          'tool_calls': [
+            {
+              'id': 'call',
+              'type': 'function',
+              'function': {'name': 'read_file', 'arguments': '{}'},
+            },
+          ],
+          'timestamp': fixture.now - 40,
+        },
+        {
+          'id': 4,
+          'role': 'tool',
+          'content': 'File contents',
+          'timestamp': fixture.now - 30,
+        },
+      ];
+      if (hidden) {
+        await controller.refreshRecents();
+        await controller.openSession(key);
+      }
+      fixture.unread = true;
+      fixture.lastRead = fixture.now - 100;
+      if (hidden) {
+        fixture.hiddenChat = true;
+        fixture.hiddenSessions['personal'] = [
+          {
+            'id': 'shared-id',
+            'title': 'Bot Chat',
+            'profile': 'personal',
+            'source': 'desktop',
+            'hidden': 1,
+            'last_read_at': fixture.lastRead,
+            'last_active': fixture.now - 30,
+          },
+        ];
+      }
+      final writes = fixture.readWrites;
+      await controller.refreshRecents();
+      expect(controller.recentsProfileErrors, isEmpty);
+      final recent = controller.recentChats().singleWhere(
+        (chat) => chat.key == key,
+      );
+      expect(recent.messagePreview, 'Next prompt');
+      expect(
+        recent.unread,
+        isFalse,
+        reason: 'Tools and outgoing prompts are not new answers',
+      );
+      expect(fixture.readWrites, writes);
+
+      // A newer prompt/tool tail must not hide a real answer still to read.
+      final messages = fixture.messageRows[('personal', 'shared-id')]!;
+      messages.insert(1, {
+        'id': 5,
+        'role': 'assistant',
+        'content': 'Unread answer',
+        'timestamp': fixture.now - 90,
+      });
+      messages.addAll([
+        for (var i = 0; i < 25; i++)
+          {
+            'id': 6 + i,
+            'role': 'tool',
+            'content': 'More activity',
+            'timestamp': fixture.now - 20 + i / 100,
+          },
+      ]);
+      await controller.refreshRecents();
+      expect(controller.recentsProfileErrors, isEmpty);
+      final withAnswer = controller.recentChats().singleWhere(
+        (chat) => chat.key == key,
+      );
+      expect(withAnswer.unread, isTrue);
+      expect(withAnswer.messagePreview, 'Next prompt');
+      expect(fixture.readWrites, writes);
+
+      fixture.lastRead = fixture.now - 85;
+      if (hidden) {
+        fixture.hiddenSessions['personal']!.single['last_read_at'] =
+            fixture.lastRead;
+      }
+      await controller.refreshRecents();
+      expect(
+        controller.recentChats().singleWhere((chat) => chat.key == key).unread,
+        isFalse,
+        reason: 'Later tools must not make a read answer unread again',
+      );
+      expect(fixture.readWrites, writes);
+    });
+  }
+
+  test('technical assistant rows do not count as new answers', () async {
+    fixture.unread = true;
+    fixture.lastRead = fixture.now - 100;
+    fixture.messageRows[('personal', 'shared-id')] = [
+      {
+        'id': 1,
+        'role': 'user',
+        'content': 'First prompt',
+        'timestamp': fixture.now - 80,
+      },
+      {
+        'id': 2,
+        'role': 'assistant',
+        'content': 'Checking a file',
+        'tool_calls': [
+          {
+            'id': 'call',
+            'type': 'function',
+            'function': {'name': 'read_file', 'arguments': '{}'},
+          },
+        ],
+        'timestamp': fixture.now - 50,
+      },
+      {
+        'id': 3,
+        'role': 'assistant',
+        'content': 'Private model context',
+        'display_kind': 'hidden',
+        'timestamp': fixture.now - 40,
+      },
+      {
+        'id': 4,
+        'role': 'assistant',
+        'content': '',
+        'reasoning': 'Internal reasoning',
+        'timestamp': fixture.now - 30,
+      },
+    ];
+    await controller.refreshRecents();
+    expect(controller.recentsProfileErrors, isEmpty);
+    expect(
+      controller
+          .recentChats()
+          .singleWhere(
+            (chat) =>
+                chat.key.sessionId == 'shared-id' &&
+                chat.key.workspace.profileName == 'personal',
+          )
+          .unread,
+      isFalse,
+    );
+    expect(fixture.readWrites, 0);
+  });
 
   test(
     'confirmed reading clears unread without advancing message freshness',

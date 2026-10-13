@@ -1053,13 +1053,42 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return latest;
   }
 
-  /// Freshness and excerpt share the same stock read. Only a trailing tool or
-  /// hidden row needs another page; preview reads never acknowledge the chat.
-  Future<({double? time, String preview})> _recentMessageObservation(
+  /// Null means an older page is needed to find an answer or reach the read
+  /// watermark. Tool execution, hidden context and outgoing prompts are not
+  /// answers, even though stock session activity can mark them unread.
+  static bool? _recentUnreadAnswer(
+    List<Map<String, dynamic>> messages,
+    num? lastRead,
+  ) {
+    for (final row in messages.reversed) {
+      final message = TranscriptMessage.fromRow(row);
+      final calls = row['tool_calls'];
+      final time = row['timestamp'];
+      if (message.role != 'assistant' ||
+          message.kind != TranscriptMessageKind.dialogue ||
+          message.text.trim().isEmpty ||
+          (calls is List && calls.isNotEmpty) ||
+          time is! num ||
+          !time.isFinite) {
+        continue;
+      }
+      return lastRead == null || time > lastRead;
+    }
+    final time = _latestMessageTime(messages);
+    return lastRead != null && time != null && time <= lastRead ? false : null;
+  }
+
+  /// Freshness, excerpt and answer eligibility share stock history reads.
+  /// Paging stops once the excerpt and unread answer are known, without ever
+  /// acknowledging a chat during a passive refresh.
+  Future<({double? time, String preview, bool unread})>
+  _recentMessageObservation(
     ProfileWorkspaceData resource,
     String id,
-    int generation,
-  ) async {
+    int generation, {
+    bool checkUnread = false,
+    Object? lastRead,
+  }) async {
     var page = await resource.gateway.history(
       id,
       limit: 1,
@@ -1067,7 +1096,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
     final time = _latestMessageTime(page.rows);
     var preview = recentChatMessagePreview(page.rows);
-    while (preview == null &&
+    final watermark = lastRead is num && lastRead.isFinite ? lastRead : null;
+    bool? unread = checkUnread
+        ? _recentUnreadAnswer(page.rows, watermark)
+        : false;
+    while ((preview == null || unread == null) &&
         page.nextOffset != null &&
         !_closed &&
         generation == _recentsGeneration) {
@@ -1077,9 +1110,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
         limit: 20,
         inlineImages: false,
       );
-      preview = recentChatMessagePreview(page.rows);
+      preview ??= recentChatMessagePreview(page.rows);
+      unread ??= _recentUnreadAnswer(page.rows, watermark);
     }
-    return (time: time, preview: preview ?? '');
+    return (time: time, preview: preview ?? '', unread: unread ?? false);
   }
 
   /// Recency is independent of live status: completed and idle chats stay here.
@@ -1299,11 +1333,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
                       resource,
                       row['id'] as String,
                       generation,
+                      checkUnread: row['unread'] == true,
+                      lastRead: row['last_read_at'],
                     );
                     return (
                       row: row,
                       time: message.time,
                       preview: message.preview,
+                      unread: message.unread,
                     );
                   }),
                 );
@@ -1323,7 +1360,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                     resource.scope,
                     row['id'] as String,
                   );
-                  rows[key] = row;
+                  rows[key] = {...row, 'unread': result.unread};
                   _recentMessageTimes[key] = time;
                   _recentMessagePreviews[key] = result.preview;
                   final title = row['title'] as String?;
@@ -1363,12 +1400,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
                     resource,
                     key.sessionId,
                     generation,
+                    checkUnread: true,
+                    lastRead: row['last_read_at'],
                   );
                   return (
                     key: key,
                     row: row,
                     time: message.time,
                     preview: message.preview,
+                    unread: message.unread,
                   );
                 }),
               );
@@ -1383,12 +1423,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                 )) {
                   continue;
                 }
-                final lastRead = row['last_read_at'];
-                rows[observation.key] = {
-                  ...row,
-                  'unread':
-                      lastRead is! num || !lastRead.isFinite || time > lastRead,
-                };
+                rows[observation.key] = {...row, 'unread': observation.unread};
                 _recentMessageTimes[observation.key] = time;
                 _recentMessagePreviews[observation.key] = observation.preview;
                 items[observation.key] = ProfileRecentChat(

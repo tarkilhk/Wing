@@ -219,7 +219,7 @@ void main() {
       'kind': 'message.member',
       'created_at': DateTime.now().millisecondsSinceEpoch / 1000 - 720,
       'actor': {'kind': 'member', 'id': 'atlas', 'display_name': 'Scout'},
-      'payload': {'text': 'Room message must stay out of Recents'},
+      'payload': {'text': 'Room discussion excerpt'},
     });
     bots = BotsSession(
       (_) async => [
@@ -287,7 +287,7 @@ void main() {
         expect(find.text('Ongoing'), findsNothing);
         expect(find.text('Last 24 hours'), findsNothing);
         expect(find.textContaining('Body text'), findsNothing);
-        expect(find.textContaining('Room message'), findsNothing);
+        expect(find.text('Room discussion excerpt'), findsOneWidget);
         expect(find.text('New answer'), findsWidgets);
         expect(find.text('Sync'), findsOneWidget);
         expect(find.byIcon(Icons.account_tree_outlined), findsOneWidget);
@@ -318,10 +318,6 @@ void main() {
         );
         final groupRow = find.byKey(
           const ValueKey('recent-group-activity-filter-test/room-1'),
-        );
-        expect(
-          find.descendant(of: unassignedRow, matching: find.text('No project')),
-          findsOneWidget,
         );
         expect(
           find.descendant(of: botRow, matching: find.text('No project')),
@@ -371,6 +367,16 @@ void main() {
             image.dispose();
           });
         }
+        await tester.scrollUntilVisible(
+          unassignedRow,
+          120,
+          scrollable: find.byType(Scrollable),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(of: unassignedRow, matching: find.text('No project')),
+          findsOneWidget,
+        );
         final room = find.byKey(
           const ValueKey('recent-group-activity-filter-test/room-1'),
         );
