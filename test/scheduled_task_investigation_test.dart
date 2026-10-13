@@ -8,7 +8,12 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/models/scheduled_task.dart';
+import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/widgets/studio_error.dart';
 import 'package:wing/core/screens/administration/admin_widgets.dart';
 import 'package:wing/core/screens/administration/admin_scheduled_task_detail_page.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -22,6 +27,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 
 import 'support/profile_browser_fixture.dart';
+import 'support/administration_fixture.dart';
 import 'support/scheduled_tasks_fixture.dart';
 
 const _error =
@@ -36,14 +42,19 @@ class _Fixture {
   late ScheduledTasksController controller;
   final creates = <(String, Map<String, dynamic>)>[];
   final sends = <(String, Map<String, dynamic>)>[];
-  final opened = <ProfileSessionKey>[];
-  Completer<void>? createGate, sendGate;
-  bool failCreate = false, failNavigate = false;
+  final screenKey = GlobalKey<ProfileWorkspaceScreenState>();
+  Completer<void>? createGate, sendGate, historyGate;
+  bool failCreate = false, failHistory = false;
 
   Future<void> initialize() async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     tasks.jobs['morning']!['last_error'] = _error;
+    final stock = AdministrationFixture();
+    tasks.admin.override = (method, path, query, body) =>
+        path.startsWith('cron/') || path == 'platforms'
+        ? tasks.send(method, path, query, body)
+        : stock.send(method, path, query, body);
     controller = ScheduledTasksController(
       ScheduledTasksRepository(tasks.profile),
       prefs,
@@ -72,6 +83,47 @@ class _Fixture {
             if (path == 'model/options') {
               return {'providers': <Object>[], 'models': <Object>[]};
             }
+            if (path.startsWith('sessions/investigation-')) {
+              final id = Uri.decodeComponent(path.split('/')[1]);
+              if (path.endsWith('/messages')) {
+                await historyGate?.future;
+                if (failHistory) throw StateError('History unavailable');
+                final sent = sends
+                    .where(
+                      (row) =>
+                          row.$1 == scope.profileName &&
+                          row.$2['session_id'] ==
+                              'runtime-${id.split('-').last}',
+                    )
+                    .firstOrNull;
+                final messages = <Map<String, dynamic>>[
+                  if (sent != null)
+                    {
+                      'role': 'user',
+                      'content': sent.$2['text'],
+                      'timestamp': 1789606800,
+                    },
+                ];
+                return {
+                  'session_id': id,
+                  'messages': messages,
+                  'pagination': {
+                    'offset': int.parse(query['offset'] ?? '0'),
+                    'limit': int.parse(query['limit'] ?? '50'),
+                    'returned': messages.length,
+                    'order': 'latest',
+                  },
+                };
+              }
+              return {
+                'id': id,
+                'profile': scope.profileName,
+                'source': 'desktop',
+                'title': 'New chat',
+                'is_hidden': false,
+                'archived': false,
+              };
+            }
             return source.read(path, query);
           },
           rpc: (method, params) async {
@@ -97,19 +149,31 @@ class _Fixture {
         );
       },
     );
+    workspace.healthSession(repository: tasks.admin.server);
     await workspace.initialize();
   }
 
-  Future<void> navigate(ProfileSessionKey key) async {
-    if (failNavigate) throw StateError('navigation failed');
-    opened.add(key);
-  }
+  Widget root({
+    AppDestination destination = AppDestination.chats,
+    ScheduledTaskInvestigationRequest? initial,
+  }) => ProfileWorkspaceScreen(
+    key: screenKey,
+    controller: workspace,
+    initialDestination: destination,
+    initialInvestigation: initial,
+    createBotsSession: () => BotsSession((_) async => []),
+  );
 
   Widget page() => AdminScheduledTaskDetailPage(
     controller: controller,
     initial: controller.task('morning')!,
-    chatController: workspace,
-    onOpenSession: navigate,
+    onOpenSession: (_) async {},
+    onInvestigate: (request) {
+      Navigator.of(
+        screenKey.currentContext!,
+      ).popUntil((route) => route.isFirst);
+      unawaited(screenKey.currentState!.openTaskInvestigation(request));
+    },
   );
 
   void dispose() {
@@ -158,6 +222,7 @@ void main() {
     WidgetTester tester, {
     Brightness brightness = Brightness.dark,
     double scale = 1,
+    bool administration = false,
   }) async {
     tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 900);
     tester.view.devicePixelRatio = 1;
@@ -172,9 +237,30 @@ void main() {
           ),
           child: RepaintBoundary(key: _frame, child: child!),
         ),
-        home: fixture.page(),
+        home: fixture.root(
+          destination: administration
+              ? AppDestination.administration
+              : AppDestination.chats,
+        ),
       ),
     );
+    await tester.pumpAndSettle();
+    if (administration) {
+      await tester.scrollUntilVisible(
+        find.text('Scheduled tasks'),
+        160,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Scheduled tasks'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Morning briefing'));
+    } else {
+      unawaited(
+        Navigator.of(
+          fixture.screenKey.currentContext!,
+        ).push<void>(MaterialPageRoute(builder: (_) => fixture.page())),
+      );
+    }
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Ask personal'),
@@ -200,22 +286,49 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 10));
     }
+    if (!settled()) {
+      debugPrint(
+        'Destination state: sends=${fixture.sends.length}, creates=${fixture.creates.length}, messages=${fixture.workspace.current?.chat?.reading.messages.length}, errors=${tester.widgetList<StudioError>(find.byType(StudioError)).map((w) => w.message).toList()}, waits=${tester.widgetList<StudioLoading>(find.byType(StudioLoading)).map((w) => w.label).toList()}',
+      );
+    }
     expect(settled(), isTrue, reason: 'The expected action did not settle');
-    await tester.pumpAndSettle();
+    await tester.pump();
   }
 
+  bool preparing(WidgetTester tester) => find
+      .byWidgetPredicate(
+        (widget) =>
+            widget is StudioLoading &&
+            widget.label == 'Opening investigation chat',
+      )
+      .evaluate()
+      .isNotEmpty;
+  bool destinationReady(WidgetTester tester) =>
+      find
+          .textContaining('The last run of scheduled task', findRichText: true)
+          .evaluate()
+          .isNotEmpty &&
+      !preparing(tester);
+
   testWidgets(
-    'Ask targets the failed profile, sends exact error, and clears project',
+    'Ask enters the destination immediately, targets its profile and clears project',
     (tester) async {
       await fixture.workspace.switchProfile('work');
       await fixture.workspace.selectProject(
         fixture.workspace.current!.projects.first,
       );
+      fixture.createGate = Completer<void>();
       await pump(tester);
       expect(find.byType(AdminAskHermesButton), findsOneWidget);
       await tester.tap(find.text('Ask personal'));
       await tester.pumpAndSettle();
-      await waitFor(tester, () => fixture.opened.isNotEmpty);
+      expect(find.byType(AdminScheduledTaskDetailPage), findsNothing);
+      expect(find.text('New chat'), findsOneWidget);
+      expect(find.byType(ProfileMessage), findsNothing);
+      expect(preparing(tester), isTrue);
+      expect(fixture.sends, isEmpty);
+      fixture.createGate!.complete();
+      await waitFor(tester, () => destinationReady(tester));
       expect(fixture.creates.single.$1, 'personal');
       expect(fixture.creates.single.$2['cwd'], isNull);
       expect(fixture.sends.single.$1, 'personal');
@@ -225,138 +338,159 @@ void main() {
       expect(prompt, contains('2026-09-17T01:00:00.000Z'));
       expect(prompt, contains(_error));
       expect(prompt, contains('Please investigate'));
-      expect(fixture.opened.single.workspace, fixture.tasks.profile.scope);
-      expect(fixture.opened.single.sessionId, 'investigation-1');
-      expect(fixture.workspace.current!.chat!.projectId, isNull);
-      expect(fixture.workspace.current!.selectedProject, isNull);
+      final chat = fixture.workspace.current!.chat!;
+      expect(chat.key.workspace, fixture.tasks.profile.scope);
+      expect(chat.key.sessionId, 'investigation-1');
+      expect(chat.projectId, isNull);
       expect(
-        fixture.workspace.current!.chat!.composer.observation.text,
+        fixture.browser.calls.where((call) => call.$2 == 'session.resume'),
         isEmpty,
       );
+      expect(fixture.workspace.current!.selectedProject, isNull);
+      expect(chat.composer.observation.text, isEmpty);
+      expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },
   );
 
   testWidgets(
-    'pending creation and send show feedback, suppress duplicates, then open',
+    'production Administration retires task routes before creation completes',
     (tester) async {
       fixture.createGate = Completer<void>();
-      fixture.sendGate = Completer<void>();
-      await pump(tester);
+      await pump(tester, administration: true);
       await tester.tap(find.text('Ask personal'));
       await tester.pumpAndSettle();
-      expect(fixture.creates, hasLength(1));
-      expect(find.byType(StudioLoading), findsOneWidget);
-      expect(
-        tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
-        'Opening investigation chat',
-      );
-      expect(
-        tester
-            .widget<IconButton>(
-              find.byWidgetPredicate(
-                (widget) =>
-                    widget is IconButton && widget.tooltip == 'Copy task error',
-              ),
-            )
-            .onPressed,
-        isNotNull,
-      );
-      expect(
-        find.byWidgetPredicate(
-          (w) =>
-              w is StudioPageLoading &&
-              w.active &&
-              w.label == 'Opening investigation chat',
-        ),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Ask personal'));
-      await tester.pump();
+      expect(find.byType(AdminScheduledTaskDetailPage), findsNothing);
+      expect(find.text('New chat'), findsOneWidget);
+      expect(preparing(tester), isTrue);
       expect(fixture.creates, hasLength(1));
       fixture.createGate!.complete();
-      await tester.pumpAndSettle();
-      await waitFor(tester, () => fixture.sends.isNotEmpty);
+      await waitFor(tester, () => destinationReady(tester));
       expect(fixture.sends, hasLength(1));
-      expect(fixture.opened, isEmpty);
-      fixture.sendGate!.complete();
-      await waitFor(tester, () => fixture.opened.isNotEmpty);
-      expect(fixture.opened, hasLength(1));
-      expect(
-        find.byWidgetPredicate(
-          (w) =>
-              w is StudioPageLoading &&
-              w.active &&
-              w.label == 'Opening investigation chat',
-        ),
-        findsNothing,
-      );
       await tester.pumpWidget(const SizedBox());
     },
   );
 
-  testWidgets('creation failure clears feedback and allows retry', (
+  testWidgets(
+    'health-alert initial entry shows the destination on its first frame',
+    (tester) async {
+      fixture.createGate = Completer<void>();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: fixture.root(
+            initial: ScheduledTaskInvestigationRequest(
+              owner: fixture.tasks.profile.scope,
+              task: fixture.controller.task('morning')!,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('New chat'), findsOneWidget);
+      expect(find.byType(AdminScheduledTaskDetailPage), findsNothing);
+      expect(find.byType(StudioLoading), findsOneWidget);
+      expect(fixture.creates, hasLength(1));
+      fixture.createGate!.complete();
+      await waitFor(tester, () => destinationReady(tester));
+      expect(fixture.sends, hasLength(1));
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'destination owns one pulse through held creation, history and send',
+    (tester) async {
+      fixture.createGate = Completer<void>();
+      fixture.historyGate = Completer<void>();
+      fixture.sendGate = Completer<void>();
+      await pump(tester);
+      await tester.tap(find.text('Ask personal'));
+      await tester.pumpAndSettle();
+      final back = tester.getRect(find.byTooltip('Back'));
+      expect(fixture.creates, hasLength(1));
+      expect(find.byType(AdminScheduledTaskDetailPage), findsNothing);
+      expect(find.byType(StudioLoading), findsOneWidget);
+      expect(preparing(tester), isTrue);
+      fixture.createGate!.complete();
+      await tester.pumpAndSettle();
+      expect(fixture.sends, isEmpty);
+      expect(preparing(tester), isTrue);
+      expect(tester.getRect(find.byTooltip('Back')), back);
+      fixture.historyGate!.complete();
+      await waitFor(tester, () => fixture.sends.isNotEmpty);
+      expect(preparing(tester), isTrue);
+      expect(find.byType(ProfileMessage), findsNothing);
+      expect(tester.getRect(find.byTooltip('Back')), back);
+      fixture.sendGate!.complete();
+      await waitFor(tester, () => destinationReady(tester));
+      expect(fixture.creates, hasLength(1));
+      expect(fixture.sends, hasLength(1));
+      expect(preparing(tester), isFalse);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('creation failure and Retry stay at the new chat destination', (
     tester,
   ) async {
     fixture.failCreate = true;
     await pump(tester);
     await tester.tap(find.text('Ask personal'));
     await tester.pumpAndSettle();
-    expect(
-      find.text(
-        'Could not open the investigation chat. Check the connection and retry.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.byType(AdminScheduledTaskDetailPage), findsNothing);
+    expect(find.text('New chat'), findsOneWidget);
+    expect(find.text('offline'), findsOneWidget);
+    expect(preparing(tester), isFalse);
     expect(fixture.sends, isEmpty);
     fixture.failCreate = false;
-    await tester.tap(find.text('Ask personal'));
-    await waitFor(tester, () => fixture.opened.isNotEmpty);
+    await tester.tap(find.byTooltip('Retry'));
+    await waitFor(tester, () => destinationReady(tester));
     expect(fixture.sends, hasLength(1));
-    expect(fixture.opened, hasLength(1));
-    await tester.pumpWidget(const SizedBox());
-  });
-
-  testWidgets('navigation retry reuses the created chat and submitted prompt', (
-    tester,
-  ) async {
-    fixture.failNavigate = true;
-    await pump(tester);
-    await tester.tap(find.text('Ask personal'));
-    await waitFor(
-      tester,
-      () => find
-          .text(
-            'Could not open the investigation chat. Check the connection and retry.',
-          )
-          .evaluate()
-          .isNotEmpty,
-    );
-    fixture.failNavigate = false;
-    await tester.tap(find.text('Ask personal'));
-    await waitFor(tester, () => fixture.opened.isNotEmpty);
-    expect(fixture.creates, hasLength(1));
-    expect(fixture.sends, hasLength(1));
-    expect(fixture.opened.single.sessionId, 'investigation-1');
+    expect(fixture.creates, hasLength(2));
     await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets(
-    'leaving during creation retains draft without sending or navigating',
+    'history retry reuses the created chat without submitting duplicates',
+    (tester) async {
+      fixture.failHistory = true;
+      await pump(tester);
+      await tester.tap(find.text('Ask personal'));
+      await waitFor(
+        tester,
+        () => find.byTooltip('Retry').evaluate().isNotEmpty,
+      );
+      expect(fixture.creates, hasLength(1));
+      fixture.failHistory = false;
+      await tester.tap(find.byTooltip('Retry'));
+      await waitFor(tester, () => destinationReady(tester));
+      expect(fixture.creates, hasLength(1));
+      expect(fixture.sends, hasLength(1));
+      expect(fixture.workspace.current!.chat!.key.sessionId, 'investigation-1');
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'Back during creation retires navigation and keeps a created draft unsent',
     (tester) async {
       fixture.createGate = Completer<void>();
       await pump(tester);
       await tester.tap(find.text('Ask personal'));
       await tester.pumpAndSettle();
-      await tester.pumpWidget(const SizedBox());
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
       fixture.createGate!.complete();
       await tester.pumpAndSettle();
       expect(fixture.sends, isEmpty);
-      expect(fixture.opened, isEmpty);
+      expect(preparing(tester), isFalse);
       final chat = fixture.workspace
           .browserResource('personal')
           .chats['investigation-1']!;
       expect(chat.composer.observation.text, contains(_error));
+      await tester.pumpWidget(const SizedBox());
     },
   );
 
@@ -442,7 +576,6 @@ void main() {
           .evaluate()
           .isNotEmpty,
     );
-    expect(fixture.opened, isEmpty);
     expect(fixture.workspace.current!.scope.profileName, 'work');
     expect(fixture.sends, hasLength(1));
     await tester.pumpWidget(const SizedBox());
@@ -487,14 +620,15 @@ void main() {
             fixture.createGate!.complete();
             await tester.pumpAndSettle();
             expect(find.byType(StudioLoading), findsNothing);
-            expect(
-              find.text(
-                'Could not open the investigation chat. Check the connection and retry.',
-              ),
-              findsOneWidget,
-            );
+            expect(find.text('offline'), findsOneWidget);
             expect(tester.takeException(), isNull);
             await capture(tester, '$name-failed');
+            fixture.failCreate = false;
+            await tester.tap(find.byTooltip('Retry'));
+            await waitFor(tester, () => destinationReady(tester));
+            expect(fixture.sends, hasLength(1));
+            expect(tester.takeException(), isNull);
+            await capture(tester, '$name-complete');
             await tester.pumpWidget(const SizedBox());
           },
         );

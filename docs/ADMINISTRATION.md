@@ -34,7 +34,7 @@ Retained memory can be searched and read. Memory entry editing and deletion are 
 
 Open **Profile → Scheduled tasks** to create, edit, pause, resume, run or delete routines. Search and the All, Active, Paused and Needs attention filters affect this list. Open a task for instructions, delivery, model, last-run details and recent runs.
 
-When the last run has an error, use the copy icon to copy its full text. **Ask <profile>** sends the task name, recorded run time and error to a new chat in that task’s profile, outside any project, and opens the chat. It uses the same Ask action as Doctor findings.
+When the last run has an error, use the copy icon to copy its full text. **Ask <profile>** takes you straight to a new chat in that task’s profile, outside any project. The header Wing pulses while the chat is created and the task name, recorded run time and error are sent. If creation fails, retry from that chat. It uses the same Ask action as Doctor findings.
 
 Schedules include recurring intervals, daily/weekly/monthly choices, one-time dates or delays, and custom expressions. Server templates provide starting points. Recurrences use Hermes time; run timestamps display in phone time. Editing a name or instructions preserves an unchanged schedule.
 

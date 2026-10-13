@@ -1,3 +1,4 @@
+import '../../models/scheduled_task.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/wing_app_bar.dart';
 import '../../services/administration_logs_session.dart';
@@ -49,6 +50,7 @@ class HermesAdministrationContent extends StatefulWidget {
   final VoidCallback? onConnections;
   final AdministrationRepository? repository;
   final Future<void> Function(ProfileSessionKey) onOpenSession;
+  final ValueChanged<ScheduledTaskInvestigationRequest>? onInvestigate;
   final bool healthOnly;
   const HermesAdministrationContent({
     super.key,
@@ -57,6 +59,7 @@ class HermesAdministrationContent extends StatefulWidget {
     this.onConnections,
     this.repository,
     required this.onOpenSession,
+    this.onInvestigate,
     this.healthOnly = false,
   });
   @override
@@ -402,7 +405,14 @@ class _HermesAdministrationContentState
                 p,
                 (context, profile) => AdminScheduledTasksPage(
                   profile: profile,
-                  chatController: widget.controller,
+                  onInvestigate: widget.onInvestigate == null
+                      ? null
+                      : (request) {
+                          widget.onInvestigate!(request);
+                          if (navigator.mounted) {
+                            navigator.popUntil((route) => route == root);
+                          }
+                        },
                   acquireController: () => ScheduledTasksController.acquire(
                     profile,
                     widget.controller.preferences,
@@ -825,6 +835,7 @@ class HermesHealthContent extends HermesAdministrationContent {
     super.onConnections,
     super.repository,
     required super.onOpenSession,
+    super.onInvestigate,
   }) : super(healthOnly: true);
 }
 

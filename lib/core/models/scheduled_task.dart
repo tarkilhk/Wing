@@ -1,3 +1,15 @@
+import 'hermes_profile.dart';
+
+/// Captured failure and destination; navigation never borrows ambient selection.
+class ScheduledTaskInvestigationRequest {
+  const ScheduledTaskInvestigationRequest({
+    required this.owner,
+    required this.task,
+  });
+  final WorkspaceScope owner;
+  final ScheduledTask task;
+}
+
 /// Current Hermes scheduled-task contract. Display strings never become writes.
 class ScheduledTask {
   ScheduledTask.fromJson(Map<String, dynamic> value)

@@ -7,7 +7,6 @@ import '../../models/scheduled_task.dart';
 import '../../services/administration_repository.dart';
 import '../../services/scheduled_tasks_controller.dart';
 import '../../services/scheduled_task_detail_session.dart';
-import '../../services/profile_workspace_controller.dart';
 import 'admin_widgets.dart';
 import 'admin_scheduled_task_detail_page.dart';
 import 'admin_scheduled_task_editor_page.dart';
@@ -19,12 +18,12 @@ class AdminScheduledTasksPage extends StatefulWidget {
     required this.profile,
     required this.acquireController,
     required this.onOpenSession,
-    this.chatController,
+    this.onInvestigate,
   });
   final ProfileAdministration profile;
   final ScheduledTasksController Function() acquireController;
   final Future<void> Function(ProfileSessionKey) onOpenSession;
-  final ProfileWorkspaceController? chatController;
+  final ValueChanged<ScheduledTaskInvestigationRequest>? onInvestigate;
   @override
   State<AdminScheduledTasksPage> createState() =>
       _AdminScheduledTasksPageState();
@@ -257,7 +256,7 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
             controller: controller,
             initial: selectedTask!,
             onOpenSession: widget.onOpenSession,
-            chatController: widget.chatController,
+            onInvestigate: widget.onInvestigate,
           ),
         ),
       ),

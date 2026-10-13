@@ -1,3 +1,4 @@
+import 'core/models/scheduled_task.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'core/services/connection_diagnostics.dart';
 import 'core/services/bots_connection_source.dart';
@@ -96,6 +97,7 @@ ProfileWorkspaceScreen _buildWorkspaceScreen({
   required VoidCallback? onPreferencesChanged,
   required AppDestination destination,
   ProfileSessionKey? initialBotSession,
+  ScheduledTaskInvestigationRequest? initialInvestigation,
   bool initialQuickChat = false,
   bool initialSearchChats = false,
 }) => ProfileWorkspaceScreen(
@@ -104,6 +106,7 @@ ProfileWorkspaceScreen _buildWorkspaceScreen({
   createBotsSession: createBotsSession,
   onOpenBotChat: onOpenBotChat,
   initialBotSession: initialBotSession,
+  initialInvestigation: initialInvestigation,
   initialDestination: destination,
   initialQuickChat: initialQuickChat,
   initialSearchChats: initialSearchChats,
@@ -196,6 +199,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     ProfileWorkspaceController controller, {
     GlobalKey<ProfileWorkspaceScreenState>? key,
     required AppDestination destination,
+    ScheduledTaskInvestigationRequest? initialInvestigation,
   }) => _buildWorkspaceScreen(
     key: key,
     controller: controller,
@@ -206,6 +210,7 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
     onOpenBotChat: (key, canUse) async =>
         _homeKey.currentState?.selectBotChat(key, canUse),
     destination: destination,
+    initialInvestigation: initialInvestigation,
     enableNotifications: enableProfileNotifications,
     backgroundMonitoringState: _backgroundMonitoring.state,
     openMonitoringBatterySettings: _backgroundMonitoring.openBatterySettings,
@@ -467,6 +472,20 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
             controller: controller,
             alert: alert,
             onConnections: openConnections,
+            onInvestigate: (request) {
+              if (!mounted) return;
+              unawaited(
+                _navigatorKey.currentState?.push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => _workspaceScreen(
+                      controller,
+                      destination: AppDestination.chats,
+                      initialInvestigation: request,
+                    ),
+                  ),
+                ),
+              );
+            },
             onOpenSession: (key) async {
               await controller.openSession(key, propagateHistoryFailure: true);
               if (mounted) {

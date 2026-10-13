@@ -9,87 +9,55 @@ import 'profile_workspace_controller.dart';
 
 typedef TaskPollTimer = Timer Function(Duration, void Function(Timer));
 
-/// Captures the failed run and owns preparation, submission and navigation retry.
-/// Chat creation and durable prompt delivery remain workspace-owned.
-class ScheduledTaskInvestigationSession extends ChangeNotifier {
-  ScheduledTaskInvestigationSession(this._tasks, this._workspace);
-  final ScheduledTasksController _tasks;
-  final ProfileWorkspaceController _workspace;
-  ProfileChat? _prepared;
-  String? _prompt;
-  bool _submitted = false, _opening = false, _disposed = false;
-  bool get opening => _opening;
-  String? _notice;
-  String? get notice => _notice;
-
-  Future<void> open({
-    required Future<void> Function(ProfileSessionKey) navigate,
-    required bool Function() isRouteCurrent,
-    required ScheduledTask task,
-  }) async {
-    if (_disposed || _opening || !isRouteCurrent() || task.error.isEmpty) {
-      return;
-    }
-    final owner = _tasks.repository.profile.scope;
-    if (task.profileName != owner.profileName ||
+/// Destination-owned preparation and retry; the workspace owns durable delivery.
+class ScheduledTaskInvestigationSession {
+  ScheduledTaskInvestigationSession(this.request, this._workspace) {
+    final owner = request.owner;
+    if (request.task.profileName != owner.profileName ||
         owner.connectionId != _workspace.connection.id ||
         owner.connectionIdentity != _workspace.connectionIdentity) {
       throw ArgumentError('Task investigation belongs to another workspace');
     }
-    bool admitted() => !_disposed && isRouteCurrent();
-    _opening = true;
-    _notice = null;
-    notifyListeners();
-    try {
-      final prompt = task.failureInvestigationPrompt;
-      if (_prepared == null || _prompt != prompt) {
-        _prepared = await _workspace.createBrowserChat(
-          profileName: owner.profileName,
-          initialDraft: prompt,
-          canDispatch: admitted,
-        );
-        _prompt = prompt;
-        _submitted = false;
-      }
-      if (!admitted()) return;
-      if (_workspace.switching ||
-          _workspace.current?.scope != owner ||
-          _workspace.current?.chat?.key != _prepared!.key) {
-        _notice = 'Chat saved in ${owner.profileName}. Open it from Chats.';
-        return;
-      }
-      if (!_submitted) {
-        // Mark before awaiting: delivery uncertainty is resolved by the chat's
-        // durable queue, never by submitting a second investigation prompt.
-        _submitted = true;
-        await _workspace.send(_prepared!);
-      }
-      if (!admitted()) return;
-      if (_workspace.switching ||
-          _workspace.current?.scope != owner ||
-          _workspace.current?.chat?.key != _prepared!.key) {
-        _notice = 'Chat saved in ${owner.profileName}. Open it from Chats.';
-        return;
-      }
-      await navigate(_prepared!.key);
-      _prepared = null;
-      _prompt = null;
-      _submitted = false;
-    } catch (_) {
-      if (!_disposed) {
-        _notice =
-            'Could not open the investigation chat. Check the connection and retry.';
-      }
-    } finally {
-      _opening = false;
-      if (!_disposed) notifyListeners();
-    }
   }
+  final ScheduledTaskInvestigationRequest request;
+  final ProfileWorkspaceController _workspace;
+  ProfileChat? _prepared;
+  bool _submitted = false;
 
-  @override
-  void dispose() {
-    _disposed = true;
-    super.dispose();
+  Future<ProfileSessionKey> open({required bool Function() canUse}) async {
+    if (!canUse()) throw StateError('Chat opening was cancelled.');
+    if (_prepared == null) {
+      _prepared = await _workspace.createBrowserChat(
+        profileName: request.owner.profileName,
+        initialDraft: request.task.failureInvestigationPrompt,
+        canDispatch: canUse,
+      );
+    } else if (_prepared!.reading.historyError != null) {
+      await _workspace.refreshHistory(_prepared!);
+    }
+    if (!canUse()) throw StateError('Chat opening was cancelled.');
+    if (_prepared!.reading.historyError case final error?) {
+      throw StateError(error);
+    }
+    void requireSelection() {
+      if (_workspace.switching ||
+          _workspace.current?.scope != request.owner ||
+          _workspace.current?.chat?.key != _prepared!.key) {
+        throw StateError(
+          'Chat saved in ${request.owner.profileName}. Open it from Chats.',
+        );
+      }
+    }
+
+    requireSelection();
+    if (!_submitted) {
+      // Delivery uncertainty belongs to the durable queue, never a second send.
+      _submitted = true;
+      await _workspace.send(_prepared!);
+    }
+    if (!canUse()) throw StateError('Chat opening was cancelled.');
+    requireSelection();
+    return _prepared!.key;
   }
 }
 

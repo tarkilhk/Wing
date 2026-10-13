@@ -1,3 +1,4 @@
+import '../models/scheduled_task.dart';
 import 'package:flutter/material.dart';
 import '../models/profile_session_key.dart';
 import '../models/health_alert.dart';
@@ -20,11 +21,13 @@ class HealthAlertHealthScreen extends StatefulWidget {
     required this.alert,
     required this.onOpenSession,
     required this.onConnections,
+    this.onInvestigate,
   });
   final ProfileWorkspaceController controller;
   final HealthAlert alert;
   final Future<void> Function(ProfileSessionKey) onOpenSession;
   final VoidCallback onConnections;
+  final ValueChanged<ScheduledTaskInvestigationRequest>? onInvestigate;
   @override
   State<HealthAlertHealthScreen> createState() =>
       _HealthAlertHealthScreenState();
@@ -69,7 +72,13 @@ class _HealthAlertHealthScreenState extends State<HealthAlertHealthScreen> {
         case 'Scheduled tasks':
           return AdminScheduledTasksPage(
             profile: profile,
-            chatController: widget.controller,
+            onInvestigate: widget.onInvestigate == null
+                ? null
+                : (request) {
+                    final root = ModalRoute.of(context);
+                    Navigator.of(context).popUntil((route) => route == root);
+                    widget.onInvestigate!(request);
+                  },
             acquireController: () => ScheduledTasksController.acquire(
               profile,
               widget.controller.preferences,
@@ -97,6 +106,7 @@ class _HealthAlertHealthScreenState extends State<HealthAlertHealthScreen> {
         onOpenMenu: () => Navigator.of(context).maybePop(),
         onConnections: widget.onConnections,
         onOpenSession: widget.onOpenSession,
+        onInvestigate: widget.onInvestigate,
       ),
     );
   }

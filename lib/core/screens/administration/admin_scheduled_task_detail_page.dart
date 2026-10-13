@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../../models/scheduled_task.dart';
 import '../../services/scheduled_tasks_controller.dart';
 import '../../services/scheduled_task_detail_session.dart';
-import '../../services/profile_workspace_controller.dart';
 import '../../widgets/activity/activity_detail_actions.dart';
 import '../../widgets/studio_action_label.dart';
 import 'admin_scheduled_task_editor_page.dart';
@@ -19,12 +18,12 @@ class AdminScheduledTaskDetailPage extends StatefulWidget {
     required this.controller,
     required this.initial,
     required this.onOpenSession,
-    this.chatController,
+    this.onInvestigate,
   });
   final ScheduledTasksController controller;
   final ScheduledTask initial;
   final Future<void> Function(ProfileSessionKey) onOpenSession;
-  final ProfileWorkspaceController? chatController;
+  final ValueChanged<ScheduledTaskInvestigationRequest>? onInvestigate;
   @override
   State<AdminScheduledTaskDetailPage> createState() =>
       _AdminScheduledTaskDetailPageState();
@@ -41,10 +40,6 @@ class _AdminScheduledTaskDetailPageState
     onOpenSession: widget.onOpenSession,
   );
   ScheduledTaskDetailState get state => session.state;
-  late final investigation = widget.chatController == null
-      ? null
-      : ScheduledTaskInvestigationSession(controller, widget.chatController!);
-  late final observations = Listenable.merge([session, investigation]);
   List<TaskRun>? get runs => state.history;
   String? get runError => state.error;
   bool get loading => state.loading;
@@ -66,7 +61,6 @@ class _AdminScheduledTaskDetailPageState
   @override
   void dispose() {
     session.dispose();
-    investigation?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -75,7 +69,7 @@ class _AdminScheduledTaskDetailPageState
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: observations,
+    listenable: session,
     builder: (context, _) {
       final task = state.task;
       final missing = state.missing;
@@ -153,201 +147,191 @@ class _AdminScheduledTaskDetailPageState
                   ),
                 ],
               ),
-        child: StudioPageLoading(
-          active: investigation?.opening == true,
-          label: 'Opening investigation chat',
-          child: StudioRefresh(
-            available: true,
-            label: 'Loading runs',
-            onRefresh: refresh,
-            child: ListView(
-              key: const ValueKey('task-detail-scroll'),
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              children: [
-                Text(
-                  task.title,
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
+        child: StudioRefresh(
+          available: true,
+          label: 'Loading runs',
+          onRefresh: refresh,
+          child: ListView(
+            key: const ValueKey('task-detail-scroll'),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            children: [
+              Text(
+                task.title,
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
                 ),
-                const SizedBox(height: 12),
-                TaskStatus(
-                  task,
-                  confirmed:
-                      !missing &&
-                      controller.checkedAt != null &&
-                      controller.error == null,
+              ),
+              const SizedBox(height: 12),
+              TaskStatus(
+                task,
+                confirmed:
+                    !missing &&
+                    controller.checkedAt != null &&
+                    controller.error == null,
+              ),
+              const SizedBox(height: 24),
+              if (missing)
+                const TaskMessage(
+                  'This task is no longer in the schedule. One-time tasks may be removed after their final run. Recent runs remain below.',
                 ),
-                const SizedBox(height: 24),
-                if (missing)
-                  const TaskMessage(
-                    'This task is no longer in the schedule. One-time tasks may be removed after their final run. Recent runs remain below.',
-                  ),
-                if (controller.error != null)
-                  TaskMessage(controller.error!, error: true),
-                if (controller.notice != null) TaskMessage(controller.notice!),
-                TaskUncertainty(controller: controller, id: task.id),
-                if (!missing)
-                  TaskSurface(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            task.nextRunHeading,
-                            style: TextStyle(
-                              fontSize: 12,
-                              letterSpacing: 1.2,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            task.nextRunText ?? taskTime(context, task.nextRun),
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            task.scheduleLabel,
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                          const SizedBox(height: 16),
-                          const Divider(height: 1),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Run times use your phone’s timezone. Recurring schedules follow Hermes’ timezone.',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 24),
-                if (task.error.isNotEmpty)
-                  TaskSection(
-                    'Last run needs attention',
+              if (controller.error != null)
+                TaskMessage(controller.error!, error: true),
+              if (controller.notice != null) TaskMessage(controller.notice!),
+              TaskUncertainty(controller: controller, id: task.id),
+              if (!missing)
+                TaskSurface(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Wrap(
-                          alignment: WrapAlignment.end,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 8,
-                          children: [
-                            if (investigation != null)
-                              AdminAskHermesButton(
-                                label: 'Ask ${task.profileName}',
-                                onPressed: investigation!.opening
-                                    ? null
-                                    : () => investigation!.open(
-                                        task: task,
-                                        navigate: widget.onOpenSession,
-                                        isRouteCurrent: () =>
-                                            mounted &&
-                                            ModalRoute.of(context)?.isCurrent ==
-                                                true,
-                                      ),
-                              ),
-                            ToolDetailCopyButton(
-                              label: 'Copy task error',
-                              text: task.error,
-                            ),
-                          ],
+                        Text(
+                          task.nextRunHeading,
+                          style: TextStyle(
+                            fontSize: 12,
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
-                        if (investigation?.notice case final notice?)
-                          TaskMessage(notice, error: true),
-                        TaskMessage(task.error, error: true),
+                        const SizedBox(height: 8),
+                        Text(
+                          task.nextRunText ?? taskTime(context, task.nextRun),
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          task.scheduleLabel,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 16),
+                        const Divider(height: 1),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Run times use your phone’s timezone. Recurring schedules follow Hermes’ timezone.',
+                          style: theme.textTheme.bodySmall,
+                        ),
                       ],
                     ),
                   ),
-                TaskSection(
-                  'Task',
-                  child: SelectableText(task.instructionsDisplay),
                 ),
+              const SizedBox(height: 24),
+              if (task.error.isNotEmpty)
                 TaskSection(
-                  'Details',
-                  child: TaskSurface(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  'Last run needs attention',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
                         children: [
-                          _fact('Results', task.destinationsDisplay),
-                          _fact('Model', task.modelDisplay),
-                          _fact(
-                            'Last run',
-                            task.lastRun == null
-                                ? 'No recorded run'
-                                : taskTime(context, task.lastRun),
-                          ),
-                          if (task.text('script').isNotEmpty)
-                            _fact('Server script', task.text('script')),
-                          if (task.skills.isNotEmpty)
-                            _fact('Skills', task.skills.join(', ')),
-                          if (task.contextFrom.isNotEmpty)
-                            _fact('Context from', task.contextFrom.join(', ')),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                TaskSection(
-                  'Recent runs',
-                  description:
-                      'Open conversation runs to read the chat. Script runs show their recorded status and output preview here.',
-                  child: StudioLoadingRegion(
-                    available: state.history != null,
-                    busy: loading,
-                    label: 'Loading runs',
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (runError != null)
-                          TaskMessage(
-                            runError!,
-                            error: true,
-                            action: StudioButtonPress(
-                              child: TextButton(
-                                onPressed: loading ? null : refresh,
-                                child: const Text('Refresh runs'),
+                          if (widget.onInvestigate != null)
+                            AdminAskHermesButton(
+                              label: 'Ask ${task.profileName}',
+                              onPressed: () => widget.onInvestigate!(
+                                ScheduledTaskInvestigationRequest(
+                                  owner: controller.repository.profile.scope,
+                                  task: task,
+                                ),
                               ),
                             ),
+                          ToolDetailCopyButton(
+                            label: 'Copy task error',
+                            text: task.error,
                           ),
-                        if (runs?.isEmpty == true)
-                          Text(
-                            'No recorded runs yet.',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        if (runs?.isNotEmpty == true)
-                          TaskSurface(
-                            child: Column(
-                              children: [
-                                for (var i = 0; i < runs!.length; i++) ...[
-                                  if (i > 0) const Divider(height: 1),
-                                  _runTile(runs![i]),
-                                ],
-                              ],
-                            ),
-                          ),
-                        if (state.canShowMore)
-                          StudioButtonPress(
-                            child: TextButton(
-                              onPressed: loading ? null : session.showMore,
-                              child: const Text('Show more runs'),
-                            ),
-                          ),
-                        if (state.atLimit)
-                          const Text('Showing the latest 100 runs.'),
+                        ],
+                      ),
+                      TaskMessage(task.error, error: true),
+                    ],
+                  ),
+                ),
+              TaskSection(
+                'Task',
+                child: SelectableText(task.instructionsDisplay),
+              ),
+              TaskSection(
+                'Details',
+                child: TaskSurface(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _fact('Results', task.destinationsDisplay),
+                        _fact('Model', task.modelDisplay),
+                        _fact(
+                          'Last run',
+                          task.lastRun == null
+                              ? 'No recorded run'
+                              : taskTime(context, task.lastRun),
+                        ),
+                        if (task.text('script').isNotEmpty)
+                          _fact('Server script', task.text('script')),
+                        if (task.skills.isNotEmpty)
+                          _fact('Skills', task.skills.join(', ')),
+                        if (task.contextFrom.isNotEmpty)
+                          _fact('Context from', task.contextFrom.join(', ')),
                       ],
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+              TaskSection(
+                'Recent runs',
+                description:
+                    'Open conversation runs to read the chat. Script runs show their recorded status and output preview here.',
+                child: StudioLoadingRegion(
+                  available: state.history != null,
+                  busy: loading,
+                  label: 'Loading runs',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (runError != null)
+                        TaskMessage(
+                          runError!,
+                          error: true,
+                          action: StudioButtonPress(
+                            child: TextButton(
+                              onPressed: loading ? null : refresh,
+                              child: const Text('Refresh runs'),
+                            ),
+                          ),
+                        ),
+                      if (runs?.isEmpty == true)
+                        Text(
+                          'No recorded runs yet.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      if (runs?.isNotEmpty == true)
+                        TaskSurface(
+                          child: Column(
+                            children: [
+                              for (var i = 0; i < runs!.length; i++) ...[
+                                if (i > 0) const Divider(height: 1),
+                                _runTile(runs![i]),
+                              ],
+                            ],
+                          ),
+                        ),
+                      if (state.canShowMore)
+                        StudioButtonPress(
+                          child: TextButton(
+                            onPressed: loading ? null : session.showMore,
+                            child: const Text('Show more runs'),
+                          ),
+                        ),
+                      if (state.atLimit)
+                        const Text('Showing the latest 100 runs.'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       );
