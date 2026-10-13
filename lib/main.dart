@@ -1,4 +1,5 @@
 import 'core/models/scheduled_task.dart';
+import 'core/theme/project_icon_glyphs.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'core/services/connection_diagnostics.dart';
 import 'core/services/bots_connection_source.dart';
@@ -63,6 +64,7 @@ import 'core/widgets/config_backup_actions.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  ProjectIconGlyphs.registerLicense();
   final dependencies = await createApplicationDependencies();
   final shareIntents = AndroidShareIntentService();
   final launchIntents = AndroidLaunchIntentService();

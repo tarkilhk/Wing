@@ -1,3 +1,6 @@
+import '../models/project_icon.dart';
+import '../theme/project_icon_glyphs.dart';
+import '../widgets/project_icon_picker.dart';
 import '../services/server_files_browser.dart';
 import '../widgets/studio_error.dart';
 import '../widgets/project_folder_picker.dart';
@@ -24,37 +27,6 @@ const _projectColors = <String>[
   'hsl(300 68% 58%)',
   'hsl(330 68% 58%)',
 ];
-
-const _projectIcons = <String, IconData>{
-  'folder-library': Icons.folder_outlined,
-  'repo': Icons.account_tree_outlined,
-  'rocket': Icons.rocket_launch_outlined,
-  'beaker': Icons.science_outlined,
-  'flame': Icons.local_fire_department_outlined,
-  'star-full': Icons.star_outline,
-  'heart': Icons.favorite_outline,
-  'zap': Icons.bolt_outlined,
-  'target': Icons.adjust,
-  'lightbulb': Icons.lightbulb_outline,
-  'tools': Icons.handyman_outlined,
-  'device-desktop': Icons.desktop_windows_outlined,
-  'device-mobile': Icons.phone_android_outlined,
-  'terminal': Icons.terminal,
-  'dashboard': Icons.dashboard_outlined,
-  'globe': Icons.public,
-  'broadcast': Icons.cell_tower_outlined,
-  'cloud': Icons.cloud_outlined,
-  'database': Icons.storage_outlined,
-  'package': Icons.inventory_2_outlined,
-  'book': Icons.menu_book_outlined,
-  'organization': Icons.business_outlined,
-  'bug': Icons.bug_report_outlined,
-  'shield': Icons.shield_outlined,
-  'key': Icons.key_outlined,
-  'gift': Icons.card_giftcard_outlined,
-  'telescope': Icons.travel_explore_outlined,
-  'home': Icons.home_outlined,
-};
 
 Future<void> showProjectActions(
   BuildContext context,
@@ -125,7 +97,7 @@ Widget projectAvatar(
 }) {
   final scheme = Theme.of(context).colorScheme;
   final color = _parseProjectColor(project.color) ?? scheme.secondary;
-  final icon = _projectIcons[project.icon] ?? Icons.folder_outlined;
+  final icon = ProjectIconGlyphs.of(project.icon);
   return Container(
     width: size,
     height: size,
@@ -277,25 +249,44 @@ class _ProjectAppearancePicker extends StatelessWidget {
       const SizedBox(height: 20),
       const Text('Icon'),
       const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
+      Row(
         children: [
-          _ChoiceButton(
-            key: const ValueKey('project-icon-none'),
-            selected: icon.isEmpty,
-            label: 'Default icon',
-            onPressed: !enabled ? null : () => onIcon(''),
-            child: const Icon(Icons.restart_alt, size: 20),
-          ),
-          for (final entry in _projectIcons.entries)
-            _ChoiceButton(
-              key: ValueKey('project-icon-${entry.key}'),
-              selected: icon == entry.key,
-              label: entry.key,
-              onPressed: !enabled ? null : () => onIcon(entry.key),
-              child: Icon(entry.value, size: 20),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color:
+                  (_parseProjectColor(color) ??
+                          Theme.of(context).colorScheme.primary)
+                      .withValues(alpha: .16),
+              borderRadius: WingRadius.control,
             ),
+            child: Icon(
+              ProjectIconGlyphs.of(icon),
+              color:
+                  _parseProjectColor(color) ??
+                  Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(projectIconLabel(icon))),
+          StudioButtonPress(
+            child: IconButton.outlined(
+              key: const ValueKey('project-choose-icon'),
+              tooltip: 'Choose project icon',
+              onPressed: !enabled
+                  ? null
+                  : () async {
+                      final chosen = await showProjectIconPicker(
+                        context,
+                        initialIcon: icon,
+                        color: _parseProjectColor(color),
+                      );
+                      if (chosen != null && context.mounted) onIcon(chosen);
+                    },
+              icon: const Icon(Icons.chevron_right),
+            ),
+          ),
         ],
       ),
     ],

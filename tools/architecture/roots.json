@@ -6368,6 +6368,32 @@
       "source": "internal/docs/CHAT_BROWSER_REFRESH.md; internal/docs/AT_REFERENCES.md; internal/docs/TESTING.md",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-test/project_icon_picker_test.dart",
+      "kind": "host-test",
+      "path": "test/project_icon_picker_test.dart",
+      "purpose": "Curated project icon identity, selection/cancellation, search and native phone/keyboard geometry",
+      "source": "internal/docs/TESTING.md; test/project_icon_picker_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "font-project-icons",
+      "kind": "flutter-font",
+      "path": "assets/fonts/codicons.ttf",
+      "purpose": "Stock Microsoft Codicons for project identities matching Hermes Desktop",
+      "source": "pubspec.yaml; lib/core/theme/project_icon_glyphs.dart",
+      "status": "supported",
+      "selector": "WingProjectIcons"
+    },
+    {
+      "id": "asset-assets/fonts/CODICONS-LICENSE",
+      "kind": "asset-or-source",
+      "path": "assets/fonts/CODICONS-LICENSE",
+      "purpose": "Microsoft Codicons CC BY 4.0 attribution and in-app license registration",
+      "source": "pubspec.yaml; lib/main.dart; lib/core/theme/project_icon_glyphs.dart:registerLicense",
+      "status": "supported"
     }
   ],
   "files": [
@@ -6892,12 +6918,22 @@
       "provenance": "tracked"
     },
     {
+      "path": "assets/fonts/CODICONS-LICENSE",
+      "area": "assets",
+      "provenance": "tracked"
+    },
+    {
       "path": "assets/fonts/LUCIDE-LICENSE",
       "area": "assets",
       "provenance": "tracked"
     },
     {
       "path": "assets/fonts/README.md",
+      "area": "assets",
+      "provenance": "tracked"
+    },
+    {
+      "path": "assets/fonts/codicons.ttf",
       "area": "assets",
       "provenance": "tracked"
     },
@@ -8020,6 +8056,11 @@
       "path": "lib/core/models/profiles_management.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/models/project_icon.dart",
+      "area": "lib",
+      "provenance": "tracked"
     },
     {
       "path": "lib/core/models/provider_access.dart",
@@ -9292,6 +9333,16 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/services/server_files_browser.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/server_files_repository.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/settings_edit_session.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -9403,6 +9454,11 @@
     },
     {
       "path": "lib/core/theme/profile_workspace_theme.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/theme/project_icon_glyphs.dart",
       "area": "lib",
       "provenance": "tracked"
     },
@@ -9843,6 +9899,11 @@
     },
     {
       "path": "lib/core/widgets/project_folder_picker.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/project_icon_picker.dart",
       "area": "lib",
       "provenance": "tracked"
     },
@@ -12157,6 +12218,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/project_icon_picker_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
       "path": "test/project_membership_index_test.dart",
       "area": "test",
       "provenance": "tracked"
@@ -12367,6 +12433,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "test/scheduled_task_investigation_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/scheduled_tasks_blueprint_contract_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
@@ -12378,11 +12449,6 @@
     },
     {
       "path": "test/scheduled_tasks_detail_session_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/scheduled_task_investigation_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },
@@ -12470,6 +12536,16 @@
       "path": "test/server_connection_status_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/server_files_browser_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/server_files_repository_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/session_control_test.dart",
@@ -14630,26 +14706,6 @@
       "path": "website/workspaces.html",
       "area": "website",
       "provenance": "tracked"
-    },
-    {
-      "path": "lib/core/services/server_files_browser.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "lib/core/services/server_files_repository.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/server_files_browser_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "test/server_files_repository_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {
@@ -14836,6 +14892,7 @@
         "lib/core/theme/profile_colors.dart",
         "lib/core/theme/profile_markdown_style.dart",
         "lib/core/theme/profile_workspace_theme.dart",
+        "lib/core/theme/project_icon_glyphs.dart",
         "lib/core/theme/usage_selection_color.dart",
         "lib/core/theme/wing_icons.dart",
         "lib/core/theme/wing_theme.dart",
@@ -14903,6 +14960,7 @@
         "lib/core/widgets/profile_tool_activity.dart",
         "lib/core/widgets/profile_transcript_disclosure.dart",
         "lib/core/widgets/project_folder_picker.dart",
+        "lib/core/widgets/project_icon_picker.dart",
         "lib/core/widgets/read_recovery.dart",
         "lib/core/widgets/recent_conversations/conversation_card_motion.dart",
         "lib/core/widgets/recent_conversations/conversation_gestures.dart",
@@ -15098,6 +15156,7 @@
         "test/profile_workspace_controller_test.dart",
         "test/profile_workspace_route_lease_test.dart",
         "test/project_folder_picker_test.dart",
+        "test/project_icon_picker_test.dart",
         "test/project_picker_design_test.dart",
         "test/provider_credential_lifetime_test.dart",
         "test/provider_recovery_screen_test.dart",
@@ -16137,6 +16196,7 @@
         "test/profiles_management_view_guard_test.dart",
         "test/profiles_repository_test.dart",
         "test/project_folder_picker_test.dart",
+        "test/project_icon_picker_test.dart",
         "test/project_membership_index_test.dart",
         "test/project_picker_design_test.dart",
         "test/provider_access_test.dart",

@@ -376,6 +376,11 @@
       "feature": "profiles-management",
       "library": "lib/core/models/profiles_management.dart"
     },
+    "lib/core/models/project_icon.dart": {
+      "role": "domain",
+      "feature": "chat-browser",
+      "library": "lib/core/models/project_icon.dart"
+    },
     "lib/core/models/provider_access.dart": {
       "role": "domain",
       "feature": "administration-providers",
@@ -1766,6 +1771,11 @@
       "feature": "ui-foundations",
       "library": "lib/core/theme/profile_workspace_theme.dart"
     },
+    "lib/core/theme/project_icon_glyphs.dart": {
+      "role": "utility",
+      "feature": "chat-browser",
+      "library": "lib/core/theme/project_icon_glyphs.dart"
+    },
     "lib/core/theme/usage_selection_color.dart": {
       "role": "view",
       "feature": "usage-analytics",
@@ -2205,6 +2215,11 @@
       "role": "view",
       "feature": "chat-browser",
       "library": "lib/core/widgets/project_folder_picker.dart"
+    },
+    "lib/core/widgets/project_icon_picker.dart": {
+      "role": "view",
+      "feature": "chat-browser",
+      "library": "lib/core/widgets/project_icon_picker.dart"
     },
     "lib/core/widgets/read_recovery.dart": {
       "role": "view",

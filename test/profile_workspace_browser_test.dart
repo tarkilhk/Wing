@@ -382,9 +382,16 @@ void main() {
       await tester.ensureVisible(find.byKey(const ValueKey('project-color-7')));
       await tester.tap(find.byKey(const ValueKey('project-color-7')));
       await tester.ensureVisible(
+        find.byKey(const ValueKey('project-choose-icon')),
+      );
+      await tester.tap(find.byKey(const ValueKey('project-choose-icon')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
         find.byKey(const ValueKey('project-icon-rocket')),
       );
       await tester.tap(find.byKey(const ValueKey('project-icon-rocket')));
+      await tester.tap(find.byKey(const ValueKey('project-icon-confirm')));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(
         find.byKey(const ValueKey('project-choose-folder')),
       );

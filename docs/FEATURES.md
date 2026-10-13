@@ -94,3 +94,10 @@ expiry, escalation or recurrence alerts you again.
 Choose a light or dark theme, accent color and text size with a live preview. Back up your connections and app preferences, with an optional passphrase. Quick Chat, Recents and Search chats are also available from Wing's Android launcher shortcut menu.
 
 [Get started](GETTING_STARTED.md) · [Good to know](KNOWN_LIMITATIONS.md) · [All guides](README.md)
+
+Project appearance uses a searchable icon tray with Hermes, Life & hobbies,
+Work & study, People & events and Tech & tools. Hermes keeps Desktop's 28
+choices; 92 distinct symbols are available overall. Search understands names
+and activities such as conference, shopping, trip and packing list. Preview a
+choice, then use the checkmark to apply it to the project draft; closing the tray
+keeps the previous icon. The plain folder is in Work & study.

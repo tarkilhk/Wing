@@ -1,3 +1,4 @@
+import 'package:wing/core/theme/project_icon_glyphs.dart';
 import 'package:wing/core/models/chat_list_view.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -177,17 +178,24 @@ void main() {
       'Mobile app',
     );
     expect(find.text('/mobile'), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('project-choose-icon')),
+    );
+    await tester.tap(find.byKey(const ValueKey('project-choose-icon')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('project-icon-search-field')),
+      'book',
+    );
+    await tester.pumpAndSettle();
     expect(
       tester
-          .widget<IconButton>(
-            find.descendant(
-              of: find.byKey(const ValueKey('project-icon-book')),
-              matching: find.byType(IconButton),
-            ),
-          )
+          .widget<IconButton>(find.byKey(const ValueKey('project-icon-book')))
           .isSelected,
       isTrue,
     );
+    await tester.tap(find.byTooltip('Cancel icon selection'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byTooltip('Change primary folder'));
     await tester.tap(find.byTooltip('Change primary folder'));
     await tester.pumpAndSettle();
@@ -379,9 +387,16 @@ void main() {
     await showHarness(tester);
     await openAction(tester, 'editProject');
     await tester.tap(find.byKey(const ValueKey('project-color-7')));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('project-choose-icon')),
+    );
+    await tester.tap(find.byKey(const ValueKey('project-choose-icon')));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('project-icon-repo')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('project-icon-repo')));
+    await tester.tap(find.byKey(const ValueKey('project-icon-confirm')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('project-edit-confirm')));
     await tester.pumpAndSettle();
 
@@ -441,42 +456,43 @@ void main() {
     },
   );
 
-  testWidgets('project avatar accepts server appearance and invalid fallback', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Row(
-          children: [
-            Builder(
-              builder: (context) => projectAvatar(
-                context,
-                const BrowserProject(
-                  id: 'first',
-                  name: '',
-                  color: '#123456',
-                  icon: 'repo',
+  testWidgets(
+    'project avatar renders stock appearance and unknown icon indicator',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Row(
+            children: [
+              Builder(
+                builder: (context) => projectAvatar(
+                  context,
+                  const BrowserProject(
+                    id: 'first',
+                    name: '',
+                    color: '#123456',
+                    icon: 'repo',
+                  ),
                 ),
               ),
-            ),
-            Builder(
-              builder: (context) => projectAvatar(
-                context,
-                const BrowserProject(
-                  id: 'second',
-                  name: '',
-                  color: 'not-a-color',
-                  icon: 'not-an-icon',
+              Builder(
+                builder: (context) => projectAvatar(
+                  context,
+                  const BrowserProject(
+                    id: 'second',
+                    name: '',
+                    color: 'not-a-color',
+                    icon: 'not-an-icon',
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
-    expect(find.byIcon(Icons.account_tree_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
-  });
+      );
+      expect(find.byIcon(ProjectIconGlyphs.of('repo')), findsOneWidget);
+      expect(find.byIcon(ProjectIconGlyphs.of('question')), findsOneWidget);
+    },
+  );
 }
 
 class _ProjectFixture extends ProfileBrowserFixture {
