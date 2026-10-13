@@ -24,8 +24,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
+import 'support/browser_mutations_fixture.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
+import 'package:wing/core/widgets/wing_app_bar.dart';
+import 'package:wing/core/models/profile_session_key.dart';
 
 const _captureMenu = bool.fromEnvironment('STUDIO_REVIEW');
+
+class _WorkspaceRefreshFixture extends BrowserMutationsFixture {
+  @override
+  List<Map<String, dynamic>> historyRows(String profile, String id) => [
+    {'id': 1, 'role': 'user', 'content': 'Keep this conversation visible'},
+  ];
+}
 
 Future<void> _capture(WidgetTester tester, GlobalKey frame, String name) async {
   if (!_captureMenu) return;
@@ -57,6 +68,224 @@ void main() {
           .load();
     }
   });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'Refresh workspace acknowledges held reads ${brightness.name} $scale',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          final preferences = await SharedPreferences.getInstance();
+          final appPreferences = AppPreferences(preferences);
+          final host = _WorkspaceRefreshFixture();
+          final controller = ProfileWorkspaceController(
+            access: ConnectionAccess(
+              connection: SavedConnection(
+                id: 'host',
+                label: 'Home server',
+                host: 'localhost',
+                port: 1,
+                apiKey: '',
+              ),
+              dashboardOAuth: null,
+            ),
+            connectionIdentity: 'refresh-feedback',
+            preferences: preferences,
+            appPreferences: appPreferences,
+            gatewayFactory: host.gateway,
+          );
+          addTearDown(controller.dispose);
+          addTearDown(appPreferences.dispose);
+          await controller.initialize();
+          final chat = (await controller.openSession(
+            ProfileSessionKey(controller.current!.scope, 'newest'),
+          ))!;
+          await controller.updateDraft(chat, 'Keep my draft');
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () =>
+                    BotsSession((_) async => [BotsFixture().repository]),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final slot = find.byKey(const ValueKey('studio-loading-slot'));
+          final slotRect = tester.getRect(slot);
+          final composer = find.byKey(const Key('profile-message-composer'));
+          final composerRect = tester.getRect(composer);
+          final actionRect = tester.getRect(find.byTooltip('Chat actions'));
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.text('Keep this conversation visible'), findsOneWidget);
+          final automaticGate = Completer<void>();
+          host.pageDelays[(chat.key.workspace.profileName, 0)] = automaticGate;
+          addTearDown(() {
+            if (!automaticGate.isCompleted) automaticGate.complete();
+          });
+          final automaticRead = controller.switchProfile(
+            chat.key.workspace.profileName,
+          );
+          await tester.pumpAndSettle();
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(tester.getRect(composer), composerRect);
+          automaticGate.complete();
+          await automaticRead;
+          await tester.pumpAndSettle();
+          final listGate = Completer<void>();
+          final resumeGate = Completer<void>();
+          host.pageDelays[(chat.key.workspace.profileName, 0)] = listGate;
+          host.rpcDelays['session.resume'] = resumeGate;
+          addTearDown(() {
+            if (!listGate.isCompleted) listGate.complete();
+            if (!resumeGate.isCompleted) resumeGate.complete();
+          });
+          await tester.tap(find.byTooltip('Chat actions'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Refresh workspace'));
+          await tester.pumpAndSettle();
+          final pulse = find.byType(StudioLoading);
+          expect(pulse, findsOneWidget);
+          expect(find.text('Keep this conversation visible'), findsOneWidget);
+          final sharedRefresh = controller.refresh();
+          expect(controller.refresh(), same(sharedRefresh));
+          expect(
+            tester.widget<StudioLoading>(pulse).label,
+            'Refreshing workspace',
+          );
+          expect(
+            find.ancestor(of: pulse, matching: find.byType(WingAppBar)),
+            findsOneWidget,
+          );
+          expect(slotRect.contains(tester.getCenter(pulse)), isTrue);
+          expect(tester.getRect(slot), slotRect);
+          expect(tester.getRect(composer), composerRect);
+          expect(tester.getRect(find.byTooltip('Chat actions')), actionRect);
+          expect(tester.widget<TextField>(composer).enabled, isNot(false));
+          final navigator = tester.state<NavigatorState>(
+            find.byType(Navigator).first,
+          );
+          unawaited(
+            navigator.push<void>(
+              MaterialPageRoute(
+                builder: (_) =>
+                    const Scaffold(body: Text('Covered conversation')),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(pulse, findsNothing);
+          navigator.pop();
+          await tester.pumpAndSettle();
+          expect(pulse, findsOneWidget);
+          await _capture(
+            tester,
+            frame,
+            'refresh-${brightness.name}-$scale-held',
+          );
+          await tester.tap(find.byTooltip('Chat actions'));
+          await tester.pumpAndSettle();
+          final refreshItem = tester.widget<PopupMenuItem<String>>(
+            find.ancestor(
+              of: find.text('Refresh workspace'),
+              matching: find.byWidgetPredicate(
+                (w) => w is PopupMenuItem<String>,
+              ),
+            ),
+          );
+          expect(refreshItem.enabled, isFalse);
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          listGate.complete();
+          await tester.pumpAndSettle();
+          expect(resumeGate.isCompleted, isFalse);
+          expect(
+            pulse,
+            findsOneWidget,
+            reason: 'feedback lasts through runtime recovery',
+          );
+          resumeGate.complete();
+          await sharedRefresh;
+          await tester.pumpAndSettle();
+          expect(pulse, findsNothing);
+          expect(controller.current!.chat, same(chat));
+          expect(find.text('Keep this conversation visible'), findsOneWidget);
+          expect(chat.composer.observation.displayedText, 'Keep my draft');
+          expect(tester.getRect(slot), slotRect);
+          expect(tester.getRect(composer), composerRect);
+          expect(tester.getRect(find.byTooltip('Chat actions')), actionRect);
+          await _capture(
+            tester,
+            frame,
+            'refresh-${brightness.name}-$scale-ready',
+          );
+          final failureGate = Completer<void>();
+          host.pageDelays[(chat.key.workspace.profileName, 0)] = failureGate;
+          host.pageFailures.add((chat.key.workspace.profileName, 0));
+          addTearDown(() {
+            if (!failureGate.isCompleted) failureGate.complete();
+          });
+          await tester.tap(find.byTooltip('Chat actions'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Refresh workspace'));
+          await tester.pumpAndSettle();
+          expect(pulse, findsOneWidget);
+          failureGate.complete();
+          await tester.pumpAndSettle();
+          expect(pulse, findsNothing);
+          expect(controller.refreshingWorkspace, isFalse);
+          expect(find.text('Page offline'), findsOneWidget);
+          expect(find.text('Keep this conversation visible'), findsOneWidget);
+          expect(chat.composer.observation.displayedText, 'Keep my draft');
+          await tester.tap(find.byTooltip('Chat actions'));
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .widget<PopupMenuItem<String>>(
+                  find.ancestor(
+                    of: find.text('Refresh workspace'),
+                    matching: find.byWidgetPredicate(
+                      (w) => w is PopupMenuItem<String>,
+                    ),
+                  ),
+                )
+                .enabled,
+            isTrue,
+          );
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          host.pageFailures.clear();
+          final retirementGate = Completer<void>();
+          host.pageDelays[(chat.key.workspace.profileName, 0)] = retirementGate;
+          addTearDown(() {
+            if (!retirementGate.isCompleted) retirementGate.complete();
+          });
+          final retiredRefresh = controller.refresh();
+          await tester.pumpAndSettle();
+          expect(pulse, findsOneWidget);
+          await tester.pumpWidget(const SizedBox.shrink());
+          retirementGate.complete();
+          await retiredRefresh;
+          await tester.pumpAndSettle();
+          expect(pulse, findsNothing);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
 
   for (final category in ['tasks', 'agents']) {
     testWidgets('saved history restores the $category activity tab', (

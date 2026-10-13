@@ -5,6 +5,10 @@ Every conversation uses the same chat menu: **View screen**, **Outputs**,
 **Parent chat**. Goal, agents and background work are available through the
 conversation's **Activity** entry.
 
+**Refresh workspace** shows Wing's pulsating feathers in the top-right header
+until the refresh finishes. Your conversation and draft remain available;
+the menu item is disabled while that refresh is pending.
+
 **View screen** opens the remote desktop for the conversation's connection and
 profile, including ordinary chats. Chats in the same profile share that screen.
 Opening it does not start the desktop or create a canonical Bot Chat. Back returns

@@ -1426,55 +1426,62 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       child: Text('Parent chat'),
                     ),
                   const PopupMenuDivider(),
-                  const StudioPopupMenuItem(
+                  StudioPopupMenuItem(
                     value: 'refresh',
-                    child: Text('Refresh workspace'),
+                    enabled: !controller.refreshingWorkspace,
+                    child: const Text('Refresh workspace'),
                   ),
                 ],
               ),
             ),
           ],
         ),
-        body: StudioLoadingRegion(
-          busy: controller.switching || chat.refreshingConversation,
-          available: !chat.runtime.opening || chat.reading.messages.isNotEmpty,
-          label: 'Updating conversation',
-          child: Column(
-            children: [
-              WorkspaceConnectionStatus(
-                status: controller.connectionStatus,
-                showHint:
-                    chat.runtime.openingError == null &&
-                    (!chat.runtime.opening || chat.reading.messages.isNotEmpty),
-              ),
-              if (controller.error != null)
-                MaterialBanner(
-                  content: StudioError(controller.error!),
-                  actions: [
-                    StudioButtonPress(
-                      child: TextButton(
-                        onPressed: () => _run(controller.retry),
-                        child: const Text('Retry'),
-                      ),
-                    ),
-                  ],
+        body: StudioPageLoading(
+          active: controller.refreshingWorkspace,
+          label: 'Refreshing workspace',
+          child: StudioLoadingRegion(
+            busy: controller.switching || chat.refreshingConversation,
+            available:
+                !chat.runtime.opening || chat.reading.messages.isNotEmpty,
+            label: 'Updating conversation',
+            child: Column(
+              children: [
+                WorkspaceConnectionStatus(
+                  status: controller.connectionStatus,
+                  showHint:
+                      chat.runtime.openingError == null &&
+                      (!chat.runtime.opening ||
+                          chat.reading.messages.isNotEmpty),
                 ),
-              if (chat.runtime.openingError != null &&
-                  chat.reading.messages.isNotEmpty)
-                MaterialBanner(
-                  forceActionsBelow: true,
-                  content: StudioError(chat.runtime.openingError!),
-                  actions: [
-                    StudioButtonPress(
-                      child: TextButton(
-                        onPressed: () => _run(controller.resumeConnection),
-                        child: const Text('Retry connection'),
+                if (controller.error != null)
+                  MaterialBanner(
+                    content: StudioError(controller.error!),
+                    actions: [
+                      StudioButtonPress(
+                        child: TextButton(
+                          onPressed: () => _run(controller.retry),
+                          child: const Text('Retry'),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              Expanded(child: _chat(chat, context, bot)),
-            ],
+                    ],
+                  ),
+                if (chat.runtime.openingError != null &&
+                    chat.reading.messages.isNotEmpty)
+                  MaterialBanner(
+                    forceActionsBelow: true,
+                    content: StudioError(chat.runtime.openingError!),
+                    actions: [
+                      StudioButtonPress(
+                        child: TextButton(
+                          onPressed: () => _run(controller.resumeConnection),
+                          child: const Text('Retry connection'),
+                        ),
+                      ),
+                    ],
+                  ),
+                Expanded(child: _chat(chat, context, bot)),
+              ],
+            ),
           ),
         ),
       ),

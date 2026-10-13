@@ -493,6 +493,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   ProfileDiscovery? get discovery => _discovery;
   ProfileWorkspaceData? _current;
   ProfileWorkspaceData? get current => _current;
+  Future<void>? _workspaceRefreshFuture;
+  bool get refreshingWorkspace => _workspaceRefreshFuture != null;
   int _readingRequestGeneration = 0;
   _ChatReadingWindow? _activeReadingWindow;
   String? _pendingProfile;
@@ -2447,7 +2449,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh() {
+    if (_closed) return Future.value();
+    final pending = _workspaceRefreshFuture;
+    if (pending != null) return pending;
+    final request = _refreshWorkspace().whenComplete(() {
+      _workspaceRefreshFuture = null;
+      _changed();
+    });
+    _workspaceRefreshFuture = request;
+    _changed();
+    return request;
+  }
+
+  Future<void> _refreshWorkspace() async {
     final resource = _current;
     if (resource == null) {
       await initialize();
