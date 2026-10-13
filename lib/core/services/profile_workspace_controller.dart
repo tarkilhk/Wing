@@ -326,6 +326,7 @@ class ProfileRecentChat {
   final ProfileLiveActivity? activity;
   final bool unread;
   final BrowserProject? project;
+  final String messagePreview;
 
   const ProfileRecentChat({
     required this.key,
@@ -335,6 +336,7 @@ class ProfileRecentChat {
     this.activity,
     this.unread = false,
     this.project,
+    this.messagePreview = '',
   });
 
   ProfileLiveActivityState? get state => activity?.state;
@@ -1026,6 +1028,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   List<ProfileRecentChat> _savedRecents = const [];
   final _recentSessionRows = <ProfileSessionKey, Map<String, dynamic>>{};
   final _recentMessageTimes = <ProfileSessionKey, double>{};
+  final _recentMessagePreviews = <ProfileSessionKey, String>{};
   bool _recentsLoading = false;
   Future<void>? _recentsRefresh;
   bool get recentsLoading => _recentsLoading;
@@ -1050,6 +1053,35 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return latest;
   }
 
+  /// Freshness and excerpt share the same stock read. Only a trailing tool or
+  /// hidden row needs another page; preview reads never acknowledge the chat.
+  Future<({double? time, String preview})> _recentMessageObservation(
+    ProfileWorkspaceData resource,
+    String id,
+    int generation,
+  ) async {
+    var page = await resource.gateway.history(
+      id,
+      limit: 1,
+      inlineImages: false,
+    );
+    final time = _latestMessageTime(page.rows);
+    var preview = recentChatMessagePreview(page.rows);
+    while (preview == null &&
+        page.nextOffset != null &&
+        !_closed &&
+        generation == _recentsGeneration) {
+      page = await resource.gateway.history(
+        id,
+        offset: page.nextOffset!,
+        limit: 20,
+        inlineImages: false,
+      );
+      preview = recentChatMessagePreview(page.rows);
+    }
+    return (time: time, preview: preview ?? '');
+  }
+
   /// Recency is independent of live status: completed and idle chats stay here.
   /// Technical sessions stay hidden regardless of the chat browser preference.
   List<ProfileRecentChat> recentChats({DateTime? now}) {
@@ -1066,6 +1098,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
               title: chat._title,
               source: chat._source,
               lastActive: time,
+              messagePreview:
+                  recentChatMessagePreview(chat.reading.messages) ?? '',
             ),
     ]) {
       if (!SessionVisibility.chats.includes(item.source) ||
@@ -1089,6 +1123,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
         source: live.source,
         lastActive: previous?.lastActive ?? _recentMessageTimes[key] ?? 0,
         activity: live,
+        messagePreview:
+            previous?.messagePreview ?? _recentMessagePreviews[key] ?? '',
       );
     }
     return [
@@ -1112,6 +1148,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                     ) ==
                     true,
           project: _recentProject(item.key),
+          messagePreview: item.messagePreview,
         ),
     ]..sort((a, b) => b.lastActive.compareTo(a.lastActive));
   }
@@ -1254,11 +1291,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
                 final batch = candidates.skip(start).take(4);
                 final messages = await Future.wait(
                   batch.map((row) async {
-                    final history = await resource.gateway.history(
+                    final message = await _recentMessageObservation(
+                      resource,
                       row['id'] as String,
-                      limit: 1,
+                      generation,
                     );
-                    return (row: row, time: _latestMessageTime(history.rows));
+                    return (
+                      row: row,
+                      time: message.time,
+                      preview: message.preview,
+                    );
                   }),
                 );
                 if (_closed || generation != _recentsGeneration) {
@@ -1279,6 +1321,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                   );
                   rows[key] = row;
                   _recentMessageTimes[key] = time;
+                  _recentMessagePreviews[key] = result.preview;
                   final title = row['title'] as String?;
                   items[key] = ProfileRecentChat(
                     key: key,
@@ -1287,6 +1330,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                         : title.trim(),
                     source: row['source'] as String?,
                     lastActive: time,
+                    messagePreview: result.preview,
                   );
                 }
               }
@@ -1311,14 +1355,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
                     key.sessionId,
                   );
                   if (row == null) return null;
-                  final history = await resource.gateway.history(
+                  final message = await _recentMessageObservation(
+                    resource,
                     key.sessionId,
-                    limit: 1,
+                    generation,
                   );
                   return (
                     key: key,
                     row: row,
-                    time: _latestMessageTime(history.rows),
+                    time: message.time,
+                    preview: message.preview,
                   );
                 }),
               );
@@ -1340,11 +1386,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
                       lastRead is! num || !lastRead.isFinite || time > lastRead,
                 };
                 _recentMessageTimes[observation.key] = time;
+                _recentMessagePreviews[observation.key] = observation.preview;
                 items[observation.key] = ProfileRecentChat(
                   key: observation.key,
                   title: row['title'] as String? ?? 'Chat',
                   source: row['source'] as String?,
                   lastActive: time,
+                  messagePreview: observation.preview,
                 );
               }
             }
@@ -1401,12 +1449,17 @@ class ProfileWorkspaceController extends ChangeNotifier {
             continue;
           }
           try {
-            final page = await _resource(
-              live.workspace.profileName,
-            ).gateway.history(live.sessionId, limit: 1);
+            final message = await _recentMessageObservation(
+              _resource(live.workspace.profileName),
+              live.sessionId,
+              generation,
+            );
             if (_closed || generation != _recentsGeneration) return;
-            final time = _latestMessageTime(page.rows);
-            if (time != null) _recentMessageTimes[key] = time;
+            final time = message.time;
+            if (time != null) {
+              _recentMessageTimes[key] = time;
+              _recentMessagePreviews[key] = message.preview;
+            }
           } catch (_) {
             /* Unknown message age stays unknown, never a runtime age. */
           }

@@ -25,6 +25,7 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_browser_fixture.dart';
 
 class TechnicalSessionsFixture extends ProfileBrowserFixture {
+  String messagePreviewText = 'Result';
   bool oldTechnicalHistory = false;
   String technicalSource = 'oneshot';
   final extraRows = <Map<String, dynamic>>[];
@@ -59,7 +60,7 @@ class TechnicalSessionsFixture extends ProfileBrowserFixture {
     {
       'id': 1,
       'role': 'assistant',
-      'content': 'Result',
+      'content': messagePreviewText,
       'timestamp':
           now - (oldTechnicalHistory && id == 'technical-run' ? 90000 : 60),
     },
@@ -469,8 +470,13 @@ void main() {
             'kind': 'message.member',
             'created_at': fixture.now,
             'actor': {'kind': 'member', 'id': 'atlas'},
-            'payload': {'text': 'Last loaded reply'},
+            'payload': {
+              'text':
+                  'Last loaded reply. The research notes are ready, including the sources and the next steps for the team.',
+            },
           });
+          fixture.messagePreviewText =
+              'I found three useful approaches. The first keeps the existing boundary and makes the workflow easier to maintain.';
           final release = Completer<void>();
           var historyStarted = false;
           botFixture.readHook = (_, method, _) async {
@@ -526,6 +532,17 @@ void main() {
           }
           expect(find.text('Research team'), findsOneWidget);
           expect(find.byType(StudioLoading), findsNothing);
+          expect(find.text(fixture.messagePreviewText), findsOneWidget);
+          expect(
+            find.text(
+              'Last loaded reply. The research notes are ready, including the sources and the next steps for the team.',
+            ),
+            findsOneWidget,
+          );
+          expect(
+            tester.widget<Text>(find.text(fixture.messagePreviewText)).maxLines,
+            2,
+          );
           expect(tester.getRect(find.text('Recents')), title);
           expect(tester.getRect(find.byType(ListView).last), list);
           await _captureRecents(

@@ -277,6 +277,24 @@ class RecentIdentityCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (row.messagePreview.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: SizedBox(
+                      height: textScaler.scale(13) * 1.45 * 2,
+                      child: Text(
+                        row.messagePreview,
+                        key: ValueKey('recent-message-${row.identity}'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.45,
+                          color: t.muted,
+                        ),
+                      ),
+                    ),
+                  ),
                 Container(
                   constraints: const BoxConstraints(minHeight: 26),
                   padding: const EdgeInsets.symmetric(

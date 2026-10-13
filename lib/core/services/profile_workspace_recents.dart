@@ -7,15 +7,18 @@ class WorkspaceRecentItem {
   WorkspaceRecentItem.chat(ProfileRecentChat value, this.bot)
     : chat = value,
       group = null,
-      unread = value.unread;
-  const WorkspaceRecentItem.group(BotGroup value, this.unread)
+      unread = value.unread,
+      messagePreview = value.messagePreview;
+  WorkspaceRecentItem.group(BotGroup value, this.unread)
     : group = value,
       chat = null,
-      bot = null;
+      bot = null,
+      messagePreview = recentMessageExcerpt(value.preview);
   final ProfileRecentChat? chat;
   final BotRecord? bot;
   final BotGroup? group;
   final bool unread;
+  final String messagePreview;
   double get lastMessage =>
       chat?.lastActive ??
       (group?.lastMessageAt?.millisecondsSinceEpoch ?? 0) / 1000;

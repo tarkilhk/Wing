@@ -22,6 +22,7 @@ import 'support/profile_browser_fixture.dart';
 import 'support/bots_fixture.dart';
 
 class _RecentsFixture extends ProfileBrowserFixture {
+  final messageRows = <(String, String), List<Map<String, dynamic>>>{};
   Completer<void>? heldResume;
   Completer<void>? resumeStarted;
   bool unread = false;
@@ -69,20 +70,22 @@ class _RecentsFixture extends ProfileBrowserFixture {
   }
 
   @override
-  List<Map<String, dynamic>> historyRows(String profile, String id) => [
-    if (id != 'empty' && id != 'active-empty')
-      {
-        'id': 1,
-        'role': 'assistant',
-        'content': 'Saved reply',
-        'timestamp': id == 'heartbeat'
-            ? now - 90000
-            : [...sessions(profile), ...?hiddenSessions[profile]]
-                      .where((row) => row['id'] == id)
-                      .firstOrNull?['last_active'] ??
-                  now - 90000,
-      },
-  ];
+  List<Map<String, dynamic>> historyRows(String profile, String id) =>
+      messageRows[(profile, id)] ??
+      [
+        if (id != 'empty' && id != 'active-empty')
+          {
+            'id': 1,
+            'role': 'assistant',
+            'content': 'Saved reply',
+            'timestamp': id == 'heartbeat'
+                ? now - 90000
+                : [...sessions(profile), ...?hiddenSessions[profile]]
+                          .where((row) => row['id'] == id)
+                          .firstOrNull?['last_active'] ??
+                      now - 90000,
+          },
+      ];
   @override
   List<Map<String, dynamic>> sessions(String profile) => [
     if (profile == 'personal')
@@ -165,6 +168,175 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  test('message excerpts keep the start of the latest visible message', () {
+    expect(
+      recentChatMessagePreview([
+        {'role': 'user', 'content': 'First prompt.'},
+        {
+          'role': 'assistant',
+          'content': '**First sentence.** Second sentence.',
+        },
+        {'role': 'tool', 'content': 'Private tool output'},
+        {
+          'role': 'user',
+          'display_kind': 'hidden',
+          'content': 'Model-only context',
+        },
+      ]),
+      'First sentence. Second sentence.',
+    );
+    expect(
+      recentChatMessagePreview([
+        {'role': 'assistant', 'content': 'Old reply'},
+        {
+          'role': 'user',
+          'content': [
+            {'type': 'text', 'text': 'Latest question?'},
+          ],
+        },
+      ]),
+      'Latest question?',
+    );
+    expect(
+      recentMessageExcerpt('```python\nprint("hello")\n```'),
+      'print("hello")',
+    );
+    expect(
+      recentChatMessagePreview([
+        {'role': 'tool', 'content': 'Output'},
+      ]),
+      isNull,
+    );
+  });
+
+  test(
+    'Recents message previews share freshness reads and cached reopening',
+    () async {
+      fixture.messageRows[('personal', 'shared-id')] = [
+        {
+          'id': 1,
+          'role': 'assistant',
+          'content': 'First sentence. Latest answer.',
+          'timestamp': fixture.now - 600,
+        },
+      ];
+      fixture.messageRows[('work', 'shared-id')] = [
+        {
+          'id': 2,
+          'role': 'user',
+          'content': 'Work question?',
+          'timestamp': fixture.now - 600,
+        },
+      ];
+      final recents = emptyRecents();
+      await recents.refresh();
+      final items = recents.items();
+      expect(
+        items
+            .singleWhere((i) => i.chat?.key.workspace.profileName == 'work')
+            .messagePreview,
+        'Work question?',
+      );
+      final personal = items.singleWhere(
+        (i) =>
+            i.chat?.key.workspace.profileName == 'personal' &&
+            i.chat?.key.sessionId == 'shared-id',
+      );
+      expect(personal.messagePreview, 'First sentence. Latest answer.');
+      final reads = fixture.reads
+          .where((r) => r.$1.endsWith('/messages'))
+          .length;
+      await recents.refresh();
+      expect(recents.items(), same(items));
+      expect(
+        fixture.reads.where((r) => r.$1.endsWith('/messages')).length,
+        reads,
+      );
+      expect(
+        fixture.reads
+            .where((r) => r.$1 == 'sessions/shared-id/messages')
+            .length,
+        2,
+      );
+      expect(
+        fixture.reads
+            .where((r) => r.$1.endsWith('/messages'))
+            .every((r) => r.$2['inline_images'] == 'false'),
+        isTrue,
+      );
+      expect(fixture.readWrites, 0);
+      // A retained transcript with this timestamp must not overwrite a newer
+      // REST message body when an edit keeps the original timestamp.
+      await controller.openSession(personal.chat!.key);
+      fixture.failHistory = true;
+      await recents.refresh(force: true);
+      expect(
+        recents
+            .items()
+            .singleWhere((i) => i.identity == personal.identity)
+            .messagePreview,
+        'First sentence. Latest answer.',
+      );
+      expect(recents.catalog.error, isNotNull);
+      fixture.failHistory = false;
+      fixture.messageRows[('personal', 'shared-id')] = [
+        {
+          'id': 3,
+          'role': 'assistant',
+          'content': 'A revised answer with the same timestamp.',
+          'timestamp': fixture.now - 600,
+        },
+      ];
+      await recents.refresh(force: true);
+      expect(
+        recents
+            .items()
+            .singleWhere((i) => i.identity == personal.identity)
+            .messagePreview,
+        'A revised answer with the same timestamp.',
+      );
+    },
+  );
+
+  test(
+    'tool-tail paging finds the last chat message without changing freshness',
+    () async {
+      fixture.messageRows[('personal', 'shared-id')] = [
+        {
+          'id': 1,
+          'role': 'assistant',
+          'content': 'Latest visible answer.',
+          'timestamp': fixture.now - 900,
+        },
+        for (var id = 2; id <= 25; id++)
+          {
+            'id': id,
+            'role': 'tool',
+            'content': 'Tool output',
+            'timestamp': fixture.now - 600,
+          },
+      ];
+      await controller.refreshRecents();
+      final item = controller.recentChats().singleWhere(
+        (i) =>
+            i.key.workspace.profileName == 'personal' &&
+            i.key.sessionId == 'shared-id',
+      );
+      expect(item.messagePreview, 'Latest visible answer.');
+      expect(item.lastActive, fixture.now - 600);
+      expect(
+        fixture.reads
+            .where(
+              (r) =>
+                  r.$1 == 'sessions/shared-id/messages' &&
+                  r.$2['offset'] != '0',
+            )
+            .map((r) => r.$2['offset']),
+        ['1', '21'],
+      );
+    },
+  );
 
   test(
     'runtime heartbeats do not outrank newer messages or invent an age',
@@ -1418,6 +1590,7 @@ void main() {
         {'role': 'user', 'content': 'Sent message', 'timestamp': fixture.now},
       ]);
       expect(controller.recentChats().single.key, chat.key);
+      expect(controller.recentChats().single.messagePreview, 'Sent message');
       expect(
         controller.recentChats(
           now: DateTime.fromMillisecondsSinceEpoch(

@@ -151,6 +151,7 @@ class WorkspaceRecentsSession extends ChangeNotifier
           item.chat?.title,
           item.chat?.source,
           item.lastMessage,
+          item.messagePreview,
           item.unread,
           item.chat?.activity != null,
           item.chat?.state,

@@ -3,6 +3,35 @@ import 'profile_session_key.dart';
 import 'bots.dart';
 import 'transcript_reading.dart';
 import 'transcript_message.dart';
+import 'chat_notification_content.dart';
+
+/// Compact display text for the most recent message, including code-only
+/// replies. Excerpts preserve the beginning of the message, not its last sentence.
+String recentMessageExcerpt(String text) => notificationTextLimit(
+  notificationPlainText(
+    text
+        .replaceAll(RegExp(r'(^|\n)\s*(```|~~~)[^\n]*'), '\n')
+        .replaceAll(RegExp(r'^[ \t]+', multiLine: true), ''),
+  ),
+  240,
+);
+
+/// Null means this saved page has no visible conversational message.
+String? recentChatMessagePreview(List<Map<String, dynamic>> messages) {
+  for (final row in messages.reversed) {
+    final message = TranscriptMessage.fromRow(row);
+    if (!{
+          TranscriptMessageKind.dialogue,
+          TranscriptMessageKind.steering,
+          TranscriptMessageKind.botMessage,
+        }.contains(message.kind) ||
+        message.text.trim().isEmpty) {
+      continue;
+    }
+    return recentMessageExcerpt(message.text);
+  }
+  return null;
+}
 
 /// A chat and a hosted room have distinct, authenticated identities.
 final class RecentConversationKey {
