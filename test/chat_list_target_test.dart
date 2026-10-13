@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/models/chat_list_status.dart';
 import 'dart:async';
@@ -98,9 +100,22 @@ class _CountingController extends ProfileWorkspaceController {
   });
   int browserReads = 0;
   int activityProjectionReads = 0;
+  bool _readingRecents = false;
+  @override
+  List<ProfileRecentChat> recentChats({DateTime? now}) {
+    // Recents legitimately projects activity on workspace updates. The counter
+    // below measures Chats index scans, independently of that shared consumer.
+    _readingRecents = true;
+    try {
+      return super.recentChats(now: now);
+    } finally {
+      _readingRecents = false;
+    }
+  }
+
   @override
   List<ProfileLiveActivity> get liveActivity {
-    activityProjectionReads++;
+    if (!_readingRecents) activityProjectionReads++;
     return super.liveActivity;
   }
 
@@ -174,6 +189,23 @@ void main() {
       gatewayFactory: fixture.gateway,
       onAttention: (_) async {},
     );
+    final server = AdministrationRepository(
+      connectionId: controller.connection.id,
+      connectionIdentity: controller.connectionIdentity,
+      connectionLabel: controller.connection.label,
+      gateway: (profile) => fixture.gateway(
+        WorkspaceScope(
+          connectionId: controller.connection.id,
+          connectionIdentity: controller.connectionIdentity,
+          profileName: profile,
+        ),
+      ),
+      request: (_, _, _, _) async => throw StateError('RPC only'),
+      settingsWrite: (_, _, _, _) async => throw StateError('Read only'),
+      ownedMutation: (_, _, _, _, _, _) async => throw StateError('Read only'),
+    );
+    controller.healthSession(repository: server);
+    addTearDown(server.close);
     await controller.initialize();
   });
   tearDown(() {
@@ -207,10 +239,7 @@ void main() {
               ? ProfileWorkspaceScreen(controller: controller)
               : ProfileWorkspaceBrowser(
                   onOpenBotChat: (_) {},
-                  createData: () => ChatBrowserData(
-                    controller,
-                    readBotAppearances: fixture.botAppearances,
-                  ),
+                  createData: () => ChatBrowserData(controller),
                   connectionLabel: controller.connection.label,
                   connectionIcon: controller.connection.icon,
                   connectionStatus: controller.connectionStatus,
@@ -315,7 +344,12 @@ void main() {
         final title = find.descendant(of: row, matching: find.text('Bot Chat'));
         expect(row, findsOneWidget);
         expect(avatar, findsOneWidget);
-        final face = tester.widget<BotAvatar>(avatar);
+        final renderedAvatar = find.descendant(
+          of: avatar,
+          matching: find.byType(BotAvatar),
+        );
+        expect(renderedAvatar, findsOneWidget);
+        final face = tester.widget<BotAvatar>(renderedAvatar);
         expect(face.name, 'personal');
         expect(face.shape, 'circle');
         expect(face.color, '#65c7bc');
@@ -339,7 +373,10 @@ void main() {
         // A fresh list visit reads newly saved appearance, as opening Bots does.
         await tester.pumpWidget(const SizedBox());
         await show(tester, brightness: brightness, scale: scale);
-        expect(tester.widget<BotAvatar>(avatar).image, base64Decode(png));
+        expect(
+          tester.widget<BotAvatar>(renderedAvatar).image,
+          base64Decode(png),
+        );
         expect(tester.getSize(avatar), const Size(20, 20));
         final uploaded = find.descendant(
           of: avatar,
