@@ -102,6 +102,167 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
+        'manual group refresh is visible and automatic reads stay quiet ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          fixture.events.add(
+            _event(1, 'message.member', 'atlas', 'Saved group reply'),
+          );
+          final group = (await fixture.repository.groups(
+            groupMessages: null,
+          )).first;
+          final frame = GlobalKey();
+          final reduced = ValueNotifier(false);
+          addTearDown(reduced.dispose);
+          late BotGroupSession session;
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: frame,
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                builder: (context, child) => ValueListenableBuilder<bool>(
+                  valueListenable: reduced,
+                  builder: (_, value, _) => MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      textScaler: TextScaler.linear(scale),
+                      disableAnimations: value,
+                    ),
+                    child: child!,
+                  ),
+                ),
+                home: BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () =>
+                      const LocalVoiceInputSettings(language: ''),
+                  createSession: () => session = BotGroupSession(
+                    fixture.repository,
+                    group,
+                    reads: BotGroupReadState(),
+                    groupMessages: null,
+                    appearances: FixedGroupAppearances(const []),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await _settleGroupMarkdown(tester);
+          await tester.pumpAndSettle();
+          final input = find.byType(TextField);
+          await tester.enterText(input, 'Keep this draft');
+          await tester.pumpAndSettle();
+          final transcript = find.byKey(const ValueKey('group-transcript'));
+          final transcriptRect = tester.getRect(transcript);
+          final composerRect = tester.getRect(input);
+          final menuRect = tester.getRect(find.byTooltip('Group options'));
+          final stateGate = Completer<void>();
+          final logGate = Completer<void>();
+          final stateStarted = Completer<void>();
+          final logStarted = Completer<void>();
+          var stateReads = 0;
+          fixture.readHook = (_, method, _) async {
+            if (method == 'groups.state') {
+              stateReads++;
+              if (!stateStarted.isCompleted) stateStarted.complete();
+              await stateGate.future;
+            }
+            if (method == 'groups.log') {
+              if (!logStarted.isCompleted) logStarted.complete();
+              await logGate.future;
+            }
+            return null;
+          };
+          final automatic = session.refresh();
+          await tester.pump();
+          expect(find.byType(StudioLoading), findsNothing);
+          await tester.tap(find.byTooltip('Group options'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.tap(find.text('Refresh group'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(stateStarted.isCompleted, isTrue);
+          expect(stateReads, 1);
+          // Wait for the dismissed popup to release its semantics scope.
+          for (
+            var frame = 0;
+            frame < 10 &&
+                find.bySemanticsLabel('Refreshing group').evaluate().isEmpty;
+            frame++
+          ) {
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+          expect(find.bySemanticsLabel('Refreshing group'), findsOneWidget);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.text('Refreshing group'), findsNothing);
+          expect(find.byIcon(Icons.more_horiz), findsOneWidget);
+          expect(tester.getRect(transcript), transcriptRect);
+          expect(tester.getRect(input), composerRect);
+          expect(tester.getRect(find.byTooltip('Group options')), menuRect);
+          expect(tester.widget<TextField>(input).readOnly, isFalse);
+          await _render(tester, frame, 'refreshing-${brightness.name}-$scale');
+          reduced.value = true;
+          await tester.pump();
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(tester.binding.transientCallbackCount, 0);
+          await tester.tap(find.byTooltip('Group options'));
+          await tester.pumpAndSettle();
+          final item = tester.widget<StudioPopupMenuItem<String>>(
+            find.widgetWithText(StudioPopupMenuItem<String>, 'Refresh group'),
+          );
+          expect(item.enabled, isFalse);
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          fixture.events.add(
+            _event(2, 'message.member', 'mira', 'Fresh group reply'),
+          );
+          stateGate.complete();
+          await tester.pump();
+          expect(logStarted.isCompleted, isTrue);
+          expect(find.bySemanticsLabel('Refreshing group'), findsOneWidget);
+          logGate.complete();
+          await automatic;
+          await _settleGroupMarkdown(tester);
+          await tester.pumpAndSettle();
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.text('Fresh group reply'), findsOneWidget);
+          expect(
+            tester.widget<TextField>(input).controller!.text,
+            'Keep this draft',
+          );
+          expect(tester.getRect(transcript), transcriptRect);
+          expect(tester.getRect(input), composerRect);
+          expect(tester.getRect(find.byTooltip('Group options')), menuRect);
+          expect(fixture.commands, isEmpty);
+          fixture.readHook = (_, method, _) async {
+            if (method == 'groups.state') throw StateError('Offline');
+            return null;
+          };
+          await tester.tap(find.byTooltip('Group options'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Refresh group'));
+          await tester.pumpAndSettle();
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.textContaining('could not refresh'), findsOneWidget);
+          expect(find.text('Fresh group reply'), findsOneWidget);
+          fixture.readHook = null;
+          await tester.tap(find.byTooltip('Group options'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Refresh group'));
+          await tester.pumpAndSettle();
+          expect(find.textContaining('could not refresh'), findsNothing);
+          expect(
+            tester.widget<TextField>(input).controller!.text,
+            'Keep this draft',
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+      testWidgets(
         'discussion instance position matches standard header ${brightness.name} $scale',
         (tester) async {
           final size = Size(scale == 1 ? 390 : 320, 844);

@@ -155,13 +155,14 @@ that button, with saved names and avatars. Tap outside or use Back
 to dismiss it. Without a saved room picture, the conversation shows its
 member-avatar collage.
 The ellipsis menu contains Edit group, working histories, Refresh and Stop.
-Refresh rereads messages, activity and approval state; it does not restart the bots. Wing also
-refreshes this state automatically. Recognized bot mentions display as bold,
+Refresh rereads messages, activity and approval state; it does not restart the bots.
+A separate Wing pulse appears while your refresh is running, without changing
+action icons or moving the messages. Wing also refreshes this state automatically. Recognized bot mentions display as bold,
 colored `@Name` text. Copy preserves the original message.
 While work is active, the empty composer offers Stop; entering a draft offers
 Send. A compact status above the composer shows sending, group updates, work or
 approval needs. Active work uses Wing's feather pulse beside steady text.
-Background refresh does not show a loading animation. Hermes
+Automatic background refresh does not show a loading animation. Hermes
 currently exposes group activity rather than individual bots typing, so Wing
 displays “Bots are working…”.
 

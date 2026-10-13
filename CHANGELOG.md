@@ -4,6 +4,10 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Show a separate Wing pulse while Refresh group reads messages and activity,
+  including when it joins an automatic read. Keep automatic polling quiet,
+  action icons unchanged and the discussion usable.
+
 - Keep action icons visible during pending work, including Health refresh,
   downloads, previews, sharing, model refresh and group creation.
 

@@ -250,8 +250,9 @@ class BotGroupSession extends ChangeNotifier {
     _events.values.toList()..sort((a, b) => a.sequence.compareTo(b.sequence)),
   );
   int _cursor = 0;
-  bool _closed = false, _reading = false, _sending = false, _visible = false;
-  bool get loading => _reading && _runtime == null;
+  bool _closed = false, _sending = false, _visible = false;
+  Completer<void>? _readCompletion;
+  bool get loading => _readCompletion != null && _runtime == null;
   bool get sending => _sending;
   String? _readError, _actionError;
   String? get error => _actionError ?? _readError;
@@ -309,9 +310,17 @@ class BotGroupSession extends ChangeNotifier {
     );
   }
 
-  Future<void> refresh() async {
-    if (_closed || _reading || _capturing) return;
-    _reading = true;
+  /// Concurrent callers await the same runtime/log read through settlement.
+  Future<void> refresh() {
+    if (_closed || _capturing) return Future.value();
+    if (_readCompletion case final active?) return active.future;
+    final completion = Completer<void>();
+    _readCompletion = completion;
+    unawaited(_refresh(completion));
+    return completion.future;
+  }
+
+  Future<void> _refresh(Completer<void> completion) async {
     notifyListeners();
     try {
       final nextRuntime = await repository.groupRuntime(group);
@@ -335,10 +344,9 @@ class BotGroupSession extends ChangeNotifier {
         _readError = 'Group updates could not refresh. Your messages are kept.';
       }
     } finally {
-      if (!_closed) {
-        _reading = false;
-        notifyListeners();
-      }
+      _readCompletion = null;
+      if (!_closed) notifyListeners();
+      completion.complete();
     }
   }
 

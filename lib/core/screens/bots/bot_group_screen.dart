@@ -69,7 +69,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   int _displayedSequence = 0;
   final _rowHeights = <int, double>{};
   bool _following = true, _capturing = false, _foreground = true;
-  bool _inspectingDetails = false;
+  bool _inspectingDetails = false, _refreshingGroup = false;
   bool _presentationVisible = true, _restoreComposerFocus = false;
   bool get _visible =>
       _presentationVisible &&
@@ -101,6 +101,16 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   void _composerChanged() {
     _session.editMentions(_composer.text);
     _changed();
+  }
+
+  Future<void> _refreshGroup() async {
+    if (_refreshingGroup) return;
+    setState(() => _refreshingGroup = true);
+    try {
+      await _session.refresh();
+    } finally {
+      if (mounted) setState(() => _refreshingGroup = false);
+    }
   }
 
   Future<void> _dictate() async {
@@ -543,7 +553,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                 case 'histories':
                   await _openWorkingHistories();
                 case 'refresh':
-                  await _session.refresh();
+                  await _refreshGroup();
                 case 'stop':
                   await _session.stop();
                 case 'edit':
@@ -575,7 +585,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
               ),
               StudioPopupMenuItem(
                 value: 'refresh',
-                enabled: !_session.loading,
+                enabled: !_session.loading && !_refreshingGroup,
                 child: const Text('Refresh group'),
               ),
               if (canStop)
@@ -710,8 +720,12 @@ class _BotGroupScreenState extends State<BotGroupScreen>
               ),
             ),
           ),
-          if (_session.loading && _session.events.isEmpty)
-            const StudioLoadingOverlay(label: 'Loading conversation'),
+          if (_refreshingGroup || (_session.loading && _session.events.isEmpty))
+            StudioLoadingOverlay(
+              label: _refreshingGroup
+                  ? 'Refreshing group'
+                  : 'Loading conversation',
+            ),
           if (!_following)
             Positioned(
               left: 0,

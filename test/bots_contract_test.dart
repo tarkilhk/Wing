@@ -2150,6 +2150,59 @@ void main() {
     );
   }
 
+  for (final outcome in ['success', 'failure', 'retired']) {
+    test(
+      'concurrent group refresh awaits the owned read through $outcome',
+      () async {
+        final fixture = BotsFixture();
+        final group = (await fixture.repository.groups(
+          groupMessages: null,
+        )).first;
+        final session = BotGroupSession(
+          fixture.repository,
+          group,
+          reads: BotGroupReadState(),
+          groupMessages: null,
+          appearances: FixedGroupAppearances(const []),
+        );
+        if (outcome != 'retired') addTearDown(session.dispose);
+        await session.refresh();
+        final started = Completer<void>();
+        final release = Completer<void>();
+        var stateReads = 0;
+        fixture.readHook = (_, method, _) async {
+          if (method == 'groups.state') {
+            stateReads++;
+            if (!started.isCompleted) started.complete();
+            await release.future;
+            if (outcome == 'failure') throw StateError('Offline');
+          }
+          return null;
+        };
+        final poll = session.refresh();
+        await started.future;
+        final manual = session.refresh();
+        expect(identical(poll, manual), isTrue);
+        var settled = false;
+        unawaited(manual.then((_) => settled = true));
+        await Future<void>.delayed(Duration.zero);
+        expect(settled, isFalse);
+        expect(stateReads, 1);
+        if (outcome == 'retired') session.dispose();
+        release.complete();
+        await Future.wait([poll, manual]);
+        expect(settled, isTrue);
+        expect(stateReads, 1);
+        if (outcome == 'failure') {
+          expect(session.error, contains('could not refresh'));
+          fixture.readHook = null;
+          await session.refresh();
+          expect(session.error, isNull);
+        }
+      },
+    );
+  }
+
   test(
     'group capture retires held reads and resumes the exact log cursor',
     () async {
