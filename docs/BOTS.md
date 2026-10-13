@@ -135,8 +135,9 @@ sender's saved avatar and name, formatted text, links, code and timestamps.
 Tap a bot's avatar in the discussion to open a compact card over it, with the
 bot's saved avatar and name above three icon-and-text actions: **View working
 history**, **Chat directly** and **Bot settings**.
-Working history opens with that member selected. Direct chat opens the bot's
-continuing private conversation; settings apply to its profile across chats.
+Working history opens with that member selected. Direct chat immediately opens
+the bot's private conversation screen, with the Wing pulse while it loads and
+Retry there if loading fails; settings apply to its profile across chats.
 Working history and settings return to the discussion with your draft and
 reading position intact. Direct chat follows the normal Bot Chat navigation;
 Back returns to Bots. A direct chat on another saved instance uses Wing's usual

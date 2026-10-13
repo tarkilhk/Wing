@@ -137,6 +137,7 @@ class ProfileWorkspaceScreen extends StatefulWidget {
   final Future<void> Function(ProfileSessionKey, bool Function())?
   onOpenBotChat;
   final ProfileSessionKey? initialBotSession;
+  final BotRecord? initialBot;
   const ProfileWorkspaceScreen({
     super.key,
     required this.controller,
@@ -156,6 +157,7 @@ class ProfileWorkspaceScreen extends StatefulWidget {
     this.createBotsSession,
     this.onOpenBotChat,
     this.initialBotSession,
+    this.initialBot,
   });
   @override
   ProfileWorkspaceScreenState createState() => ProfileWorkspaceScreenState();
@@ -226,10 +228,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     AppDestination origin = AppDestination.bots,
   }) => _openBotConversation((_) async => key, origin: origin);
 
-  Future<void> _openBot(BotRecord bot) => _openBotConversation(
+  Future<void> _openBot(
+    BotRecord bot, {
+    AppDestination origin = AppDestination.bots,
+  }) => _openBotConversation(
     (current) => _bots.open(bot, canUse: current),
     title: bot.title,
     bot: bot,
+    origin: origin,
   );
 
   Future<void> _openBotConversation(
@@ -537,6 +543,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Future<void> _openGroupChatWindow(
     BuildContext groupContext, {
     required AppDestination origin,
+    BotRecord? bot,
   }) => Navigator.of(groupContext).push<void>(
     MaterialPageRoute(
       builder: (_) => RecentConversationRouteScope(
@@ -545,6 +552,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         onLeave: _leaveConversation,
         child: ProfileWorkspaceScreen(
           controller: controller,
+          initialBot: bot,
           enableNotifications: widget.enableNotifications,
           backgroundMonitoringState: widget.backgroundMonitoringState,
           openMonitoringBatterySettings: widget.openMonitoringBatterySettings,
@@ -566,28 +574,16 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     BuildContext groupContext,
     BotRecord bot,
   ) async {
-    bool current() =>
-        mounted &&
-        groupContext.mounted &&
-        ModalRoute.isCurrentOf(groupContext) == true;
-    final key = await _bots.openProfile(bot.scope, canUse: current);
-    if (!current() || key == null) return;
-    if (!controller.owns(key)) {
-      final open = widget.onOpenBotChat;
-      if (open == null) {
-        throw StateError('Open this bot from its saved instance');
-      }
-      await open(key, current);
+    if (!mounted ||
+        !groupContext.mounted ||
+        ModalRoute.isCurrentOf(groupContext) != true) {
       return;
     }
-    final chat = await controller.openSession(
-      key,
-      propagateHistoryFailure: true,
-      isCurrentRequest: current,
+    await _openGroupChatWindow(
+      groupContext,
+      origin: AppDestination.bots,
+      bot: bot,
     );
-    if (current() && groupContext.mounted && chat != null) {
-      await _openGroupChatWindow(groupContext, origin: AppDestination.bots);
-    }
   }
 
   Future<void> _openRecentGroup(
@@ -788,6 +784,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   void initState() {
     super.initState();
     _destination = widget.initialDestination;
+    if (widget.initialBot case final bot?) {
+      _destination = AppDestination.chats;
+      _chatOrigin = AppDestination.bots;
+      _pendingBotTitle = bot.title;
+      _pendingBot = bot;
+    }
     _composerFocus.addListener(_composerFocusChanged);
     _appIsActive =
         WidgetsBinding.instance.lifecycleState == null ||
@@ -809,6 +811,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       await controller.initialize();
     }
     if (!mounted || controller.current == null) return;
+    if (widget.initialBot case final bot?) {
+      await _openBot(bot, origin: AppDestination.chats);
+      return;
+    }
     if (widget.initialBotSession case final key?) {
       await _openBotChat(key);
       return;
@@ -3477,6 +3483,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   void _leaveConversation(AppDestination destination) {
     final borrowed = RecentConversationRouteScope.maybeOf(context);
     if (borrowed != null) {
+      _botNavigation++;
       _disposeRecentVisit();
       borrowed.onLeave(destination);
       return;

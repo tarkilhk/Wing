@@ -3419,137 +3419,279 @@ void main() {
     );
   }
 
-  testWidgets(
-    'group popup reaches captured bot settings and canonical private chat',
-    (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final preferences = await SharedPreferences.getInstance();
-      final appPreferences = AppPreferences(preferences);
-      addTearDown(appPreferences.dispose);
-      final activity = ValueNotifier<ChatNoticeActivity?>(null);
-      addTearDown(activity.dispose);
-      final administration = AdministrationFixture('Home server');
-      final browser = _BotConversationBrowser();
-      final controller = ProfileWorkspaceController(
-        access: ConnectionAccess(
-          connection: SavedConnection(
-            id: 'host',
-            label: 'Home server',
-            host: 'localhost',
-            port: 1,
-            apiKey: '',
-          ),
-          dashboardOAuth: null,
-        ),
-        connectionIdentity: 'instance-1',
-        preferences: preferences,
-        appPreferences: appPreferences,
-        gatewayFactory: (scope) {
-          final base = browser.gateway(scope);
-          return ProfileGateway(
-            scope: scope,
-            discover: base.discover,
-            get: (path, query) => path == 'model/options'
-                ? administration.server
-                      .profile(scope.profileName)
-                      .gateway
-                      .read(path, query)
-                : base.read(path, query),
-            rpc: base.call,
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group popup reaches captured bot settings and canonical private chat ${brightness.name} $scale',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          final preferences = await SharedPreferences.getInstance();
+          final appPreferences = AppPreferences(preferences);
+          addTearDown(appPreferences.dispose);
+          final activity = ValueNotifier<ChatNoticeActivity?>(null);
+          addTearDown(activity.dispose);
+          final administration = AdministrationFixture('Home server');
+          final browser = _BotConversationBrowser();
+          final controller = ProfileWorkspaceController(
+            access: ConnectionAccess(
+              connection: SavedConnection(
+                id: 'host',
+                label: 'Home server',
+                host: 'localhost',
+                port: 1,
+                apiKey: '',
+              ),
+              dashboardOAuth: null,
+            ),
+            connectionIdentity: 'instance-1',
+            preferences: preferences,
+            appPreferences: appPreferences,
+            gatewayFactory: (scope) {
+              final base = browser.gateway(scope);
+              return ProfileGateway(
+                scope: scope,
+                discover: base.discover,
+                get: (path, query) => path == 'model/options'
+                    ? administration.server
+                          .profile(scope.profileName)
+                          .gateway
+                          .read(path, query)
+                    : base.read(path, query),
+                rpc: base.call,
+              );
+            },
           );
+          addTearDown(controller.dispose);
+          await controller.initialize();
+          final bots = BotsFixture(server: administration.server);
+          bots.profiles
+            ..clear()
+            ..addAll([
+              BotsFixture.profile('personal', 'Atlas'),
+              BotsFixture.profile('work', 'Mira'),
+            ]);
+          bots.profiles.last['canonical_session'] = {
+            'id': 'canonical-root',
+            'resolved_id': 'canonical-tip',
+          };
+          bots.room['members'][0]['profile'] = 'personal';
+          bots.room['members'][1]['profile'] = 'work';
+          bots.events.add({
+            'room_id': 'room-1',
+            'seq': 1,
+            'kind': 'message.member',
+            'actor': {'kind': 'member', 'id': 'mira', 'profile': 'work'},
+            'payload': {'text': 'Mira shared answer'},
+            'created_at': 1791756000.0,
+          });
+          await tester.binding.setSurfaceSize(
+            Size(scale == 1 ? 390 : 320, 844),
+          );
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          final frame = GlobalKey();
+          await tester.pumpMarkdownWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => ChatNoticeActivityScope(
+                activity: activity,
+                child: MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: RepaintBoundary(key: frame, child: child!),
+                ),
+              ),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                initialDestination: AppDestination.bots,
+                createBotsSession: () =>
+                    BotsSession((_) async => [bots.repository]),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.widgetWithText(Tab, 'Groups'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Research team'));
+          await tester.pumpAndSettle();
+          await tester.settleMarkdown();
+          expect(find.byType(BotGroupScreen), findsOneWidget);
+          final input = find.byKey(const ValueKey('group-message-composer'));
+          await tester.enterText(input, 'Keep my group draft');
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Options for Mira'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Bot settings'));
+          await tester.pumpAndSettle();
+          final settings = tester.widget<BotSettingsScreen>(
+            find.byType(BotSettingsScreen),
+          );
+          expect(settings.profile.name, 'work');
+          expect(settings.bot.scope.connectionIdentity, 'instance-1');
+          expect(find.text('Role & instructions'), findsOneWidget);
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<TextField>(input).controller!.text,
+            'Keep my group draft',
+          );
+          await tester.tap(find.byTooltip('Options for Mira'));
+          await tester.pumpAndSettle();
+          final identity = Completer<void>();
+          final resume = browser.resumeDelay = Completer<void>();
+          final history = Completer<void>();
+          browser.historyDelays[('canonical-root', 0)] = history;
+          bots.readHook = (_, method, _) async {
+            if (method == 'profiles.list') await identity.future;
+            return null;
+          };
+          await tester.tap(find.text('Chat directly'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          expect(find.byType(BotGroupScreen), findsNothing);
+          expect(find.text('Mira'), findsOneWidget);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byType(ProfileMessage), findsNothing);
+          final backRect = tester.getRect(find.byTooltip('Back'));
+          await _capture(
+            tester,
+            frame,
+            'group-chat-opening-${brightness.name}-$scale',
+            motion: true,
+          );
+          identity.complete();
+          for (var i = 0; i < 20; i++) {
+            await tester.pump();
+          }
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byType(ProfileMessage), findsNothing);
+          expect(tester.getRect(find.byTooltip('Back')), backRect);
+          resume.complete();
+          for (var i = 0; i < 20; i++) {
+            await tester.pump();
+          }
+          expect(
+            browser.reads.any(
+              (read) => read.$1 == 'sessions/canonical-root/messages',
+            ),
+            isTrue,
+          );
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byType(ProfileMessage), findsNothing);
+          expect(tester.getRect(find.byTooltip('Back')), backRect);
+          history.complete();
+          await tester.pumpAndSettle();
+          await tester.settleMarkdown();
+          expect(controller.current!.chat!.key.workspace.profileName, 'work');
+          expect(controller.current!.chat!.key.sessionId, 'canonical-root');
+          expect(find.byType(BotGroupScreen), findsNothing);
+          expect(find.text('Mira'), findsOneWidget);
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(
+            tester.getRect(find.byTooltip('Open navigation menu')),
+            backRect,
+          );
+          await _capture(
+            tester,
+            frame,
+            'group-chat-loaded-${brightness.name}-$scale',
+          );
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(
+            find.byType(BotGroupScreen, skipOffstage: false),
+            findsNothing,
+          );
+          expect(controller.current!.chat, isNull);
+          expect(
+            tester
+                .widget<TextField>(find.byKey(const ValueKey('bots-search')))
+                .decoration!
+                .hintText,
+            'Search groups',
+          );
+          expect(find.byType(BotsContent), findsOneWidget);
+          expect(find.byType(BotGroupScreen), findsNothing);
+
+          Future<void> openDirectChat() async {
+            await tester.tap(find.text('Research team'));
+            await tester.pumpAndSettle();
+            await tester.settleMarkdown();
+            await tester.tap(find.byTooltip('Options for Mira'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Chat directly'));
+            for (var i = 0; i < 12; i++) {
+              await tester.pump(const Duration(milliseconds: 100));
+            }
+          }
+
+          browser.failHistory = true;
+          await openDirectChat();
+          expect(find.byType(BotGroupScreen), findsNothing);
+          expect(find.byTooltip('Retry'), findsOneWidget);
+          expect(find.byType(StudioLoading), findsNothing);
+          await _capture(
+            tester,
+            frame,
+            'group-chat-error-${brightness.name}-$scale',
+            motion: true,
+          );
+          browser.failHistory = false;
+          final retryHistory = Completer<void>();
+          browser.historyDelays[('canonical-root', 0)] = retryHistory;
+          await tester.tap(find.byTooltip('Retry'));
+          for (var i = 0; i < 20; i++) {
+            await tester.pump();
+          }
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byTooltip('Retry'), findsNothing);
+          retryHistory.complete();
+          await tester.pumpAndSettle();
+          expect(find.byType(StudioLoading), findsNothing);
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+
+          for (final stage in ['identity', 'resume', 'history']) {
+            final held = Completer<void>();
+            bots.readHook = (_, method, _) async {
+              if (stage == 'identity' && method == 'profiles.list') {
+                await held.future;
+              }
+              return null;
+            };
+            browser.resumeDelay = stage == 'resume' ? held : null;
+            browser.historyDelays.remove(('canonical-root', 0));
+            if (stage == 'history') {
+              browser.historyDelays[('canonical-root', 0)] = held;
+            }
+            await openDirectChat();
+            expect(find.byType(StudioLoading), findsOneWidget);
+            expect(find.byType(ProfileMessage), findsNothing);
+            await tester.tap(find.byTooltip('Back'));
+            if (stage == 'history') held.complete();
+            for (var i = 0; i < 12; i++) {
+              await tester.pump(const Duration(milliseconds: 100));
+            }
+            expect(find.byType(BotsContent), findsOneWidget);
+            expect(
+              find.byType(BotGroupScreen, skipOffstage: false),
+              findsNothing,
+            );
+            if (!held.isCompleted) held.complete();
+            await tester.pumpAndSettle();
+            expect(controller.current!.chat, isNull);
+            expect(find.byType(BotsContent), findsOneWidget);
+          }
+          expect(bots.commands, isEmpty);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
         },
       );
-      addTearDown(controller.dispose);
-      await controller.initialize();
-      final bots = BotsFixture(server: administration.server);
-      bots.profiles
-        ..clear()
-        ..addAll([
-          BotsFixture.profile('personal', 'Atlas'),
-          BotsFixture.profile('work', 'Mira'),
-        ]);
-      bots.profiles.last['canonical_session'] = {
-        'id': 'canonical-root',
-        'resolved_id': 'canonical-tip',
-      };
-      bots.room['members'][0]['profile'] = 'personal';
-      bots.room['members'][1]['profile'] = 'work';
-      bots.events.add({
-        'room_id': 'room-1',
-        'seq': 1,
-        'kind': 'message.member',
-        'actor': {'kind': 'member', 'id': 'mira', 'profile': 'work'},
-        'payload': {'text': 'Mira shared answer'},
-        'created_at': 1791756000.0,
-      });
-      await tester.binding.setSurfaceSize(const Size(390, 844));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpMarkdownWidget(
-        MaterialApp(
-          theme: wingTheme(Brightness.dark),
-          builder: (context, child) =>
-              ChatNoticeActivityScope(activity: activity, child: child!),
-          home: ProfileWorkspaceScreen(
-            controller: controller,
-            initialDestination: AppDestination.bots,
-            createBotsSession: () =>
-                BotsSession((_) async => [bots.repository]),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(Tab, 'Groups'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Research team'));
-      await tester.pumpAndSettle();
-      await tester.settleMarkdown();
-      expect(find.byType(BotGroupScreen), findsOneWidget);
-      final input = find.byKey(const ValueKey('group-message-composer'));
-      await tester.enterText(input, 'Keep my group draft');
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Options for Mira'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Bot settings'));
-      await tester.pumpAndSettle();
-      final settings = tester.widget<BotSettingsScreen>(
-        find.byType(BotSettingsScreen),
-      );
-      expect(settings.profile.name, 'work');
-      expect(settings.bot.scope.connectionIdentity, 'instance-1');
-      expect(find.text('Role & instructions'), findsOneWidget);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      expect(
-        tester.widget<TextField>(input).controller!.text,
-        'Keep my group draft',
-      );
-      await tester.tap(find.byTooltip('Options for Mira'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Chat directly'));
-      await tester.pumpAndSettle();
-      await tester.settleMarkdown();
-      expect(controller.current!.chat!.key.workspace.profileName, 'work');
-      expect(controller.current!.chat!.key.sessionId, 'canonical-root');
-      expect(find.byType(BotGroupScreen), findsNothing);
-      expect(find.text('Mira'), findsOneWidget);
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.byType(BotGroupScreen, skipOffstage: false), findsNothing);
-      expect(controller.current!.chat, isNull);
-      expect(
-        tester
-            .widget<TextField>(find.byKey(const ValueKey('bots-search')))
-            .decoration!
-            .hintText,
-        'Search groups',
-      );
-      expect(find.byType(BotsContent), findsOneWidget);
-      expect(find.byType(BotGroupScreen), findsNothing);
-      expect(bots.commands, isEmpty);
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
+    }
+  }
 
   testWidgets('saved and streaming replies omit repeated author headers', (
     tester,
