@@ -24,8 +24,14 @@ final class BrowserActionChoice {
 }
 
 final class BrowserActionState {
-  const BrowserActionState({this.submitting = false, this.error, this.moving});
+  const BrowserActionState({
+    this.submitting = false,
+    this.generatingTitle = false,
+    this.error,
+    this.moving,
+  });
   final bool submitting;
+  final bool generatingTitle;
   final String? error;
   final BrowserProject? moving;
 }

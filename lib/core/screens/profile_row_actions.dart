@@ -114,38 +114,7 @@ Future<void> showChatActions(
   if (action == 'move') {
     await showChatProjectPicker(context, session);
   } else if (action == 'rename') {
-    var value = title;
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        scrollable: true,
-        title: const Text('Rename chat'),
-        content: TextFormField(
-          initialValue: title,
-          autofocus: true,
-          maxLength: 200,
-          onChanged: (text) => value = text,
-          decoration: const InputDecoration(labelText: 'Chat title'),
-        ),
-        actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, value),
-              child: const Text('Save'),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (result != null) {
-      await _submit(session, BrowserAction.rename, name: result);
-    }
+    await showChatRenameDialog(context, session);
   } else if (action == 'delete') {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -179,6 +148,154 @@ Future<void> showChatActions(
     }
   } else {
     await _submit(session, BrowserAction.values.byName(action));
+  }
+}
+
+Future<void> showChatRenameDialog(
+  BuildContext context,
+  BrowserActionSession session,
+) => showDialog<void>(
+  context: context,
+  builder: (_) => _ChatRenameDialog(session: session),
+);
+
+class _ChatRenameDialog extends StatefulWidget {
+  const _ChatRenameDialog({required this.session});
+  final BrowserActionSession session;
+
+  @override
+  State<_ChatRenameDialog> createState() => _ChatRenameDialogState();
+}
+
+class _ChatRenameDialogState extends State<_ChatRenameDialog> {
+  late final _title = TextEditingController(text: widget.session.title);
+  int _editRevision = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.session.addListener(_changed);
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_changed);
+    _title.dispose();
+    super.dispose();
+  }
+
+  Future<void> _generate() async {
+    final revision = _editRevision;
+    final title = await widget.session.generateTitle();
+    if (!mounted || title == null || revision != _editRevision) return;
+    setState(() {
+      _title.value = TextEditingValue(
+        text: title,
+        selection: TextSelection.collapsed(offset: title.length),
+      );
+    });
+  }
+
+  Future<void> _save() async {
+    final saved = await widget.session.perform(
+      BrowserAction.rename,
+      name: _title.text,
+    );
+    if (saved && mounted) Navigator.pop(context);
+  }
+
+  Widget _progress(String label) => SizedBox.square(
+    dimension: 20,
+    child: CircularProgressIndicator(
+      value: MediaQuery.disableAnimationsOf(context) ? 0.75 : null,
+      strokeWidth: 2,
+      semanticsLabel: label,
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.session.state;
+    final pending = state.submitting || state.generatingTitle;
+    return PopScope(
+      canPop: !state.submitting,
+      child: AlertDialog(
+        scrollable: true,
+        title: const Text('Rename chat'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                key: const ValueKey('chat-rename-title'),
+                controller: _title,
+                autofocus: true,
+                enabled: !state.submitting,
+                maxLength: 100,
+                textInputAction: TextInputAction.done,
+                onChanged: (_) => setState(() => _editRevision++),
+                onSubmitted: (_) {
+                  if (!pending &&
+                      widget.session.available &&
+                      _title.text.trim().isNotEmpty) {
+                    _save();
+                  }
+                },
+                decoration: InputDecoration(
+                  labelText: 'Chat title',
+                  suffixIcon: StudioButtonPress(
+                    child: IconButton(
+                      key: const ValueKey('chat-rename-ai'),
+                      tooltip: 'Auto rename',
+                      onPressed: pending || !widget.session.available
+                          ? null
+                          : _generate,
+                      icon: state.generatingTitle
+                          ? _progress('Generating chat title')
+                          : const Icon(Icons.auto_awesome_outlined),
+                    ),
+                  ),
+                ),
+              ),
+              if (state.error case final error?) ...[
+                const SizedBox(height: 12),
+                StudioError(error),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          StudioButtonPress(
+            child: IconButton(
+              tooltip: 'Cancel',
+              onPressed: state.submitting ? null : () => Navigator.pop(context),
+              icon: const Icon(Icons.close),
+            ),
+          ),
+          StudioButtonPress(
+            child: IconButton.filled(
+              key: const ValueKey('chat-rename-save'),
+              tooltip: 'Save chat title',
+              onPressed:
+                  pending ||
+                      !widget.session.available ||
+                      _title.text.trim().isEmpty
+                  ? null
+                  : _save,
+              icon: state.submitting
+                  ? _progress('Saving chat title')
+                  : const Icon(Icons.check),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

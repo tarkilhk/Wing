@@ -1307,9 +1307,24 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       _run(() async {
         final browser = ChatBrowserData(controller);
         try {
-          final issued = browser.projectPickerFor(chat.key);
+          final issued = browser.chatActionsFor(chat.key);
           try {
             if (mounted) await showChatProjectPicker(context, issued);
+          } finally {
+            issued.dispose();
+          }
+        } finally {
+          browser.dispose();
+        }
+      }),
+    );
+    void openRename() => unawaited(
+      _run(() async {
+        final browser = ChatBrowserData(controller);
+        try {
+          final issued = browser.chatActionsFor(chat.key);
+          try {
+            if (mounted) await showChatRenameDialog(context, issued);
           } finally {
             issued.dispose();
           }
@@ -1362,7 +1377,21 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     ),
                   ),
                 )
-              : title,
+              : Tooltip(
+                  message: 'Rename chat',
+                  child: Semantics(
+                    button: true,
+                    child: StudioButtonPress(
+                      child: InkWell(
+                        onTap: openRename,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: title,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
           contextHeight: stackChatScope ? 96 : 48,
           contextRow: LayoutBuilder(
             builder: (context, constraints) {

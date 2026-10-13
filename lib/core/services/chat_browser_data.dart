@@ -1,4 +1,5 @@
 import 'server_files_browser.dart';
+import '../models/transcript_message.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import '../models/profile_session_key.dart';
 import 'package:wing/core/models/chat_list_status.dart';
@@ -549,12 +550,12 @@ final class ChatBrowserData extends ChangeNotifier {
     return _issue(_controller.current!, draft: draft);
   }
 
-  BrowserActionSession projectPickerFor(ProfileSessionKey key) {
+  BrowserActionSession chatActionsFor(ProfileSessionKey key) {
     final resource = _controller.current;
     if (resource == null ||
         resource.scope != key.workspace ||
         !_controller.owns(key)) {
-      throw StateError('Profile changed. Open the project picker again.');
+      throw StateError('Profile changed. Open the chat actions again.');
     }
     final raw = resource.sessions
         .where((row) => row['id'] == key.sessionId)
@@ -564,7 +565,11 @@ final class ChatBrowserData extends ChangeNotifier {
         _entries.where((entry) => entry.sessionKey == key).firstOrNull ??
         ChatListEntry.fromWire(
           scope: key.workspace,
-          row: raw ?? {'id': key.sessionId, 'title': chat?.title ?? ''},
+          row: {
+            ...?raw,
+            'id': key.sessionId,
+            'title': chat?.title ?? raw?['title'] ?? '',
+          },
           status: ChatListStatus.idle,
         );
     return _issue(resource, entry: entry);
@@ -1736,13 +1741,18 @@ final class BrowserActionSession extends ChangeNotifier {
     files: _resource.gateway.files,
     isCurrent: () => _active,
   );
-  String get title => project != null
-      ? (project!.name.trim().isEmpty
-            ? 'Untitled project'
-            : project!.name.trim())
-      : entry?.title.isNotEmpty == true
-      ? entry!.title
-      : 'Untitled chat';
+  String get title {
+    if (project case final project?) {
+      return project.name.trim().isEmpty
+          ? 'Untitled project'
+          : project.name.trim();
+    }
+    final title = entry == null
+        ? null
+        : _resource.chats[entry!.id]?.title ?? entry!.title;
+    return title?.isNotEmpty == true ? title! : 'Untitled chat';
+  }
+
   bool _retired = false;
   bool _revoked = false;
   void _revoke() {
@@ -1754,6 +1764,7 @@ final class BrowserActionSession extends ChangeNotifier {
   }
 
   int _notifications = 0;
+  bool get available => _active;
   bool get _active =>
       !_retired &&
       !_revoked &&
@@ -1771,6 +1782,64 @@ final class BrowserActionSession extends ChangeNotifier {
     }
   }
 
+  Future<String?> generateTitle() async {
+    if (!_active ||
+        entry == null ||
+        _state.submitting ||
+        _state.generatingTitle) {
+      return null;
+    }
+    _publish(const BrowserActionState(generatingTitle: true));
+    try {
+      if (!_active) return null;
+      final chat = _resource.chats[entry!.id];
+      final page = await _resource.gateway.history(
+        entry!.id,
+        limit: 50,
+        inlineImages: false,
+        runtimeId: chat?.runtime.runtimeId,
+      );
+      if (!_active) return null;
+      final messages = page.rows
+          .map(TranscriptMessage.fromRow)
+          .where(
+            (message) =>
+                message.kind == TranscriptMessageKind.dialogue &&
+                (message.role == 'user' || message.role == 'assistant') &&
+                message.copyText.trim().isNotEmpty,
+          )
+          .toList();
+      if (messages.isEmpty) {
+        throw StateError('Send a message before generating a chat title.');
+      }
+      final input = messages
+          .skip(math.max(0, messages.length - 24))
+          .map((message) {
+            final text = message.copyText.trim();
+            return '${message.role}: ${text.length > 500 ? text.substring(0, 500) : text}';
+          })
+          .join('\n');
+      final title = await _resource.gateway.suggestChatTitle(
+        input,
+        canDispatch: () => _active,
+      );
+      if (!_active) return null;
+      _publish(const BrowserActionState());
+      return title;
+    } catch (error) {
+      if (_active) {
+        _publish(
+          BrowserActionState(
+            error: error is StateError
+                ? error.message.toString()
+                : 'Could not generate a title. Check the connection and try again.',
+          ),
+        );
+      }
+      return null;
+    }
+  }
+
   Future<bool> perform(
     BrowserAction action, {
     String name = '',
@@ -1779,7 +1848,7 @@ final class BrowserActionSession extends ChangeNotifier {
     String path = '',
     BrowserProject? target,
   }) async {
-    if (_state.submitting) return false;
+    if (_state.submitting || _state.generatingTitle) return false;
     if (!_active) {
       _publish(
         const BrowserActionState(
@@ -1792,6 +1861,16 @@ final class BrowserActionSession extends ChangeNotifier {
       return false;
     }
     final trimmed = name.trim();
+    if (action == BrowserAction.rename &&
+        entry != null &&
+        _resource.mutatingSessions.contains(entry!.id)) {
+      _publish(
+        const BrowserActionState(
+          error: 'A change to this chat is already in progress. Try again.',
+        ),
+      );
+      return false;
+    }
     if ((action == BrowserAction.rename ||
             action == BrowserAction.editProject) &&
         trimmed.isEmpty) {

@@ -9,6 +9,10 @@ Every conversation uses the same chat menu: **View screen**, **Outputs**,
 **Parent chat**. Goal, agents and background work are available through the
 conversation's **Activity** entry.
 
+Tap an ordinary conversation's title to rename it. The same editor opens from
+the chat list's **Rename** action. Its AI sparkle suggests a name in the text
+field; edit it or tap the checkmark to save.
+
 **Refresh workspace** shows Wing's pulsating feathers in the top-right header
 until the refresh finishes. Your conversation and draft remain available;
 the menu item is disabled while that refresh is pending.

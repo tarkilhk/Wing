@@ -15,7 +15,14 @@ status dot. With reduced motion, the border stays still. Opening the chat and it
 actions remain available while Hermes works.
 
 Inside a chat, tap the project name below the chat title to open the project
-picker and move the chat. The chat title is passive.
+picker and move the chat. Tap the chat title to open **Rename chat**, or hold a
+chat in the list and choose **Rename**. Type a name or tap the AI sparkle beside
+the field to generate a suggestion from the conversation. Adjust it if needed,
+then tap the checkmark to save. Generation and saving show progress in their
+controls; errors keep your draft name available for retry. A new chat needs a
+message before AI can suggest a name.
+
+A canonical Bot Chat's avatar and name continue to open **Bot settings**.
 
 Hidden conversations stay out of Chats by default, including a bot's continuing
 **Bot Chat**, even after opening it from Bots. Tick **Show automated chats** in

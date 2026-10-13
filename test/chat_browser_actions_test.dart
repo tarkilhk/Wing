@@ -451,8 +451,11 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 200));
       if (action == 'Rename') {
-        await tester.enterText(find.byType(TextFormField), 'Renamed chat');
-        await tester.tap(find.text('Save'));
+        await tester.enterText(
+          find.byKey(const ValueKey('chat-rename-title')),
+          'Renamed chat',
+        );
+        await tester.tap(find.byKey(const ValueKey('chat-rename-save')));
       } else if (action == 'Delete') {
         await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
       }

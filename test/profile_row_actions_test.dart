@@ -9,6 +9,10 @@ import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'support/chat_browser_interactions.dart';
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,13 +26,27 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
 
 void main() {
-  late ProfileActionsFixture host;
+  const capture = bool.fromEnvironment('CAPTURE_CHAT_RENAME');
+  const captureKey = ValueKey('chat-rename-capture');
+  setUpAll(() async {
+    if (!capture) return;
+    for (final entry in {
+      'Roboto': 'build/studio-roboto.ttf',
+      'MaterialIcons': 'build/studio-icons.otf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            File(entry.value).readAsBytes().then(ByteData.sublistView),
+          ))
+          .load();
+    }
+  });
+  late _RenameActionsFixture host;
   late ProfileWorkspaceController controller;
   late ChatBrowserData browser;
   late AppPreferences appPreferences;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    host = ProfileActionsFixture();
+    host = _RenameActionsFixture();
     final preferences = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
@@ -116,6 +134,353 @@ void main() {
     await controller.refresh();
     host.updates.clear();
   }
+
+  test(
+    'AI title reads bounded dialogue and uses captured profile without saving',
+    () async {
+      host.titleHistory = [
+        for (var i = 0; i < 30; i++)
+          {
+            'id': i,
+            'role': i.isEven ? 'user' : 'assistant',
+            'content': 'message $i ${'x' * 800}',
+          },
+        {'id': 31, 'role': 'tool', 'content': 'private tool output'},
+        {'id': 32, 'role': 'system', 'content': 'private system instructions'},
+        {
+          'id': 33,
+          'role': 'user',
+          'content': 'hidden machinery',
+          'display_kind': 'hidden',
+        },
+      ];
+      final issued = browser.chatActionsFor(key());
+      addTearDown(issued.dispose);
+      expect(await issued.generateTitle(), host.suggestedTitle);
+      final request = host.titleRequests.single;
+      expect(request['profile'], 'personal');
+      expect(request['task'], 'title_generation');
+      expect(request.containsKey('session_id'), isFalse);
+      expect(request['input'], isNot(contains('private')));
+      expect(request['input'], isNot(contains('hidden machinery')));
+      expect((request['input'] as String).split('\n'), hasLength(24));
+      expect((request['input'] as String).length, lessThan(12500));
+      expect(host.updates, isEmpty);
+      expect(issued.state.generatingTitle, isFalse);
+    },
+  );
+
+  test(
+    'AI title retirement before generation prevents the model request',
+    () async {
+      host.titleHistory = [
+        {'id': 1, 'role': 'user', 'content': 'Plan a garden'},
+      ];
+      final held = Completer<void>();
+      host.historyDelays[('newest', 0)] = held;
+      final issued = browser.chatActionsFor(key());
+      final pending = issued.generateTitle();
+      expect(issued.state.generatingTitle, isTrue);
+      expect(await issued.generateTitle(), isNull);
+      issued.dispose();
+      held.complete();
+      expect(await pending, isNull);
+      expect(host.titleRequests, isEmpty);
+      expect(host.updates, isEmpty);
+    },
+  );
+
+  test('AI title profile retirement discards a held model response', () async {
+    host.titleHistory = [
+      {'id': 1, 'role': 'user', 'content': 'Plan a garden'},
+    ];
+    final issued = browser.chatActionsFor(key());
+    addTearDown(issued.dispose);
+    host.titleDelay = Completer<void>();
+    final pending = issued.generateTitle();
+    await Future<void>.delayed(Duration.zero);
+    expect(host.titleRequests, hasLength(1));
+    await controller.navigateProfile('work');
+    expect(issued.state.generatingTitle, isFalse);
+    host.titleDelay!.complete();
+    expect(await pending, isNull);
+    expect(host.updates, isEmpty);
+  });
+
+  test(
+    'AI title rejects empty history and malformed model responses',
+    () async {
+      final issued = browser.chatActionsFor(key());
+      addTearDown(issued.dispose);
+      expect(await issued.generateTitle(), isNull);
+      expect(issued.state.error, contains('Send a message'));
+      expect(host.titleRequests, isEmpty);
+      host.titleHistory = [
+        {'id': 1, 'role': 'user', 'content': 'Plan a garden'},
+      ];
+      for (final invalid in [null, '', 'a\nb', 'x' * 101]) {
+        host.suggestedTitle = invalid;
+        expect(await issued.generateTitle(), isNull);
+        expect(issued.state.error, contains('invalid title'));
+        expect(issued.state.generatingTitle, isFalse);
+      }
+      host.suggestedTitle = 'A small garden plan';
+      expect(await issued.generateTitle(), 'A small garden plan');
+      expect(issued.state.error, isNull);
+    },
+  );
+
+  test(
+    'Rename refuses a concurrent mutation instead of acknowledging an unsent name',
+    () async {
+      final issued = browser.chatActionsFor(key());
+      addTearDown(issued.dispose);
+      host.mutationDelay = Completer<void>();
+      final pin = controller.mutateSession(
+        key(),
+        changes: {'pinned': true},
+        canDispatch: () => true,
+      );
+      expect(
+        await issued.perform(BrowserAction.rename, name: 'New name'),
+        isFalse,
+      );
+      expect(issued.state.error, contains('already in progress'));
+      expect(host.updates, hasLength(1));
+      host.mutationDelay!.complete();
+      await pin;
+      host.mutationDelay = null;
+      expect(
+        await issued.perform(BrowserAction.rename, name: 'New name'),
+        isTrue,
+      );
+      expect(host.updates.last.$3['title'], 'New name');
+    },
+  );
+
+  testWidgets(
+    'AI rename preserves newer typing and cancel retires the request',
+    (tester) async {
+      host.titleHistory = [
+        {'id': 1, 'role': 'user', 'content': 'Plan a garden'},
+      ];
+      await show(tester);
+      await menu(tester, 'newest');
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      final field = find.byKey(const ValueKey('chat-rename-title'));
+      final history = Completer<void>();
+      host.historyDelays[('newest', 0)] = history;
+      host.titleDelay = Completer<void>();
+      await tester.tap(find.byKey(const ValueKey('chat-rename-ai')));
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(host.titleRequests, isEmpty);
+      history.complete();
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const ValueKey('chat-rename-save')))
+            .onPressed,
+        isNull,
+      );
+      await tester.enterText(field, 'My chosen name');
+      host.titleDelay!.complete();
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(field).controller!.text,
+        'My chosen name',
+      );
+      expect(host.updates, isEmpty);
+      host.titleDelay = Completer<void>();
+      await tester.tap(find.byKey(const ValueKey('chat-rename-ai')));
+      await tester.pump();
+      await tester.tap(find.byTooltip('Cancel'));
+      await tester.pumpAndSettle();
+      host.titleDelay!.complete();
+      await tester.pumpAndSettle();
+      expect(field, findsNothing);
+      expect(host.updates, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('Chat title editor feedback ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        host.titleHistory = [
+          {'id': 1, 'role': 'user', 'content': 'Improve the chat list layout'},
+          {
+            'id': 2,
+            'role': 'assistant',
+            'content': 'Use a compact grouped list.',
+          },
+        ];
+        await controller.openSession(key());
+        final chat = controller.current!.chat!;
+        final reading = chat.reading;
+        await controller.updateDraft(chat, 'Keep my draft');
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: captureKey,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: scale == 2,
+                  viewInsets: const EdgeInsets.only(bottom: 260),
+                ),
+                child: child!,
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final header = find.byTooltip('Rename chat');
+        host.updates.clear();
+        final headerRect = tester.getRect(header);
+        await tester.tap(header);
+        await tester.pumpAndSettle();
+        final field = find.byKey(const ValueKey('chat-rename-title'));
+        expect(field, findsOneWidget);
+        expect(tester.testTextInput.isVisible, isTrue);
+        expect(tester.widget<TextField>(field).controller!.text, chat.title);
+
+        Future<void> snapshot(String state) async {
+          expect(tester.takeException(), isNull);
+          if (!capture) return;
+          await tester.runAsync(() async {
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.byKey(captureKey),
+            );
+            final image = await boundary.toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final target = File(
+              'build/design-previews/chat-rename/${brightness.name}-$scale-$state.png',
+            );
+            target.parent.createSync(recursive: true);
+            target.writeAsBytesSync(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+
+        await snapshot('editor');
+        final fieldRect = tester.getRect(field);
+        final save = find.byKey(const ValueKey('chat-rename-save'));
+        final saveRect = tester.getRect(save);
+        expect(saveRect.bottom, lessThanOrEqualTo(844 - 260));
+        expect(
+          tester
+              .getSize(find.byKey(const ValueKey('chat-rename-ai')))
+              .shortestSide,
+          greaterThanOrEqualTo(48),
+        );
+        host.titleDelay = Completer<void>();
+        await tester.tap(find.byKey(const ValueKey('chat-rename-ai')));
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(
+          tester
+              .widget<CircularProgressIndicator>(
+                find.byType(CircularProgressIndicator),
+              )
+              .value,
+          scale == 2 ? 0.75 : null,
+        );
+        expect(tester.getRect(field), fieldRect);
+        expect(tester.getRect(save), saveRect);
+        expect(tester.widget<IconButton>(save).onPressed, isNull);
+        await snapshot('generating');
+        host.failTitle = true;
+        host.titleDelay!.complete();
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Title generation failed. Try again.'),
+          findsOneWidget,
+        );
+        expect(tester.widget<TextField>(field).controller!.text, chat.title);
+        await snapshot('generation-error');
+        host.failTitle = false;
+        host.titleDelay = null;
+        await tester.tap(find.byKey(const ValueKey('chat-rename-ai')));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(field).controller!.text,
+          host.suggestedTitle,
+        );
+        expect(host.updates, isEmpty);
+        await snapshot('suggested');
+
+        host.mutationDelay = Completer<void>();
+        await tester.tap(save);
+        await tester.pump();
+        expect(field, findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(
+          tester
+              .widget<IconButton>(
+                find.byWidgetPredicate(
+                  (widget) =>
+                      widget is IconButton && widget.tooltip == 'Cancel',
+                ),
+              )
+              .onPressed,
+          isNull,
+        );
+        await snapshot('saving');
+        host.failMutation = true;
+        host.mutationDelay!.complete();
+        await tester.pumpAndSettle();
+        expect(find.text('Write rejected'), findsOneWidget);
+        expect(
+          tester.widget<TextField>(field).controller!.text,
+          host.suggestedTitle,
+        );
+        await snapshot('save-error');
+        host.failMutation = false;
+        host.mutationDelay = null;
+        await tester.tap(save);
+        await tester.pumpAndSettle();
+        expect(field, findsNothing);
+        expect(chat.title, host.suggestedTitle);
+        expect(identical(chat.reading, reading), isTrue);
+        expect(chat.composer.observation.text, 'Keep my draft');
+        expect(tester.getRect(header), headerRect);
+        expect(host.updates.last.$3['profile'], 'personal');
+        await snapshot('renamed');
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
+  test(
+    'Unsubmitted chat rename uses queued stock session title acknowledgement',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      final issued = browser.chatActionsFor(chat.key);
+      addTearDown(issued.dispose);
+      expect(
+        await issued.perform(
+          BrowserAction.rename,
+          name: 'Before the first message',
+        ),
+        isTrue,
+      );
+      expect(chat.title, 'Before the first message');
+      expect(host.updates, isEmpty);
+    },
+  );
 
   test(
     'opening an unread chat marks every loaded owner row read after history',
@@ -1204,4 +1569,11 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+}
+
+class _RenameActionsFixture extends ProfileActionsFixture {
+  List<Map<String, dynamic>> titleHistory = [];
+  @override
+  List<Map<String, dynamic>> historyRows(String profile, String id) =>
+      id == 'newest' ? titleHistory : super.historyRows(profile, id);
 }

@@ -4570,6 +4570,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
           canDispatch: () =>
               !_closed && identical(current, resource) && canDispatch(),
         );
+      } else if (changes.length == 1 &&
+          changes.containsKey('title') &&
+          chat?._replaceableUnsubmittedRuntime == true) {
+        if (!identical(current, resource) || !canDispatch()) {
+          throw StateError('Profile changed. Open the chat editor again.');
+        }
+        final result = await resource.gateway.call('session.title', {
+          'session_id': chat!.runtime.runtimeId,
+          'title': changes['title'],
+        });
+        if (result['session_key'] != id || result['title'] is! String) {
+          throw const FormatException('Invalid chat title acknowledgement');
+        }
+        updated = {'title': result['title']};
       } else {
         final result = await resource.gateway.updateSession(
           id,

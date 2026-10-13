@@ -25,6 +25,10 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
   bool acknowledgeClose = true;
   bool foreignActive = false;
   Completer<void>? mutationDelay;
+  Completer<void>? titleDelay;
+  String? suggestedTitle = 'Conversation list improvements';
+  bool failTitle = false;
+  final titleRequests = <Map<String, dynamic>>[];
   @override
   List<Map<String, dynamic>> sessions(String profile) => [
     for (final row in super.sessions(profile))
@@ -62,6 +66,22 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
         return base.read(endpoint, query);
       },
       rpc: (method, params) async {
+        if (method == 'llm.oneshot') {
+          titleRequests.add(Map.of(params));
+          await titleDelay?.future;
+          if (failTitle) {
+            throw StateError('Title generation failed. Try again.');
+          }
+          return {'text': suggestedTitle};
+        }
+        if (method == 'session.title') {
+          final id = active ? activeSessionKey : 'new-chat';
+          final title = params['title'];
+          changes.putIfAbsent(scope.profileName, () => {})[id] = {
+            'title': title,
+          };
+          return {'session_key': id, 'title': title, 'pending': !active};
+        }
         if (method == 'session.workspace.move') {
           moves.add((scope.profileName, params));
           await mutationDelay?.future;
