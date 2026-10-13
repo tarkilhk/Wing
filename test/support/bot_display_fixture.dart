@@ -1,3 +1,4 @@
+import 'package:wing/core/services/group_observations.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -94,6 +95,7 @@ class DisplayFixture {
     'lease': lease,
   };
   late final repository = BotsRepository(
+    groupObservations: GroupObservations(roster.repository.scope),
     scope: roster.repository.scope,
     instance: 'Home server',
     retain: () {

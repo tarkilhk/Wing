@@ -1,3 +1,4 @@
+import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
@@ -1030,7 +1031,7 @@ void main() {
       ConversationActivityKind kind = ConversationActivityKind.reply,
     }) async {
       activity.value = ChatNoticeActivity(
-        key: source.entries[index].key.chat!,
+        key: source.entries[index].key,
         kind: kind,
         identity: 'pond-$sequence',
         sequence: sequence,
@@ -3296,13 +3297,54 @@ void main() {
         },
       );
 
+      testWidgets('group reply cue paints in ${brightness.name}', (
+        tester,
+      ) async {
+        final room = RecentConversationEntry.group(
+          BotGroup(
+            scope: source.entries[0].key.chat!.workspace,
+            instance: 'Host',
+            id: 'room-1',
+            name: 'Discussion',
+            members: const [],
+            observationComplete: true,
+          ),
+          unread: true,
+        );
+        source.entries[1] = room;
+        session.dispose();
+        session = RecentConversationSession.fromRecents(
+          entries: source.entries,
+          source: source,
+          activity: activity,
+        );
+        final frame = GlobalKey();
+        await mount(tester, brightness: brightness, frame: frame);
+        activity.value = ChatNoticeActivity(
+          key: room.key,
+          kind: ConversationActivityKind.reply,
+          identity: 'answer:2',
+          sequence: 1,
+        );
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 900));
+        expect((await nudgePixels(tester)).alpha, greaterThan(0));
+        await _captureCurrent(
+          tester,
+          frame,
+          'group-arrival-cue-${brightness.name}',
+        );
+        expect(source.opens, isEmpty);
+        expect(tester.takeException(), isNull);
+      });
+
       testWidgets('neutral and amber cue paint in ${brightness.name}', (
         tester,
       ) async {
         await mount(tester, brightness: brightness);
         for (final kind in ConversationActivityKind.values) {
           activity.value = ChatNoticeActivity(
-            key: source.entries[1].key.chat!,
+            key: source.entries[1].key,
             kind: kind,
             identity: kind.name,
             sequence: kind.index + 1,
@@ -4082,7 +4124,7 @@ void main() {
           await tester.pump();
           final other = visit.entries.last.key;
           activity.value = ChatNoticeActivity(
-            key: other.chat!,
+            key: other,
             kind: ConversationActivityKind.reply,
             identity: 'background',
             sequence: 1,
@@ -4109,7 +4151,7 @@ void main() {
             findsNothing,
           );
           activity.value = ChatNoticeActivity(
-            key: other.chat!,
+            key: other,
             kind: ConversationActivityKind.reply,
             identity: 'fresh',
             sequence: 2,
@@ -4220,6 +4262,9 @@ void main() {
                   return BotsSession(
                     (_) async => [
                       BotsRepository(
+                        groupObservations: GroupObservations(
+                          controller.current!.scope,
+                        ),
                         scope: controller.current!.scope,
                         instance: 'Host',
                         read: bots.read,

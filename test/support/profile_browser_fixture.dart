@@ -1,3 +1,4 @@
+import 'package:wing/core/services/group_observations.dart';
 import 'dart:async';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -38,6 +39,7 @@ class ProfileBrowserFixture {
     final keys = conversations.toList();
     final workspace = keys.first.workspace;
     final source = BotsRepository(
+      groupObservations: GroupObservations(workspace),
       scope: workspace,
       instance: 'Test',
       savedHistory: (_, _, _) async =>

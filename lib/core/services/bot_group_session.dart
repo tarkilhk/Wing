@@ -354,6 +354,29 @@ class BotGroupSession extends ChangeNotifier {
     }
   }
 
+  BotGroup? _retainedMessagesFor;
+  int? _retainedMessagesThrough;
+
+  /// The catalog supplies its exact current projection after facts publication.
+  /// Replayed messages can seed a later route; this never advances read receipts
+  /// or lets a cached transcript establish the replay cursor/runtime authority.
+  void retainRecentMessages(BotGroup observed) {
+    if (_closed || observed.key != group.key || !observed.observationComplete) {
+      return;
+    }
+    final coverage = observed.messageCoverageSequence;
+    if (coverage == null || coverage != _cursor) return;
+    final cache = groupMessages;
+    if (cache == null ||
+        identical(_retainedMessagesFor, observed) &&
+            _retainedMessagesThrough == _cursor) {
+      return;
+    }
+    cache.record(observed, events, complete: true);
+    _retainedMessagesFor = observed;
+    _retainedMessagesThrough = _cursor;
+  }
+
   /// Passive tail read for card previews. Never acquires visibility or receipts.
   Future<List<BotGroupEvent>> readRecentMessages({
     required int limit,
@@ -403,18 +426,26 @@ class BotGroupSession extends ChangeNotifier {
       final nextRuntime = await repository.groupRuntime(group);
       if (_closed || _capturing || revision != _recoveryRevision) return;
       _runtime = nextRuntime;
-      do {
-        final page = await repository.groupLog(group, since: _cursor);
-        if (_closed || _capturing || revision != _recoveryRevision) return;
-        if (page.hasMore && page.cursor == _cursor) {
-          throw StateError('Group log did not advance');
+      final observation = repository.groupObservations.beginRead(group);
+      try {
+        do {
+          final page = await repository.groupLog(group, since: _cursor);
+          if (_closed || _capturing || revision != _recoveryRevision) return;
+          if (page.hasMore && page.cursor == _cursor) {
+            throw StateError('Group log did not advance');
+          }
+          observation.add(page, since: _cursor);
+          for (final event in page.events) {
+            _events[event.sequence] = event;
+          }
+          _cursor = page.cursor;
+          if (!page.hasMore) break;
+        } while (!_closed && _visible);
+      } finally {
+        if (!_closed && !_capturing && revision == _recoveryRevision) {
+          observation.publish();
         }
-        for (final event in page.events) {
-          _events[event.sequence] = event;
-        }
-        _cursor = page.cursor;
-        if (!page.hasMore) break;
-      } while (!_closed && _visible);
+      }
       _readError = null;
     } catch (_) {
       if (!_closed && revision == _recoveryRevision) {

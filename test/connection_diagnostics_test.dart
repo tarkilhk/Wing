@@ -1,3 +1,4 @@
+import 'package:wing/core/services/group_observations.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -44,6 +45,13 @@ BotsRepository _imageRepository(ScopedRpc rpc) => BotsRepository.forServer(
         currentName: null,
         activeName: null,
       ),
+    ),
+  ),
+  groupObservations: GroupObservations(
+    WorkspaceScope(
+      connectionId: 'host',
+      connectionIdentity: 'instance-1',
+      profileName: 'default',
     ),
   ),
 );

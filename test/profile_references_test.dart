@@ -1,3 +1,4 @@
+import 'package:wing/core/services/group_observations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:io';
 import 'dart:async';
@@ -146,6 +147,13 @@ void main() {
     botFixture.profiles[1]['ui_meta']['hermes-bots']['shape'] = 'hexagon';
     botFixture.profiles[1]['ui_meta']['hermes-bots']['color'] = '#8b5cf6';
     botRepository = BotsRepository(
+      groupObservations: GroupObservations(
+        WorkspaceScope(
+          connectionId: chat.key.workspace.connectionId,
+          connectionIdentity: chat.key.workspace.connectionIdentity,
+          profileName: 'default',
+        ),
+      ),
       scope: WorkspaceScope(
         connectionId: chat.key.workspace.connectionId,
         connectionIdentity: chat.key.workspace.connectionIdentity,

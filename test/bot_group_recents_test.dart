@@ -56,6 +56,9 @@ void main() {
       expect(group.lastMessageSequence, 2);
       expect(group.lastAnswerSequence, 1);
       expect(group.preview, 'event 2');
+      final facts = fixture.repository.groupObservations.forRoom(group.id)!;
+      expect(facts.coverage, 150);
+      expect(facts.project(group).observationComplete, isTrue);
       final pinned = group.withPinned(true);
       expect(pinned.lastMessageAt, group.lastMessageAt);
       expect(pinned.lastAnswerSequence, 1);
@@ -159,6 +162,34 @@ void main() {
     await session.acknowledgeVisibleMessages(1);
     expect(reads.unread(group), isFalse);
   });
+  test(
+    'an older preview cannot erase an answer already admitted by its notification',
+    () async {
+      final fixture = BotsFixture();
+      final group = (await readFixtureGroups(
+        fixture.repository,
+        groupMessages: null,
+      )).single;
+      final notified = BotGroup(
+        scope: group.scope,
+        instance: group.instance,
+        id: group.id,
+        name: group.name,
+        members: group.members,
+        observationComplete: false,
+        latestSequence: 8,
+        lastAnswerSequence: 8,
+      );
+      final reads = BotGroupReadState();
+      addTearDown(reads.dispose);
+      await reads.load();
+      await reads.acknowledge(group, 3);
+      final merged = notified.withMessageObservation(group);
+      expect(merged.lastAnswerSequence, 8);
+      expect(reads.unread(merged), isTrue);
+      expect(reads.sequence(merged), 3);
+    },
+  );
   test(
     'retired passive tail stops paging without receipts or commands',
     () async {

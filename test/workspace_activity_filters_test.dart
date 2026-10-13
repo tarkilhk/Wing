@@ -1,3 +1,4 @@
+import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/services/workspace_recents_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'package:wing/core/widgets/bot_avatar.dart';
@@ -224,6 +225,7 @@ void main() {
     bots = BotsSession(
       (_) async => [
         BotsRepository(
+          groupObservations: GroupObservations(controller.current!.scope),
           scope: controller.current!.scope,
           instance: 'Host',
           read: fixture.read,

@@ -1,3 +1,5 @@
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/group_observations.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/bots.dart';
@@ -79,7 +81,16 @@ void main() {
           },
         };
       };
-      final repository = BotsRepository.forServer(server.server);
+      final repository = BotsRepository.forServer(
+        server.server,
+        groupObservations: GroupObservations(
+          WorkspaceScope(
+            connectionId: (server.server).connectionId,
+            connectionIdentity: (server.server).connectionIdentity,
+            profileName: 'default',
+          ),
+        ),
+      );
       final ownedGroup = BotGroup(
         observationComplete: true,
         scope: repository.scope,

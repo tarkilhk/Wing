@@ -16,6 +16,7 @@ import 'hermes_voice.dart';
 import '../models/bot_display.dart';
 import 'recent_conversation_snapshots.dart';
 import 'server_connection_status.dart';
+import 'group_observations.dart';
 
 typedef BotsRead =
     Future<Map<String, dynamic>> Function(
@@ -56,6 +57,7 @@ class BotsRepository {
   BotsRepository({
     required this.scope,
     required this.instance,
+    required this.groupObservations,
     required this._read,
     required this._command,
     required this._ownership,
@@ -71,6 +73,7 @@ class BotsRepository {
 
   factory BotsRepository.forServer(
     AdministrationRepository server, {
+    required GroupObservations groupObservations,
     bool Function()? isCurrent,
   }) => BotsRepository(
     scope: WorkspaceScope(
@@ -79,6 +82,7 @@ class BotsRepository {
       profileName: 'default',
     ),
     instance: server.connectionLabel,
+    groupObservations: groupObservations,
     server: server,
     displayConnect: server.displayConnect,
     retain: server.retain,
@@ -142,6 +146,7 @@ class BotsRepository {
   static void _noop() {}
   final WorkspaceScope scope;
   final String instance;
+  final GroupObservations groupObservations;
   final AdministrationRepository? server;
   ServerConnectionStatus? get connectionStatus =>
       server?.gateway(scope.profileName).connectionStatus;
@@ -798,34 +803,20 @@ class BotsRepository {
       final result = await _read('default', 'groups.state', {
         'room_id': group.id,
       });
-      final room = _map(result['room']);
-      final current = _group(room);
-      final latest = room['latest_seq'];
-      if (current.id != group.id || latest is! int || latest < 0) {
-        throw const FormatException('Invalid group state owner or sequence');
+      final decoded = decodeGroupState(scope, instance, group.id, result);
+      if (decoded.room == null) {
+        return BotGroupState(room: group, roomAvailable: false);
       }
-      try {
-        final status = _map(result['driver_status']);
-        if (status['working'] is! bool || status['blocked'] is! bool) {
-          throw const FormatException('Invalid group runtime status');
-        }
-        return BotGroupState(
-          room: current,
-          roomAvailable: true,
-          latestSequence: latest,
-          runtimeAvailable: true,
-          working: status['working'] == true,
-          blocked:
-              status['blocked'] == true ||
-              _rows(status['pending_actions']).isNotEmpty,
-        );
-      } catch (_) {
-        return BotGroupState(
-          room: current,
-          roomAvailable: true,
-          latestSequence: latest,
-        );
-      }
+      final runtime = decoded.runtime;
+      return BotGroupState(
+        room: decoded.room!,
+        roomAvailable: true,
+        latestSequence: decoded.latestSequence,
+        runtimeAvailable: runtime != null,
+        working: runtime?.working ?? false,
+        blocked:
+            runtime != null && (runtime.blocked || runtime.actions.isNotEmpty),
+      );
     } catch (_) {
       return BotGroupState(room: group, roomAvailable: false);
     }
@@ -873,21 +864,25 @@ class BotsRepository {
     final recentMessages = <BotGroupEvent>[];
     BotGroupEvent? message, answer;
     var end = latest;
+    final observation = groupObservations.beginRead(current);
     try {
       // Scan backwards until both newest message and bot reply are established.
       while (end > 0 && (message == null || answer == null)) {
         final start = (end - 100).clamp(0, end);
-        final events = await groupLogWindow(
+        final events = await _readGroupLogWindow(
           current,
           start: start,
           end: end,
           canRead: canPublish,
+          observation: observation,
         );
         recentMessages.insertAll(0, events.where((e) => e.isMessage));
         for (final event
             in events.where((e) => e.isMessage).toList().reversed) {
           message ??= event;
-          if (event.kind == 'message.member') answer ??= event;
+          if (event.kind == 'message.member' && event.text.trim().isNotEmpty) {
+            answer ??= event;
+          }
         }
         end = start;
       }
@@ -918,10 +913,19 @@ class BotsRepository {
       return updated;
     } catch (_) {
       return unavailable();
+    } finally {
+      if (canPublish()) observation.publish();
     }
   }
 
-  BotGroup _group(Map<String, dynamic> row) => BotGroup(
+  BotGroup _group(Map<String, dynamic> row) =>
+      decodeGroup(scope, instance, row);
+
+  static BotGroup decodeGroup(
+    WorkspaceScope scope,
+    String instance,
+    Map<String, dynamic> row,
+  ) => BotGroup(
     scope: scope,
     instance: instance,
     id: _requiredText(row['room_id']),
@@ -1039,8 +1043,19 @@ class BotsRepository {
       'since_seq': since,
       'limit': 100,
     });
+    return decodeGroupLog(group.id, result, since: since);
+  }
+
+  static BotGroupPage decodeGroupLog(
+    String roomId,
+    Map<String, dynamic> result, {
+    required int since,
+  }) {
     final cursor = result['cursor'];
-    if (cursor is! int || cursor < since || result['has_more'] is! bool) {
+    if (cursor is! int ||
+        cursor < since ||
+        result['has_more'] is! bool ||
+        (result['has_more'] == true && cursor == since)) {
       throw const FormatException('Invalid group log cursor');
     }
     final authority = _map(result['authority']);
@@ -1054,7 +1069,7 @@ class BotsRepository {
     return BotGroupPage(
       _rows(result['events']).map((row) {
         final seq = row['seq'];
-        if (row['room_id'] != group.id ||
+        if (row['room_id'] != roomId ||
             seq is! int ||
             seq <= previous ||
             seq > cursor) {
@@ -1063,6 +1078,11 @@ class BotsRepository {
         previous = seq;
         final actor = _map(row['actor']);
         final payload = _map(row['payload']);
+        final kind = _requiredText(row['kind']);
+        if ((kind == 'message.member' || kind == 'message.user') &&
+            payload['text'] is! String) {
+          throw const FormatException('Invalid group message text');
+        }
         final created = row['created_at'];
         if (created is! num ||
             !created.isFinite ||
@@ -1071,7 +1091,8 @@ class BotsRepository {
         }
         return BotGroupEvent(
           sequence: seq,
-          kind: _requiredText(row['kind']),
+          eventId: _requiredText(row['event_id']),
+          kind: kind,
           actor: _text(actor['profile']).isEmpty
               ? _text(actor['kind'])
               : _text(actor['profile']),
@@ -1085,6 +1106,9 @@ class BotsRepository {
       }),
       cursor,
       result['has_more'] as bool,
+      latestSequence: latest,
+      gatewayId: _requiredText(authority['gateway_id']),
+      epoch: epoch,
     );
   }
 
@@ -1095,6 +1119,27 @@ class BotsRepository {
     required int start,
     required int end,
     required bool Function() canRead,
+  }) async {
+    final observation = groupObservations.beginRead(group);
+    try {
+      return await _readGroupLogWindow(
+        group,
+        start: start,
+        end: end,
+        canRead: canRead,
+        observation: observation,
+      );
+    } finally {
+      if (canRead()) observation.publish();
+    }
+  }
+
+  Future<List<BotGroupEvent>> _readGroupLogWindow(
+    BotGroup group, {
+    required int start,
+    required int end,
+    required bool Function() canRead,
+    required GroupObservationRead observation,
   }) async {
     _ownsGroup(group);
     if (start < 0 || end <= start || end - start > 100) {
@@ -1109,6 +1154,18 @@ class BotsRepository {
       if (page.cursor <= cursor || (!page.hasMore && page.cursor < end)) {
         throw const FormatException('Group log window is incomplete');
       }
+      final covered = page.cursor < end ? page.cursor : end;
+      observation.add(
+        BotGroupPage(
+          page.events.where((event) => event.sequence <= covered),
+          covered,
+          false,
+          latestSequence: page.latestSequence,
+          gatewayId: page.gatewayId,
+          epoch: page.epoch,
+        ),
+        since: cursor,
+      );
       events.addAll(page.events.where((event) => event.sequence <= end));
       cursor = page.cursor;
     }
@@ -1196,10 +1253,51 @@ class BotsRepository {
     final result = await _read('default', 'groups.state', {
       'room_id': group.id,
     });
-    if (_map(result['room'])['room_id'] != group.id) {
+    final decoded = decodeGroupState(scope, instance, group.id, result);
+    final runtime = decoded.runtime;
+    if (runtime == null) {
+      throw const FormatException('Group runtime unavailable');
+    }
+    return runtime;
+  }
+
+  static ({BotGroup? room, int latestSequence, BotGroupRuntime? runtime})
+  decodeGroupState(
+    WorkspaceScope scope,
+    String instance,
+    String roomId,
+    Map<String, dynamic> result,
+  ) {
+    final row = _map(result['room']);
+    if (row['room_id'] != roomId) {
       throw const FormatException('Wrong group state owner');
     }
+    if (row['disbanded_at'] != null) {
+      final value = row['disbanded_at'];
+      if (value is! num || !value.isFinite) {
+        throw const FormatException('Invalid group disband receipt');
+      }
+      return (room: null, latestSequence: 0, runtime: null);
+    }
+    final room = decodeGroup(scope, instance, row);
+    final latest = row['latest_seq'];
+    if (latest is! int || latest < 0) {
+      throw const FormatException('Invalid group sequence');
+    }
+    BotGroupRuntime? runtime;
+    try {
+      runtime = _decodeGroupRuntime(result);
+    } on FormatException {
+      /* Room facts remain usable. */
+    }
+    return (room: room, latestSequence: latest, runtime: runtime);
+  }
+
+  static BotGroupRuntime _decodeGroupRuntime(Map<String, dynamic> result) {
     final status = _map(result['driver_status']);
+    if (status['working'] is! bool || status['blocked'] is! bool) {
+      throw const FormatException('Invalid group runtime status');
+    }
     final actions = <BotGroupAction>[];
     for (final action in _rows(status['pending_actions'])) {
       final kind = _requiredText(action['kind']);

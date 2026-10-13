@@ -1,3 +1,4 @@
+import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/services/bots_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -43,8 +44,17 @@ class GroupHost {
     int latest = 0,
   }) {
     states[id] = {
-      'room': {'room_id': id, 'name': 'Group $id', 'latest_seq': latest},
-      'driver_status': {'working': working, 'blocked': blocked},
+      'room': {
+        'room_id': id,
+        'name': 'Group $id',
+        'latest_seq': latest,
+        'members': <Map<String, dynamic>>[],
+      },
+      'driver_status': {
+        'working': working,
+        'blocked': blocked,
+        'pending_actions': <Map<String, dynamic>>[],
+      },
     };
   }
 
@@ -58,10 +68,13 @@ class GroupHost {
     logs.putIfAbsent(id, () => []).add({
       'room_id': id,
       'seq': seq,
+      'created_at': 1791936000.0 + seq,
+      'actor': {'id': 'member', 'kind': 'member', 'display_name': 'Member'},
+      'event_id': clientEventId == null
+          ? 'event-$seq'
+          : BotsRepository.groupUserEventId(clientEventId),
       'kind': kind,
       'payload': {'text': text},
-      if (clientEventId != null)
-        'event_id': BotsRepository.groupUserEventId(clientEventId),
     });
     states[id]!['room']['latest_seq'] = seq;
   }
@@ -120,6 +133,7 @@ void main() {
   var postsStarted = 0;
   GroupNotificationSession create({WorkspaceScope? key}) =>
       GroupNotificationSession(
+        observations: GroupObservations(key ?? scope),
         scope: key ?? scope,
         instance: 'Host',
         preferences: prefs,
@@ -158,6 +172,47 @@ void main() {
     watch.dispose();
     app.dispose();
   });
+
+  test(
+    'already-read replies publish timestamp and text without notifications or cues',
+    () async {
+      await watch.activate();
+      await prefs.setString(
+        'bots_group_read_sequences',
+        jsonEncode({'owner/one': 1}),
+      );
+      host.event('one', 1, 'message.member', 'Read in discussion');
+      await watch.refresh();
+      final observed = watch.observations.forRoom('one')!;
+      expect(observed.message!.text, 'Read in discussion');
+      expect(observed.message!.timestamp.millisecondsSinceEpoch, 1791936001000);
+      expect(observed.answer!.sequence, 1);
+      expect(observed.gatewayId, 'fixture');
+      expect(observed.epoch, 1);
+      expect(sink.shown, isEmpty);
+      expect(notices.activity.value, isNull);
+    },
+  );
+
+  test(
+    'malformed member text cannot advance delivery cursor or suppress replay',
+    () async {
+      await watch.activate();
+      host.event('one', 1, 'message.member', 'Will recover');
+      host.logs['one']!.single['payload'] = {'text': null};
+      await watch.refresh();
+      expect(watch.hasActiveGroups, isTrue);
+      expect(sink.shown, isEmpty);
+      expect(watch.observations.forRoom('one')!.answer, isNull);
+      host.logs['one']!.single['payload'] = {'text': 'Recovered answer'};
+      await watch.refresh();
+      expect(sink.shown.single.body, contains('Recovered answer'));
+      expect(
+        watch.observations.forRoom('one')!.answer!.text,
+        'Recovered answer',
+      );
+    },
+  );
 
   test(
     'failed first-send journal admission releases its lease before physical dispatch',

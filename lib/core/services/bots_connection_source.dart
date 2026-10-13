@@ -24,6 +24,7 @@ BotsSession savedBotsSession(
       sources.add(
         BotsRepository.forServer(
           controller.healthSession().server,
+          groupObservations: controller.groupObservations,
           isCurrent: () {
             try {
               manager.accessFor(controller.connection);

@@ -168,7 +168,7 @@ final class ChatNoticeActivity {
     required this.identity,
     required this.sequence,
   });
-  final ProfileSessionKey key;
+  final RecentConversationKey key;
   final ConversationActivityKind kind;
   final String identity;
   final int sequence;
@@ -181,7 +181,7 @@ final class ConversationNudge {
     required this.kind,
     required this.sequence,
   });
-  final ProfileSessionKey key;
+  final RecentConversationKey key;
   final ConversationDirection direction;
   final ConversationActivityKind kind;
   final int sequence;

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/services/bots_preferences.dart';
 import 'package:wing/core/services/bot_group_read_state.dart';
 import 'dart:async';
@@ -48,6 +49,442 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     groupPreferences = await BotsPreferences.load();
   });
+
+  test(
+    'group arrivals overtake held previews without clearing unread or starting duplicate reads',
+    () async {
+      var now = DateTime(2026, 10, 14);
+      final fixture = BotsFixture();
+      void event(int sequence, String kind) => fixture.events.add({
+        'room_id': 'room-1',
+        'seq': sequence,
+        'kind': kind,
+        'created_at': now.millisecondsSinceEpoch / 1000 + sequence,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Reply $sequence'},
+      });
+      event(1, 'message.member');
+      final bots = BotsSession(
+        (_) async => [fixture.repository],
+        now: () => now,
+      );
+      var disposed = false;
+      addTearDown(() {
+        if (!disposed) bots.dispose();
+      });
+      await bots.refresh();
+      final group = bots.observedGroups.single;
+      await bots.groupReads.acknowledge(group, 1);
+      event(2, 'task.completed');
+      final release = Completer<void>(), started = Completer<void>();
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+      });
+      var logs = 0;
+      fixture.readHook = (_, method, params) async {
+        if (method != 'groups.log') return null;
+        logs++;
+        if (logs != 1) return null;
+        final captured = List<Map<String, dynamic>>.of(fixture.events);
+        started.complete();
+        await release.future;
+        return {
+          'events': captured,
+          'cursor': 2,
+          'latest_seq': 2,
+          'has_more': false,
+          'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+        };
+      };
+      now = now.add(const Duration(seconds: 31));
+      final refresh = bots.refresh();
+      await started.future;
+      for (final sequence in [3, 4]) {
+        event(sequence, 'message.member');
+        fixture.observeGroupMessages(since: sequence - 1);
+      }
+      expect(bots.groupReads.unread(bots.observedGroups.single), isTrue);
+      expect(
+        logs,
+        1,
+        reason: 'Both arrivals join the already admitted preview',
+      );
+      release.complete();
+      await refresh;
+      expect(bots.groupReads.unread(bots.observedGroups.single), isTrue);
+      for (
+        var i = 0;
+        i < 30 && bots.observedGroups.single.lastMessageSequence != 4;
+        i++
+      ) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(bots.observedGroups.single.lastMessageSequence, 4);
+      expect(bots.observedGroups.single.lastAnswerSequence, 4);
+      expect(bots.groupReads.sequence(group), 1);
+      expect(
+        logs,
+        1,
+        reason: 'Complete observations need no redundant preview',
+      );
+      expect(fixture.commands, isEmpty);
+      final readCount = logs;
+      final other = BotsFixture();
+      other.events.add({...fixture.events.last, 'seq': 5});
+      other.observeGroupMessages();
+      await Future<void>.delayed(Duration.zero);
+      expect(logs, readCount);
+      bots.dispose();
+      disposed = true;
+      event(6, 'message.member');
+      fixture.observeGroupMessages();
+      await Future<void>.delayed(Duration.zero);
+      expect(logs, readCount);
+    },
+  );
+
+  test(
+    'old group arrival admits its real message before follow-up reads',
+    () async {
+      final now = DateTime(2026, 10, 14);
+      final fixture = BotsFixture();
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at':
+            now.subtract(const Duration(days: 2)).millisecondsSinceEpoch / 1000,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Old answer'},
+      });
+      final bots = BotsSession(
+        (_) async => [fixture.repository],
+        now: () => now,
+      );
+      addTearDown(bots.dispose);
+      await bots.refresh();
+      final room = bots.observedGroups.single;
+      await bots.groupReads.acknowledge(room, 1);
+      fixture.readHook = (_, method, _) async {
+        if (method.startsWith('groups.')) {
+          throw StateError('Follow-up unavailable');
+        }
+        return null;
+      };
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 2,
+        'kind': 'message.member',
+        'created_at': now.millisecondsSinceEpoch / 1000,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Fresh answer'},
+      });
+      fixture.observeGroupMessages(since: 1);
+      expect(bots.observedGroups.single.lastMessageAt, now);
+      expect(bots.observedGroups.single.preview, 'Fresh answer');
+      expect(bots.groupReads.unread(bots.observedGroups.single), isTrue);
+    },
+  );
+
+  test(
+    'unknown and late-subscribed rooms borrow complete observations without preview I/O',
+    () async {
+      final fixture = BotsFixture();
+      final bots = BotsSession((_) async => [fixture.repository]);
+      addTearDown(bots.dispose);
+      fixture.readHook = (_, method, _) async => method == 'groups.list'
+          ? {'rooms': <Map<String, dynamic>>[], 'next_offset': null}
+          : null;
+      await bots.refresh();
+      expect(bots.observedGroups, isEmpty);
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': 1791936000.0,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Discovered reply'},
+      });
+      var reads = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method.startsWith('groups.')) reads++;
+        return null;
+      };
+      fixture.observeGroupMessages();
+      await Future<void>.delayed(Duration.zero);
+      expect(bots.observedGroups.single.preview, 'Discovered reply');
+      expect(reads, 0);
+      final later = BotsSession((_) async => [fixture.repository]);
+      addTearDown(later.dispose);
+      await later.refresh();
+      expect(later.observedGroups.single.preview, 'Discovered reply');
+      expect(later.groupReads.unread(later.observedGroups.single), isTrue);
+    },
+  );
+
+  test(
+    'complete arrival during unrelated mutation updates facts with no follow-up read',
+    () async {
+      final fixture = BotsFixture();
+      final bots = BotsSession((_) async => [fixture.repository]);
+      addTearDown(bots.dispose);
+      await bots.refresh();
+      final release = Completer<void>(), started = Completer<void>();
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+      });
+      fixture.beforeCommand = () async {
+        started.complete();
+        await release.future;
+      };
+      final mutation = bots.setPinned(
+        bots.state.bots.first,
+        canUse: () => true,
+      );
+      await started.future;
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': 1791936000.0,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'During pin save'},
+      });
+      var logs = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method == 'groups.log') logs++;
+        return null;
+      };
+      fixture.observeGroupMessages();
+      expect(bots.observedGroups.single.preview, 'During pin save');
+      expect(bots.groupReads.unread(bots.observedGroups.single), isTrue);
+      release.complete();
+      await mutation;
+      await Future<void>.delayed(Duration.zero);
+      expect(logs, 0);
+    },
+  );
+
+  test(
+    'incomplete discovery during mutation retains targeted read demand',
+    () async {
+      final fixture = BotsFixture();
+      final bots = BotsSession((_) async => [fixture.repository]);
+      addTearDown(bots.dispose);
+      await bots.refresh();
+      final release = Completer<void>(), started = Completer<void>();
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+      });
+      fixture.beforeCommand = () async {
+        started.complete();
+        await release.future;
+      };
+      final mutation = bots.setPinned(
+        bots.state.bots.first,
+        canUse: () => true,
+      );
+      await started.future;
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': 1791936000.0,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Read after pin save'},
+      });
+      fixture.repository.groupObservations.discover(
+        bots.observedGroups.single,
+        1,
+      );
+      release.complete();
+      await mutation;
+      for (
+        var i = 0;
+        i < 30 && bots.observedGroups.single.lastMessageSequence != 1;
+        i++
+      ) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(bots.observedGroups.single.preview, 'Read after pin save');
+    },
+  );
+
+  test(
+    'live multi-page replay publishes canonical facts without competing preview reads',
+    () async {
+      final fixture = BotsFixture();
+      final bots = BotsSession((_) async => [fixture.repository]);
+      addTearDown(bots.dispose);
+      await bots.refresh();
+      final room = bots.observedGroups.single;
+      final discussion = bots.openGroup(room);
+      addTearDown(discussion.dispose);
+      for (var sequence = 1; sequence <= 101; sequence++) {
+        fixture.events.add({
+          'room_id': 'room-1',
+          'seq': sequence,
+          'kind': 'message.member',
+          'created_at': 1791936000.0 + sequence,
+          'actor': {'kind': 'member', 'id': 'atlas'},
+          'payload': {'text': 'Live $sequence'},
+        });
+      }
+      var logs = 0;
+      final started = Completer<void>(), release = Completer<void>();
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+      });
+      fixture.readHook = (_, method, params) async {
+        if (method != 'groups.log') return null;
+        logs++;
+        if (params['since_seq'] == 100) {
+          started.complete();
+          await release.future;
+        }
+        return null;
+      };
+      discussion.setVisible(true);
+      final reading = discussion.refresh();
+      await started.future;
+      await Future<void>.delayed(Duration.zero);
+      expect(logs, 2);
+      release.complete();
+      await reading;
+      await Future<void>.delayed(Duration.zero);
+      expect(bots.observedGroups.single.preview, 'Live 101');
+      expect(bots.observedGroups.single.lastAnswerSequence, 101);
+      expect(logs, 2);
+      expect(bots.groupReads.sequence(room), 0);
+    },
+  );
+
+  test(
+    'observation subscriptions rebind and retire without leaking old owners',
+    () async {
+      final first = BotsFixture(), replacement = BotsFixture();
+      var active = first;
+      final bots = BotsSession((_) async => [active.repository]);
+      await bots.refresh();
+      active = replacement;
+      await bots.refresh();
+      final next = bots;
+      addTearDown(next.dispose);
+      first.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': 1791936000.0,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Retired source'},
+      });
+      first.observeGroupMessages();
+      expect(next.observedGroups.single.preview, isEmpty);
+      replacement.events.add({
+        ...first.events.single,
+        'payload': {'text': 'Current source'},
+      });
+      replacement.observeGroupMessages();
+      expect(next.observedGroups.single.preview, 'Current source');
+      replacement.repository.groupObservations.dispose();
+      replacement.observeGroupMessages();
+      expect(next.observedGroups.single.preview, 'Current source');
+    },
+  );
+
+  test(
+    'newer incomplete observation survives an older targeted read',
+    () async {
+      final fixture = BotsFixture();
+      final bots = BotsSession((_) async => [fixture.repository]);
+      addTearDown(bots.dispose);
+      await bots.refresh();
+      final room = bots.observedGroups.single;
+      void event(int sequence, String kind, String text) => fixture.events.add({
+        'room_id': 'room-1',
+        'seq': sequence,
+        'kind': kind,
+        'created_at': 1791936000.0 + sequence,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': text},
+      });
+      event(1, 'message.user', 'First prompt');
+      final started = Completer<void>(), release = Completer<void>();
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+      });
+      var logs = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method != 'groups.log') return null;
+        logs++;
+        if (logs != 1) return null;
+        final captured = List<Map<String, dynamic>>.of(fixture.events);
+        started.complete();
+        await release.future;
+        return {
+          'events': captured,
+          'cursor': 1,
+          'latest_seq': 1,
+          'has_more': false,
+          'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+        };
+      };
+      fixture.repository.groupObservations.discover(room, 1);
+      await started.future;
+      event(2, 'task.completed', 'Work');
+      event(3, 'message.user', 'Newest prompt');
+      fixture.observeGroupMessages(since: 2);
+      release.complete();
+      for (
+        var i = 0;
+        i < 60 && bots.observedGroups.single.messageCoverageSequence != 3;
+        i++
+      ) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(bots.observedGroups.single.preview, 'Newest prompt');
+      expect(bots.observedGroups.single.messageCoverageSequence, 3);
+      expect(bots.observedGroups.single.lastAnswerSequence, 0);
+      expect(logs, 2);
+    },
+  );
+
+  test(
+    'held catalog preserves a room discovered after that catalog began',
+    () async {
+      final fixture = BotsFixture();
+      final bots = BotsSession((_) async => [fixture.repository]);
+      addTearDown(bots.dispose);
+      final started = Completer<void>(), release = Completer<void>();
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+      });
+      fixture.readHook = (_, method, _) async {
+        if (method != 'groups.list') return null;
+        started.complete();
+        await release.future;
+        return {'rooms': <Map<String, dynamic>>[], 'next_offset': null};
+      };
+      final reading = bots.refresh();
+      await started.future;
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': 1791936000.0,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Newly discovered'},
+      });
+      fixture.observeGroupMessages();
+      release.complete();
+      await reading;
+      expect(bots.observedGroups.single.preview, 'Newly discovered');
+      expect(
+        fixture.repository.groupObservations.forRoom('room-1')!.message!.text,
+        'Newly discovered',
+      );
+    },
+  );
 
   Future<(BotsFixture, BotGroupSession)> draftGroup() async {
     final fixture = BotsFixture();
@@ -1273,6 +1710,13 @@ void main() {
     other.readHook = (_, method, _) async =>
         method == 'session.active_list' ? {'sessions': []} : null;
     final repository = BotsRepository(
+      groupObservations: GroupObservations(
+        WorkspaceScope(
+          connectionId: 'other-host',
+          connectionIdentity: 'other-instance',
+          profileName: 'default',
+        ),
+      ),
       scope: WorkspaceScope(
         connectionId: 'other-host',
         connectionIdentity: 'other-instance',
@@ -1574,6 +2018,7 @@ void main() {
     final fixture = BotsFixture();
     var retained = 0, released = 0;
     final repository = BotsRepository(
+      groupObservations: GroupObservations(fixture.repository.scope),
       scope: fixture.repository.scope,
       instance: fixture.repository.instance,
       read: fixture.read,
@@ -1707,6 +2152,7 @@ void main() {
         profileName: 'default',
       );
       final other = BotsRepository(
+        groupObservations: GroupObservations(scope),
         scope: scope,
         instance: 'Other server',
         read: second.read,
@@ -1881,7 +2327,16 @@ void main() {
           }
           throw DashboardSessionNotFound(path);
         };
-        final repository = BotsRepository.forServer(administration.server);
+        final repository = BotsRepository.forServer(
+          administration.server,
+          groupObservations: GroupObservations(
+            WorkspaceScope(
+              connectionId: (administration.server).connectionId,
+              connectionIdentity: (administration.server).connectionIdentity,
+              profileName: 'default',
+            ),
+          ),
+        );
         final roster = await repository.bots();
         final presence = (await repository.presence(roster)).values;
         expect(
@@ -1939,7 +2394,16 @@ void main() {
           }
           return {'id': 'atlas-chat', 'profile': 'atlas'};
         };
-        final repository = BotsRepository.forServer(administration.server);
+        final repository = BotsRepository.forServer(
+          administration.server,
+          groupObservations: GroupObservations(
+            WorkspaceScope(
+              connectionId: (administration.server).connectionId,
+              connectionIdentity: (administration.server).connectionIdentity,
+              profileName: 'default',
+            ),
+          ),
+        );
         final roster = await repository.bots();
         expect(
           (await repository.presence(roster)).values.values,
@@ -2472,6 +2936,7 @@ void main() {
       final fixture = BotsFixture();
       var retains = 0, releases = 0;
       final repository = BotsRepository(
+        groupObservations: GroupObservations(fixture.repository.scope),
         scope: fixture.repository.scope,
         instance: fixture.repository.instance,
         read: fixture.read,
@@ -2591,6 +3056,13 @@ void main() {
   test('wrong instance cannot dispatch profile or group operations', () async {
     final fixture = BotsFixture();
     final other = BotsRepository(
+      groupObservations: GroupObservations(
+        WorkspaceScope(
+          connectionId: 'other',
+          connectionIdentity: 'other',
+          profileName: 'default',
+        ),
+      ),
       scope: WorkspaceScope(
         connectionId: 'other',
         connectionIdentity: 'other',
@@ -2756,6 +3228,73 @@ void main() {
       expect(await session.send('@everyone'), isTrue);
     },
   );
+  test(
+    'live replay retains a covered tail for a later route without preview reads',
+    () async {
+      final fixture = BotsFixture();
+      fixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': 1700000001,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Read in the live discussion'},
+      });
+      final bots = BotsSession((_) async => [fixture.repository]);
+      addTearDown(bots.dispose);
+      await bots.refresh();
+      final cache = RecentGroupMessages();
+      addTearDown(cache.dispose);
+      bots.attachGroupMessages(cache);
+      final live = bots.openGroup(bots.observedGroups.single);
+      await live.refresh();
+      live.dispose();
+      var reads = 0;
+      fixture.readHook = (_, _, _) async {
+        reads++;
+        return null;
+      };
+      final later = bots.openGroup(bots.observedGroups.single);
+      addTearDown(later.dispose);
+      expect(later.events.single.text, 'Read in the live discussion');
+      expect(reads, 0);
+      expect(bots.groupReads.unread(bots.observedGroups.single), isTrue);
+      final cursors = <int>[];
+      fixture.readHook = (_, method, params) async {
+        if (method == 'groups.log') cursors.add(params['since_seq'] as int);
+        return null;
+      };
+      await later.refresh();
+      expect(cursors, [
+        0,
+      ], reason: 'Cached messages never advance the live replay cursor');
+      final covered = bots.observedGroups.single;
+      for (var index = 0; index < RecentGroupMessages.roomLimit; index++) {
+        cache.record(
+          BotGroup(
+            scope: covered.scope,
+            instance: covered.instance,
+            id: 'other-$index',
+            name: 'Other',
+            members: const [],
+            observationComplete: true,
+          ),
+          later.events,
+          complete: true,
+        );
+      }
+      expect(cache.borrow(covered, limit: 1), isNull);
+      await later.editMentions('Keep typing');
+      await later.refresh();
+      expect(
+        cache.borrow(covered, limit: 1),
+        isNull,
+        reason:
+            'Draft/status updates must not rebuild or reinsert unchanged transcript tails',
+      );
+    },
+  );
+
   for (final complete in [false, true]) {
     test(
       'live group borrows Recents messages before its first runtime read complete=$complete',
@@ -3246,6 +3785,13 @@ void main() {
   test('group creation rejects mixed instances before any dispatch', () async {
     final fixture = BotsFixture();
     final other = BotsRepository(
+      groupObservations: GroupObservations(
+        WorkspaceScope(
+          connectionId: 'other',
+          connectionIdentity: 'other',
+          profileName: 'default',
+        ),
+      ),
       scope: WorkspaceScope(
         connectionId: 'other',
         connectionIdentity: 'other',

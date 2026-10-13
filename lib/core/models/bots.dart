@@ -371,6 +371,9 @@ class BotGroup {
     }
     final latest = latestSequence;
     final incoming = observed.latestSequence;
+    final newerMessage = observed.lastMessageSequence >= lastMessageSequence;
+    final coverage = messageCoverageSequence;
+    final incomingCoverage = observed.messageCoverageSequence;
     return BotGroup(
       scope: scope,
       instance: instance,
@@ -384,14 +387,22 @@ class BotGroup {
           : incoming == null || latest >= incoming
           ? latest
           : incoming,
-      messageCoverageSequence: observed.messageCoverageSequence,
-      preview: observed.preview,
+      messageCoverageSequence: coverage == null
+          ? incomingCoverage
+          : incomingCoverage == null || coverage >= incomingCoverage
+          ? coverage
+          : incomingCoverage,
+      preview: newerMessage ? observed.preview : preview,
       working: working,
       blocked: blocked,
       activeMemberProfiles: activeMemberProfiles,
-      lastMessageAt: observed.lastMessageAt,
-      lastMessageSequence: observed.lastMessageSequence,
-      lastAnswerSequence: observed.lastAnswerSequence,
+      lastMessageAt: newerMessage ? observed.lastMessageAt : lastMessageAt,
+      lastMessageSequence: newerMessage
+          ? observed.lastMessageSequence
+          : lastMessageSequence,
+      lastAnswerSequence: observed.lastAnswerSequence > lastAnswerSequence
+          ? observed.lastAnswerSequence
+          : lastAnswerSequence,
       pinned: pinned,
       picture: picture,
       iconColor: iconColor,
@@ -489,6 +500,7 @@ class BotGroupEditConflict implements Exception {
 class BotGroupEvent {
   const BotGroupEvent({
     required this.sequence,
+    required this.eventId,
     required this.kind,
     required this.actor,
     required this.actorId,
@@ -497,18 +509,26 @@ class BotGroupEvent {
     required this.text,
   });
   final int sequence;
-  final String kind, actor, actorId, actorName, text;
+  final String eventId, kind, actor, actorId, actorName, text;
   final DateTime timestamp;
   bool get isMessage => kind == 'message.user' || kind == 'message.member';
 }
 
 @immutable
 class BotGroupPage {
-  BotGroupPage(Iterable<BotGroupEvent> events, this.cursor, this.hasMore)
-    : events = List.unmodifiable(events);
+  BotGroupPage(
+    Iterable<BotGroupEvent> events,
+    this.cursor,
+    this.hasMore, {
+    required this.latestSequence,
+    required this.gatewayId,
+    required this.epoch,
+  }) : events = List.unmodifiable(events);
   final List<BotGroupEvent> events;
   final int cursor;
   final bool hasMore;
+  final int latestSequence, epoch;
+  final String gatewayId;
 }
 
 @immutable

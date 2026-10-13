@@ -1,3 +1,5 @@
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/group_observations.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -42,7 +44,16 @@ void main() {
         connection.id,
         connectionStatus: status,
       );
-      final repository = BotsRepository.forServer(server);
+      final repository = BotsRepository.forServer(
+        server,
+        groupObservations: GroupObservations(
+          WorkspaceScope(
+            connectionId: (server).connectionId,
+            connectionIdentity: (server).connectionIdentity,
+            profileName: 'default',
+          ),
+        ),
+      );
       BotScreenSession? session;
       var started = false;
 

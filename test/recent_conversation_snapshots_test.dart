@@ -96,6 +96,7 @@ void main() {
     observationComplete: true,
   );
   BotGroupEvent event(int seq, {String text = 'message'}) => BotGroupEvent(
+    eventId: 'event-$seq',
     sequence: seq,
     kind: 'message.member',
     actor: 'member',

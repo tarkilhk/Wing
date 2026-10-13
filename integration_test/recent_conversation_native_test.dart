@@ -633,7 +633,7 @@ void main() {
           var sequence = 0;
           for (final kind in ConversationActivityKind.values) {
             activity.value = ChatNoticeActivity(
-              key: ring[(origin + 1) % ring.length].key.chat!,
+              key: ring[(origin + 1) % ring.length].key,
               kind: kind,
               identity: 'native-${kind.name}',
               sequence: ++sequence,
@@ -661,7 +661,7 @@ void main() {
             capture: false,
           );
           activity.value = ChatNoticeActivity(
-            key: ring[(origin + 1) % ring.length].key.chat!,
+            key: ring[(origin + 1) % ring.length].key,
             kind: ConversationActivityKind.reply,
             identity: 'editing',
             sequence: ++sequence,

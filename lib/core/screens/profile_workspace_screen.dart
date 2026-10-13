@@ -191,7 +191,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           widget.createBotsSession?.call() ??
           BotsSession(
             (canUse) async => [
-              BotsRepository.forServer(controller.healthSession().server),
+              BotsRepository.forServer(
+                controller.healthSession().server,
+                groupObservations: controller.groupObservations,
+              ),
             ],
           );
       _recentsOwner = WorkspaceRecentsSession(controller, bots);

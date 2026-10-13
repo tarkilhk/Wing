@@ -1,3 +1,4 @@
+import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'dart:async';
@@ -693,6 +694,7 @@ void main() {
       final bots = BotsSession(
         (_) async => [
           BotsRepository(
+            groupObservations: GroupObservations(controller.current!.scope),
             scope: controller.current!.scope,
             instance: 'Host',
             read: botFixture.read,

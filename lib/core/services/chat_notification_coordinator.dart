@@ -65,12 +65,14 @@ class ChatNotificationCoordinator {
     ConversationActivityKind kind,
   ) {
     if (_activityClosed) return;
-    final ProfileSessionKey key;
+    final RecentConversationKey key;
     try {
-      if ((jsonDecode(chat) as Map).containsKey('room')) return;
-      key = ProfileSessionKey.fromJson(
-        Map<String, dynamic>.from(jsonDecode(chat) as Map),
-      );
+      final target = Map<String, dynamic>.from(jsonDecode(chat) as Map);
+      key = target.containsKey('room')
+          ? RecentConversationKey.group(
+              GroupNotificationTarget.fromJson(target).key,
+            )
+          : RecentConversationKey.chat(ProfileSessionKey.fromJson(target));
     } on FormatException {
       return;
     }

@@ -6,6 +6,8 @@ import '../models/group_notification.dart';
 import '../models/hermes_profile.dart';
 import 'bot_group_read_state.dart';
 import 'bots_repository.dart';
+import 'group_observations.dart';
+import '../models/bots.dart';
 
 typedef GroupNotificationRead =
     Future<Map<String, dynamic>> Function(
@@ -32,6 +34,7 @@ class GroupNotificationSession extends ChangeNotifier {
     required this.instance,
     required this.preferences,
     required this.read,
+    required this.observations,
     required this.publish,
     required this.clearRead,
     this.pollInterval = const Duration(seconds: 5),
@@ -71,6 +74,7 @@ class GroupNotificationSession extends ChangeNotifier {
   final String instance;
   final SharedPreferences preferences;
   final GroupNotificationRead read;
+  final GroupObservations observations;
   final Future<void> Function(GroupAnswerNotification) publish;
   final Future<void> Function(GroupNotificationTarget, int) clearRead;
   final Duration pollInterval;
@@ -210,13 +214,6 @@ class GroupNotificationSession extends ChangeNotifier {
     return Map<String, dynamic>.from(value);
   }
 
-  static int _sequence(dynamic value) {
-    if (value is! int || value < 0) {
-      throw const FormatException('Invalid group sequence');
-    }
-    return value;
-  }
-
   Future<T> _write<T>(Future<T> Function() run) {
     final result = _writes.then((_) => run());
     _writes = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
@@ -334,32 +331,25 @@ class GroupNotificationSession extends ChangeNotifier {
       'include_disbanded': true,
     });
     if (_closed) return;
-    final room = _map(state['room']);
-    if (room['room_id'] != id) {
-      throw const FormatException('Wrong group state owner');
-    }
-    if (room['disbanded_at'] != null) {
-      final disbanded = room['disbanded_at'];
-      if (disbanded is! num || !disbanded.isFinite) {
-        throw const FormatException('Invalid group disband receipt');
-      }
+    final decoded = BotsRepository.decodeGroupState(scope, instance, id, state);
+    final room = decoded.room;
+    if (room == null) {
+      observations.forget(id);
       group.working = false;
       group.pending = false;
       await _removePending(id, Set.of(group.awaiting));
       group.uncertain = false;
       return;
     }
-    final driver = _map(state['driver_status']);
-    if (room['room_id'] != id ||
-        driver['working'] is! bool ||
-        driver['blocked'] is! bool) {
+    final runtime = decoded.runtime;
+    if (runtime == null) {
       throw const FormatException('Invalid shared group state');
     }
-    final latest = _sequence(room['latest_seq']);
+    final latest = decoded.latestSequence;
     if (latest < group.cursor) {
       throw const FormatException('Group sequence moved backwards');
     }
-    final working = driver['working'] == true || driver['blocked'] == true;
+    final working = runtime.working || runtime.blocked;
     if (working) {
       group.working = true;
       group.uncertain = false;
@@ -370,64 +360,54 @@ class GroupNotificationSession extends ChangeNotifier {
       final saved = await _saveCursor(id, latest);
       if (_closed) return;
       if (saved > group.cursor) group.cursor = saved;
+      observations.discover(room, latest);
     } else if (latest > group.cursor || group.awaiting.isNotEmpty) {
       group.pending = true;
       _changed();
       final awaiting = Set.of(group.awaiting);
       final accepted = <String, int>{};
       var cursor = awaiting.isNotEmpty || group.cursor < 0 ? 0 : group.cursor;
-      Map<String, dynamic>? answer;
-      do {
-        final page = await read('groups.log', {
-          'room_id': id,
-          'since_seq': cursor,
-          'limit': 100,
-        });
-        if (_closed) return;
-        final authority = _map(page['authority']);
-        if (authority['gateway_id'] is! String ||
-            (authority['gateway_id'] as String).isEmpty ||
-            _sequence(authority['epoch']) < 1 ||
-            page['events'] is! List ||
-            page['has_more'] is! bool) {
-          throw const FormatException('Invalid group log');
-        }
-        final next = _sequence(page['cursor']),
-            end = _sequence(page['latest_seq']);
-        if (next < cursor ||
-            next > end ||
-            end < latest ||
-            (page['has_more'] == true && next == cursor)) {
-          throw const FormatException('Invalid group log cursor');
-        }
-        var previous = cursor;
-        for (final raw in page['events'] as List) {
-          final event = _map(raw);
-          final seq = _sequence(event['seq']);
-          if (event['room_id'] != id ||
-              seq <= previous ||
-              seq > next ||
-              event['kind'] is! String) {
-            throw const FormatException('Invalid group event owner');
+      BotGroupEvent? answer;
+      final observation = observations.beginRead(room);
+      try {
+        do {
+          final page = await read('groups.log', {
+            'room_id': id,
+            'since_seq': cursor,
+            'limit': 100,
+          });
+          if (_closed) return;
+          final decoded = BotsRepository.decodeGroupLog(
+            id,
+            page,
+            since: cursor,
+          );
+          if (decoded.latestSequence < latest) {
+            throw const FormatException('Invalid group log cursor');
           }
-          previous = seq;
-          if (awaiting.contains(event['event_id'])) {
-            if (event['kind'] != 'message.user') {
-              throw const FormatException('Invalid accepted group send event');
+          // Canonical message facts precede notification eligibility and delivery.
+          // Even an already-read answer or failed post remains an observed message.
+          observation.add(decoded, since: cursor);
+          for (final event in decoded.events) {
+            if (awaiting.contains(event.eventId)) {
+              if (event.kind != 'message.user') {
+                throw const FormatException(
+                  'Invalid accepted group send event',
+                );
+              }
+              accepted[event.eventId] = event.sequence;
             }
-            accepted[event['event_id'] as String] = seq;
-          }
-          if (event['kind'] == 'message.member') {
-            final payload = _map(event['payload']);
-            if (payload['text'] is! String) {
-              throw const FormatException('Invalid group answer');
+            if (event.kind == 'message.member' &&
+                event.text.trim().isNotEmpty) {
+              answer = event;
             }
-            if ((payload['text'] as String).trim().isNotEmpty) answer = event;
           }
-        }
-        cursor = next;
-        if (page['has_more'] != true) break;
-      } while (!_closed);
+          cursor = decoded.cursor;
+          if (!decoded.hasMore) break;
+        } while (!_closed);
+      } finally {
+        if (!_closed) observation.publish();
+      }
       if (_closed) return;
       if (group.awaiting.any((event) => !accepted.containsKey(event))) {
         throw StateError('Group send acceptance is still uncertain');
@@ -441,7 +421,7 @@ class GroupNotificationSession extends ChangeNotifier {
           ? cursor
           : accepted.values.reduce((a, b) => a < b ? a : b);
       if (answer != null) {
-        final sequence = answer['seq'] as int;
+        final sequence = answer.sequence;
         // Actual viewport receipts, not opening a route, suppress read replies.
         final target = GroupNotificationTarget(scope, id);
         final readSequence = BotGroupReadState.savedSequence(
@@ -455,7 +435,7 @@ class GroupNotificationSession extends ChangeNotifier {
               title: group.title,
               instance: instance,
               sequence: sequence,
-              text: _map(answer['payload'])['text'] as String,
+              text: answer.text,
             ),
           );
         }
@@ -473,7 +453,7 @@ class GroupNotificationSession extends ChangeNotifier {
       group.pending = false;
     }
     group.working = working;
-    group.blocked = driver['blocked'] == true;
+    group.blocked = runtime.blocked;
     group.pending = false;
     group.uncertain = false;
   }

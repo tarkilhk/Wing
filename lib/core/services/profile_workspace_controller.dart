@@ -1,3 +1,4 @@
+import 'group_observations.dart';
 import '../models/server_reference.dart';
 import '../models/composer_reference.dart';
 import 'composer_reference_repository.dart';
@@ -748,6 +749,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
             !_hasLoadedNotificationChat(entry.key, entry.value.sessionId),
       );
 
+  GroupObservations get groupObservations => _groupObservations;
+  late final GroupObservations _groupObservations = GroupObservations(
+    WorkspaceScope(
+      connectionId: connection.id,
+      connectionIdentity: connectionIdentity,
+      profileName: 'default',
+    ),
+  );
   late final GroupNotificationSession _groupNotifications;
   late final bool _groupNotificationsEnabled;
   Future<void> activateGroupNotifications() => _groupNotificationsEnabled
@@ -856,6 +865,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     connectionStatus = ServerConnectionStatus(connection.label);
     _groupNotificationsEnabled = onAttention != null || onGroupAnswer != null;
     _groupNotifications = GroupNotificationSession(
+      observations: groupObservations,
       scope: WorkspaceScope(
         connectionId: connection.id,
         connectionIdentity: connectionIdentity,
@@ -8886,6 +8896,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   void dispose() {
     _groupNotifications.removeListener(_changed);
     _groupNotifications.dispose();
+    groupObservations.dispose();
     appPreferences.state.removeListener(_visibilityChanged);
     _profileSelection.removeListener(_selectionChanged);
     _closed = true;

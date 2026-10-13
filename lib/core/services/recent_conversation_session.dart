@@ -539,7 +539,7 @@ final class RecentConversationSession extends ChangeNotifier {
     final direction = recentConversationDirection(
       entries,
       _cueOrigin!,
-      RecentConversationKey.chat(activity.key),
+      activity.key,
     );
     if (direction == null) return;
     if (_pendingCue?.kind != ConversationActivityKind.inputNeeded ||
@@ -560,7 +560,7 @@ final class RecentConversationSession extends ChangeNotifier {
       final direction = recentConversationDirection(
         entries,
         _cueOrigin!,
-        RecentConversationKey.chat(pending.key),
+        pending.key,
       );
       if (direction == null) return;
       ++_notificationDepth;

@@ -132,7 +132,12 @@ final class ChatBrowserData extends ChangeNotifier {
   _readBotAppearances;
   BotsSession? _botAppearanceOwner;
   BotsSession get avatarOwner => _botAppearanceOwner ??= BotsSession(
-    (_) async => [BotsRepository.forServer(_controller.administration())],
+    (_) async => [
+      BotsRepository.forServer(
+        _controller.administration(),
+        groupObservations: _controller.groupObservations,
+      ),
+    ],
   );
   final _botAppearances = <ProfileSessionKey, BotRecord>{};
   BotRecord? botAppearance(ProfileSessionKey key) => _readBotAppearances != null

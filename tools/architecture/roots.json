@@ -6394,6 +6394,15 @@
       "purpose": "Microsoft Codicons CC BY 4.0 attribution and in-app license registration",
       "source": "pubspec.yaml; lib/main.dart; lib/core/theme/project_icon_glyphs.dart:registerLicense",
       "status": "supported"
+    },
+    {
+      "id": "host-test-test/group_observations_test.dart",
+      "kind": "host-test",
+      "path": "test/group_observations_test.dart",
+      "selector": "main",
+      "purpose": "Canonical authenticated room message facts, monotonic coverage and retirement",
+      "source": "internal/docs/TESTING.md; internal/docs/BOTS.md",
+      "status": "supported"
     }
   ],
   "files": [
@@ -8983,6 +8992,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/services/group_observations.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
       "path": "lib/core/services/health_alert_incident_store.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -11314,6 +11328,11 @@
     },
     {
       "path": "test/group_notification_session_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/group_observations_test.dart",
       "area": "test",
       "provenance": "tracked"
     },

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/group_observations.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/painting.dart';
@@ -517,6 +518,13 @@ void main() {
         };
       }
       final other = BotsRepository(
+        groupObservations: GroupObservations(
+          WorkspaceScope(
+            connectionId: 'other',
+            connectionIdentity: 'instance-2',
+            profileName: 'default',
+          ),
+        ),
         scope: WorkspaceScope(
           connectionId: 'other',
           connectionIdentity: 'instance-2',

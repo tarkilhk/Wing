@@ -1,3 +1,4 @@
+import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/services/recent_conversation_snapshots.dart';
 import 'package:flutter/foundation.dart';
 import 'package:wing/core/models/bots.dart';
@@ -70,6 +71,13 @@ class BotsFixture {
   commandHook;
   int _newSession = 0;
   late final repository = BotsRepository(
+    groupObservations: GroupObservations(
+      WorkspaceScope(
+        connectionId: 'host',
+        connectionIdentity: 'instance-1',
+        profileName: 'default',
+      ),
+    ),
     scope: WorkspaceScope(
       connectionId: 'host',
       connectionIdentity: 'instance-1',
@@ -83,6 +91,25 @@ class BotsFixture {
     ownership: ownership,
     now: now,
   );
+  void observeGroupMessages({int since = 0}) {
+    final latest = events.isEmpty ? 0 : events.last['seq'] as int;
+    final page = BotsRepository.decodeGroupLog(room['room_id'] as String, {
+      'events': [
+        for (final event in events.where((event) => event['seq'] > since))
+          {'event_id': 'fixture-${event['seq']}', ...event},
+      ],
+      'cursor': latest,
+      'latest_seq': latest,
+      'has_more': false,
+      'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+    }, since: since);
+    repository.groupObservations.record(
+      BotsRepository.decodeGroup(repository.scope, repository.instance, room),
+      page,
+      since: since,
+    );
+  }
+
   Future<ProfileHistoryPage> savedHistory(
     String profile,
     String session,
@@ -150,7 +177,19 @@ class BotsFixture {
     Map<String, dynamic> params,
   ) async {
     final custom = await readHook?.call(profile, method, params);
-    if (custom != null) return custom;
+    Map<String, dynamic> stockLog(Map<String, dynamic> result) => {
+      ...result,
+      'events': [
+        for (final raw in result['events'] as List)
+          {
+            'event_id': 'fixture-${raw['seq']}',
+            ...Map<String, dynamic>.from(raw as Map),
+          },
+      ],
+    };
+    if (custom != null) {
+      return method == 'groups.log' ? stockLog(custom) : custom;
+    }
     if (method == 'groups.log') {
       final since = params['since_seq'] as int;
       final page = <Map<String, dynamic>>[];
@@ -176,7 +215,7 @@ class BotsFixture {
           break;
         }
       }
-      return response();
+      return stockLog(response());
     }
     return switch (method) {
       'session.list' => {'sessions': workerRows[profile] ?? []},

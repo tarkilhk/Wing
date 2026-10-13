@@ -10,6 +10,7 @@ import '../models/profile_colors.dart';
 import '../models/hermes_profile.dart';
 import '../models/profile_session_key.dart';
 import 'bots_repository.dart';
+import 'group_observations.dart';
 import 'bots_preferences.dart';
 import 'bot_screen_session.dart';
 import 'bot_group_read_state.dart';
@@ -59,6 +60,110 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   final _recentsReaders = <Object>{};
   RecentGroupMessages? _groupMessages;
   RecentGroupMessages? get groupMessages => _groupMessages;
+
+  final _observationSources = <GroupObservations>{};
+  final _seenGroupObservations = <String, GroupMessageObservation>{};
+  final _groupObservationDemand = <String>{};
+  final _groupObservationReads = <String, Future<void>>{};
+
+  void _groupObservationsChanged() {
+    if (_closed) return;
+    for (final source in _repositories ?? <BotsRepository>[]) {
+      final snapshots = source.groupObservations.values.toList();
+      final keys = snapshots.map((value) => value.room.key).toSet();
+      for (final entry in _seenGroupObservations.entries.toList()) {
+        if (entry.value.room.scope == source.scope &&
+            !keys.contains(entry.key)) {
+          _seenGroupObservations.remove(entry.key);
+          _groups[source.scope.connectionIdentity] = List.unmodifiable(
+            (_groups[source.scope.connectionIdentity] ?? <BotGroup>[]).where(
+              (room) => room.key != entry.key,
+            ),
+          );
+          _groupObservationDemand.remove(entry.key);
+          notifyListeners();
+        }
+      }
+      for (final observation in snapshots) {
+        final key = observation.room.key;
+        if (identical(_seenGroupObservations[key], observation)) continue;
+        _seenGroupObservations[key] = observation;
+        final previous = groupForKey(key);
+        final projected = observation.project(previous ?? observation.room);
+        if (previous == null) {
+          _groups[source.scope.connectionIdentity] = List.unmodifiable([
+            ...?_groups[source.scope.connectionIdentity],
+            projected,
+          ]);
+          notifyListeners();
+        } else {
+          _publishRoom(previous, projected);
+        }
+        if (projected.observationComplete) {
+          _groupObservationDemand.remove(key);
+        } else {
+          _groupObservationDemand.add(key);
+        }
+      }
+    }
+    _drainGroupObservationDemand();
+  }
+
+  void _drainGroupObservationDemand() {
+    if (_closed || _busy) return;
+    for (final key in _groupObservationDemand.toList()) {
+      _groupObservationReads.putIfAbsent(
+        key,
+        () => _refreshGroupObservation(key).whenComplete(() {
+          _groupObservationReads.remove(key);
+          if (!_busy && _groupObservationDemand.contains(key)) {
+            _drainGroupObservationDemand();
+          }
+        }),
+      );
+    }
+  }
+
+  Future<void> _refreshGroupObservation(String key) async {
+    final generation = _readGeneration;
+    await Future.wait([?_stateJobs[key]?.pending, ?_previewJobs[key]?.pending]);
+    if (_closed || generation != _readGeneration || _busy) return;
+    final room = groupForKey(key);
+    final source = _repositories
+        ?.where((source) => source.scope == room?.scope)
+        .firstOrNull;
+    if (room == null || source == null) {
+      _groupObservationDemand.remove(key);
+      return;
+    }
+    if (!_groupObservationDemand.remove(key)) return;
+    final serving = _seenGroupObservations[key];
+    // Only missing facts need a read. Complete log observations already carry
+    // freshness/excerpt/answer, and never manufacture cached transcript coverage.
+    for (final job in [_stateJobs[key], _previewJobs[key]]) {
+      job?.success = null;
+      job?.failed = null;
+    }
+    source.retain();
+    try {
+      await _refreshRoom(source, room, generation);
+    } finally {
+      source.release();
+      final latest = _seenGroupObservations[key];
+      final stillBound =
+          _repositories?.any(
+            (bound) =>
+                identical(bound.groupObservations, source.groupObservations),
+          ) ??
+          false;
+      if (stillBound &&
+          latest != null &&
+          serving != null &&
+          latest.latestSequence <= serving.latestSequence) {
+        _groupObservationDemand.remove(key);
+      }
+    }
+  }
 
   void attachGroupMessages(RecentGroupMessages messages) {
     if (_closed ||
@@ -493,7 +598,26 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
         _roomStates.remove(room.key);
       }
     }
+    final nextObservations = sources
+        .map((source) => source.groupObservations)
+        .toSet();
+    for (final old in _observationSources.difference(nextObservations)) {
+      old.removeListener(_groupObservationsChanged);
+      _groupObservationDemand.removeWhere(
+        (key) => _seenGroupObservations[key]?.room.scope == old.scope,
+      );
+      _seenGroupObservations.removeWhere(
+        (_, value) => value.room.scope == old.scope,
+      );
+    }
+    for (final added in nextObservations.difference(_observationSources)) {
+      added.addListener(_groupObservationsChanged);
+    }
+    _observationSources
+      ..clear()
+      ..addAll(nextObservations);
     _repositories = List.unmodifiable(sources);
+    _groupObservationsChanged();
     for (final source in previous) {
       source.release();
     }
@@ -525,7 +649,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     if (preferences == null) {
       throw StateError('Device preferences are unavailable');
     }
-    return BotGroupSession(
+    final session = BotGroupSession(
       repository(group.scope.connectionIdentity),
       group,
       groupMessages: _groupMessages,
@@ -536,6 +660,12 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
       beforeSend: beforeGroupSend,
       afterSend: afterGroupSend,
     );
+    session.addListener(() {
+      if (_closed) return;
+      final current = groupForKey(group.key);
+      if (current != null) session.retainRecentMessages(current);
+    });
+    return session;
   }
 
   /// Screen identity is the profile, independent of its canonical conversation.
@@ -852,16 +982,31 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     );
     await catalog.run(_now, _metadataAge, () async {
       final startingStates = Map<String, BotGroupState>.of(_roomStates);
+      final startingMessages = {
+        for (final value in source.groupObservations.values)
+          value.room.id: value,
+      };
       final rooms = await source.groupCatalog();
       if (!_sourceCurrent(source, generation) ||
           !identical(_catalogJobs[source.scope], catalog)) {
         return false;
       }
+      final discoveredDuringRead = source.groupObservations.values
+          .where(
+            (value) =>
+                (startingMessages[value.room.id] == null ||
+                    value.latestSequence >
+                        startingMessages[value.room.id]!.latestSequence) &&
+                !rooms.any((room) => room.id == value.room.id),
+          )
+          .map((value) => value.project(value.room))
+          .toList();
+      final catalogRooms = [...rooms, ...discoveredDuringRead];
       final old = {
         for (final room in _groups[identity] ?? <BotGroup>[]) room.key: room,
       };
       _groups[identity] = List.unmodifiable(
-        rooms.map((room) {
+        catalogRooms.map((room) {
           final previous = old[room.key];
           // Catalog establishes membership/metadata, never newer runtime/messages.
           if (previous == null) return room;
@@ -876,7 +1021,10 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
           return result;
         }),
       );
-      final keys = rooms.map((room) => room.key).toSet();
+      final keys = catalogRooms.map((room) => room.key).toSet();
+      source.groupObservations.retainRooms(
+        catalogRooms.map((room) => room.id).toSet(),
+      );
       for (final key in old.keys.where((key) => !keys.contains(key))) {
         _stateJobs.remove(key);
         _previewJobs.remove(key);
@@ -939,7 +1087,10 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
         );
         if (!admitted()) return false;
         final previous = groupForKey(room.key)!;
-        final updated = previous.withMessageObservation(observed);
+        final merged = previous.withMessageObservation(observed);
+        final updated =
+            source.groupObservations.forRoom(room.id)?.project(merged) ??
+            merged;
         _groupMessages?.rebind(observed, updated);
         _publishRoom(previous, updated);
         return observed.observationComplete;
@@ -1023,6 +1174,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
       }
       if (!_closed) {
         _busy = false;
+        _drainGroupObservationDemand();
         notifyListeners();
         unawaited(refresh());
       }
@@ -1314,6 +1466,12 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   @override
   void dispose() {
     _closed = true;
+    for (final source in _observationSources) {
+      source.removeListener(_groupObservationsChanged);
+    }
+    _observationSources.clear();
+    _seenGroupObservations.clear();
+    _groupObservationDemand.clear();
     groupReads.dispose();
     for (final borrower in _avatars.borrowers.toList()) {
       borrower.dispose();

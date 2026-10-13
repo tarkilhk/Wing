@@ -1,3 +1,5 @@
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/services/group_observations.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -332,7 +334,16 @@ void main() {
           }
           throw DashboardSessionNotFound(path);
         };
-        final repository = BotsRepository.forServer(administration.server);
+        final repository = BotsRepository.forServer(
+          administration.server,
+          groupObservations: GroupObservations(
+            WorkspaceScope(
+              connectionId: (administration.server).connectionId,
+              connectionIdentity: (administration.server).connectionIdentity,
+              profileName: 'default',
+            ),
+          ),
+        );
         final owner = BotsSession((_) async => [repository], now: () => now);
         addTearDown(owner.dispose);
         if (botsVisible) {

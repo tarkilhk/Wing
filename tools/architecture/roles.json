@@ -1301,6 +1301,11 @@
       "feature": "notifications",
       "library": "lib/core/services/group_notification_session.dart"
     },
+    "lib/core/services/group_observations.dart": {
+      "role": "application",
+      "feature": "bots",
+      "library": "lib/core/services/group_observations.dart"
+    },
     "lib/core/services/health_alert_incident_store.dart": {
       "role": "data",
       "feature": "administration-health",

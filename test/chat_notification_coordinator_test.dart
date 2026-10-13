@@ -1,4 +1,6 @@
 import 'package:wing/core/models/recent_conversation.dart';
+import 'package:wing/core/models/group_notification.dart';
+import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/notification_input.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'dart:async';
@@ -58,6 +60,37 @@ void main() {
     );
   });
   tearDown(() => appPreferences.dispose());
+  test(
+    'fresh group replies emit one arrival cue without native permission',
+    () async {
+      sink.permissionResult = false;
+      final target = GroupNotificationTarget(
+        WorkspaceScope(
+          connectionId: 'home',
+          connectionIdentity: 'owner',
+          profileName: 'default',
+        ),
+        'room',
+      );
+      var cues = 0;
+      notices.activity.addListener(() => cues++);
+      final answer = GroupAnswerNotification(
+        target: target,
+        title: 'Discussion',
+        instance: 'Home',
+        sequence: 387,
+        text: 'New answer',
+      );
+      await notices.receiveGroupAnswer(answer);
+      expect(
+        notices.resultFor(jsonEncode(target.toJson()))?.identity,
+        'answer:387',
+      );
+      expect(cues, 1);
+      await notices.receiveGroupAnswer(answer);
+      expect(cues, 1);
+    },
+  );
   test(
     'queued replay retries a failed first delivery without repeating its cue',
     () async {
@@ -313,7 +346,7 @@ void main() {
       await reply('fresh');
       await reply('fresh');
       expect(events.single.kind, ConversationActivityKind.reply);
-      expect(events.single.key.workspace.connectionIdentity, 'owner');
+      expect(events.single.key.chat!.workspace.connectionIdentity, 'owner');
       await inputs([approval('baseline'), approval('new')]);
       await inputs([approval('baseline'), approval('new', submitting: true)]);
       expect(events, hasLength(2));

@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/models/transcript_reading.dart';
@@ -151,7 +152,7 @@ void main() {
       expect(session.entries, hasLength(1));
       session.setInteractive(true, origin: source.selected);
       activity.value = ChatNoticeActivity(
-        key: _entry(1).key.chat!,
+        key: _entry(1).key,
         kind: ConversationActivityKind.reply,
         identity: 'old',
         sequence: 1,
@@ -646,7 +647,7 @@ void main() {
         session.dispose();
       });
       activity.value = ChatNoticeActivity(
-        key: _entry(5).key.chat!,
+        key: _entry(5).key,
         kind: ConversationActivityKind.reply,
         identity: 'answer:5',
         sequence: 1,
@@ -658,13 +659,56 @@ void main() {
   );
 
   testWidgets(
+    'fresh group replies nudge their exact conversation without opening it',
+    (tester) async {
+      final group = RecentConversationEntry.group(
+        BotGroup(
+          scope: _scope,
+          instance: 'Home',
+          id: 'room',
+          name: 'Discussion',
+          members: const [],
+          observationComplete: true,
+        ),
+        unread: true,
+      );
+      source.currentEntries.insert(1, group);
+      source.notifyListeners();
+      await session.select(_entry(0).key);
+      source.opens.clear();
+      session.setInteractive(true, origin: _entry(0).key);
+      activity.value = ChatNoticeActivity(
+        key: group.key,
+        kind: ConversationActivityKind.reply,
+        identity: 'answer:2',
+        sequence: 1,
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(session.nudges.value?.key, group.key);
+      expect(session.nudges.value?.direction, ConversationDirection.right);
+      expect(source.opens, isEmpty);
+      expect(source.reads, isEmpty);
+      final delivered = session.nudges.value;
+      session.setInteractive(true, origin: group.key);
+      activity.value = ChatNoticeActivity(
+        key: group.key,
+        kind: ConversationActivityKind.reply,
+        identity: 'answer:3',
+        sequence: 2,
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(session.nudges.value, same(delivered));
+    },
+  );
+
+  testWidgets(
     'suppresses quiet history/current/nonmember; coalesces amber priority',
     (tester) async {
       await session.select(_entry(0).key);
       var sequence = 0;
       void signal(int index, ConversationActivityKind kind) =>
           activity.value = ChatNoticeActivity(
-            key: _entry(index).key.chat!,
+            key: _entry(index).key,
             kind: kind,
             identity: '$sequence',
             sequence: ++sequence,

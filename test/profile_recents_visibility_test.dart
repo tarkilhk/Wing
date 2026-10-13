@@ -1,4 +1,7 @@
 import 'package:wing/core/widgets/studio_loading.dart';
+import 'package:wing/core/models/group_notification.dart';
+import 'package:wing/core/services/chat_notification_coordinator.dart';
+import 'support/recording_turn_notification_sink.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
@@ -91,6 +94,207 @@ Future<void> _captureRecents(
 }
 
 void main() {
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final daysOld in [0, 2]) {
+        testWidgets(
+          'fresh group notification updates New answer before the Recents poll ${brightness.name} $scale age=$daysOld',
+          (tester) async {
+            tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            SharedPreferences.setMockInitialValues({});
+            final preferences = await SharedPreferences.getInstance();
+            final appPreferences = AppPreferences(preferences);
+            final fixture = TechnicalSessionsFixture();
+            final controller = ProfileWorkspaceController(
+              access: ConnectionAccess(
+                connection: identityTestConnection(),
+                dashboardOAuth: null,
+              ),
+              connectionIdentity: 'group-arrival',
+              preferences: preferences,
+              appPreferences: appPreferences,
+              gatewayFactory: fixture.gateway,
+            );
+            final host = BotsFixture();
+            void answer(int sequence) => host.events.add({
+              'room_id': 'room-1',
+              'seq': sequence,
+              'kind': 'message.member',
+              'created_at':
+                  fixture.now +
+                  sequence -
+                  (sequence == 1 ? daysOld * 86400 : 0),
+              'actor': {'kind': 'member', 'id': 'atlas'},
+              'payload': {'text': 'Group reply $sequence'},
+            });
+            answer(1);
+            final bots = BotsSession((_) async => [host.repository]);
+            final recents = WorkspaceRecentsSession(controller, bots);
+            final notices = ChatNotificationCoordinator(
+              preferences,
+              RecordingTurnNotificationSink(),
+              appPreferences: appPreferences,
+            );
+            addTearDown(() async {
+              await tester.pumpWidget(const SizedBox.shrink());
+              recents.dispose();
+              bots.dispose();
+              controller.dispose();
+              appPreferences.dispose();
+            });
+            await controller.initialize();
+            await recents.refresh();
+            final group = bots.observedGroups.single;
+            await bots.groupReads.acknowledge(group, 1);
+            final frame = GlobalKey();
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: RepaintBoundary(key: frame, child: child!),
+                ),
+                home: Scaffold(
+                  body: WorkspaceActivityContent(
+                    visible: true,
+                    recents: recents,
+                    onOpen: (_, _) {},
+                    onOpenGroup: (_) async {},
+                  ),
+                ),
+              ),
+            );
+            await tester.pump();
+            final card = find.byKey(ValueKey('recent-group-${group.key}'));
+            expect(card, daysOld == 0 ? findsOneWidget : findsNothing);
+            expect(
+              find.descendant(of: card, matching: find.text('New answer')),
+              findsNothing,
+            );
+            answer(2);
+            final release = Completer<void>();
+            var refreshing = false;
+            host.readHook = (_, method, _) async {
+              if (method == 'groups.state') {
+                refreshing = true;
+                await release.future;
+              }
+              return null;
+            };
+            addTearDown(() {
+              if (!release.isCompleted) release.complete();
+            });
+            host.observeGroupMessages();
+            await notices.receiveGroupAnswer(
+              GroupAnswerNotification(
+                target: GroupNotificationTarget(group.scope, group.id),
+                title: group.name,
+                instance: group.instance,
+                sequence: 2,
+                text: 'Group reply 2',
+              ),
+            );
+            for (var i = 0; i < 30; i++) {
+              await tester.pump();
+            }
+            expect(
+              find.descendant(of: card, matching: find.text('New answer')),
+              findsOneWidget,
+            );
+            expect(
+              recents.items().singleWhere((item) => item.group != null).unread,
+              isTrue,
+            );
+            expect(bots.groupReads.sequence(group), 1);
+            expect(
+              refreshing,
+              isFalse,
+              reason: 'Observed messages need no follow-up read',
+            );
+            expect(find.text('Group reply 2'), findsOneWidget);
+            await _captureRecents(
+              tester,
+              frame,
+              'group-unread-held-${brightness.name}-$scale-age-$daysOld',
+            );
+            release.complete();
+            for (var i = 0; i < 30; i++) {
+              await tester.pump();
+            }
+            expect(find.text('Group reply 2'), findsOneWidget);
+            expect(
+              find.descendant(of: card, matching: find.text('New answer')),
+              findsOneWidget,
+            );
+            await bots.groupReads.acknowledge(bots.observedGroups.single, 2);
+            expect(bots.groupReads.unread(bots.observedGroups.single), isFalse);
+            await tester.pump();
+            expect(
+              recents.items().singleWhere((item) => item.group != null).unread,
+              isFalse,
+            );
+            await tester.pump();
+            expect(
+              find.descendant(of: card, matching: find.text('New answer')),
+              findsNothing,
+            );
+            answer(3);
+            host.readHook = (_, method, _) async {
+              if (method == 'groups.log') {
+                throw StateError('History unavailable');
+              }
+              return null;
+            };
+            host.observeGroupMessages();
+            await notices.receiveGroupAnswer(
+              GroupAnswerNotification(
+                target: GroupNotificationTarget(group.scope, group.id),
+                title: group.name,
+                instance: group.instance,
+                sequence: 3,
+                text: 'Group reply 3',
+              ),
+            );
+            for (var i = 0; i < 30; i++) {
+              await tester.pump();
+            }
+            expect(
+              find.descendant(of: card, matching: find.text('New answer')),
+              findsOneWidget,
+            );
+            expect(bots.state.errors, isEmpty);
+            expect(bots.groupReads.sequence(group), 2);
+            host.readHook = null;
+            answer(4);
+            host.observeGroupMessages();
+            await notices.receiveGroupAnswer(
+              GroupAnswerNotification(
+                target: GroupNotificationTarget(group.scope, group.id),
+                title: group.name,
+                instance: group.instance,
+                sequence: 4,
+                text: 'Group reply 4',
+              ),
+            );
+            for (var i = 0; i < 30; i++) {
+              await tester.pump();
+            }
+            expect(find.text('Group reply 4'), findsOneWidget);
+            expect(
+              find.descendant(of: card, matching: find.text('New answer')),
+              findsOneWidget,
+            );
+            expect(bots.state.errors, isEmpty);
+            expect(host.commands, isEmpty);
+          },
+        );
+      }
+    }
+  }
   setUpAll(() async {
     if (!_captureLoading) return;
     for (final entry in {

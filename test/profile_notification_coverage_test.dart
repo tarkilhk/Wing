@@ -121,7 +121,20 @@ class NotificationCoverageHost {
           if (method == 'groups.list') {
             return {'rooms': groups, 'next_offset': null};
           }
-          if (method == 'groups.state') return groupStates[params['room_id']]!;
+          if (method == 'groups.state') {
+            final state = groupStates[params['room_id']]!;
+            return {
+              ...state,
+              'room': {
+                'members': <Map<String, dynamic>>[],
+                ...Map<String, dynamic>.from(state['room']),
+              },
+              'driver_status': {
+                'pending_actions': <Map<String, dynamic>>[],
+                ...Map<String, dynamic>.from(state['driver_status'] ?? {}),
+              },
+            };
+          }
           if (method == 'groups.log') {
             final events = groupLogs[params['room_id']] ?? [];
             final latest =

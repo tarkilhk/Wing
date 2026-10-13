@@ -1,6 +1,6 @@
 # Bots
 
-Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Bots show the most recent activity first, including conversation and background-worker activity. Bots without an activity timestamp appear last; pins break timestamp ties. Pinned groups lead their list. Names and message previews sit on the left, with saved artwork on the right. The floating + creates a bot or group for the selected tab. Status refreshes every ten seconds while Bots is visible. Known group messages refresh every thirty seconds. Groups created elsewhere may take up to five minutes to appear. Usable lists refresh quietly.
+Open **Bots** from Wing's side menu to browse profiles from your saved Hermes instances. Bots and Groups have separate tabs and search. Bots show the most recent activity first, including conversation and background-worker activity. Bots without an activity timestamp appear last; pins break timestamp ties. Pinned groups lead their list. Names and message previews sit on the left, with saved artwork on the right. The floating + creates a bot or group for the selected tab. Status refreshes every ten seconds while Bots is visible. Known group messages refresh every thirty seconds. Groups created elsewhere appear when the background watcher observes them; the fallback discovery scan runs every five minutes. Usable lists refresh quietly.
 Wing's feather pulse appears when initial loading prevents you from using the
 list. It sits at the right of the instance row, without covering or moving the cards
 when loading finishes.
@@ -168,7 +168,13 @@ screen with Groups and its search retained. Opening from Recents, switching
 with a two-finger swipe or entering the card viewport makes **Recents** the
 Back destination. Back closes any open card stack first, then leaves the
 conversation. Earlier conversations are cleared from the navigation stack.
-Cards do not mark group messages as read.
+Cards do not mark group messages as read. New group replies immediately show
+New answer in Recents and can trigger the conversation arrival cue. The badge
+clears when you reach the reply in the discussion.
+
+New group messages update Recents as soon as Wing observes them, including rooms
+last used more than a day ago. Reading a reply clears New answer; notification
+permission does not control the unread badge.
 
 Recents and the card browser share a cached list and screenshots. Reopening uses
 the saved view while background reads refresh it. You can swipe to another
