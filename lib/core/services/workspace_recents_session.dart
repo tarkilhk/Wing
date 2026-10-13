@@ -36,6 +36,8 @@ class WorkspaceRecentsSession extends ChangeNotifier
   bool _closed = false, _publicationPending = false;
   final _visible = <Object>{};
   Future<void>? _refreshing;
+  bool _initialLoadSettled = false;
+  Future<void>? _preparingAppearances;
   DateTime? _lastRefresh;
   static const refreshInterval = Duration(seconds: 30);
   List<WorkspaceRecentItem> _items = const [];
@@ -47,12 +49,14 @@ class WorkspaceRecentsSession extends ChangeNotifier
   @override
   RecentConversationCatalog get catalog => _catalog;
   ({
+    bool initialLoading,
     bool chatsLoading,
     bool chatsLoaded,
     bool botsLoading,
     bool groupsAvailable,
   })
   _loadingFacts = (
+    initialLoading: false,
     chatsLoading: false,
     chatsLoaded: false,
     botsLoading: false,
@@ -62,8 +66,9 @@ class WorkspaceRecentsSession extends ChangeNotifier
       _items.isNotEmpty ||
       (_loadingFacts.chatsLoaded && _loadingFacts.groupsAvailable);
   bool get contentLoading =>
-      !contentAvailable &&
-      (_loadingFacts.chatsLoading || _loadingFacts.botsLoading);
+      _loadingFacts.initialLoading ||
+      (!contentAvailable &&
+          (_loadingFacts.chatsLoading || _loadingFacts.botsLoading));
   int _appearanceEpoch = -1;
   int _appearanceGeneration = 0;
   Set<ProfileSessionKey> _keys = {};
@@ -113,15 +118,24 @@ class WorkspaceRecentsSession extends ChangeNotifier
     final completion = Completer<void>();
     _refreshing = completion.future;
     _lastRefresh = DateTime.now();
+    _changed();
     unawaited(() async {
       try {
         await Future.wait([controller.refreshRecents(), bots.refresh()]);
-        if (!_closed) _publish();
+        // Metadata and admitted image reads can outlive the catalog reads.
+        // Join the current decoration generation before settling initial entry.
+        while (!_closed) {
+          final preparation = prepareAppearances();
+          await preparation;
+          if (identical(preparation, _preparingAppearances)) break;
+        }
         completion.complete();
       } catch (error, stack) {
         completion.completeError(error, stack);
       } finally {
         _refreshing = null;
+        _initialLoadSettled = true;
+        if (!_closed) _publish();
       }
     }());
     return completion.future;
@@ -160,6 +174,7 @@ class WorkspaceRecentsSession extends ChangeNotifier
         ? null
         : 'Some recent conversations could not be loaded.';
     final loadingFacts = (
+      initialLoading: !_initialLoadSettled && _refreshing != null,
       chatsLoading: controller.recentsLoading,
       chatsLoaded: controller.recentsLoaded,
       botsLoading: bots.state.loading,
@@ -195,8 +210,8 @@ class WorkspaceRecentsSession extends ChangeNotifier
   }
 
   /// A mounted identity list can request decoration without starting polling.
-  void prepareAppearances() {
-    if (_closed) return;
+  Future<void> prepareAppearances() {
+    if (_closed) return Future.value();
     final keys = controller.recentChats().map((c) => c.key).toSet();
     for (final name in keys.map((key) => key.workspace.profileName)) {
       if (_colorProfiles.add(name)) {
@@ -210,18 +225,20 @@ class WorkspaceRecentsSession extends ChangeNotifier
       _keys = keys;
       _appearanceEpoch = bots.appearanceEpoch;
       final generation = ++_appearanceGeneration;
-      unawaited(
-        bots
-            .appearancesForConversations(
-              keys,
+      _preparingAppearances = bots
+          .appearancesForConversations(
+            keys,
+            canRead: () => !_closed && generation == _appearanceGeneration,
+          )
+          .then((value) async {
+            if (_closed || generation != _appearanceGeneration) return;
+            _changed();
+            await bots.prepareRecentsAvatars(
               canRead: () => !_closed && generation == _appearanceGeneration,
-            )
-            .then((value) {
-              if (_closed || generation != _appearanceGeneration) return;
-              _changed();
-            }),
-      );
+            );
+          });
     }
+    return _preparingAppearances ??= Future.value();
   }
 
   @override

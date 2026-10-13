@@ -110,9 +110,8 @@ class _WorkspaceActivityContentState extends State<WorkspaceActivityContent> {
     );
     return ValueListenableBuilder(
       valueListenable: colors,
-      builder: (context, choices, _) => StudioLoadingRegion(
-        busy: _session.contentLoading,
-        available: _session.contentAvailable,
+      builder: (context, choices, _) => StudioPageLoading(
+        active: _session.contentLoading,
         label: 'Loading recent chats',
         child: ListView(
           padding: const EdgeInsets.all(16),

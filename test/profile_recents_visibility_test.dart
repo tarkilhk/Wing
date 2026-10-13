@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:wing/core/screens/workspace_overview_content.dart';
+import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/workspace_recents_session.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -284,13 +286,256 @@ void main() {
             await tester.pumpWidget(const SizedBox.shrink());
             expect(
               loadingAfterElevenSeconds,
-              0,
-              reason:
-                  'Ready content must not advertise page loading after 11 seconds',
+              cached ? 0 : 1,
+              reason: cached
+                  ? 'Automatic refresh of a completed catalog stays quiet'
+                  : 'Initial entry pulses until presence and group reads settle',
             );
           },
         );
       }
+    }
+  }
+  for (final failure in ['none', 'history', 'avatar']) {
+    testWidgets(
+      'Recents pulse spans partial chats and group history (failure=$failure)',
+      (tester) async {
+        final failHistory = failure == 'history';
+        final failAvatar = failure == 'avatar';
+        SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        final appPreferences = AppPreferences(preferences);
+        final fixture = TechnicalSessionsFixture();
+        final controller = ProfileWorkspaceController(
+          access: ConnectionAccess(
+            connection: identityTestConnection(),
+            dashboardOAuth: null,
+          ),
+          connectionIdentity: 'partial-loading',
+          preferences: preferences,
+          appPreferences: appPreferences,
+          gatewayFactory: fixture.gateway,
+        );
+        final botFixture = BotsFixture();
+        botFixture.profiles.first['has_avatar'] = true;
+        botFixture.profiles.first['ui_meta']['hermes-bots']['imageKind'] =
+            'photo';
+        botFixture.events.add({
+          'room_id': 'room-1',
+          'seq': 1,
+          'kind': 'message.member',
+          'created_at': fixture.now,
+          'actor': {'kind': 'member', 'id': 'atlas'},
+          'payload': {'text': 'Last loaded reply'},
+        });
+        final catalogRelease = Completer<void>();
+        final historyRelease = Completer<void>();
+        final avatarRelease = Completer<void>();
+        var avatarStarted = false;
+        var historyStarted = false;
+        botFixture.readHook = (_, method, _) async {
+          if (method == 'profiles.get_asset') {
+            avatarStarted = true;
+            await avatarRelease.future;
+            if (failAvatar) throw StateError('Avatar unavailable');
+            return {
+              'found': true,
+              'data':
+                  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK7sAAAAASUVORK5CYII=',
+            };
+          }
+          if (method == 'groups.list') await catalogRelease.future;
+          if (method == 'groups.log') {
+            historyStarted = true;
+            await historyRelease.future;
+            if (failHistory) throw StateError('History unavailable');
+          }
+          return null;
+        };
+        final bots = BotsSession((_) async => [botFixture.repository]);
+        final recents = WorkspaceRecentsSession(controller, bots);
+        addTearDown(() {
+          if (!catalogRelease.isCompleted) catalogRelease.complete();
+          if (!historyRelease.isCompleted) historyRelease.complete();
+          if (!avatarRelease.isCompleted) avatarRelease.complete();
+          recents.dispose();
+          bots.dispose();
+          controller.dispose();
+          appPreferences.dispose();
+        });
+        await controller.initialize();
+        var opens = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              appBar: AppBar(actions: const [StudioLoadingSlot()]),
+              body: WorkspaceActivityContent(
+                recents: recents,
+                visible: true,
+                onOpen: (_, _) => opens++,
+                onOpenGroup: (_) async {},
+              ),
+            ),
+          ),
+        );
+        for (var i = 0; i < 20; i++) {
+          await tester.pump();
+        }
+        final refresh = recents.refresh();
+        expect(controller.recentsLoading, isFalse);
+        expect(find.text('User conversation'), findsOneWidget);
+        final cardPosition = tester.getTopLeft(
+          find.byType(RecentIdentityCard).first,
+        );
+        final pulseDuringCatalog = find.byType(StudioLoading).evaluate().length;
+        await tester.tap(find.text('User conversation'));
+        await tester.pump();
+        expect(opens, 1);
+        catalogRelease.complete();
+        for (var i = 0; i < 20; i++) {
+          await tester.pump();
+        }
+        expect(historyStarted, isTrue);
+        expect(find.text('Research team'), findsNothing);
+        expect(
+          tester.getTopLeft(find.byType(RecentIdentityCard).first),
+          cardPosition,
+        );
+        final pulseDuringHistory = find.byType(StudioLoading).evaluate().length;
+        historyRelease.complete();
+        for (var i = 0; i < 20; i++) {
+          await tester.pump();
+        }
+        expect(bots.state.loading, isFalse);
+        expect(avatarStarted, isTrue);
+        final pulseDuringAvatar = find.byType(StudioLoading).evaluate().length;
+        avatarRelease.complete();
+        for (var i = 0; i < 20; i++) {
+          await tester.pump();
+        }
+        await refresh;
+        expect(bots.warmAvatarCount, failAvatar ? 0 : 1);
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(
+          find.text('Research team'),
+          failHistory ? findsNothing : findsOneWidget,
+        );
+        expect(bots.state.errors, failHistory ? isNotEmpty : isEmpty);
+        await tester.pumpWidget(const SizedBox.shrink());
+        expect(
+          pulseDuringCatalog,
+          1,
+          reason: 'Partial chats do not complete Recents loading',
+        );
+        expect(
+          pulseDuringAvatar,
+          1,
+          reason: 'Admitted avatar reads must settle too',
+        );
+        expect(
+          pulseDuringHistory,
+          1,
+          reason: 'Group history must settle before the pulse stops',
+        );
+      },
+    );
+  }
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'production Recents waits for group logs ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          SharedPreferences.setMockInitialValues({});
+          final preferences = await SharedPreferences.getInstance();
+          final appPreferences = AppPreferences(preferences);
+          final fixture = TechnicalSessionsFixture();
+          final controller = ProfileWorkspaceController(
+            access: ConnectionAccess(
+              connection: identityTestConnection(),
+              dashboardOAuth: null,
+            ),
+            connectionIdentity: 'route-loading',
+            preferences: preferences,
+            appPreferences: appPreferences,
+            gatewayFactory: fixture.gateway,
+          );
+          final botFixture = BotsFixture();
+          botFixture.events.add({
+            'room_id': 'room-1',
+            'seq': 1,
+            'kind': 'message.member',
+            'created_at': fixture.now,
+            'actor': {'kind': 'member', 'id': 'atlas'},
+            'payload': {'text': 'Last loaded reply'},
+          });
+          final release = Completer<void>();
+          var historyStarted = false;
+          botFixture.readHook = (_, method, _) async {
+            if (method == 'groups.log') {
+              historyStarted = true;
+              await release.future;
+            }
+            return null;
+          };
+          addTearDown(() async {
+            if (!release.isCompleted) release.complete();
+            await tester.pumpWidget(const SizedBox.shrink());
+            controller.dispose();
+            appPreferences.dispose();
+          });
+          await controller.initialize();
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                initialDestination: AppDestination.activity,
+                createBotsSession: () =>
+                    BotsSession((_) async => [botFixture.repository]),
+              ),
+            ),
+          );
+          for (var i = 0; i < 30; i++) {
+            await tester.pump();
+          }
+          expect(historyStarted, isTrue);
+          expect(find.text('User conversation'), findsOneWidget);
+          expect(find.text('Research team'), findsNothing);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          final title = tester.getRect(find.text('Recents'));
+          final list = tester.getRect(find.byType(ListView).last);
+          await _captureRecents(
+            tester,
+            frame,
+            'route-held-${brightness.name}-$scale',
+          );
+          release.complete();
+          for (var i = 0; i < 30; i++) {
+            await tester.pump();
+          }
+          expect(find.text('Research team'), findsOneWidget);
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(tester.getRect(find.text('Recents')), title);
+          expect(tester.getRect(find.byType(ListView).last), list);
+          await _captureRecents(
+            tester,
+            frame,
+            'route-settled-${brightness.name}-$scale',
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
     }
   }
   testWidgets('empty Recents settles loading without replacing its catalog', (

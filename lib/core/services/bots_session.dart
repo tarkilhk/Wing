@@ -676,6 +676,20 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     });
   }
 
+  /// Join eligible shared image reads without widening the cache's admission
+  /// or bypassing freshness, failure cooldowns and physical read limits.
+  Future<void> prepareRecentsAvatars({required bool Function() canRead}) async {
+    if (_closed || !_avatarActive || !canRead()) return;
+    final scopes = {
+      ..._avatars.warm,
+      for (final borrower in _avatars.borrowers) ...borrower._demand,
+    };
+    await Future.wait([
+      for (final scope in scopes)
+        if (_avatars.shouldRead(scope, _now())) _readAvatar(scope),
+    ]);
+  }
+
   Future<void> refresh() async {
     if (_closed || _busy) return;
     final generation = _readGeneration;
