@@ -1,3 +1,5 @@
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wing/core/services/bots_preferences.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
 import 'package:wing/core/services/bot_group_read_state.dart';
 import 'dart:io';
@@ -53,6 +55,11 @@ Future<void> _render(WidgetTester tester, GlobalKey frame, String name) async {
 }
 
 void main() {
+  late BotsPreferences groupPreferences;
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    groupPreferences = await BotsPreferences.load();
+  });
   setUpAll(() async {
     if (!_capture) return;
     for (final entry in {
@@ -237,6 +244,7 @@ void main() {
                   fixture.repository,
                   group,
                   reads: BotGroupReadState(),
+                  preferences: groupPreferences,
                   groupMessages: null,
                   appearances: FixedGroupAppearances(appearances),
                 ),

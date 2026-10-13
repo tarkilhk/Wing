@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_preferences.dart';
 import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/screens/bots/bot_group_history_screen.dart';
 import 'package:wing/core/models/profile_colors.dart';
@@ -26,6 +27,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/bots/bot_group_screen.dart';
 import 'package:wing/core/services/bot_group_session.dart';
+import 'package:wing/core/services/bots_session.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/mention_suggestions.dart';
 import 'support/bots_fixture.dart';
@@ -103,6 +106,49 @@ Future<void> _render(WidgetTester tester, GlobalKey key, String name) async {
 }
 
 void main() {
+  late BotsPreferences groupPreferences;
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    groupPreferences = await BotsPreferences.load();
+  });
+  testWidgets('group message draft survives leaving and reopening', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final fixture = BotsFixture();
+    var roster = BotsSession((_) async => [fixture.repository]);
+    await roster.refresh();
+    Future<void> open() async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BotGroupScreen(
+            createSession: () => roster.openGroup(roster.state.groups.single),
+            voiceInputSettings: () =>
+                const LocalVoiceInputSettings(language: ''),
+            stopVoicePlayback: () async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await open();
+    const draft = '  Please compare these approaches.\nKeep the detail.  ';
+    final input = find.byKey(const ValueKey('group-message-composer'));
+    await tester.enterText(input, draft);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    roster.dispose();
+    SharedPreferences.resetStatic();
+    roster = BotsSession((_) async => [fixture.repository]);
+    await roster.refresh();
+    await open();
+    expect(tester.widget<TextField>(input).controller!.text, draft);
+    expect(fixture.commands, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+    roster.dispose();
+  });
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
@@ -139,6 +185,7 @@ void main() {
                     groupMessages: null,
                     appearances: FixedGroupAppearances(const []),
                     reads: BotGroupReadState(),
+                    preferences: groupPreferences,
                   ),
                 ),
               ),
@@ -244,6 +291,7 @@ void main() {
                       fixture.repository,
                       group,
                       reads: BotGroupReadState(),
+                      preferences: groupPreferences,
                       groupMessages: null,
                       appearances: FixedGroupAppearances(const []),
                     ),
@@ -459,6 +507,7 @@ void main() {
                     fixture.repository,
                     group,
                     reads: BotGroupReadState(),
+                    preferences: groupPreferences,
                     groupMessages: null,
                     appearances: appearances,
                   ),
@@ -783,6 +832,7 @@ void main() {
                 fixture.repository,
                 group,
                 reads: BotGroupReadState(),
+                preferences: groupPreferences,
                 groupMessages: cache,
                 appearances: FixedGroupAppearances(const []),
               ),
@@ -831,6 +881,7 @@ void main() {
             fixture.repository,
             group,
             reads: BotGroupReadState(),
+            preferences: groupPreferences,
             groupMessages: null,
             appearances: FixedGroupAppearances(const []),
           ),
@@ -896,6 +947,7 @@ void main() {
                     groupMessages: null,
                     appearances: FixedGroupAppearances(const []),
                     reads: BotGroupReadState(),
+                    preferences: groupPreferences,
                   ),
                 ),
               ),
@@ -1023,6 +1075,7 @@ void main() {
         groupMessages: null,
         appearances: FixedGroupAppearances(const []),
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
       ),
     );
     await tester.pumpWidget(
@@ -1106,6 +1159,7 @@ void main() {
               groupMessages: null,
               appearances: FixedGroupAppearances(const []),
               reads: BotGroupReadState(),
+              preferences: groupPreferences,
             ),
           ),
         ),
@@ -1179,6 +1233,7 @@ void main() {
                     fixture.repository,
                     group,
                     reads: BotGroupReadState(),
+                    preferences: groupPreferences,
                     groupMessages: null,
                     appearances: FixedGroupAppearances(appearances),
                   ),
@@ -1327,6 +1382,7 @@ void main() {
                     fixture.repository,
                     group,
                     reads: BotGroupReadState(),
+                    preferences: groupPreferences,
                     groupMessages: null,
                     appearances: FixedGroupAppearances(appearances),
                   ),
@@ -1511,6 +1567,7 @@ void main() {
             fixture.repository,
             group,
             reads: BotGroupReadState(),
+            preferences: groupPreferences,
             groupMessages: null,
             appearances: FixedGroupAppearances([]),
           ),
@@ -1577,6 +1634,7 @@ void main() {
             fixture.repository,
             group,
             reads: BotGroupReadState(),
+            preferences: groupPreferences,
             groupMessages: null,
             appearances: FixedGroupAppearances(appearances),
           ),
@@ -1673,6 +1731,7 @@ void main() {
                     fixture.repository,
                     group,
                     reads: BotGroupReadState(),
+                    preferences: groupPreferences,
                     groupMessages: null,
                     appearances: FixedGroupAppearances(appearances),
                   ),
@@ -1892,6 +1951,7 @@ void main() {
                     fixture.repository,
                     group,
                     reads: BotGroupReadState(),
+                    preferences: groupPreferences,
                     groupMessages: null,
                     appearances: FixedGroupAppearances(appearances),
                   ),
@@ -2121,6 +2181,7 @@ void main() {
                   fixture.repository,
                   group,
                   reads: BotGroupReadState(),
+                  preferences: groupPreferences,
                   groupMessages: null,
                   appearances: FixedGroupAppearances(appearances),
                 ),

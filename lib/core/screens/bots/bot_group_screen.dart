@@ -268,6 +268,8 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _composer.text = _session.draftText;
+    _composer.observeReferences(_session.composerReferences);
     _session.addListener(_changed);
     _composer.addListener(_composerChanged);
     _voiceInput.addListener(_voiceChanged);
@@ -279,6 +281,13 @@ class _BotGroupScreenState extends State<BotGroupScreen>
 
   void _changed() {
     if (!mounted) return;
+    if (_composer.text != _session.draftText) {
+      _composer.value = TextEditingValue(
+        text: _session.draftText,
+        selection: TextSelection.collapsed(offset: _session.draftText.length),
+      );
+    }
+    _composer.observeReferences(_session.composerReferences);
     if (_following) {
       _displayedSequence = _session.events.lastOrNull?.sequence ?? 0;
     }
@@ -451,14 +460,9 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   }
 
   Future<void> _send() async {
-    final draftAtSend = _composer.text;
     final submitted = _session.pendingText ?? _composer.text;
     setState(() => _following = true);
-    if (await _session.send(submitted) &&
-        mounted &&
-        _composer.text == draftAtSend) {
-      _composer.clear();
-    }
+    await _session.send(submitted);
   }
 
   Future<void> _showBotActions(

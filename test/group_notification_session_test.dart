@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
@@ -410,6 +411,7 @@ void main() {
         group,
         appearances: FixedGroupAppearances(const []),
         reads: BotGroupReadState(),
+        preferences: BotsPreferences(prefs),
         groupMessages: null,
         beforeSend: (group, eventId) async {
           await watch.beginSend(group.id, group.name, eventId);

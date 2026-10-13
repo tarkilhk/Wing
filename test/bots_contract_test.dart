@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_preferences.dart';
 import 'package:wing/core/services/bot_group_read_state.dart';
 import 'dart:async';
 import 'package:wing/core/models/composer_reference.dart';
@@ -5,6 +6,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -26,8 +28,227 @@ class _AvatarPicker extends BotAvatarIo {
   Future<Uint8List?> pick() async => base64Decode(_avatarPng);
 }
 
+class _DraftStorage extends InMemorySharedPreferencesStore {
+  _DraftStorage() : super.empty();
+  Completer<void>? held;
+  bool reject = false;
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (key.startsWith('flutter.bots_group_message_draft:')) {
+      await held?.future;
+      if (reject) return false;
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  late BotsPreferences groupPreferences;
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    groupPreferences = await BotsPreferences.load();
+  });
+
+  Future<(BotsFixture, BotGroupSession)> draftGroup() async {
+    final fixture = BotsFixture();
+    final group = (await readFixtureGroups(
+      fixture.repository,
+      groupMessages: null,
+    )).single;
+    final session = BotGroupSession(
+      fixture.repository,
+      group,
+      appearances: FixedGroupAppearances(const []),
+      reads: BotGroupReadState(),
+      groupMessages: null,
+      preferences: groupPreferences,
+    );
+    return (fixture, session);
+  }
+
+  test(
+    'group message draft restores selected routing and clears after acceptance',
+    () async {
+      final (fixture, session) = await draftGroup();
+      const text = '  Ask @Atlas for details.\nThen compare.  ';
+      final mention = session
+          .completeMentions(MentionQuery.at('@atl', 4)!)
+          .items
+          .single
+          .reference;
+      await session.editMentions(text, selected: mention);
+      final group = session.group;
+      session.dispose();
+      SharedPreferences.resetStatic();
+      final restored = BotGroupSession(
+        fixture.repository,
+        group,
+        appearances: FixedGroupAppearances(const []),
+        reads: BotGroupReadState(),
+        groupMessages: null,
+        preferences: await BotsPreferences.load(),
+      );
+      addTearDown(restored.dispose);
+      expect(restored.draftText, text);
+      expect(restored.composerReferences.single.target, 'atlas');
+      expect(await restored.send(restored.draftText), true);
+      expect(
+        fixture.commands.single.$3['payload']['text'],
+        'Ask @bot_atlas for details.\nThen compare.',
+      );
+      expect(restored.draftText, isEmpty);
+      SharedPreferences.resetStatic();
+      expect(
+        (await BotsPreferences.load()).messageDraft('instance-1', group.id),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'group message draft writes keep the latest edit available while saving',
+    () async {
+      final storage = _DraftStorage()..held = Completer<void>();
+      SharedPreferencesStorePlatform.instance = storage;
+      SharedPreferences.resetStatic();
+      final preferences = await SharedPreferences.getInstance();
+      final first = BotsPreferences(preferences),
+          second = BotsPreferences(preferences);
+      final old = first.writeMessageDraft('one', 'room', 'Old draft', const []);
+      final newer = second.writeMessageDraft(
+        'one',
+        'room',
+        'Newest draft',
+        const [],
+      );
+      expect(first.messageDraft('one', 'room')!.text, 'Newest draft');
+      expect(first.messageDraft('two', 'room'), isNull);
+      expect(first.messageDraft('one', 'other'), isNull);
+      final clear = first.writeMessageDraft('one', 'room', '', const []);
+      expect(second.messageDraft('one', 'room'), isNull);
+      storage.held!.complete();
+      await Future.wait([old, newer, clear]);
+      SharedPreferences.resetStatic();
+      expect(
+        (await BotsPreferences.load()).messageDraft('one', 'room'),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'group message draft save failure keeps text and recovers on editing',
+    () async {
+      final storage = _DraftStorage()..reject = true;
+      SharedPreferencesStorePlatform.instance = storage;
+      SharedPreferences.resetStatic();
+      groupPreferences = await BotsPreferences.load();
+      final (_, session) = await draftGroup();
+      addTearDown(session.dispose);
+      await session.editMentions('Keep this draft');
+      expect(session.draftText, 'Keep this draft');
+      expect(session.error, contains('Draft could not be saved'));
+      storage.reject = false;
+      await session.editMentions('Keep this edited draft');
+      expect(session.error, isNull);
+      SharedPreferences.resetStatic();
+      expect(
+        (await BotsPreferences.load())
+            .messageDraft('instance-1', 'room-1')!
+            .text,
+        'Keep this edited draft',
+      );
+    },
+  );
+
+  for (final reopen in [false, true]) {
+    test(
+      'group message acceptance preserves a newer draft ${reopen ? 'in a new visit' : 'while sending'}',
+      () async {
+        final (fixture, session) = await draftGroup();
+        await session.editMentions('Send this');
+        final held = Completer<void>(), started = Completer<void>();
+        fixture.commandHook = (_, method, _) async {
+          if (method != 'groups.send') return null;
+          started.complete();
+          await held.future;
+          return null;
+        };
+        final sending = session.send(session.draftText);
+        await started.future;
+        final current = reopen
+            ? BotGroupSession(
+                fixture.repository,
+                session.group,
+                appearances: FixedGroupAppearances(const []),
+                reads: BotGroupReadState(),
+                groupMessages: null,
+                preferences: groupPreferences,
+              )
+            : session;
+        if (reopen) session.dispose();
+        addTearDown(current.dispose);
+        final mention = current
+            .completeMentions(MentionQuery.at('@atl', 4)!)
+            .items
+            .single
+            .reference;
+        await current.editMentions('Ask @Atlas next', selected: mention);
+        held.complete();
+        await sending;
+        expect(current.draftText, 'Ask @Atlas next');
+        expect(current.composerReferences.single.target, 'atlas');
+        SharedPreferences.resetStatic();
+        final saved = (await BotsPreferences.load()).messageDraft(
+          'instance-1',
+          'room-1',
+        )!;
+        expect(saved.text, 'Ask @Atlas next');
+        expect(saved.references.single.target, 'atlas');
+      },
+    );
+  }
+
+  test('group message send failure retains the saved draft', () async {
+    final (fixture, session) = await draftGroup();
+    addTearDown(session.dispose);
+    await session.editMentions('Keep the unsent message');
+    fixture.sendLost = true;
+    expect(await session.send(session.draftText), false);
+    expect(session.draftText, 'Keep the unsent message');
+    SharedPreferences.resetStatic();
+    expect(
+      (await BotsPreferences.load()).messageDraft('instance-1', 'room-1')!.text,
+      'Keep the unsent message',
+    );
+  });
+
+  test(
+    'group dictation applies immediately while automatic draft saving is held',
+    () async {
+      final storage = _DraftStorage();
+      SharedPreferencesStorePlatform.instance = storage;
+      SharedPreferences.resetStatic();
+      groupPreferences = await BotsPreferences.load();
+      final (_, session) = await draftGroup();
+      addTearDown(session.dispose);
+      session.setVisible(true);
+      storage.held = Completer<void>();
+      addTearDown(() {
+        if (!storage.held!.isCompleted) storage.held!.complete();
+      });
+      var applied = false;
+      final applying = session
+          .applyVoiceDraft(session.captureVoiceDraft(), 'Dictated text')
+          .then((_) => applied = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(applied, true);
+      expect(session.draftText, 'Dictated text');
+      storage.held!.complete();
+      await applying;
+      await session.editMentions('Dictated text with an edit');
+    },
+  );
 
   Future<(BotsFixture, BotGroupSession)> pausedGroup({
     bool retireInTest = false,
@@ -44,6 +265,7 @@ void main() {
       fixture.repository,
       group,
       reads: BotGroupReadState(),
+      preferences: groupPreferences,
       groupMessages: null,
       appearances: FixedGroupAppearances(const []),
       beforeSend: beforeSend,
@@ -513,6 +735,7 @@ void main() {
         group,
         appearances: FixedGroupAppearances(const []),
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
         groupMessages: null,
       );
       addTearDown(session.dispose);
@@ -847,6 +1070,7 @@ void main() {
       group,
       appearances: FixedGroupAppearances(const []),
       reads: BotGroupReadState(),
+      preferences: groupPreferences,
       groupMessages: groupMessages,
     );
     addTearDown(preview.dispose);
@@ -1104,6 +1328,7 @@ void main() {
         group,
         appearances: FixedGroupAppearances(const []),
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
         groupMessages: null,
       );
       addTearDown(preview.dispose);
@@ -1150,6 +1375,7 @@ void main() {
         group,
         appearances: FixedGroupAppearances(const []),
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
         groupMessages: groupMessages,
       );
       addTearDown(preview.dispose);
@@ -1217,6 +1443,7 @@ void main() {
         groupMessages: groupMessages,
         appearances: FixedGroupAppearances(const []),
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
       );
       addTearDown(visit.dispose);
       expect(
@@ -1266,6 +1493,7 @@ void main() {
         groupMessages: null,
         appearances: FixedGroupAppearances(const []),
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
       )..setVisible(true);
       final session = open();
       final otherVisit = open();
@@ -2514,6 +2742,7 @@ void main() {
         appearances: FixedGroupAppearances([foreign, roster[1], roster[1]]),
 
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
       );
       addTearDown(session.dispose);
       final choices = session.completeMentions(MentionQuery.at('@', 1)!).items;
@@ -2556,6 +2785,7 @@ void main() {
           fixture.repository,
           group,
           reads: BotGroupReadState(),
+          preferences: groupPreferences,
           groupMessages: cache,
           appearances: FixedGroupAppearances(const []),
         );
@@ -2587,6 +2817,7 @@ void main() {
           fixture.repository,
           group,
           reads: BotGroupReadState(),
+          preferences: groupPreferences,
           groupMessages: null,
           appearances: FixedGroupAppearances(const []),
         );
@@ -2653,6 +2884,7 @@ void main() {
         fixture.repository,
         group,
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
         groupMessages: null,
         appearances: FixedGroupAppearances(const []),
       );
@@ -2696,6 +2928,7 @@ void main() {
         fixture.repository,
         group,
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
         groupMessages: null,
         appearances: FixedGroupAppearances(const []),
       );
@@ -2730,6 +2963,7 @@ void main() {
         appearances: FixedGroupAppearances(const []),
 
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
       );
       addTearDown(session.dispose);
       final choice = session
@@ -2774,6 +3008,7 @@ void main() {
         appearances: FixedGroupAppearances(const []),
 
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
       );
       addTearDown(session.dispose);
       const typed = '@`Client Wo';
@@ -2820,6 +3055,7 @@ void main() {
       appearances: FixedGroupAppearances(const []),
 
       reads: BotGroupReadState(),
+      preferences: groupPreferences,
     );
     addTearDown(session.dispose);
     final query = MentionQuery.at('@foo', 4)!;
@@ -2861,6 +3097,7 @@ void main() {
         appearances: FixedGroupAppearances(const []),
 
         reads: BotGroupReadState(),
+        preferences: groupPreferences,
       );
       addTearDown(session.dispose);
       final choices = session.completeMentions(MentionQuery.at('@', 1)!).items;
@@ -2900,6 +3137,7 @@ void main() {
       appearances: FixedGroupAppearances(const []),
 
       reads: BotGroupReadState(),
+      preferences: groupPreferences,
     );
     addTearDown(session.dispose);
     final ref = session

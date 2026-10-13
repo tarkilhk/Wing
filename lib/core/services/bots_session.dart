@@ -521,12 +521,17 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   /// Borrow canonical identity for live and passive room visits. References
   /// observe the same owner without starting roster or avatar reads.
   BotGroupSession openGroup(BotGroup group) {
+    final preferences = _preferences;
+    if (preferences == null) {
+      throw StateError('Device preferences are unavailable');
+    }
     return BotGroupSession(
       repository(group.scope.connectionIdentity),
       group,
       groupMessages: _groupMessages,
       appearances: this,
       reads: groupReads,
+      preferences: preferences,
       onRead: onGroupRead,
       beforeSend: beforeGroupSend,
       afterSend: afterGroupSend,

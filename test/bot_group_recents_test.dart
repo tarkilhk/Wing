@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_preferences.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,7 +9,11 @@ import 'package:wing/core/services/bot_group_session.dart';
 import 'support/bots_fixture.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  late BotsPreferences groupPreferences;
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    groupPreferences = await BotsPreferences.load();
+  });
   test(
     'room freshness ignores work events and reads beyond the tail',
     () async {
@@ -136,6 +141,7 @@ void main() {
       fixture.repository,
       group,
       reads: reads,
+      preferences: groupPreferences,
       groupMessages: null,
       appearances: FixedGroupAppearances(const []),
     );
@@ -180,6 +186,7 @@ void main() {
         groupMessages: null,
         appearances: FixedGroupAppearances(const []),
         reads: reads,
+        preferences: groupPreferences,
       );
       addTearDown(session.dispose);
       final started = Completer<void>(), released = Completer<void>();

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/bots.dart';
 import 'bots_repository.dart';
+import 'bots_preferences.dart';
 import 'bot_group_read_state.dart';
 import '../models/composer_reference.dart';
 import '../models/recent_conversation.dart';
@@ -37,6 +38,7 @@ class BotGroupSession extends ChangeNotifier {
     required this.appearances,
     required this.reads,
     required this.groupMessages,
+    required this.preferences,
     this.onRead,
     this.beforeSend,
     this.afterSend,
@@ -44,6 +46,22 @@ class BotGroupSession extends ChangeNotifier {
     repository.retain();
     _appearance = appearances.appearanceForGroup(group);
     appearances.addListener(_appearanceChanged);
+    _draftWriteRevision = preferences.messageDraftRevision(
+      group.scope.connectionIdentity,
+      group.id,
+    );
+    try {
+      final saved = preferences.messageDraft(
+        group.scope.connectionIdentity,
+        group.id,
+      );
+      if (saved != null) {
+        _draft = saved.text;
+        _references = retainComposerReferences(_draft, saved.references);
+      }
+    } catch (_) {
+      _draftError = 'The saved group draft could not be read on this device.';
+    }
     // Discovery already obtained this exact room's bounded message tail.
     // It is passive reading, never runtime/action authority or a log cursor.
     final cache = groupMessages;
@@ -61,6 +79,7 @@ class BotGroupSession extends ChangeNotifier {
     }
   }
   final BotGroupAppearanceSource appearances;
+  final BotsPreferences preferences;
   late BotGroupAppearance _appearance;
   void _appearanceChanged() {
     if (_closed) return;
@@ -192,16 +211,49 @@ class BotGroupSession extends ChangeNotifier {
     return wire;
   }
 
-  void editMentions(String text, {ComposerReference? selected}) {
+  Future<void> editMentions(String text, {ComposerReference? selected}) {
+    if (_closed || (text == _draft && selected == null)) return Future.value();
     if (text != _draft) {
       _draft = text;
       _draftRevision++;
     }
     _references = retainComposerReferences(text, [..._references, ?selected]);
+    return _saveDraft();
   }
 
   String _draft = '';
+  String get draftText => _draft;
+  String? _draftError;
   int _draftRevision = 0;
+  int _draftWriteRevision = 0;
+
+  Future<void> _saveDraft() async {
+    final revision = _draftRevision;
+    try {
+      final saved = preferences.writeMessageDraft(
+        group.scope.connectionIdentity,
+        group.id,
+        _draft,
+        _references,
+      );
+      _draftWriteRevision = preferences.messageDraftRevision(
+        group.scope.connectionIdentity,
+        group.id,
+      );
+      await saved;
+      if (!_closed && revision == _draftRevision && _draftError != null) {
+        _draftError = null;
+        notifyListeners();
+      }
+    } catch (_) {
+      if (!_closed && revision == _draftRevision) {
+        _draftError =
+            'Draft could not be saved on this device. Edit your message to retry.';
+        notifyListeners();
+      }
+    }
+  }
+
   RecentConversationKey get voiceTarget =>
       RecentConversationKey.group(group.key);
   bool get canDictate =>
@@ -223,7 +275,7 @@ class BotGroupSession extends ChangeNotifier {
         capture._revision != _draftRevision) {
       throw StateError('The group draft changed. Please dictate again.');
     }
-    editMentions(text);
+    unawaited(editMentions(text));
     return Future.value();
   }
 
@@ -279,7 +331,7 @@ class BotGroupSession extends ChangeNotifier {
   bool get loading => _readCompletion != null && _runtime == null;
   bool get sending => _sending;
   String? _readError, _actionError;
-  String? get error => _actionError ?? _readError;
+  String? get error => _actionError ?? _draftError ?? _readError;
   (String, String)? _pending;
   String? _pendingWireText;
   String? get pendingText => _pending?.$2;
@@ -394,6 +446,7 @@ class BotGroupSession extends ChangeNotifier {
     }
     final isNew = _pending == null;
     final attempt = _pending ?? (const Uuid().v4(), text.trim());
+    final draftRevision = _draftRevision;
     _pending = attempt;
     _sending = true;
     _actionError = null;
@@ -441,7 +494,19 @@ class BotGroupSession extends ChangeNotifier {
       );
       _pending = null;
       _pendingWireText = null;
-      _references = const [];
+      if (_draftRevision == draftRevision &&
+          _draft.trim() == attempt.$2 &&
+          preferences.messageDraftRevision(
+                group.scope.connectionIdentity,
+                group.id,
+              ) ==
+              _draftWriteRevision) {
+        _draft = '';
+        _draftRevision++;
+        _references = const [];
+        if (!_closed) notifyListeners();
+        await _saveDraft();
+      }
       if (!_closed) unawaited(refresh());
       return !_closed;
     } catch (_) {

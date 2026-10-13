@@ -133,6 +133,11 @@ The bottom dock previews your room and keeps Create group above the keyboard.
 Creation becomes available with at least two members. If it cannot be confirmed,
 the form fixes the room details so you can retry the same group.
 
+Group message drafts save on this device as you type, including selected member
+mentions. Leaving the group or restarting Wing restores its draft. Each server
+and room keeps its own draft. Sending clears the accepted text; a newer draft
+typed while sending stays available.
+
 An unconfirmed send stays available for review/retry. Paused work offers Continue group work to stop the paused attempt and send a continuation request. Approvals apply to the request shown in that discussion.
 
 Your bubbles show your message without a User label. Bot replies show the
