@@ -264,6 +264,32 @@ void main() {
   });
 
   testWidgets(
+    'Chats menu returns from a conversation to the list and retains its draft',
+    (tester) async {
+      final key = ProfileSessionKey(controller.current!.scope, 'newest');
+      final chat = await controller.openSession(key);
+      await controller.updateDraft(chat!, 'Keep this draft');
+      await show(tester);
+      expect(find.text('Keep this draft'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('nav-chats')));
+      await tester.pumpAndSettle();
+
+      expect(controller.current!.chat, isNull);
+      expect(find.byTooltip('New chat'), findsOneWidget);
+      expect(find.text('Keep this draft'), findsNothing);
+      expect(chat.composer.observation.displayedText, 'Keep this draft');
+
+      await controller.openSession(key);
+      await tester.pumpAndSettle();
+      expect(find.text('Keep this draft'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'conversation header offers only connections and retains its draft',
     (tester) async {
       final chat = await controller.openSession(

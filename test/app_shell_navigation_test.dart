@@ -202,9 +202,11 @@ void main() {
     expect(find.byType(AppDrawer), findsNothing);
   }
 
-  for (final systemBack in [false, true]) {
+  for (final exit in ['drawer', 'system Back', 'Chats menu']) {
+    final systemBack = exit == 'system Back';
+    final chatsMenu = exit == 'Chats menu';
     testWidgets(
-      'chat opened from Recents returns to Recents ${systemBack ? 'on system Back' : 'through the drawer'}',
+      'chat opened from Recents returns to ${chatsMenu ? 'Chats' : 'Recents'} through $exit',
       (tester) async {
         final chat = await controller.createChat(canDispatch: () => true);
         emitChatEvent(controller, chat, 'session.title', {
@@ -229,9 +231,17 @@ void main() {
           expect(find.byIcon(Icons.arrow_back), findsNothing);
           await tester.tap(find.byTooltip('Open navigation menu'));
           await tester.pumpAndSettle();
-          await tester.tap(find.byKey(const ValueKey('nav-activity')));
+          await tester.tap(
+            find.byKey(ValueKey(chatsMenu ? 'nav-chats' : 'nav-activity')),
+          );
         }
         await tester.pumpAndSettle();
+        if (chatsMenu) {
+          expect(find.byType(WorkspaceActivityContent), findsNothing);
+          expect(find.byTooltip('New chat'), findsOneWidget);
+          expect(controller.current!.chat, isNull);
+          return;
+        }
         expect(find.byType(WorkspaceActivityContent), findsOneWidget);
         if (systemBack) {
           expect(find.text('Recents'), findsOneWidget);
@@ -416,7 +426,8 @@ void main() {
         await navigate(tester, AppDestination.health);
         expect(find.text('Usage'), findsNothing);
         await navigate(tester, AppDestination.chats);
-        expect(controller.current!.chat, same(chat));
+        expect(controller.current!.chat, isNull);
+        expect(find.byTooltip('New chat'), findsOneWidget);
         expect(chat.composer.observation.text, 'Keep my analytics draft');
         expect(tester.takeException(), isNull);
       });
@@ -595,7 +606,6 @@ void main() {
       final chat = await controller.createChat(canDispatch: () => true);
       chat.composer.editText('Keep this unsent');
       await show(tester);
-      final callsBefore = fixture.calls.length;
       await navigate(tester, AppDestination.settings);
       expect(controller.visible, isFalse);
       expect(controller.current!.chat, same(chat));
@@ -605,8 +615,12 @@ void main() {
       expect(controller.visible, isFalse);
       await tester.tap(find.byKey(const ValueKey('nav-chats')));
       await tester.pumpAndSettle();
+      expect(controller.current!.chat, isNull);
+      expect(find.byTooltip('New chat'), findsOneWidget);
+      expect(chat.composer.observation.text, 'Keep this unsent');
+      await controller.openSession(chat.key);
+      await tester.pumpAndSettle();
       expect(find.text('Keep this unsent'), findsOneWidget);
-      expect(controller.visible, isTrue);
       await navigate(tester, AppDestination.administration);
       expect(find.byType(HermesAdministrationContent), findsOneWidget);
       expect(find.text('Models and reasoning'), findsOneWidget);
@@ -628,18 +642,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AppDrawer), findsOneWidget);
       await navigate(tester, AppDestination.chats);
-      expect(controller.visible, isTrue);
-      expect(find.text('Keep this unsent'), findsOneWidget);
-      expect(
-        fixture.calls.skip(callsBefore).map((call) => (call.$1, call.$2)),
-        [(controller.current!.scope.profileName, 'setup.runtime_check')],
-      );
-      final afterHealth = fixture.calls.length;
+      expect(controller.current!.chat, isNull);
+      expect(find.byTooltip('New chat'), findsOneWidget);
+      expect(chat.composer.observation.text, 'Keep this unsent');
       await navigate(tester, AppDestination.health);
       await tester.pumpAndSettle();
       await navigate(tester, AppDestination.chats);
-      expect(find.text('Keep this unsent'), findsOneWidget);
-      expect(fixture.calls.length, afterHealth);
+      expect(find.byTooltip('New chat'), findsOneWidget);
+      expect(chat.composer.observation.text, 'Keep this unsent');
       expect(tester.takeException(), isNull);
     },
   );

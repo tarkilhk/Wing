@@ -1,5 +1,9 @@
 # Explore Wing
 
+Choose **Chats** in the navigation menu to return to the chat list, including
+from an open conversation or Recents. Your unsent draft is kept for when you
+reopen the conversation.
+
 Every conversation uses the same chat menu: **View screen**, **Outputs**,
 **Find in chat**, and **Refresh workspace**. Child conversations also offer
 **Parent chat**. Goal, agents and background work are available through the

@@ -3466,7 +3466,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     selected: _destination,
     access: controller.access,
     connectionStatus: controller.connectionStatus,
-    onSelected: _selectDestination,
+    onSelected: (destination) {
+      if (destination == AppDestination.chats) {
+        _leaveConversation(AppDestination.chats);
+      } else {
+        _selectDestination(destination);
+      }
+    },
   );
 
   void _leaveChat() {
