@@ -1216,17 +1216,6 @@ class BotsRepository {
       if (result['approved'] != true) {
         throw StateError('Approval was not confirmed');
       }
-    } else if (action.kind == 'retry') {
-      final result = await _command(
-        'default',
-        'groups.retry',
-        {'room_id': group.id, 'task_id': action.task},
-        canDispatch,
-        onDispatched,
-      );
-      if (result['retried'] != true) {
-        throw StateError('Retry was not confirmed');
-      }
     } else {
       throw ArgumentError('Unknown group action');
     }
@@ -1281,6 +1270,10 @@ class BotsRepository {
       canDispatch,
       onDispatched,
     );
+    if (action == 'stop' &&
+        (result['cancelled'] is! int || (result['cancelled'] as int) < 0)) {
+      throw StateError('Group stop could not be confirmed');
+    }
     if (action == 'rename' &&
         (_map(result['room'])['room_id'] != group.id ||
             _map(result['room'])['name'] != name)) {

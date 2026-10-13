@@ -120,7 +120,7 @@ The bottom dock previews your room and keeps Create group above the keyboard.
 Creation becomes available with at least two members. If it cannot be confirmed,
 the form fixes the room details so you can retry the same group.
 
-An unconfirmed send stays available for review/retry. Interrupted tasks ask for explicit confirmation before retrying. Approvals apply to the request shown in that discussion.
+An unconfirmed send stays available for review/retry. Paused work offers Continue group work to stop the paused attempt and send a continuation request. Approvals apply to the request shown in that discussion.
 
 Your bubbles show your message without a User label. Bot replies show the
 sender's saved avatar and name, formatted text, links, code and timestamps.
@@ -166,9 +166,13 @@ that button, with saved names and avatars. Tap outside or use Back
 to dismiss it. Without a saved room picture, the conversation shows its
 member-avatar collage.
 The ellipsis menu contains working histories, Refresh and Stop.
-Stop group work is also available when interrupted work is waiting for Retry,
-even if the bots are no longer running. Stop cancels that pending work and keeps
-the conversation history; send a follow-up in the same group to continue.
+When work pauses, **Continue group work** below the explanation stops the paused
+attempt, then sends a message asking the bots to continue unfinished work and
+avoid repeating completed work. If Stop cannot be confirmed, Wing keeps Continue
+available and sends no message. If the message cannot be confirmed, Continue
+resends that same message without stopping again. Your draft and conversation
+history are kept.
+Stop group work in the menu also cancels paused work without sending a message.
 Refresh rereads messages, activity and approval state; it does not restart the bots.
 A separate Wing pulse appears while your refresh is running, without changing
 action icons or moving the messages. Wing also refreshes this state automatically. Recognized bot mentions display as bold,

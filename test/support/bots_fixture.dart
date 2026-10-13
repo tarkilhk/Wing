@@ -320,13 +320,14 @@ class BotsFixture {
       case 'groups.approve':
         pending.clear();
         return {'approved': true};
-      case 'groups.retry':
-        pending.clear();
-        return {'retried': true};
       case 'groups.rename':
         room['name'] = params['name'];
         return {'room': room};
-      case 'groups.stop' || 'groups.disband':
+      case 'groups.stop':
+        final cancelled = pending.length;
+        pending.clear();
+        return {'cancelled': cancelled};
+      case 'groups.disband':
         return {'ok': true};
       case 'profiles.set_asset':
         return {'ok': true};

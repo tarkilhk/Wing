@@ -469,33 +469,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     }
   }
 
-  Future<void> _retry(BotGroupAction action) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Retry interrupted group work?'),
-        content: const Text(
-          'The previous attempt has an uncertain outcome. Retrying may repeat work that already completed.',
-        ),
-        actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Retry'),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (mounted && confirmed == true) await _session.resolve(action);
-  }
-
   Future<void> _showBotActions(
     BuildContext anchor,
     BotGroupMember member,
@@ -837,7 +810,9 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                                     children: [
                                       Text(
                                         action.kind == 'retry'
-                                            ? 'Interrupted work'
+                                            ? _session.awaitingContinuation
+                                                  ? 'Work was stopped; Continue resends the same continuation message.'
+                                                  : 'Work paused; Continue stops this attempt and asks the bots to resume.'
                                             : '${_session.group.members.where((m) => m.id == action.member).firstOrNull?.name ?? 'A bot'} needs approval',
                                         style: Theme.of(
                                           context,
@@ -852,11 +827,17 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                                           if (action.kind == 'retry')
                                             StudioButtonPress(
                                               child: IconButton(
-                                                tooltip: 'Review retry',
-                                                onPressed: _session.acting
+                                                tooltip: 'Continue group work',
+                                                onPressed:
+                                                    _session.acting ||
+                                                        _session.sending
                                                     ? null
-                                                    : () => _retry(action),
-                                                icon: const Icon(Icons.refresh),
+                                                    : () => _session.resolve(
+                                                        action,
+                                                      ),
+                                                icon: const Icon(
+                                                  Icons.play_arrow,
+                                                ),
                                               ),
                                             ),
                                           for (final choice in action.choices)
@@ -865,7 +846,9 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                                                 tooltip: choice == 'once'
                                                     ? 'Allow once'
                                                     : 'Deny',
-                                                onPressed: _session.acting
+                                                onPressed:
+                                                    _session.acting ||
+                                                        _session.sending
                                                     ? null
                                                     : () => _session.resolve(
                                                         action,
@@ -968,6 +951,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                 : stopping
                 ? _session.stop
                 : _session.sending ||
+                      _session.acting ||
                       (_session.pendingText == null &&
                           _composer.text.trim().isEmpty)
                 ? null

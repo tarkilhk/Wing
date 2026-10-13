@@ -243,15 +243,33 @@ class BotGroupSession extends ChangeNotifier {
   }
 
   BotGroupRuntime? _runtime;
-  BotGroupRuntime? get runtime => _runtime;
+  BotGroupRuntime? get runtime {
+    final value = _runtime;
+    final continuation = _continuation;
+    if (value == null ||
+        continuation == null ||
+        value.actions.any((action) => action.key == continuation.action.key)) {
+      return value;
+    }
+    return BotGroupRuntime(
+      working: value.working,
+      blocked: value.blocked,
+      actions: [continuation.action, ...value.actions],
+    );
+  }
+
+  _GroupContinuation? _continuation;
+  bool get awaitingContinuation => _continuation?.stopped == true;
+  int _recoveryRevision = 0;
   bool _acting = false;
   bool get acting => _acting;
   bool get canStopGroupWork =>
       !_closed &&
       !_acting &&
-      (_runtime?.working == true ||
-          _runtime?.blocked == true ||
-          _runtime?.actions.any((action) => action.kind == 'retry') == true);
+      !_sending &&
+      (runtime?.working == true ||
+          runtime?.blocked == true ||
+          runtime?.actions.any((action) => action.kind == 'retry') == true);
   List<BotGroupEvent> get events => List.unmodifiable(
     _events.values.toList()..sort((a, b) => a.sequence.compareTo(b.sequence)),
   );
@@ -327,14 +345,15 @@ class BotGroupSession extends ChangeNotifier {
   }
 
   Future<void> _refresh(Completer<void> completion) async {
+    final revision = _recoveryRevision;
     notifyListeners();
     try {
       final nextRuntime = await repository.groupRuntime(group);
-      if (_closed || _capturing) return;
+      if (_closed || _capturing || revision != _recoveryRevision) return;
       _runtime = nextRuntime;
       do {
         final page = await repository.groupLog(group, since: _cursor);
-        if (_closed || _capturing) return;
+        if (_closed || _capturing || revision != _recoveryRevision) return;
         if (page.hasMore && page.cursor == _cursor) {
           throw StateError('Group log did not advance');
         }
@@ -346,18 +365,27 @@ class BotGroupSession extends ChangeNotifier {
       } while (!_closed && _visible);
       _readError = null;
     } catch (_) {
-      if (!_closed) {
+      if (!_closed && revision == _recoveryRevision) {
         _readError = 'Group updates could not refresh. Your messages are kept.';
       }
     } finally {
       _readCompletion = null;
       if (!_closed) notifyListeners();
       completion.complete();
+      if (!_closed && !_capturing && revision != _recoveryRevision) {
+        unawaited(refresh());
+      }
     }
   }
 
   Future<bool> send(String text) async {
-    if (_closed || _sending || text.trim().isEmpty) return false;
+    if (_closed || _sending || _acting || text.trim().isEmpty) return false;
+    if (_continuation != null) {
+      _actionError =
+          'Tap Continue to confirm the continuation message, or Stop to cancel.';
+      notifyListeners();
+      return false;
+    }
     if (_pending != null && _pending!.$2 != text.trim()) {
       _actionError =
           'Retry the unconfirmed message before sending a different one.';
@@ -445,8 +473,13 @@ class BotGroupSession extends ChangeNotifier {
   }
 
   Future<void> resolve(BotGroupAction action, {String? choice}) async {
+    if (action.kind == 'retry') {
+      await _continueWork(action);
+      return;
+    }
     if (_closed ||
         _acting ||
+        _sending ||
         runtime?.actions.any((a) => a.key == action.key) != true) {
       return;
     }
@@ -477,8 +510,97 @@ class BotGroupSession extends ChangeNotifier {
     }
   }
 
+  Future<void> _continueWork(BotGroupAction action) async {
+    if (_closed ||
+        _acting ||
+        _sending ||
+        runtime?.actions.any((value) => value.key == action.key) != true) {
+      return;
+    }
+    if (_pending != null) {
+      _actionError = 'Confirm your message before continuing group work.';
+      notifyListeners();
+      return;
+    }
+    if (_continuation != null && _continuation!.action.key != action.key) {
+      _actionError =
+          'Tap Continue on the pending attempt before starting another.';
+      notifyListeners();
+      return;
+    }
+    final attempt = _continuation ??= _GroupContinuation(action);
+    _recoveryRevision++;
+    _acting = true;
+    _actionError = null;
+    repository.retain();
+    notifyListeners();
+    try {
+      if (!attempt.stopped) {
+        await repository.groupAction(
+          group,
+          'stop',
+          attempt.cancelId,
+          () => !_closed,
+          () {},
+        );
+        attempt.stopped = true;
+        _forgetStoppedActions();
+      }
+      if (_closed) return;
+      _sending = true;
+      notifyListeners();
+      var dispatched = false;
+      int? sequence;
+      try {
+        await beforeSend?.call(group, attempt.eventId);
+        if (_closed) return;
+        sequence = await repository.sendGroup(
+          group,
+          attempt.eventId,
+          'Continue the unfinished work from where you left off. Check the conversation and current results first, and avoid repeating completed work.',
+          () => !_closed,
+          () => dispatched = true,
+        );
+        _continuation = null;
+        _forgetStoppedActions();
+      } finally {
+        await afterSend?.call(group, (
+          eventId: attempt.eventId,
+          dispatched: dispatched,
+          sequence: sequence,
+        ));
+      }
+    } catch (_) {
+      if (!_closed) {
+        _actionError = attempt.stopped
+            ? 'Message not confirmed. Tap Continue to resend.'
+            : 'Stop could not be confirmed. Tap Continue to try again.';
+      }
+    } finally {
+      repository.release();
+      if (!_closed) {
+        _acting = false;
+        _sending = false;
+        notifyListeners();
+        unawaited(refresh());
+      }
+    }
+  }
+
+  void _forgetStoppedActions() {
+    _recoveryRevision++;
+    if (_runtime case final value?) {
+      _runtime = BotGroupRuntime(
+        working: value.working,
+        blocked: value.blocked,
+        actions: const [],
+      );
+    }
+  }
+
   Future<void> stop() async {
-    if (_closed || _acting) return;
+    if (_closed || _acting || _sending) return;
+    _recoveryRevision++;
     _acting = true;
     _actionError = null;
     repository.retain();
@@ -491,6 +613,8 @@ class BotGroupSession extends ChangeNotifier {
         () => !_closed,
         () {},
       );
+      _continuation = null;
+      _forgetStoppedActions();
     } catch (_) {
       if (!_closed) _actionError = 'Stop could not be confirmed.';
     } finally {
@@ -511,4 +635,13 @@ class BotGroupSession extends ChangeNotifier {
     repository.release();
     super.dispose();
   }
+}
+
+/// One captured Stop/send transaction retained while confirmation is uncertain.
+final class _GroupContinuation {
+  _GroupContinuation(this.action);
+  final BotGroupAction action;
+  final String cancelId = const Uuid().v4();
+  final String eventId = const Uuid().v4();
+  bool stopped = false;
 }
