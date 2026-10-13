@@ -10,8 +10,13 @@ import 'studio_loading.dart';
 
 /// Folder-selection presentation over the shared server filesystem browser.
 class ProjectFolderPickerDialog extends StatefulWidget {
-  const ProjectFolderPickerDialog({super.key, required this.createBrowser});
+  const ProjectFolderPickerDialog({
+    super.key,
+    required this.createBrowser,
+    this.initialPath,
+  });
   final ServerFilesBrowser Function() createBrowser;
+  final String? initialPath;
 
   @override
   State<ProjectFolderPickerDialog> createState() =>
@@ -29,7 +34,7 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
   void initState() {
     super.initState();
     _browser = widget.createBrowser();
-    unawaited(_browser.open());
+    unawaited(_browser.open(widget.initialPath));
   }
 
   @override

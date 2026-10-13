@@ -41,3 +41,5 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Project icons use Microsoft’s unmodified `@vscode/codicons` 0.0.45, matching Hermes Desktop, under [CC BY 4.0](assets/fonts/CODICONS-LICENSE). Microsoft is the original author; see [font provenance](assets/fonts/README.md).

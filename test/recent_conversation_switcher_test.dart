@@ -985,6 +985,150 @@ void main() {
       await _finishFrames(tester);
     }
 
+    Future<({int alpha, Color strongest})> nudgePixels(
+      WidgetTester tester,
+    ) async {
+      final paint = tester.renderObject<RenderCustomPaint>(
+        find.byKey(const ValueKey('recent-conversation-nudge')),
+      );
+      final boundary = paint.parent! as RenderRepaintBoundary;
+      return (await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        try {
+          final bytes = await image.toByteData(
+            format: ui.ImageByteFormat.rawStraightRgba,
+          );
+          var alpha = 0, strongestAlpha = 0;
+          var strongest = const Color(0xff000000);
+          for (var i = 3; i < bytes!.lengthInBytes; i += 4) {
+            final value = bytes.getUint8(i);
+            alpha += value;
+            if (value > strongestAlpha) {
+              strongestAlpha = value;
+              strongest = Color.fromARGB(
+                255,
+                bytes.getUint8(i - 3),
+                bytes.getUint8(i - 2),
+                bytes.getUint8(i - 1),
+              );
+            }
+          }
+          return (alpha: alpha, strongest: strongest);
+        } finally {
+          image.dispose();
+        }
+      }))!;
+    }
+
+    Future<int> nudgeAlpha(WidgetTester tester) async =>
+        (await nudgePixels(tester)).alpha;
+
+    Future<void> signal(
+      WidgetTester tester, {
+      int index = 1,
+      int sequence = 1,
+      ConversationActivityKind kind = ConversationActivityKind.reply,
+    }) async {
+      activity.value = ChatNoticeActivity(
+        key: source.entries[index].key.chat!,
+        kind: kind,
+        identity: 'pond-$sequence',
+        sequence: sequence,
+      );
+      await tester.pump(const Duration(milliseconds: 180));
+      await tester.pump();
+    }
+
+    testWidgets('pond ripples keep arriving then expire after 3.8 seconds', (
+      tester,
+    ) async {
+      await mount(tester);
+      await signal(tester);
+      final cue = find.byKey(const ValueKey('recent-conversation-nudge'));
+      await tester.pump(const Duration(milliseconds: 900));
+      expect(await nudgeAlpha(tester), greaterThan(0));
+      expect(tester.getRect(cue).right, 360);
+      await tester.pump(const Duration(milliseconds: 2300));
+      final ongoing = await nudgeAlpha(tester);
+      expect(ongoing, greaterThan(0), reason: 'Later waves must still arrive');
+      await tester.pump(const Duration(milliseconds: 500));
+      final fading = await nudgeAlpha(tester);
+      expect(fading, greaterThan(0));
+      expect(fading, lessThan(ongoing * .2));
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(cue, findsNothing);
+      expect(source.opens, isEmpty, reason: 'Cues cannot open or read a chat');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('pond ripples replace direction and clear for card gestures', (
+      tester,
+    ) async {
+      await mount(tester);
+      await signal(tester);
+      await tester.pump(const Duration(milliseconds: 900));
+      await signal(
+        tester,
+        index: 2,
+        sequence: 2,
+        kind: ConversationActivityKind.inputNeeded,
+      );
+      await tester.pump(const Duration(milliseconds: 900));
+      final cue = find.byKey(const ValueKey('recent-conversation-nudge'));
+      expect(cue, findsOneWidget);
+      expect(tester.getRect(cue).left, 0);
+      expect(await nudgeAlpha(tester), greaterThan(0));
+      switcher.currentState!.openStack();
+      await tester.pump();
+      expect(cue, findsNothing);
+      expect(source.opens, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('pond cue retires when the mounted conversation changes', (
+      tester,
+    ) async {
+      await mount(tester);
+      await signal(tester);
+      await tester.pump(const Duration(milliseconds: 900));
+      expect(await nudgeAlpha(tester), greaterThan(0));
+      source.selected = source.entries[1].key;
+      source.notifyListeners();
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('recent-conversation-nudge')),
+        findsNothing,
+      );
+      expect(source.opens, isEmpty);
+      expect(session.active, isFalse);
+      await signal(tester, index: 2, sequence: 2);
+      await tester.pump(const Duration(milliseconds: 900));
+      expect(
+        find.byKey(const ValueKey('recent-conversation-nudge')),
+        findsNothing,
+      );
+      await tester.pumpWidget(const SizedBox());
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('reduced motion clears an ongoing pond cue', (tester) async {
+      await mount(tester);
+      await signal(tester);
+      await tester.pump(const Duration(milliseconds: 900));
+      expect(await nudgeAlpha(tester), greaterThan(0));
+      await mount(tester, reduced: true);
+      await signal(tester, index: 2, sequence: 2);
+      await tester.pump(const Duration(milliseconds: 900));
+      expect(
+        find.byKey(const ValueKey('recent-conversation-nudge')),
+        findsNothing,
+      );
+      await tester.pumpWidget(const SizedBox());
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets(
       'mixed circle has fresher left, older right and endpoint wrap',
       (tester) async {
@@ -3165,20 +3309,24 @@ void main() {
           );
           await tester.pump(const Duration(milliseconds: 200));
           await tester.pump(const Duration(milliseconds: 100));
-          final filtered = find.byType(ImageFiltered);
-          expect(filtered, findsOneWidget);
-          final box = tester.widget<DecoratedBox>(
-            find.descendant(of: filtered, matching: find.byType(DecoratedBox)),
-          );
+          await tester.pump(const Duration(milliseconds: 800));
+          final pixels = await nudgePixels(tester);
+          expect(pixels.alpha, greaterThan(0));
+          final expected = kind == ConversationActivityKind.inputNeeded
+              ? brightness == Brightness.light
+                    ? const Color(0xffaa5e1e)
+                    : const Color(0xfff4b160)
+              : brightness == Brightness.light
+              ? const Color(0xff2a393f)
+              : const Color(0xffe8f7f7);
+          expect(pixels.strongest.r, closeTo(expected.r, .025));
+          expect(pixels.strongest.g, closeTo(expected.g, .025));
+          expect(pixels.strongest.b, closeTo(expected.b, .025));
+          await tester.pump(const Duration(milliseconds: 3100));
           expect(
-            (box.decoration as BoxDecoration).color,
-            kind == ConversationActivityKind.inputNeeded
-                ? const Color(0xffefaa5b)
-                : brightness == Brightness.light
-                ? const Color(0xff3b3b3b)
-                : const Color(0xffe9efef),
+            find.byKey(const ValueKey('recent-conversation-nudge')),
+            findsNothing,
           );
-          await tester.pump(const Duration(milliseconds: 700));
         }
         expect(tester.takeException(), isNull);
       });
@@ -3841,7 +3989,7 @@ void main() {
           final activity = ValueNotifier<ChatNoticeActivity?>(null);
           addTearDown(activity.dispose);
           final frame = GlobalKey();
-          tester.view.physicalSize = Size(scale == 1 ? 360 : 320, 800);
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 800);
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
           await tester.pumpWidget(
@@ -3972,7 +4120,19 @@ void main() {
             find.byKey(const ValueKey('recent-conversation-nudge')),
             findsOneWidget,
           );
+          if (_export) {
+            await tester.pump(const Duration(milliseconds: 1400));
+            await _captureCurrent(
+              tester,
+              frame,
+              'pond-ripples-${brightness.name}-$scale',
+            );
+          }
           await _chatGesture(tester, pinch: false);
+          expect(
+            find.byKey(const ValueKey('recent-conversation-nudge')),
+            findsNothing,
+          );
           expect(controller.current!.chat!.key, other.chat);
           await tester.binding.handlePopRoute();
           await _finishFrames(tester);

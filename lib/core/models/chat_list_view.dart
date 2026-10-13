@@ -76,12 +76,7 @@ class ProjectFolderSuggestion {
 }
 
 /// User-entered project details, submitted together to the captured profile.
-typedef ProjectCreationDraft = ({
-  String name,
-  String path,
-  String color,
-  String icon,
-});
+typedef ProjectDraft = ({String name, String path, String color, String icon});
 
 /// Detached project facts. Wire maps never cross into browser views.
 final class BrowserProject {

@@ -4986,25 +4986,61 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String? name,
     String? color,
     String? icon,
+    String? path,
     required bool Function() canDispatch,
   }) => _retainWorkspaceOperation(() async {
     final resource = _projectMutationOwner(owner, id);
-    final project = _savedProject(
-      await resource.gateway.updateProject(
-        id,
-        name: name,
-        color: color,
-        icon: icon,
-        canDispatch: () =>
-            !_closed && identical(current, resource) && canDispatch(),
-      ),
-    );
-    if (_closed) return;
-    _applyProjects(resource, [
-      for (final existing in resource._projects)
-        if (existing['id'] == id) project else existing,
-    ]);
-    _browserMutated(ProjectBrowserMutation(resource.scope, id, project));
+    if (name != null && name.trim().isEmpty ||
+        path != null && path.trim().isEmpty) {
+      throw ArgumentError('A project name and folder must not be empty');
+    }
+    bool admitted() =>
+        !_closed && identical(current, resource) && canDispatch();
+    void publish(Map<String, dynamic> confirmed) {
+      if (_closed) return;
+      final project = _savedProject(confirmed);
+      _applyProjects(resource, [
+        for (final existing in resource._projects)
+          if (existing['id'] == id) project else existing,
+      ]);
+      _browserMutated(ProjectBrowserMutation(resource.scope, id, project));
+    }
+
+    final existing = resource._projects.firstWhere((row) => row['id'] == id);
+    final folderChanged =
+        path != null &&
+        path.trim() != ProfileGateway.projectDirectory(existing);
+    if (folderChanged) {
+      publish(
+        await resource.gateway.setProjectPrimaryFolder(
+          id,
+          path,
+          canDispatch: admitted,
+        ),
+      );
+    }
+    if (name != null || color != null || icon != null) {
+      try {
+        publish(
+          await resource.gateway.updateProject(
+            id,
+            name: name,
+            color: color,
+            icon: icon,
+            canDispatch: admitted,
+          ),
+        );
+      } catch (_) {
+        if (folderChanged) {
+          throw StateError(
+            "Folder saved. Other changes weren't confirmed. Try saving again.",
+          );
+        }
+        rethrow;
+      }
+    } else if (path == null) {
+      throw ArgumentError('No project changes supplied');
+    }
   });
 
   Future<void> deleteProject(

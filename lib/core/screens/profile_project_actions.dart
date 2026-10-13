@@ -1,5 +1,7 @@
+import '../models/project_icon.dart';
+import '../theme/project_icon_glyphs.dart';
+import '../widgets/project_icon_picker.dart';
 import '../services/server_files_browser.dart';
-import '../widgets/studio_action_label.dart';
 import '../widgets/studio_error.dart';
 import '../widgets/project_folder_picker.dart';
 import 'package:flutter/material.dart';
@@ -26,37 +28,6 @@ const _projectColors = <String>[
   'hsl(330 68% 58%)',
 ];
 
-const _projectIcons = <String, IconData>{
-  'folder-library': Icons.folder_outlined,
-  'repo': Icons.account_tree_outlined,
-  'rocket': Icons.rocket_launch_outlined,
-  'beaker': Icons.science_outlined,
-  'flame': Icons.local_fire_department_outlined,
-  'star-full': Icons.star_outline,
-  'heart': Icons.favorite_outline,
-  'zap': Icons.bolt_outlined,
-  'target': Icons.adjust,
-  'lightbulb': Icons.lightbulb_outline,
-  'tools': Icons.handyman_outlined,
-  'device-desktop': Icons.desktop_windows_outlined,
-  'device-mobile': Icons.phone_android_outlined,
-  'terminal': Icons.terminal,
-  'dashboard': Icons.dashboard_outlined,
-  'globe': Icons.public,
-  'broadcast': Icons.cell_tower_outlined,
-  'cloud': Icons.cloud_outlined,
-  'database': Icons.storage_outlined,
-  'package': Icons.inventory_2_outlined,
-  'book': Icons.menu_book_outlined,
-  'organization': Icons.business_outlined,
-  'bug': Icons.bug_report_outlined,
-  'shield': Icons.shield_outlined,
-  'key': Icons.key_outlined,
-  'gift': Icons.card_giftcard_outlined,
-  'telescope': Icons.travel_explore_outlined,
-  'home': Icons.home_outlined,
-};
-
 Future<void> showProjectActions(
   BuildContext context,
   BrowserActionSession session,
@@ -72,8 +43,7 @@ Future<void> showProjectActions(
           choice.label,
           switch (choice.action) {
             BrowserAction.newChat => WingIcons.newChat,
-            BrowserAction.rename => Icons.edit_outlined,
-            BrowserAction.appearance => Icons.palette_outlined,
+            BrowserAction.editProject => Icons.edit_outlined,
             _ => Icons.delete_outline,
           },
           choice.enabled,
@@ -90,15 +60,33 @@ Future<void> showProjectActions(
     return;
   }
   final action = BrowserAction.values.byName(choice);
+  if (action == BrowserAction.editProject) {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => ProjectEditorDialog.edit(
+        project: session.project!,
+        createFolders: session.createFilesBrowser,
+        save: (draft) async {
+          final saved = await session.perform(
+            BrowserAction.editProject,
+            name: draft.name,
+            path: draft.path,
+            color: draft.color,
+            icon: draft.icon,
+          );
+          if (!saved) {
+            throw StateError(
+              session.state.error ?? 'Could not save the project. Try again.',
+            );
+          }
+        },
+      ),
+    );
+    return;
+  }
   await showDialog<void>(
     context: context,
-    builder: (context) => _ProjectDialog(
-      action: action,
-      initialName: session.title,
-      initialColor: session.project!.color,
-      initialIcon: session.project!.icon,
-      session: session,
-    ),
+    builder: (context) => _ProjectDeleteDialog(session: session),
   );
 }
 
@@ -109,7 +97,7 @@ Widget projectAvatar(
 }) {
   final scheme = Theme.of(context).colorScheme;
   final color = _parseProjectColor(project.color) ?? scheme.secondary;
-  final icon = _projectIcons[project.icon] ?? Icons.folder_outlined;
+  final icon = ProjectIconGlyphs.of(project.icon);
   return Container(
     width: size,
     height: size,
@@ -122,33 +110,17 @@ Widget projectAvatar(
   );
 }
 
-class _ProjectDialog extends StatefulWidget {
-  const _ProjectDialog({
-    required this.action,
-    required this.initialName,
-    required this.initialColor,
-    required this.initialIcon,
-    required this.session,
-  });
-
-  final BrowserAction action;
-  final String initialName;
-  final String initialColor;
-  final String initialIcon;
+class _ProjectDeleteDialog extends StatefulWidget {
+  const _ProjectDeleteDialog({required this.session});
   final BrowserActionSession session;
 
   @override
-  State<_ProjectDialog> createState() => _ProjectDialogState();
+  State<_ProjectDeleteDialog> createState() => _ProjectDeleteDialogState();
 }
 
-class _ProjectDialogState extends State<_ProjectDialog> {
-  late final TextEditingController _name = TextEditingController(
-    text: widget.initialName,
-  );
-  late String _color = widget.initialColor;
-  late String _icon = widget.initialIcon;
+class _ProjectDeleteDialogState extends State<_ProjectDeleteDialog> {
   bool get _pending => widget.session.state.submitting;
-  String? get _failure => widget.session.state.error;
+
   @override
   void initState() {
     super.initState();
@@ -162,18 +134,13 @@ class _ProjectDialogState extends State<_ProjectDialog> {
   @override
   void dispose() {
     widget.session.removeListener(_changed);
-    _name.dispose();
     super.dispose();
   }
 
-  Future<void> _save() async {
-    final saved = await widget.session.perform(
-      widget.action,
-      name: _name.text,
-      color: _color,
-      icon: _icon,
-    );
-    if (saved && mounted) Navigator.pop(context);
+  Future<void> _delete() async {
+    if (await widget.session.perform(BrowserAction.delete) && mounted) {
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -181,69 +148,49 @@ class _ProjectDialogState extends State<_ProjectDialog> {
     canPop: !_pending,
     child: AlertDialog(
       scrollable: true,
-      title: Text(switch (widget.action) {
-        BrowserAction.rename => 'Rename project',
-        BrowserAction.appearance => 'Project appearance',
-        BrowserAction.delete => 'Delete project?',
-        _ => throw StateError('Unsupported project dialog'),
-      }),
+      title: const Text('Delete project?'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (widget.action == BrowserAction.rename)
-            TextField(
-              key: const ValueKey('project-name-field'),
-              controller: _name,
-              autofocus: true,
-              enabled: !_pending,
-              maxLength: 200,
-              onSubmitted: (_) => _save(),
-              decoration: const InputDecoration(labelText: 'Project name'),
-            )
-          else if (widget.action == BrowserAction.appearance) ...[
-            _ProjectAppearancePicker(
-              color: _color,
-              icon: _icon,
-              enabled: !_pending,
-              onColor: (value) => setState(() => _color = value),
-              onIcon: (value) => setState(() => _icon = value),
-            ),
-          ] else
-            Text(
-              'Remove "${widget.initialName}" from Hermes? Its chats will remain in Recents and All chats. Files on the host will not be deleted.',
-            ),
-          if (_failure != null) ...[
+          Text(
+            'Remove "${widget.session.title}" from Hermes? Its chats will remain in Recents and All chats. Files on the host will not be deleted.',
+          ),
+          if (widget.session.state.error case final failure?) ...[
             const SizedBox(height: 12),
-            StudioError(_failure!),
+            StudioError(failure),
           ],
         ],
       ),
       actions: [
         StudioButtonPress(
-          child: TextButton(
+          child: IconButton(
+            tooltip: 'Cancel',
             onPressed: _pending ? null : () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            icon: const Icon(Icons.close),
           ),
         ),
         StudioButtonPress(
-          child: FilledButton(
-            key: ValueKey(switch (widget.action) {
-              BrowserAction.rename => 'project-rename-save',
-              BrowserAction.appearance => 'project-appearance-save',
-              BrowserAction.delete => 'project-delete-confirm',
-              _ => throw StateError('Unsupported project dialog'),
-            }),
-            style: widget.action == BrowserAction.delete
-                ? FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                  )
-                : null,
-            onPressed: _pending ? null : _save,
-            child: StudioActionLabel(
-              widget.action == BrowserAction.delete ? 'Delete' : 'Save',
-              busy: _pending,
+          child: IconButton.filled(
+            key: const ValueKey('project-delete-confirm'),
+            tooltip: 'Delete project',
+            style: IconButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
             ),
+            onPressed: _pending ? null : _delete,
+            icon: _pending
+                ? SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(
+                      value: MediaQuery.disableAnimationsOf(context)
+                          ? .75
+                          : null,
+                      strokeWidth: 2,
+                      semanticsLabel: 'Deleting project',
+                    ),
+                  )
+                : const Icon(Icons.delete_outline),
           ),
         ),
       ],
@@ -302,52 +249,80 @@ class _ProjectAppearancePicker extends StatelessWidget {
       const SizedBox(height: 20),
       const Text('Icon'),
       const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
+      Row(
         children: [
-          _ChoiceButton(
-            key: const ValueKey('project-icon-none'),
-            selected: icon.isEmpty,
-            label: 'Default icon',
-            onPressed: !enabled ? null : () => onIcon(''),
-            child: const Icon(Icons.restart_alt, size: 20),
-          ),
-          for (final entry in _projectIcons.entries)
-            _ChoiceButton(
-              key: ValueKey('project-icon-${entry.key}'),
-              selected: icon == entry.key,
-              label: entry.key,
-              onPressed: !enabled ? null : () => onIcon(entry.key),
-              child: Icon(entry.value, size: 20),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color:
+                  (_parseProjectColor(color) ??
+                          Theme.of(context).colorScheme.primary)
+                      .withValues(alpha: .16),
+              borderRadius: WingRadius.control,
             ),
+            child: Icon(
+              ProjectIconGlyphs.of(icon),
+              color:
+                  _parseProjectColor(color) ??
+                  Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(projectIconLabel(icon))),
+          StudioButtonPress(
+            child: IconButton.outlined(
+              key: const ValueKey('project-choose-icon'),
+              tooltip: 'Choose project icon',
+              onPressed: !enabled
+                  ? null
+                  : () async {
+                      final chosen = await showProjectIconPicker(
+                        context,
+                        initialIcon: icon,
+                        color: _parseProjectColor(color),
+                      );
+                      if (chosen != null && context.mounted) onIcon(chosen);
+                    },
+              icon: const Icon(Icons.chevron_right),
+            ),
+          ),
         ],
       ),
     ],
   );
 }
 
-/// One draft keeps the project's name, host folder and appearance together.
-class NewProjectDialog extends StatefulWidget {
-  const NewProjectDialog({
+/// Creation and editing share one name, primary-folder and appearance draft.
+class ProjectEditorDialog extends StatefulWidget {
+  const ProjectEditorDialog.create({
     super.key,
     required this.createFolders,
-    required this.create,
+    required this.save,
+  }) : project = null;
+
+  const ProjectEditorDialog.edit({
+    super.key,
+    required BrowserProject this.project,
+    required this.createFolders,
+    required this.save,
   });
 
+  final BrowserProject? project;
   final ServerFilesBrowser Function() createFolders;
-  final Future<void> Function(ProjectCreationDraft) create;
+  final Future<void> Function(ProjectDraft) save;
 
   @override
-  State<NewProjectDialog> createState() => _NewProjectDialogState();
+  State<ProjectEditorDialog> createState() => _ProjectEditorDialogState();
 }
 
-class _NewProjectDialogState extends State<NewProjectDialog> {
-  final _name = TextEditingController();
+class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
+  late final _name = TextEditingController(text: widget.project?.name ?? '');
   final _errorScroll = ScrollController();
-  String _path = '';
-  String _color = '';
-  String _icon = 'folder-library';
+  late String _path = widget.project?.directory ?? '';
+  late String _color = widget.project?.color ?? '';
+  late String _icon = widget.project?.icon ?? 'folder-library';
+  bool get _editing => widget.project != null;
   bool _pending = false;
   String? _failure;
 
@@ -361,21 +336,23 @@ class _NewProjectDialogState extends State<NewProjectDialog> {
   Future<void> _chooseFolder() async {
     final path = await showDialog<String>(
       context: context,
-      builder: (_) =>
-          ProjectFolderPickerDialog(createBrowser: widget.createFolders),
+      builder: (_) => ProjectFolderPickerDialog(
+        createBrowser: widget.createFolders,
+        initialPath: _path.isEmpty ? null : _path,
+      ),
     );
     if (!mounted || path == null) return;
     setState(() => _path = path);
   }
 
-  Future<void> _create() async {
+  Future<void> _save() async {
     if (_pending || _name.text.trim().isEmpty || _path.isEmpty) return;
     setState(() {
       _pending = true;
       _failure = null;
     });
     try {
-      await widget.create((
+      await widget.save((
         name: _name.text.trim(),
         path: _path,
         color: _color,
@@ -401,7 +378,7 @@ class _NewProjectDialogState extends State<NewProjectDialog> {
     child: AlertDialog(
       scrollable: true,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      title: const Text('New project'),
+      title: Text(_editing ? 'Edit project' : 'New project'),
       content: SizedBox(
         width: 360,
         child: Column(
@@ -450,13 +427,22 @@ class _NewProjectDialogState extends State<NewProjectDialog> {
                 StudioButtonPress(
                   child: IconButton.outlined(
                     key: const ValueKey('project-choose-folder'),
-                    tooltip: 'Choose project folder',
+                    tooltip: _editing
+                        ? 'Change primary folder'
+                        : 'Choose project folder',
                     onPressed: _pending ? null : _chooseFolder,
                     icon: const Icon(Icons.folder_open_outlined),
                   ),
                 ),
               ],
             ),
+            if (_editing) ...[
+              const SizedBox(height: 4),
+              Text(
+                'New chats start here. Existing chats keep their folders.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             const SizedBox(height: 20),
             _ProjectAppearancePicker(
               color: _color,
@@ -482,10 +468,13 @@ class _NewProjectDialogState extends State<NewProjectDialog> {
                     controller: _errorScroll,
                     thumbVisibility: true,
                     child: SingleChildScrollView(
-                      key: const ValueKey('project-create-error'),
+                      key: const ValueKey('project-save-error'),
                       controller: _errorScroll,
                       primary: false,
-                      child: StudioError(_failure!),
+                      child: DefaultTextStyle.merge(
+                        style: Theme.of(context).textTheme.bodySmall,
+                        child: StudioError(_failure!),
+                      ),
                     ),
                   ),
                 ),
@@ -503,12 +492,16 @@ class _NewProjectDialogState extends State<NewProjectDialog> {
                   ),
                   StudioButtonPress(
                     child: IconButton.filled(
-                      key: const ValueKey('project-create-confirm'),
-                      tooltip: 'Create project',
+                      key: ValueKey(
+                        _editing
+                            ? 'project-edit-confirm'
+                            : 'project-create-confirm',
+                      ),
+                      tooltip: _editing ? 'Save changes' : 'Create project',
                       onPressed:
                           _pending || _name.text.trim().isEmpty || _path.isEmpty
                           ? null
-                          : _create,
+                          : _save,
                       icon: _pending
                           ? SizedBox.square(
                               dimension: 20,
@@ -517,7 +510,9 @@ class _NewProjectDialogState extends State<NewProjectDialog> {
                                     ? 0.75
                                     : null,
                                 strokeWidth: 2,
-                                semanticsLabel: 'Creating project',
+                                semanticsLabel: _editing
+                                    ? 'Saving project'
+                                    : 'Creating project',
                               ),
                             )
                           : const Icon(Icons.check),

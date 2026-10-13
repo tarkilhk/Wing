@@ -446,7 +446,7 @@ void main() {
             );
             await tester.pumpAndSettle(const Duration(milliseconds: 250));
             expect(
-              find.byKey(const ValueKey('project-action-rename')),
+              find.byKey(const ValueKey('project-action-editProject')),
               findsOneWidget,
             );
             await tester.tapAt(const Offset(8, 8));

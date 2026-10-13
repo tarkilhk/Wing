@@ -12,7 +12,7 @@ enum BrowserAction {
   archive,
   delete,
   newChat,
-  appearance,
+  editProject,
   editDraft,
 }
 

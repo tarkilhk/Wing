@@ -62,6 +62,10 @@ flutter:
     - family: WingIcons
       fonts:
         - asset: assets/fonts/wing-icons.ttf
+    - family: WingProjectIcons
+      fonts:
+        - asset: assets/fonts/codicons.ttf
   assets:
+    - assets/fonts/CODICONS-LICENSE
     - PRIVACY.md
     - assets/icon/icon.png
