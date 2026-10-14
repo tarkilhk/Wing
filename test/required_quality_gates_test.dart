@@ -27,6 +27,7 @@ const notificationBoundaryCommand =
     'python3 tools/architecture/native_notification/retired_action.py';
 const notificationFixtureCommand =
     'python3 tools/architecture/native_notification/prove_boundary.py';
+const notificationDeviceCommand = 'python3 tools/qa/run_notification_gate.py';
 const declarationBoundaryCommand =
     'python3 tools/architecture/native_notification/retired_declaration.py';
 const declarationFixtureCommand =
@@ -57,6 +58,7 @@ const fixtureCommands = [
   'dart run tools/architecture/tests/retired_answer_versions_namespace_test.dart',
 ];
 final independentCommands = [
+  notificationDeviceCommand,
   ...fixtureCommands,
   'python3 tools/architecture/rules/authored_census.py',
   'python3 tools/architecture/rules/native_retired_resources.py',
@@ -106,6 +108,31 @@ void main() {
   test('normal mandatory QA and architecture gates are accepted', () {
     expect(checkRequiredQualityGates(root), isEmpty);
   });
+
+  test(
+    'real notification shade gate cannot be omitted or soft-failed',
+    () async {
+      for (final workflow in ['pr-quality.yml', 'release.yml']) {
+        for (final replacement in [
+          'echo notification checks skipped',
+          '$notificationDeviceCommand || true',
+          'echo "$notificationDeviceCommand"',
+        ]) {
+          _writeWorkflows(root);
+          final file = File('${root.path}/.github/workflows/$workflow');
+          file.writeAsStringSync(
+            file.readAsStringSync().replaceFirst(
+              'run: $notificationDeviceCommand',
+              'run: $replacement',
+            ),
+          );
+          final result = await runCli();
+          expect(result.exitCode, 1, reason: '$workflow: $replacement');
+          expect(result.stderr, contains('notification-device'));
+        }
+      }
+    },
+  );
 
   test('PR quality must run on pushes to every branch without filters', () {
     for (final triggers in [

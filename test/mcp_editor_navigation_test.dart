@@ -50,7 +50,8 @@ void main() {
               mode: mode,
             );
             final profile = choice?.id;
-            if (profile != null &&
+            if (choice?.kind == WorkspaceChoiceKind.profile &&
+                profile != null &&
                 profile != (navigation.profileName ?? 'personal')) {
               await navigation.switchTo(profile, () async {
                 selected.add(profile);

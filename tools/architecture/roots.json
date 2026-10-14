@@ -6484,6 +6484,14 @@
       "purpose": "Independent shared compact alert/select dialog framing source gate",
       "source": "internal/docs/TESTING.md; internal/tools/architecture/README.md",
       "status": "supported"
+    },
+    {
+      "id": "qa-tools/qa/run_notification_gate.py",
+      "kind": "qa-cli",
+      "path": "tools/qa/run_notification_gate.py",
+      "purpose": "Required native notification shade tap with blocked history; owns isolated CI emulator lifetime",
+      "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml; internal/docs/TESTING.md",
+      "status": "supported"
     }
   ],
   "files": [
@@ -14916,6 +14924,16 @@
       "path": "android/app/src/main/res/drawable/ic_notice_session.xml",
       "area": "android",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/qa/run_notification_gate.py",
+      "area": "tools",
+      "provenance": "tracked"
+    },
+    {
+      "path": "tools/qa/test_notification_gate.py",
+      "area": "tools",
+      "provenance": "tracked"
     },
     {
       "path": "lib/core/services/chat_transcript_events.dart",

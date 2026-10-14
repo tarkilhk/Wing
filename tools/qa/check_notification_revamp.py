@@ -137,13 +137,19 @@ def check_content_tap_clear():
         shade()
         tap(text=answer)
         until(lambda: state()['history_held'], 'Tap did not start the captured chat history')
+        assert state()['read_guards']['selected_is_target'], 'Tap opened a different chat'
         raw = adb('shell', 'dumpsys', 'notification', '--noredact')
         assert not any(f'pkg={PACKAGE} ' in line and f'id={notification_id} ' in line
                        for line in raw.splitlines() if 'NotificationRecord(' in line), \
             'Body tap left its notification in the shade while history was loading'
-        print('PASS: body tap opens the captured chat and clears the shade before history completes', flush=True)
     finally:
         state('/release-history', {})
+    def answer_visible():
+        current = state()
+        return (current['lifecycle'] == 'resumed' and current['chat_visible']
+                and any(answer in (node.get('text'), node.get('content-desc')) for node in nodes()))
+    until(answer_visible, 'Tapped chat answer is not visible after history completes')
+    print('PASS: body tap opens the captured chat and clears the shade before history completes', flush=True)
 
 
 def run(output, tap_only=False):

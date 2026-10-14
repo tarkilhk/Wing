@@ -363,7 +363,7 @@ void main() {
           'tool_id': 'live-after-review',
         });
       } else {
-        emitChatEvent(controller, chat, 'reasoning.available', {
+        emitChatEvent(controller, chat, 'reasoning.delta', {
           'text': 'Native reasoning after the saved review',
         });
       }
@@ -372,7 +372,7 @@ void main() {
       final live = find.byType(ProfileLiveExecution);
       expect(live, findsOneWidget);
       expect(
-        find.text(activity == 'tool' ? 'Running command' : 'Reasoning'),
+        find.text(activity == 'tool' ? 'Running command' : 'Thinking'),
         findsOneWidget,
       );
       if (activity == 'reasoning') {
@@ -464,7 +464,7 @@ void main() {
         'name': 'terminal',
         'tool_id': 'live',
       });
-      emitChatEvent(controller, chat, 'reasoning.available', {
+      emitChatEvent(controller, chat, 'reasoning.delta', {
         'text': 'Current private reasoning',
       });
 
@@ -507,7 +507,7 @@ void main() {
       await tester.tap(currentHeader);
       await tester.pumpAndSettle();
       expect(find.text('Running command'), findsOneWidget);
-      expect(find.text('Reasoning'), findsOneWidget);
+      expect(find.text('Thinking'), findsOneWidget);
       expect(find.text('Current private reasoning'), findsOneWidget);
 
       await tester.enterText(

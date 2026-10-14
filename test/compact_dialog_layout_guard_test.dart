@@ -99,7 +99,7 @@ void main() {
     addTearDown(workspace.dispose);
     expect(rule.check(workspace.snapshot), isEmpty);
   });
-  test('source CLI rejects the defect and accepts shared framing', () async {
+  test('CLI rejects the defect and accepts shared framing', () async {
     final workspace = FixtureWorkspace({
       'files': {
         'lib/view.dart': {
@@ -110,16 +110,31 @@ void main() {
       },
     });
     addTearDown(workspace.dispose);
-    Future<ProcessResult> run() =>
-        Process.run('${dartSdkPath(Directory.current.path)}/bin/dart', [
-          'run',
-          'tools/architecture/rules/compact_dialog_layout.dart',
-          '--root',
-          workspace.directory.path,
-          '--roles',
-          workspace.rolesPath,
-          '--json',
-        ]);
+    final directory = await Directory.systemTemp.createTemp('wing-dialog-cli-');
+    addTearDown(() => directory.delete(recursive: true));
+    final dart = '${dartSdkPath(Directory.current.path)}/bin/dart';
+    final kernel = '${directory.path}/rule.dill';
+    // Compile the actual entry point once; each verdict still uses a fresh VM.
+    final compiled = await Process.run(dart, [
+      'compile',
+      'kernel',
+      'tools/architecture/rules/compact_dialog_layout.dart',
+      '-o',
+      kernel,
+    ]);
+    expect(
+      compiled.exitCode,
+      0,
+      reason: '${compiled.stdout}\n${compiled.stderr}',
+    );
+    Future<ProcessResult> run() => Process.run(dart, [
+      kernel,
+      '--root',
+      workspace.directory.path,
+      '--roles',
+      workspace.rolesPath,
+      '--json',
+    ]);
     final rejected = await run();
     expect(
       rejected.exitCode,

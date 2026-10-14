@@ -112,6 +112,9 @@ void main() {
               find.byKey(const ValueKey('dialog-draft')),
               'Retained draft',
             );
+            // Settle the text field's focused layout before measuring the
+            // separate transition into saving.
+            await tester.pumpAndSettle();
             await captureFormFamily(
               tester,
               'dialog-${brightness.name}-$scale-$keyboard-idle',

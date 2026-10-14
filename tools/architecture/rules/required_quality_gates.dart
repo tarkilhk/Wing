@@ -35,6 +35,7 @@ const _notificationBoundaryCommand =
     'python3 tools/architecture/native_notification/retired_action.py';
 const _notificationFixtureCommand =
     'python3 tools/architecture/native_notification/prove_boundary.py';
+const _notificationDeviceCommand = 'python3 tools/qa/run_notification_gate.py';
 const _declarationBoundaryCommand =
     'python3 tools/architecture/native_notification/retired_declaration.py';
 const _declarationFixtureCommand =
@@ -109,6 +110,7 @@ List<String> checkRequiredQualityGates(Directory root) {
         ('native-share-fixtures', _nativeFixtureCommand),
         ('native-notification-action', _notificationBoundaryCommand),
         ('native-notification-fixtures', _notificationFixtureCommand),
+        ('notification-device', _notificationDeviceCommand),
         ('native-retired-declarations', _declarationBoundaryCommand),
         ('native-retired-declaration-fixtures', _declarationFixtureCommand),
         ('native-voice-boundary', _voiceBoundaryCommand),
