@@ -17,6 +17,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/workspace_recents_session.dart';
 import 'package:wing/core/services/recent_conversation_session.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/ws_client.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_browser_fixture.dart';
@@ -32,6 +33,9 @@ class _RecentsFixture extends ProfileBrowserFixture {
   int readWrites = 0;
   bool failHiddenMetadata = false;
   bool failDiscovery = false;
+  Completer<void>? heldRead;
+  bool failRead = false;
+  final readWatermarks = <String, double>{};
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
     final delegate = super.gateway(scope);
@@ -60,8 +64,12 @@ class _RecentsFixture extends ProfileBrowserFixture {
         expect(body['profile'], scope.profileName);
         expect(body['unread'], false);
         onDispatched();
+        final readAt = DateTime.now().millisecondsSinceEpoch / 1000;
+        await heldRead?.future;
+        if (failRead) throw StateError('Read acknowledgement interrupted');
         unread = false;
         readWrites++;
+        readWatermarks[scope.profileName] = readAt;
         for (final row
             in hiddenSessions[scope.profileName] ?? <Map<String, dynamic>>[]) {
           if (row['id'] == 'shared-id') row['last_read_at'] = now;
@@ -117,7 +125,7 @@ class _RecentsFixture extends ProfileBrowserFixture {
         'last_active': now - 600,
         'archived': profile == 'work',
         'unread': unread,
-        'last_read_at': lastRead,
+        'last_read_at': readWatermarks[profile] ?? lastRead,
       },
     {
       'id': 'old',
@@ -135,17 +143,20 @@ void main() {
   late AppPreferences appPreferences;
   late SharedPreferences preferences;
 
-  ProfileWorkspaceController makeController({String identity = 'recents'}) =>
-      ProfileWorkspaceController(
-        access: ConnectionAccess(
-          connection: identityTestConnection(),
-          dashboardOAuth: null,
-        ),
-        connectionIdentity: identity,
-        preferences: preferences,
-        appPreferences: appPreferences,
-        gatewayFactory: fixture.gateway,
-      );
+  ProfileWorkspaceController makeController({
+    String identity = 'recents',
+    Future<void> Function(ProfileNotification)? onAttention,
+  }) => ProfileWorkspaceController(
+    access: ConnectionAccess(
+      connection: identityTestConnection(),
+      dashboardOAuth: null,
+    ),
+    connectionIdentity: identity,
+    preferences: preferences,
+    appPreferences: appPreferences,
+    gatewayFactory: fixture.gateway,
+    onAttention: onAttention,
+  );
 
   WorkspaceRecentsSession recentsFor(BotsSession bots) {
     final recents = WorkspaceRecentsSession(controller, bots);
@@ -171,6 +182,422 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  for (final hidden in [false, true]) {
+    test(
+      'live answer updates ${hidden ? 'hidden Bot Chat' : 'ordinary chat'} unread before Recents polling',
+      () async {
+        fixture.hiddenChat = hidden;
+        if (hidden) {
+          fixture.hiddenSessions['personal'] = [
+            {
+              'id': 'shared-id',
+              'title': 'Bot Chat',
+              'profile': 'personal',
+              'source': 'desktop',
+              'hidden': true,
+              'last_active': fixture.now - 600,
+              'unread': false,
+              'last_read_at': fixture.now - 300,
+            },
+          ];
+        }
+        fixture.lastRead = fixture.now - 300;
+        final key = ProfileSessionKey(controller.current!.scope, 'shared-id');
+        final chat = (await controller.openSession(key))!;
+        final gateway = controller.current!.gateway;
+        final recents = emptyRecents();
+        await recents.refresh();
+        expect(
+          recents.items().singleWhere((item) => item.chat?.key == key).unread,
+          isFalse,
+        );
+        controller.setRouteVisibility(controller, false);
+        fixture.messageRows[('personal', 'shared-id')] = [
+          {
+            'id': 2,
+            'role': 'assistant',
+            'content': 'New live answer',
+            'timestamp': fixture.now,
+          },
+        ];
+        gateway.onEvent!(
+          StreamEvent(
+            type: 'message.start',
+            sessionId: chat.runtime.runtimeId,
+            data: {},
+          ),
+        );
+        gateway.onEvent!(
+          StreamEvent(
+            type: 'message.complete',
+            sessionId: chat.runtime.runtimeId,
+            data: {'text': 'New live answer'},
+          ),
+        );
+        for (var tick = 0; tick < 30; tick++) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        final item = recents.items().singleWhere(
+          (item) => item.chat?.key == key,
+        );
+        expect(item.messagePreview, 'New live answer');
+        expect(
+          item.unread,
+          isTrue,
+          reason:
+              'A delivered answer must update cached Recents without waiting for its periodic list read',
+        );
+        expect(
+          recents.catalog.entries
+              .singleWhere((entry) => entry.key.chat == key)
+              .unread,
+          isTrue,
+        );
+        expect(fixture.readWrites, 0);
+        await controller.openSession(key);
+        await Future<void>.delayed(Duration.zero);
+        expect(fixture.readWrites, 1);
+        expect(
+          recents.items().singleWhere((item) => item.chat?.key == key).unread,
+          isFalse,
+          reason:
+              'An explicit successful open must acknowledge the event-driven answer',
+        );
+      },
+    );
+  }
+
+  for (final failure in [false, true]) {
+    test(
+      'newer answer survives a held read acknowledgement failure=$failure',
+      () async {
+        fixture.lastRead = fixture.now - 300;
+        final key = ProfileSessionKey(controller.current!.scope, 'shared-id');
+        final chat = (await controller.openSession(key))!;
+        final recents = emptyRecents();
+        await recents.refresh();
+        fixture.messageRows[('personal', 'shared-id')] = [
+          {
+            'id': 2,
+            'role': 'assistant',
+            'content': 'First incoming answer',
+            'timestamp': fixture.now,
+          },
+        ];
+        await controller.refreshHistory(chat);
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          recents.items().singleWhere((item) => item.chat?.key == key).unread,
+          isTrue,
+        );
+        fixture.heldRead = Completer<void>();
+        fixture.failRead = failure;
+        final reading = controller.mutateSession(
+          key,
+          changes: const {'unread': false},
+          canDispatch: () => true,
+        );
+        final result = expectLater(
+          reading,
+          failure ? throwsStateError : completes,
+        );
+        await Future<void>.delayed(Duration.zero);
+        fixture.messageRows[('personal', 'shared-id')] = [
+          ...fixture.messageRows[('personal', 'shared-id')]!,
+          {
+            'id': 3,
+            'role': 'assistant',
+            'content': 'Newer incoming answer',
+            'timestamp': fixture.now + 1,
+          },
+        ];
+        await controller.refreshHistory(chat);
+        fixture.heldRead!.complete();
+        await result;
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          recents.items().singleWhere((item) => item.chat?.key == key).unread,
+          isTrue,
+          reason: 'A receipt only covers the history captured before dispatch',
+        );
+        expect(
+          recents
+              .items()
+              .singleWhere((item) => item.chat?.key == key)
+              .messagePreview,
+          'Newer incoming answer',
+        );
+        expect(fixture.readWrites, failure ? 0 : 1);
+      },
+    );
+  }
+
+  test(
+    'valid read watermark overrides stale read list flag during reconciliation',
+    () async {
+      fixture.lastRead = fixture.now - 300;
+      final key = ProfileSessionKey(controller.current!.scope, 'shared-id');
+      final chat = (await controller.openSession(key))!;
+      final recents = emptyRecents();
+      await recents.refresh();
+      fixture.messageRows[('personal', 'shared-id')] = [
+        {
+          'id': 2,
+          'role': 'assistant',
+          'content': 'Answer after the metadata snapshot',
+          'timestamp': fixture.now,
+        },
+      ];
+      await controller.refreshHistory(chat);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        recents.items().singleWhere((item) => item.chat?.key == key).unread,
+        isTrue,
+      );
+      await recents.refresh(force: true);
+      expect(
+        recents.items().singleWhere((item) => item.chat?.key == key).unread,
+        isTrue,
+        reason:
+            'Metadata and history reads are not an atomic snapshot; compare the answer to last_read_at',
+      );
+      expect(fixture.readWrites, 0);
+    },
+  );
+
+  test(
+    'first live answer enters Recents unread without a previous message observation',
+    () async {
+      final key = ProfileSessionKey(controller.current!.scope, 'shared-id');
+      fixture.messageRows[('personal', 'shared-id')] = [];
+      final chat = (await controller.openSession(key))!;
+      final recents = emptyRecents();
+      await recents.refresh();
+      expect(recents.items().any((item) => item.chat?.key == key), isFalse);
+      controller.setRouteVisibility(controller, false);
+      final release = fixture.historyDelays[('shared-id', 0)] =
+          Completer<void>();
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+      });
+      final gateway = controller.current!.gateway;
+      gateway.onEvent!(
+        StreamEvent(
+          type: 'message.start',
+          sessionId: chat.runtime.runtimeId,
+          data: {},
+        ),
+      );
+      gateway.onEvent!(
+        StreamEvent(
+          type: 'message.complete',
+          sessionId: chat.runtime.runtimeId,
+          data: {
+            'text': 'First incoming answer',
+            'mobile_push_event_id': 'first-answer',
+          },
+        ),
+      );
+      for (var tick = 0; tick < 20; tick++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final item = recents.items().singleWhere((item) => item.chat?.key == key);
+      expect(item.messagePreview, 'First incoming answer');
+      expect(
+        item.unread,
+        isTrue,
+        reason:
+            'The first answer has no older saved-message baseline to compare',
+      );
+      expect(fixture.readWrites, 0);
+      fixture.unread = true;
+      fixture.messageRows[('personal', 'shared-id')] = [
+        {
+          'id': 1,
+          'role': 'assistant',
+          'content': 'First incoming answer',
+          'timestamp': fixture.now,
+        },
+      ];
+      release.complete();
+    },
+  );
+
+  test(
+    'live answer cue publishes before held completion history enrichment',
+    () async {
+      final notices = <ProfileNotification>[];
+      controller.dispose();
+      controller = makeController(
+        onAttention: (notice) async => notices.add(notice),
+      );
+      await controller.initialize();
+      fixture.lastRead = fixture.now - 300;
+      final key = ProfileSessionKey(controller.current!.scope, 'shared-id');
+      final chat = (await controller.openSession(key))!;
+      final recents = emptyRecents();
+      await recents.refresh();
+      controller.setRouteVisibility(controller, false);
+      final history = fixture.historyDelays[('shared-id', 0)] =
+          Completer<void>();
+      addTearDown(() {
+        if (!history.isCompleted) history.complete();
+      });
+      final gateway = controller.current!.gateway;
+      gateway.onEvent!(
+        StreamEvent(
+          type: 'message.start',
+          sessionId: chat.runtime.runtimeId,
+          data: {},
+        ),
+      );
+      gateway.onEvent!(
+        StreamEvent(
+          type: 'message.complete',
+          sessionId: chat.runtime.runtimeId,
+          data: {
+            'text': 'Delivered reply before history',
+            'mobile_push_event_id': 'held-history-answer',
+          },
+        ),
+      );
+      for (var tick = 0; tick < 20; tick++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(chat.reading.historyLoading, isTrue);
+      expect(
+        recents.items().singleWhere((item) => item.chat?.key == key).unread,
+        isTrue,
+      );
+      expect(
+        notices,
+        hasLength(1),
+        reason: 'The fresh answer cue must not wait for passive enrichment',
+      );
+      expect(notices.single.focus!.identity, 'answer:held-history-answer');
+      history.complete();
+    },
+  );
+
+  for (final failed in [false, true]) {
+    test(
+      'viewed current live answer clears Recents through confirmed read acknowledgement failure=$failed',
+      () async {
+        fixture.lastRead = fixture.now - 300;
+        final key = ProfileSessionKey(controller.current!.scope, 'shared-id');
+        final chat = (await controller.openSession(key))!;
+        final recents = emptyRecents();
+        await recents.refresh();
+        fixture.messageRows[('personal', 'shared-id')] = [
+          {
+            'id': 2,
+            'role': 'assistant',
+            'content': 'Reply viewed in the current chat',
+            'timestamp': fixture.now,
+          },
+        ];
+        final gateway = controller.current!.gateway;
+        gateway.onEvent!(
+          StreamEvent(
+            type: 'message.start',
+            sessionId: chat.runtime.runtimeId,
+            data: {},
+          ),
+        );
+        gateway.onEvent!(
+          StreamEvent(
+            type: 'message.complete',
+            sessionId: chat.runtime.runtimeId,
+            data: {
+              'text': 'Reply viewed in the current chat',
+              'mobile_push_event_id': 'current-answer',
+            },
+          ),
+        );
+        for (var tick = 0; tick < 30; tick++) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        controller.setRouteVisibility(controller, true);
+        fixture.failRead = failed;
+        final target = chat.reading.notificationReadTarget!;
+        controller.notificationAnswerVisible(chat, target);
+        for (var tick = 0; tick < 20; tick++) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(fixture.readWrites, failed ? 0 : 1);
+        expect(chat.markReadFailed, failed);
+        if (failed) {
+          expect(
+            recents.items().singleWhere((item) => item.chat?.key == key).unread,
+            isTrue,
+          );
+          fixture.failRead = false;
+          await controller.openSession(key);
+          await Future<void>.delayed(Duration.zero);
+          expect(fixture.readWrites, 1);
+          expect(chat.markReadFailed, isFalse);
+        }
+        expect(
+          recents.items().singleWhere((item) => item.chat?.key == key).unread,
+          isFalse,
+          reason:
+              'Returning to Recents must not claim an already viewed live answer is new',
+        );
+        await recents.refresh(force: true);
+        expect(
+          recents.items().singleWhere((item) => item.chat?.key == key).unread,
+          isFalse,
+          reason: 'Confirmed reading stays read through reconciliation',
+        );
+      },
+    );
+  }
+
+  for (final text in ['', '   ']) {
+    test(
+      'empty completion cannot manufacture an answer cue (length=${text.length})',
+      () async {
+        final notices = <ProfileNotification>[];
+        controller.dispose();
+        controller = makeController(
+          onAttention: (notice) async => notices.add(notice),
+        );
+        await controller.initialize();
+        fixture.lastRead = fixture.now - 300;
+        final key = ProfileSessionKey(controller.current!.scope, 'shared-id');
+        final chat = (await controller.openSession(key))!;
+        final recents = emptyRecents();
+        await recents.refresh();
+        controller.setRouteVisibility(controller, false);
+        final gateway = controller.current!.gateway;
+        gateway.onEvent!(
+          StreamEvent(
+            type: 'message.start',
+            sessionId: chat.runtime.runtimeId,
+            data: {},
+          ),
+        );
+        gateway.onEvent!(
+          StreamEvent(
+            type: 'message.complete',
+            sessionId: chat.runtime.runtimeId,
+            data: {'text': text},
+          ),
+        );
+        for (var tick = 0; tick < 30; tick++) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(notices, hasLength(1));
+        expect(notices.single.focus!.kind, 'status');
+        expect(
+          recents.items().singleWhere((item) => item.chat?.key == key).unread,
+          isFalse,
+        );
+        expect(fixture.readWrites, 0);
+      },
+    );
+  }
 
   test('message excerpts keep the start of the latest visible message', () {
     expect(
@@ -212,6 +639,79 @@ void main() {
       isNull,
     );
   });
+
+  for (final fromRecents in [false, true]) {
+    testWidgets(
+      'group origin admits cues only after Recents activation (fromRecents=$fromRecents)',
+      (tester) async {
+        final host = BotsFixture();
+        host.events.add({
+          'room_id': 'room-1',
+          'seq': 1,
+          'kind': 'message.member',
+          'created_at': fixture.now,
+          'actor': {'kind': 'member', 'id': 'atlas'},
+          'payload': {'text': 'A recent group answer'},
+        });
+        final bots = BotsSession((_) async => [host.repository]);
+        addTearDown(bots.dispose);
+        final recents = recentsFor(bots);
+        await recents.refresh();
+        final group = bots.observedGroups.single;
+        final origin = RecentConversationKey.group(group.key);
+        final target = recents.catalog.entries
+            .firstWhere((entry) => entry.key.chat != null)
+            .key;
+        final activity = ValueNotifier<ChatNoticeActivity?>(null);
+        addTearDown(activity.dispose);
+        var subscriptions = 0;
+        final visit = controller.groupRecentConversationSession(
+          group: group,
+          fromRecents: fromRecents,
+          recents: recents,
+          onOpenGroup: (_) async {},
+          onOpenChat: (_) async {},
+          activity: () {
+            subscriptions++;
+            return activity;
+          },
+        );
+        addTearDown(visit.dispose);
+        expect(visit.modeEnabled, fromRecents);
+        expect(subscriptions, fromRecents ? 1 : 0);
+        visit.setInteractive(true, origin: origin);
+        activity.value = ChatNoticeActivity(
+          key: target,
+          kind: ConversationActivityKind.reply,
+          identity: 'group-origin-answer-1',
+          sequence: 1,
+        );
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(visit.nudges.value?.key, fromRecents ? target : null);
+        if (!fromRecents) {
+          await visit.activate();
+          visit.setInteractive(true, origin: origin);
+          await tester.pump(const Duration(milliseconds: 200));
+          expect(
+            visit.nudges.value,
+            isNull,
+            reason: 'Activation cannot replay the earlier arrival',
+          );
+          activity.value = ChatNoticeActivity(
+            key: target,
+            kind: ConversationActivityKind.reply,
+            identity: 'group-origin-answer-2',
+            sequence: 2,
+          );
+          await tester.pump(const Duration(milliseconds: 200));
+          expect(visit.nudges.value?.key, target);
+          expect(subscriptions, 1);
+        }
+        visit.setVisible(false);
+        expect(fixture.readWrites, 0);
+      },
+    );
+  }
 
   test(
     'Recents message previews share freshness reads and cached reopening',
@@ -1441,6 +1941,7 @@ void main() {
         final group = bots.observedGroups.single;
         final visit = controller.groupRecentConversationSession(
           group: group,
+          fromRecents: false,
           recents: recentsFor(bots),
           onOpenGroup: (_) async {},
           onOpenChat: (key) async {

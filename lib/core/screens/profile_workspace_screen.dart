@@ -649,6 +649,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     BotGroup group, {
     AppDestination origin = AppDestination.activity,
   }) {
+    final fromRecents =
+        origin == AppDestination.activity || _recentVisit?.modeEnabled == true;
     return Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (groupContext) {
@@ -662,6 +664,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               onLeaveRecents: () => _leaveConversation(AppDestination.activity),
               createSession: () => controller.groupRecentConversationSession(
                 group: group,
+                fromRecents: fromRecents,
                 recents: _recents,
                 onOpenGroup: _openRecentGroup,
                 activity: () => ChatNoticeActivityScope.of(groupContext),

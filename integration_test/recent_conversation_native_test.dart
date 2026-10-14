@@ -18,6 +18,11 @@ import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/bots_repository.dart';
+import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/services/chat_notification_coordinator.dart';
+import 'package:wing/core/services/ws_client.dart';
+import 'package:wing/core/screens/workspace_overview_content.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
@@ -26,6 +31,700 @@ import 'package:wing/core/widgets/recent_conversations/recent_conversation_switc
 import 'package:wing/core/widgets/source_code_block.dart';
 
 import '../test/support/profile_browser_fixture.dart';
+import '../test/support/bots_fixture.dart';
+import '../test/support/recording_turn_notification_sink.dart';
+
+class _NativeEventChats extends ProfileBrowserFixture {
+  final groups = BotsFixture();
+  final messages = <(String, String), List<Map<String, dynamic>>>{};
+  final watermarks = <(String, String), double>{};
+  final patched = <ProfileSessionKey>[];
+  int sequence = 0;
+  @override
+  List<Map<String, dynamic>> sessions(String profile) => [
+    if (profile == 'personal')
+      {
+        'id': 'anchor',
+        'title': 'My open conversation',
+        'profile': profile,
+        'last_active': now - 100,
+        'last_read_at': now - 10,
+        'unread': false,
+      },
+    {
+      'id': 'recipient',
+      'title': profile == 'work' ? 'Bot Chat' : 'Ordinary recipient',
+      'profile': profile,
+      'source': profile == 'work' ? 'desktop' : 'wing',
+      'last_active': now - 200,
+      'last_read_at': watermarks[(profile, 'recipient')] ?? now - 10,
+      'unread':
+          messages.containsKey((profile, 'recipient')) &&
+          (watermarks[(profile, 'recipient')] ?? now - 10) <
+              (messages[(profile, 'recipient')]!.last['timestamp'] as num),
+    },
+  ];
+  @override
+  List<Map<String, dynamic>> historyRows(String profile, String id) =>
+      messages[(profile, id)] ??
+      [
+        if (profile != 'personal' || id != 'recipient')
+          {
+            'id': 1,
+            'role': 'assistant',
+            'timestamp': now - (id == 'anchor' ? 100 : 200),
+            'content':
+                'Earlier saved reply. Keep my draft and reading position.',
+          },
+      ];
+  @override
+  ProfileGateway gateway(WorkspaceScope scope) {
+    final base = super.gateway(scope);
+    final gateway = ProfileGateway(
+      scope: scope,
+      discover: base.discover,
+      get: base.read,
+      rpc: (method, params) => method.startsWith('groups.')
+          ? groups.read(scope.profileName, method, params)
+          : base.call(method, params),
+      ownedPatch: (path, body, canDispatch, onDispatched) async {
+        if (!canDispatch()) throw StateError('Read superseded');
+        // Native callbacks can run while WidgetTester.pump is pending.
+        expectSync(body['profile'], scope.profileName);
+        expectSync(body['unread'], false);
+        onDispatched();
+        final id = Uri.decodeComponent(path.split('/').last);
+        watermarks[(
+          scope.profileName,
+          id,
+        )] = (historyRows(scope.profileName, id).last['timestamp'] as num)
+            .toDouble();
+        patched.add(ProfileSessionKey(scope, id));
+        return {'ok': true};
+      },
+    );
+    return gateway;
+  }
+
+  void reply(ProfileChat chat, String text, ProfileGateway gateway) {
+    final key = chat.key;
+    messages[(key.workspace.profileName, key.sessionId)] = [
+      ...historyRows(key.workspace.profileName, key.sessionId),
+      {
+        'id': ++sequence + 1,
+        'role': 'assistant',
+        'content': text,
+        'timestamp': now + sequence,
+      },
+    ];
+    gateway.onEvent!(
+      StreamEvent(
+        type: 'message.start',
+        sessionId: chat.runtime.runtimeId,
+        data: {},
+      ),
+    );
+    gateway.onEvent!(
+      StreamEvent(
+        type: 'message.delta',
+        sessionId: chat.runtime.runtimeId,
+        data: {'text': text},
+      ),
+    );
+    gateway.onEvent!(
+      StreamEvent(
+        type: 'message.complete',
+        sessionId: chat.runtime.runtimeId,
+        data: {'text': text, 'mobile_push_event_id': 'native-answer-$sequence'},
+      ),
+    );
+  }
+
+  void groupReply(int sequence) => groups.events.add({
+    'room_id': 'room-1',
+    'seq': sequence,
+    'kind': 'message.member',
+    'created_at': now + sequence,
+    'actor': {'kind': 'member', 'id': 'atlas'},
+    'payload': {'text': 'Incoming group answer $sequence'},
+  });
+}
+
+Future<void> _until(
+  WidgetTester tester,
+  bool Function() ready, {
+  String Function()? details,
+}) async {
+  for (var tick = 0; tick < 150 && !ready(); tick++) {
+    await tester.pump(const Duration(milliseconds: 20));
+  }
+  expect(
+    ready(),
+    isTrue,
+    reason:
+        'An incoming publication must not wait for the 30-second Recents timer${ready() ? '' : ' ${details?.call() ?? ''}'}',
+  );
+  await tester.pump();
+}
+
+Future<void> _incomingJourney(
+  WidgetTester tester,
+  Brightness brightness,
+  bool large,
+) async {
+  final prefix = 'events-${brightness.name}-${large ? 'large' : 'normal'}';
+  await _native(
+    tester,
+    '$prefix-configure',
+    actions: [
+      {'type': 'configure', 'large': large},
+    ],
+    capture: false,
+  );
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  final preferences = AppPreferences(prefs);
+  final host = _NativeEventChats()
+    ..botMetadata['work'] = {'title': 'Event bot'};
+  host.groups.room['members'] = [
+    {
+      'member_id': 'atlas',
+      'profile': 'personal',
+      'handle': 'bot_personal',
+      'display_name': 'Personal',
+    },
+    {
+      'member_id': 'mira',
+      'profile': 'work',
+      'handle': 'bot_work',
+      'display_name': 'Event bot',
+    },
+  ];
+  final notices = ChatNotificationCoordinator(
+    prefs,
+    RecordingTurnNotificationSink()..permissionResult = false,
+    appPreferences: preferences,
+  );
+  final controller = ProfileWorkspaceController(
+    access: ConnectionAccess(
+      connection: SavedConnection(
+        id: 'native-events',
+        label: 'Recents QA',
+        host: 'unused',
+        port: 1,
+        apiKey: '',
+      ),
+      dashboardOAuth: null,
+    ),
+    connectionIdentity: 'native-events',
+    preferences: prefs,
+    appPreferences: preferences,
+    gatewayFactory: host.gateway,
+    onAttention: (notice) => notices.result(
+      chat: jsonEncode(notice.key.toJson()),
+      title: notice.title,
+      scope: notice.connectionLabel,
+      focus: notice.focus!,
+      content: notice.content,
+      alert: notice.alert,
+    ),
+    onGroupAnswer: notices.receiveGroupAnswer,
+    onGroupAnswerRead: notices.readGroupAnswer,
+    onNotificationRead: notices.readTarget,
+    notificationResultFor: notices.focusFor,
+  );
+  await controller.initialize();
+  final personal = controller.current!.scope;
+  final ordinary = (await controller.openSession(
+    ProfileSessionKey(personal, 'recipient'),
+  ))!;
+  final ordinaryGateway = controller.current!.gateway;
+  final work = WorkspaceScope(
+    connectionId: personal.connectionId,
+    connectionIdentity: personal.connectionIdentity,
+    profileName: 'work',
+  );
+  final bot = (await controller.openSession(
+    ProfileSessionKey(work, 'recipient'),
+  ))!;
+  final botGateway = controller.current!.gateway;
+  await controller.switchProfile('personal');
+  controller.showList();
+  // The explicit setup opens may acknowledge an unlisted profile's saved chat.
+  // The assertions below count receipts only after Recents becomes visible.
+  final setupReadReceipts = host.patched.length;
+  host.patched.clear();
+  final scope = controller.groupObservations.scope;
+  final metadataGateway = host.gateway(scope);
+  addTearDown(metadataGateway.close);
+  ProfileGateway gatewayFor(String profile) => profile == 'default'
+      ? metadataGateway
+      : controller.browserResource(profile).gateway;
+  final repository = BotsRepository(
+    scope: scope,
+    instance: 'Recents QA',
+    groupObservations: controller.groupObservations,
+    read: (profile, method, params) => gatewayFor(profile).call(method, params),
+    command: (profile, method, params, canDispatch, onDispatched) async {
+      if (!canDispatch()) throw StateError('Retired fixture');
+      onDispatched();
+      return gatewayFor(profile).call(method, params);
+    },
+    ownership: (profile, ids) async => ids
+        .where((id) => host.sessions(profile).any((row) => row['id'] == id))
+        .toSet(),
+    savedHistory: (profile, id, offset) =>
+        gatewayFor(profile).history(id, offset: offset),
+  );
+  host.groupReply(1);
+  final bots = BotsSession((_) async => [repository]);
+  await bots.refresh();
+  await controller.activateGroupNotifications();
+  await bots.groupReads.acknowledge(bots.observedGroups.single, 1);
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+    preferences.dispose();
+  });
+  await tester.pumpWidget(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: wingTheme(brightness),
+      builder: (context, child) =>
+          ChatNoticeActivityScope(activity: notices.activity, child: child!),
+      home: ProfileWorkspaceScreen(
+        controller: controller,
+        createBotsSession: () => bots,
+        initialDestination: AppDestination.activity,
+      ),
+    ),
+  );
+  await _until(
+    tester,
+    () => find.byType(WorkspaceActivityContent).evaluate().isNotEmpty,
+  );
+  final recents = tester
+      .widget<WorkspaceActivityContent>(find.byType(WorkspaceActivityContent))
+      .recents;
+  await recents.refresh();
+  await tester.pumpAndSettle();
+  final group = bots.observedGroups.single;
+  expect(recents.items().every((item) => !item.unread), isTrue);
+  expect(
+    recents.items().singleWhere((item) => item.chat?.key == bot.key).bot?.title,
+    'Event bot',
+  );
+  final ordinaryCard = find.byKey(
+    const ValueKey('activity-personal-recipient'),
+  );
+  expect(
+    ordinaryCard,
+    findsNothing,
+    reason:
+        'The empty conversation stays outside Recents until its first message',
+  );
+  await _native(tester, '$prefix-read-list');
+  host.reply(ordinary, 'Incoming ordinary answer', ordinaryGateway);
+  await _until(
+    tester,
+    () => recents.items().any(
+      (item) => item.chat?.key == ordinary.key && item.unread,
+    ),
+    details: () => jsonEncode({
+      'selected': controller.current?.chat?.key.sessionId,
+      'patches': host.patched.map((key) => key.workspace.profileName).toList(),
+      'loading': ordinary.reading.historyLoading,
+      'error': ordinary.reading.historyError,
+      'markReadFailed': ordinary.markReadFailed,
+      'target': ordinary.reading.notificationReadTarget?.identity,
+      'times': ordinary.reading.messages
+          .map((row) => row['timestamp'])
+          .toList(),
+      'serverRead': host.watermarks[('personal', 'recipient')],
+    }),
+  );
+  expect(
+    find.descendant(of: ordinaryCard, matching: find.text('New answer')),
+    findsOneWidget,
+  );
+  expect(find.text('Incoming ordinary answer'), findsOneWidget);
+  expect(host.patched, isEmpty);
+  final published = recents.catalog;
+  ordinaryGateway.onEvent!(
+    StreamEvent(
+      type: 'message.complete',
+      sessionId: ordinary.runtime.runtimeId,
+      data: {
+        'text': 'Incoming ordinary answer',
+        'mobile_push_event_id': 'native-answer-1',
+      },
+    ),
+  );
+  await tester.pump(const Duration(milliseconds: 220));
+  expect(recents.catalog, same(published));
+  await _native(tester, '$prefix-ordinary-unread');
+  expect(
+    tester
+        .widget<InkWell>(
+          find.descendant(of: ordinaryCard, matching: find.byType(InkWell)),
+        )
+        .onTap,
+    isNotNull,
+  );
+  await _native(
+    tester,
+    '$prefix-open-ordinary',
+    actions: [_tap(tester, ordinaryCard)],
+  );
+  expect(
+    find.byType(RecentConversationSwitcher),
+    findsOneWidget,
+    reason:
+        'Native tap must enter the conversation; selected=${controller.current?.chat?.key.sessionId}, receipts=${host.patched.length}',
+  );
+  await _until(
+    tester,
+    () => !recents
+        .items()
+        .singleWhere((item) => item.chat?.key == ordinary.key)
+        .unread,
+    details: () => jsonEncode({
+      'selected': controller.current?.chat?.key.sessionId,
+      'patches': host.patched.map((key) => key.workspace.profileName).toList(),
+      'loading': ordinary.reading.historyLoading,
+      'error': ordinary.reading.historyError,
+      'markReadFailed': ordinary.markReadFailed,
+      'target': ordinary.reading.notificationReadTarget?.identity,
+      'times': ordinary.reading.messages
+          .map((row) => row['timestamp'])
+          .toList(),
+      'serverRead': host.watermarks[('personal', 'recipient')],
+    }),
+  );
+  expect(host.patched, [ordinary.key]);
+  final switcher = tester.widget<RecentConversationSwitcher>(
+    find.byType(RecentConversationSwitcher),
+  );
+  expect(controller.current!.chat!.key, ordinary.key);
+  expect(find.byKey(const ValueKey('recent-conversation-nudge')), findsNothing);
+  await _native(tester, '$prefix-live-chat');
+  host.reply(bot, 'Incoming Bot Chat answer', botGateway);
+  await _until(
+    tester,
+    () =>
+        switcher.session.nudges.value?.key ==
+        RecentConversationKey.chat(bot.key),
+  );
+  expect(
+    recents.items().singleWhere((item) => item.chat?.key == bot.key).unread,
+    isTrue,
+  );
+  expect(
+    switcher.session.nudges.value!.direction,
+    recentConversationDirection(
+      switcher.session.entries,
+      RecentConversationKey.chat(ordinary.key),
+      RecentConversationKey.chat(bot.key),
+    ),
+  );
+  expect(
+    find.byKey(const ValueKey('recent-conversation-nudge')),
+    findsOneWidget,
+  );
+  await tester.pump(const Duration(milliseconds: 500));
+  final ripple = find.byKey(const ValueKey('recent-conversation-nudge'));
+  expect(ripple, findsOneWidget);
+  dynamic painter = tester.widget<CustomPaint>(ripple).painter;
+  final double paintedProgress = painter.progress.value;
+  expect(paintedProgress, greaterThan(.03));
+  await _native(
+    tester,
+    '$prefix-bot-ripple',
+    actions: [
+      {'type': 'wait', 'milliseconds': 120},
+    ],
+    observation: {
+      'kind': 'reply',
+      'direction': switcher.session.nudges.value!.direction.name,
+      'progress': paintedProgress,
+      'tickerEnabled': TickerMode.valuesOf(tester.element(ripple)).enabled,
+    },
+  );
+  host.groupReply(2);
+  await controller.refreshGroupNotifications();
+  await _until(
+    tester,
+    () =>
+        switcher.session.nudges.value?.key ==
+        RecentConversationKey.group(group.key),
+  );
+  expect(
+    recents.items().singleWhere((item) => item.group?.key == group.key).unread,
+    isTrue,
+  );
+  expect(bots.groupReads.sequence(group), 1);
+  expect(controller.current!.chat!.key, ordinary.key);
+  await _native(
+    tester,
+    '$prefix-group-ripple',
+    observation: {
+      'kind': 'reply',
+      'direction': switcher.session.nudges.value!.direction.name,
+    },
+  );
+  final width = _chatRect(tester).width;
+  final y = _gestureRow(tester, [
+    .24,
+    .76,
+  ], transcript: find.byType(ProfileTranscript));
+  await _native(
+    tester,
+    '$prefix-unread-stack',
+    actions: [
+      _touch(tester, 'two', [
+        (Offset(width * .24, y), Offset(width * .41, y)),
+        (Offset(width * .76, y), Offset(width * .59, y)),
+      ]),
+    ],
+  );
+  expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+  expect(controller.visible, isFalse);
+  expect(host.patched, [ordinary.key]);
+  expect(bots.groupReads.sequence(group), 1);
+  await _native(
+    tester,
+    '$prefix-return',
+    actions: [
+      {'type': 'back'},
+    ],
+  );
+  await _native(
+    tester,
+    '$prefix-recents',
+    actions: [
+      {'type': 'back'},
+    ],
+  );
+  await _until(
+    tester,
+    () => find.byType(WorkspaceActivityContent).evaluate().isNotEmpty,
+  );
+  final botCard = find.byKey(const ValueKey('activity-work-recipient'));
+  final groupCard = find.byKey(ValueKey('recent-group-${group.key}'));
+  for (final card in [botCard, groupCard]) {
+    await _revealRecent(
+      tester,
+      card,
+      '$prefix-review-${card == botCard ? 'bot' : 'group'}',
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('New answer')),
+      findsOneWidget,
+    );
+    await _native(
+      tester,
+      '$prefix-${card == botCard ? 'bot' : 'group'}-unread-list',
+    );
+  }
+  expect(host.patched, [ordinary.key]);
+  await _revealRecent(tester, botCard, '$prefix-select-bot');
+  await _native(tester, '$prefix-open-bot', actions: [_tap(tester, botCard)]);
+  await _until(
+    tester,
+    () => !recents
+        .items()
+        .singleWhere((item) => item.chat?.key == bot.key)
+        .unread,
+  );
+  expect(host.patched, [ordinary.key, bot.key]);
+  host.reply(bot, 'A reply while I read Bot Chat', botGateway);
+  await _until(
+    tester,
+    () =>
+        host.patched.length == 3 &&
+        !recents
+            .items()
+            .singleWhere((item) => item.chat?.key == bot.key)
+            .unread,
+  );
+  expect(host.patched, [ordinary.key, bot.key, bot.key]);
+  expect(find.byKey(const ValueKey('recent-conversation-nudge')), findsNothing);
+  await _native(tester, '$prefix-current-bot-read');
+  await _native(
+    tester,
+    '$prefix-bot-back',
+    actions: [
+      {'type': 'back'},
+    ],
+  );
+  await _until(
+    tester,
+    () => find.byType(WorkspaceActivityContent).evaluate().isNotEmpty,
+  );
+  await _revealRecent(tester, groupCard, '$prefix-select-group');
+  await _native(
+    tester,
+    '$prefix-open-group',
+    actions: [_tap(tester, groupCard)],
+  );
+  await _until(tester, () => bots.groupReads.sequence(group) == 2);
+  expect(
+    recents.items().singleWhere((item) => item.group?.key == group.key).unread,
+    isFalse,
+  );
+  await _native(tester, '$prefix-group-read');
+  final groupSwitcher = tester.widget<RecentConversationSwitcher>(
+    find.byType(RecentConversationSwitcher),
+  );
+  expect(
+    groupSwitcher.session.modeEnabled,
+    isTrue,
+    reason: 'A group selected in Recents must admit arrival cues immediately',
+  );
+  host.reply(
+    ordinary,
+    'Incoming ordinary reply while reading the group',
+    ordinaryGateway,
+  );
+  await _until(
+    tester,
+    () =>
+        groupSwitcher.session.nudges.value?.key ==
+        RecentConversationKey.chat(ordinary.key),
+  );
+  await tester.pump(const Duration(milliseconds: 500));
+  expect(
+    find.byKey(const ValueKey('recent-conversation-nudge')),
+    findsOneWidget,
+  );
+  await _native(
+    tester,
+    '$prefix-ordinary-ripple-in-group',
+    observation: {
+      'kind': 'reply',
+      'direction': groupSwitcher.session.nudges.value!.direction.name,
+    },
+  );
+  final groupWidth = _chatRect(tester).width;
+  final groupY = _gestureRow(tester, [
+    .24,
+    .76,
+  ], transcript: find.byKey(const ValueKey('group-transcript')));
+  await _native(
+    tester,
+    '$prefix-group-stack',
+    actions: [
+      _touch(tester, 'two', [
+        (Offset(groupWidth * .24, groupY), Offset(groupWidth * .41, groupY)),
+        (Offset(groupWidth * .76, groupY), Offset(groupWidth * .59, groupY)),
+      ]),
+    ],
+  );
+  expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+  host.groupReply(3);
+  await controller.refreshGroupNotifications();
+  await _until(
+    tester,
+    () => recents
+        .items()
+        .singleWhere((item) => item.group?.key == group.key)
+        .unread,
+  );
+  expect(
+    bots.groupReads.sequence(group),
+    2,
+    reason:
+        'A passive group viewport cannot acknowledge its newly delivered answer',
+  );
+  await _native(tester, '$prefix-passive-group-unread');
+  await _native(
+    tester,
+    '$prefix-group-stack-back',
+    actions: [
+      {'type': 'back'},
+    ],
+  );
+  await _until(tester, () => bots.groupReads.sequence(group) == 3);
+  expect(
+    recents.items().singleWhere((item) => item.group?.key == group.key).unread,
+    isFalse,
+  );
+  await _native(
+    tester,
+    '$prefix-group-final-back',
+    actions: [
+      {'type': 'back'},
+    ],
+  );
+  await _until(
+    tester,
+    () => find.byType(WorkspaceActivityContent).evaluate().isNotEmpty,
+  );
+  expect(
+    recents
+        .items()
+        .singleWhere((item) => item.chat?.key == ordinary.key)
+        .unread,
+    isTrue,
+  );
+  expect(tester.takeException(), isNull);
+  await _native(
+    tester,
+    '$prefix-complete',
+    observation: {
+      'conversationTypes': ['ordinary', 'canonical-bot', 'group'],
+      'permission': 'denied',
+      'backendMutations': 0,
+      'unreadChats': recents.items().where((item) => item.unread).length,
+      'readAcks': host.patched.length,
+      'setupReadAcks': setupReadReceipts,
+      'groupReadSequence': bots.groupReads.sequence(group),
+    },
+  );
+}
+
+Future<void> _revealRecent(
+  WidgetTester tester,
+  Finder card,
+  String prefix,
+) async {
+  final content = find.byType(WorkspaceActivityContent);
+  final viewport = tester.getRect(
+    find.descendant(of: content, matching: find.byType(ListView)),
+  );
+  final scrolling = tester.state<ScrollableState>(
+    find.descendant(of: content, matching: find.byType(Scrollable)),
+  );
+  final x = viewport.center.dx;
+  Future<void> swipe(bool down, int step) => _native(
+    tester,
+    '$prefix-${down ? 'down' : 'up'}-$step',
+    actions: [
+      _touch(tester, 'one', [
+        (
+          Offset(x, down ? viewport.top + 70 : viewport.bottom - 70),
+          Offset(x, down ? viewport.bottom - 70 : viewport.top + 70),
+        ),
+      ], milliseconds: 450),
+    ],
+    capture: false,
+  );
+  for (var step = 0; step < 6 && scrolling.position.pixels > 1; step++) {
+    await swipe(true, step);
+  }
+  for (
+    var step = 0;
+    step < 6 && card.hitTestable().evaluate().isEmpty;
+    step++
+  ) {
+    await swipe(false, step);
+  }
+  expect(
+    card.hitTestable(),
+    findsOneWidget,
+    reason: 'Native scrolling must reveal the current Recents card',
+  );
+}
 
 /// Only gateway responses and incoming journal projections are synthetic.
 /// Android dispatches every tested touch through the installed production chat.
@@ -153,8 +852,12 @@ Rect _chatRect(WidgetTester tester) =>
 
 // Select a real admitted transcript row; text, controls and OS edges keep their
 // production hit-test policy. Large native font settings can move these rows.
-double _gestureRow(WidgetTester tester, List<double> fractions) {
-  final rect = tester.getRect(find.byType(ProfileTranscript));
+double _gestureRow(
+  WidgetTester tester,
+  List<double> fractions, {
+  required Finder transcript,
+}) {
+  final rect = tester.getRect(transcript);
   for (var y = rect.top + 24; y < rect.bottom - 24; y += 12) {
     if (fractions.every(
       (fraction) => admitsConversationGesture(
@@ -192,8 +895,17 @@ void main() {
   const enabled = bool.fromEnvironment('RECENTS_NATIVE_INPUT');
   const codeOnly = bool.fromEnvironment('RECENTS_CODE_ONLY');
   const momentumOnly = bool.fromEnvironment('RECENTS_MOMENTUM_ONLY');
+  const eventsOnly = bool.fromEnvironment('RECENTS_EVENTS_ONLY');
   for (final brightness in [Brightness.dark, Brightness.light]) {
     for (final large in [false, true]) {
+      if (eventsOnly) {
+        testWidgets(
+          'native incoming messages ${brightness.name} ${large ? 'large' : 'normal'}',
+          (tester) => _incomingJourney(tester, brightness, large),
+          skip: !enabled,
+        );
+        continue;
+      }
       if (momentumOnly && (brightness != Brightness.dark || large)) continue;
       testWidgets(
         'native Recents ${brightness.name} ${large ? 'large' : 'normal'}${codeOnly ? ' code' : ''}',
@@ -392,7 +1104,11 @@ void main() {
             bool right = false,
             String type = 'two',
           }) async {
-            final y = _gestureRow(tester, right ? [.16, .38] : [.62, .84]);
+            final y = _gestureRow(
+              tester,
+              right ? [.16, .38] : [.62, .84],
+              transcript: find.byType(ProfileTranscript),
+            );
             final start = right ? [.16, .38] : [.62, .84];
             final dx = w * (right ? .5 : -.5);
             await _native(
@@ -408,7 +1124,10 @@ void main() {
           }
 
           Future<void> pinch(String name) async {
-            final y = _gestureRow(tester, [.24, .76]);
+            final y = _gestureRow(tester, [
+              .24,
+              .76,
+            ], transcript: find.byType(ProfileTranscript));
             await _native(
               tester,
               '$prefix-$name',

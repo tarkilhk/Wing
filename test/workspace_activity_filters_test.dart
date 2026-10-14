@@ -150,6 +150,7 @@ void main() {
     for (final entry in {
       'Roboto': 'build/studio-roboto.ttf',
       'MaterialIcons': 'build/studio-icons.otf',
+      'WingProjectIcons': 'assets/fonts/codicons.ttf',
     }.entries) {
       await (FontLoader(entry.key)..addFont(
             File(entry.value).readAsBytes().then(ByteData.sublistView),

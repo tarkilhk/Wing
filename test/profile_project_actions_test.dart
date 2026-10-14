@@ -469,7 +469,7 @@ void main() {
   );
 
   testWidgets(
-    'project avatar renders stock appearance and unknown icon indicator',
+    'project avatar uses the current glyph catalogue and server appearance',
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -502,7 +502,7 @@ void main() {
         ),
       );
       expect(find.byIcon(ProjectIconGlyphs.of('repo')), findsOneWidget);
-      expect(find.byIcon(ProjectIconGlyphs.of('question')), findsOneWidget);
+      expect(find.byIcon(ProjectIconGlyphs.of('not-an-icon')), findsOneWidget);
     },
   );
 }

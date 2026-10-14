@@ -31,6 +31,8 @@ def main() -> None:
                         help="Run the limited circular-fling and painted-selection journey")
     parser.add_argument("--code-only", action="store_true",
                         help="Run only independent code-copy/exclusion and Android-edge probes")
+    parser.add_argument("--events-only", action="store_true",
+                        help="Run incoming chat/bot/group cues and read transitions in all four configurations")
     args = parser.parse_args()
     if not args.device.startswith("emulator-"):
         parser.error("This test installs a fixture APK and accepts disposable emulators only")
@@ -78,11 +80,19 @@ def main() -> None:
         for path in sorted((source / folder).rglob("*")):
             if path.is_file():
                 snapshot[str(path.relative_to(source))] = hashlib.sha256(path.read_bytes()).hexdigest()
+    for name in ["pubspec.yaml", "pubspec.lock", "assets/fonts/codicons.ttf"]:
+        path = source / name
+        snapshot[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    snapshot["scripts/test_native_recents.py"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     (output / "tested-inputs.json").write_text(json.dumps(snapshot, indent=2) + "\n")
 
     def action(item: dict, ratio: float) -> None:
         kind = item["type"]
         if kind == "configure":
+            # A previous device task can leave an override density. Fix the
+            # native viewport for this matrix and restore the operator's value
+            # in finally, rather than testing enlarged text on a tablet width.
+            shell("wm", "density", "420")
             shell("wm", "size", "840x2240" if item["large"] else "reset")
             shell("settings", "put", "system", "font_scale", "2.0" if item["large"] else "1.0")
             time.sleep(.8)
@@ -130,6 +140,8 @@ def main() -> None:
             command.append("--dart-define=RECENTS_CODE_ONLY=true")
         if args.momentum_only:
             command.append("--dart-define=RECENTS_MOMENTUM_ONLY=true")
+        if args.events_only:
+            command.append("--dart-define=RECENTS_EVENTS_ONLY=true")
         if args.name:
             command.extend(["--name", args.name])
         print("Installing and running native Recents acceptance:", args.device, flush=True)
@@ -149,7 +161,7 @@ def main() -> None:
                     time.sleep(.08)
                     continue
                 # Launch screenrecord once during the first gesture scenario.
-                if stage["name"].endswith("slide-next") and screenrecord is None:
+                if stage["name"].endswith(("slide-next", "bot-ripple")) and screenrecord is None:
                     video = f"/sdcard/wing-recents-{stage['name']}.mp4"
                     screenrecord = subprocess.Popen(["adb", "-s", args.device, "shell", "screenrecord",
                                                      "--time-limit", "25", video],
@@ -172,8 +184,10 @@ def main() -> None:
                 print(log_path.read_text()[-12000:], flush=True)
                 raise RuntimeError(f"Native test failed: {log_path}")
         process = None
-        receipt["result"] = "passed"
         receipt["completedCases"] = [stage["name"] for stage in stages if stage["name"].endswith("complete")]
+        if not receipt["completedCases"]:
+            raise RuntimeError("No native acceptance case completed; an empty test run is not a pass")
+        receipt["result"] = "passed"
         print(log_path.read_text()[-1800:], flush=True)
     finally:
         if process is not None and process.poll() is None:

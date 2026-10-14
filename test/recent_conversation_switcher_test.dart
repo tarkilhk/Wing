@@ -3851,10 +3851,10 @@ void main() {
                 find.byType(RecentConversationSwitcher),
               )
               .session;
-          expect(visit.modeEnabled, isFalse);
+          expect(visit.modeEnabled, entry == 'Recents group');
           if (cancelPinch) {
             await _chatGesture(tester, returnToStart: true);
-            expect(visit.modeEnabled, isFalse);
+            expect(visit.modeEnabled, entry == 'Recents group');
           }
           await tester.binding.handlePopRoute();
           await _finishFrames(tester);

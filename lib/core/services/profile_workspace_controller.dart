@@ -1088,6 +1088,31 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return lastRead != null && time != null && time <= lastRead ? false : null;
   }
 
+  bool _recentChatUnread(ProfileSessionKey key) {
+    final resource = _resources[key.workspace];
+    final row =
+        _recentSessionRows[key] ??
+        resource?._sessions
+            .where((row) => row['id'] == key.sessionId)
+            .firstOrNull;
+    final observedAt = _recentMessageTimes[key];
+    final chat = resource?._chats[key.sessionId];
+    if (observedAt != null && chat != null) {
+      final lastRead = row?['last_read_at'];
+      final watermark =
+          lastRead is num && lastRead.isFinite && lastRead > observedAt
+          ? lastRead
+          : observedAt;
+      // A newer delivered answer supersedes the cached list's unread flag.
+      // Prompts/tools cannot promote unread, and partial/older reading cannot
+      // clear a server-confirmed unread answer.
+      if (_recentUnreadAnswer(chat.reading.messages, watermark) == true) {
+        return true;
+      }
+    }
+    return row?['unread'] == true;
+  }
+
   /// Freshness, excerpt and answer eligibility share stock history reads.
   /// Paging stops once the excerpt and unread answer are known, without ever
   /// acknowledging a chat during a passive refresh.
@@ -1107,7 +1132,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final time = _latestMessageTime(page.rows);
     var preview = recentChatMessagePreview(page.rows);
     final watermark = lastRead is num && lastRead.isFinite ? lastRead : null;
-    bool? unread = checkUnread
+    bool? unread = checkUnread || watermark != null
         ? _recentUnreadAnswer(page.rows, watermark)
         : false;
     while ((preview == null || unread == null) &&
@@ -1183,14 +1208,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           source: item.source,
           lastActive: item.lastActive,
           activity: item.activity,
-          unread: _recentSessionRows.containsKey(item.key)
-              ? (_recentSessionRows[item.key]?['unread'] == true)
-              : _resources[item.key.workspace]?._sessions.any(
-                      (row) =>
-                          row['id'] == item.key.sessionId &&
-                          row['unread'] == true,
-                    ) ==
-                    true,
+          unread: _recentChatUnread(item.key),
           project: _recentProject(item.key),
           messagePreview: item.messagePreview,
         ),
@@ -1248,21 +1266,39 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   RecentConversationSession groupRecentConversationSession({
     required BotGroup group,
+    required bool fromRecents,
     required WorkspaceRecentsCache recents,
     required Future<void> Function(BotGroup) onOpenGroup,
     required Future<void> Function(RecentConversationKey) onOpenChat,
     required ValueListenable<ChatNoticeActivity?> Function() activity,
-  }) => RecentConversationSession.fromChat(
-    chat: RecentConversationEntry.group(group, unread: false),
-    source: _WorkspaceRecentConversationSource(
+  }) {
+    final entry = RecentConversationEntry.group(
+      group,
+      unread: recents.bots.groupReads.unread(group),
+    );
+    final source = _WorkspaceRecentConversationSource(
       this,
       recents,
       onOpenGroup,
       routeOrigin: RecentConversationKey.group(group.key),
       onOpenChat: onOpenChat,
-    ),
-    activity: activity,
-  );
+    );
+    return fromRecents
+        ? RecentConversationSession.fromRecents(
+            entries: [
+              ...recents.catalog.entries,
+              if (!recents.catalog.entries.any((item) => item.key == entry.key))
+                entry,
+            ],
+            source: source,
+            activity: activity(),
+          )
+        : RecentConversationSession.fromChat(
+            chat: entry,
+            source: source,
+            activity: activity,
+          );
+  }
 
   Future<void> refreshRecents() {
     if (_recentsRefresh case final pending?) return pending;
@@ -4043,6 +4079,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       ...resource._sessions,
     ].where((row) => row['id'] == key.sessionId).toList();
     final markReadAfterOpen =
+        _recentChatUnread(key) ||
         openedRows.any((row) => row['unread'] == true) ||
         !openedRows.any((row) => row['unread'] == false);
     _cancelOlderLoads();
@@ -4516,6 +4553,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final id = key.sessionId;
     if (resource._mutatingSessions.contains(id)) return;
     final chat = resource._chats[id];
+    final viewedAt = changes['unread'] == false && chat != null
+        ? _latestMessageTime(chat.reading.messages)
+        : null;
     if ((delete || changes.containsKey('archived')) &&
         chat?.runtime.blocksTurnAdmission == true) {
       throw StateError(
@@ -4652,6 +4692,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
         if (updated['unread'] == false) {
           chat._markReadFailed = false;
+          // The successful explicit read acknowledges the delivered history.
+          // Keep that boundary with the existing Recents message observation so
+          // the same retained answer cannot reassert unread on the next frame.
+          if (viewedAt != null && viewedAt > (_recentMessageTimes[key] ?? 0)) {
+            _recentMessageTimes[key] = viewedAt;
+          }
         }
       }
       if (resource._selectedSession == id &&
@@ -7827,7 +7873,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       notificationContent,
       eventId: _notificationEventId(completion),
       focus: NotificationFocus(
-        failed || cancelled ? 'status' : 'answer',
+        failed || cancelled || finalText.trim().isEmpty ? 'status' : 'answer',
         _notificationEventId(completion) ??
             '${chat.runtime.runtimeId}:${DateTime.now().microsecondsSinceEpoch}',
       ),
@@ -7846,6 +7892,33 @@ class ProfileWorkspaceController extends ChangeNotifier {
       );
     }
     chat.reading.updateStreaming('');
+    // The received result is authoritative before optional history/list/project
+    // enrichment. Publish it now so a held read cannot delay another chat's cue.
+    if (!failed &&
+        !cancelled &&
+        finalText.trim().isNotEmpty &&
+        SessionVisibility.chats.includes(chat.source) &&
+        chat.reading.messages.isNotEmpty &&
+        _recentUnreadAnswer([chat.reading.messages.last], null) == true) {
+      // The first answer may have no saved-message observation yet. Refine the
+      // existing scoped row cache from this received fact before enrichment.
+      final before =
+          _recentSessionRows[chat.key] ??
+          resource._sessions
+              .where((row) => row['id'] == chat.key.sessionId)
+              .firstOrNull;
+      _recentSessionRows[chat.key] = {
+        ...?before,
+        'id': chat.key.sessionId,
+        'unread': true,
+      };
+    }
+    if (failed ||
+        cancelled ||
+        chat.composer.observation.queue.isEmpty ||
+        chat.composer.observation.paused) {
+      _deliverNotification(chat, notification);
+    }
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.finish(
         'controller.completion_handoff_sync',
@@ -7905,12 +7978,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     await _journal();
     if (!isCurrentTurn()) return;
-    if (failed ||
-        cancelled ||
-        chat.composer.observation.queue.isEmpty ||
-        chat.composer.observation.paused) {
-      _deliverNotification(chat, notification);
-    }
     if (!failed && !cancelled) {
       unawaited(_drainQueuedPrompts(chat));
     }
