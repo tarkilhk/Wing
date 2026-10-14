@@ -781,34 +781,47 @@ class _TranscriptNoticeState extends State<_TranscriptNotice> {
 
   @override
   Widget build(BuildContext context) => AnchoredExpansionTile(
-    title: widget.title,
-    subtitle: widget.subtitle,
+    title: widget.actions == null
+        ? widget.title
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              widget.title,
+              Row(
+                children: [
+                  Expanded(
+                    child: DefaultTextStyle.merge(
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      child: widget.subtitle,
+                    ),
+                  ),
+                  SizedBox.square(
+                    dimension: 48,
+                    child: Center(
+                      child: AnimatedRotation(
+                        turns: _expanded ? .5 : 0,
+                        duration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : WingMotion.standard,
+                        curve: WingMotion.curve,
+                        child: const Icon(Icons.expand_more),
+                      ),
+                    ),
+                  ),
+                  widget.actions!,
+                ],
+              ),
+            ],
+          ),
+    subtitle: widget.actions == null ? widget.subtitle : null,
     minTileHeight: widget.actions == null ? null : 56,
     shape: const Border(),
     tilePadding: widget.actions == null
         ? null
         : const EdgeInsets.only(left: WingSpacing.lg),
-    trailing: widget.actions == null
-        ? null
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox.square(
-                dimension: 48,
-                child: Center(
-                  child: AnimatedRotation(
-                    turns: _expanded ? .5 : 0,
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : WingMotion.standard,
-                    curve: WingMotion.curve,
-                    child: const Icon(Icons.expand_more),
-                  ),
-                ),
-              ),
-              widget.actions!,
-            ],
-          ),
+    showTrailingIcon: widget.actions == null,
     onExpansionChanged: (expanded) => setState(() => _expanded = expanded),
     children: widget.children,
   );
