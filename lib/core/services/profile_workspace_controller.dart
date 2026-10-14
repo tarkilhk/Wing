@@ -181,6 +181,37 @@ class ProfileChat {
       List.unmodifiable(_reviewNotices.map((receipt) => receipt.notice));
   List<GatewayTodo> get todos => List.unmodifiable(_todos);
   int? get todoRevision => _todoRevision;
+  Object? _workInputs;
+  Object _workRevision = Object();
+
+  /// Opaque invalidation for supervision, independent of growing answer text.
+  /// Compare canonical facts here rather than cloning detached work snapshots
+  /// merely to decide whether a borrower needs to render them again.
+  Object get workRevision {
+    final inputs = (
+      runtime.runtimeId,
+      _todos,
+      _todoRevision,
+      _subagentsRevision,
+      _subagentsLoadGeneration,
+      _subagentsLoading,
+      _subagentsError,
+      _sessionControl,
+      _sessionControlLoading,
+      _sessionControlWorking,
+      _sessionControlError,
+      _sessionControlNotice,
+      _processesReadGeneration,
+      _processesLoading,
+      _processesError,
+    );
+    if (_workInputs != inputs) {
+      _workInputs = inputs;
+      _workRevision = Object();
+    }
+    return _workRevision;
+  }
+
   List<GatewaySubagentActivity> get subagents =>
       List.unmodifiable(_subagents.map(copySupervisedSubagent));
   Set<String> get unconfirmedSubagentIds =>

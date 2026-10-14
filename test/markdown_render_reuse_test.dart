@@ -1,3 +1,11 @@
+import 'package:flutter/rendering.dart'
+    show
+        RenderRepaintBoundary,
+        RenderObject,
+        Layer,
+        ContainerLayer,
+        PictureLayer;
+import 'package:wing/core/widgets/source_code_block.dart';
 import 'helpers/pump_markdown_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -6,6 +14,61 @@ import 'package:wing/core/widgets/deliverable_attachment.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 
 void main() {
+  testWidgets('growing prose does not repaint an unchanged code segment', (
+    tester,
+  ) async {
+    const prefix = '```dart\nfinal stable = 1;\n```\n\n';
+    final data = ValueNotifier('$prefix Growing prose');
+    addTearDown(data.dispose);
+    await tester.pumpMarkdownWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ValueListenableBuilder<String>(
+              valueListenable: data,
+              builder: (_, source, _) =>
+                  MarkdownMessageContent(data: source, streaming: true),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.settleMarkdown();
+    await tester.pumpAndSettle();
+    final code = tester.renderObject(find.byType(SourceCodeBlock));
+    RenderObject? ancestor = code;
+    while (ancestor != null && ancestor is! RenderRepaintBoundary) {
+      ancestor = ancestor.parent;
+    }
+    final boundary = ancestor! as RenderRepaintBoundary;
+    List<PictureLayer> pictures(Layer layer) {
+      final result = <PictureLayer>[];
+      if (layer is PictureLayer) result.add(layer);
+      if (layer is ContainerLayer) {
+        for (
+          var child = layer.firstChild;
+          child != null;
+          child = child.nextSibling
+        ) {
+          result.addAll(pictures(child));
+        }
+      }
+      return result;
+    }
+
+    final before = pictures(boundary.debugLayer!);
+    expect(before, isNotEmpty);
+    data.value = '$prefix Growing prose with another received sentence.';
+    await tester.pump();
+    await tester.settleMarkdown();
+    expect(
+      pictures(boundary.debugLayer!),
+      orderedEquals(before),
+      reason: 'Static code paint stays isolated from changing prose.',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'missing document heading reports locally without reading a file',
     (tester) async {

@@ -94,7 +94,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   final _focusedRow = GlobalKey();
   final _tail = GlobalKey();
   final _rows = <Object, GlobalKey>{};
+  final _messageBodies = <Object, GlobalKey>{};
   final _rowHeights = <Key, double>{};
+
+  Widget _messageBody(timeline_facts.TranscriptTimelineEntry entry) =>
+      KeyedSubtree(
+        key: _messageBodies.putIfAbsent(entry.presentationId, GlobalKey.new),
+        child: widget.messageBuilder(entry),
+      );
 
   void _recordRowHeight(Key key, TranscriptAnchorBox row, double height) {
     final previous = _rowHeights[key];
@@ -509,7 +516,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                       ? WingSpacing.xs
                       : 12,
                 ),
-                child: widget.messageBuilder(liveReply.messages.last),
+                child: _messageBody(liveReply.messages.last),
               ),
           ],
         ),
@@ -553,6 +560,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         .expand((section) => section.presentationIds)
         .toSet();
     _rows.removeWhere((id, _) => !activeIds.contains(id));
+    _messageBodies.removeWhere((id, _) => !activeIds.contains(id));
     // A sliver needs an index lookup to retain mounted message/expansion state
     // when a new tail shifts every existing row's index.
     final keys = <Key>[];
@@ -693,7 +701,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                       child: section.isActivity
                           ? ProfileToolActivitySection(
                               section: section,
-                              noticeBuilder: widget.messageBuilder,
+                              noticeBuilder: _messageBody,
                               trailing: widget.activityTrailingBuilder?.call(
                                 section,
                               ),
@@ -712,7 +720,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                                   ? widget.currentActivity
                                   : const [],
                             )
-                          : widget.messageBuilder(row),
+                          : _messageBody(row),
                     ),
                   );
                 }

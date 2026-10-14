@@ -4,8 +4,11 @@ import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
-import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
 import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/profile_live_work_dock.dart';
+import 'package:wing/core/widgets/profile_subagent_panel.dart';
+import 'package:wing/core/widgets/profile_live_execution.dart';
+import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
 
 import '../tools/performance/streaming_replay_fixture.dart';
 import '../tools/performance/workspace_streaming_replay.dart';
@@ -14,6 +17,7 @@ import 'helpers/pump_markdown_widget.dart';
 Future<WorkspaceStreamingReplayState> _preparedWorkspace(
   WidgetTester tester, {
   int? historyCount,
+  bool work = false,
 }) async {
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   tester.view.physicalSize = const Size(390, 800);
@@ -30,7 +34,7 @@ Future<WorkspaceStreamingReplayState> _preparedWorkspace(
   Map<String, Object?>? result;
   Object? failure;
   final preparation = historyCount == null
-      ? key.currentState!.prepare(requireKeyboard: false)
+      ? key.currentState!.prepare(requireKeyboard: false, work: work)
       : key.currentState!.prepareIdle(historyCount, requireKeyboard: false);
   final pending = preparation.then<void>(
     (value) => result = value,
@@ -64,6 +68,123 @@ bool _canAddListener(ChangeNotifier notifier) {
 }
 
 void main() {
+  testWidgets('completion retains the already rendered work-run answer', (
+    tester,
+  ) async {
+    final state = await _preparedWorkspace(tester, work: true);
+    final body = find.byWidgetPredicate(
+      (widget) =>
+          widget is MarkdownMessageContent &&
+          widget.data == streamingReplayInitial(),
+    );
+    final original = tester.element(body);
+    final prose = find.descendant(
+      of: body,
+      matching: find.byType(BlockReusingMarkdownBody),
+    );
+    final originalProse = tester
+        .widgetList<BlockReusingMarkdownBody>(prose)
+        .toList();
+    final paragraph = find.descendant(
+      of: prose.first,
+      matching: find.byType(SelectableText),
+    );
+    final originalParagraph = tester.widget<SelectableText>(paragraph.first);
+    state.complete();
+    await tester.pump();
+    await tester.settleMarkdown();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(state.controller!.current!.chat!.runtime.executionActive, isFalse);
+    expect(tester.element(body), same(original));
+    expect(
+      tester.widgetList<BlockReusingMarkdownBody>(prose).first,
+      same(originalProse.first),
+    );
+    expect(
+      tester.widget<SelectableText>(paragraph.first),
+      same(originalParagraph),
+    );
+    expect(tester.widget<MarkdownMessageContent>(body).streaming, isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('answer chunks leave an open work drawer unchanged', (
+    tester,
+  ) async {
+    final state = await _preparedWorkspace(tester, work: true);
+    final chat = state.controller!.current!.chat!;
+    await tester.tap(find.byKey(const ValueKey(('live-work-tab', 0, false))));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.settleMarkdown();
+    final panel = tester.widget<ProfileSubagentPanel>(
+      find.byType(ProfileSubagentPanel),
+    );
+    var notifications = 0, dockBuilds = 0, panelBuilds = 0, activityBuilds = 0;
+    panel.session.addListener(() => notifications++);
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, builtOnce) {
+      if (element.widget is ProfileLiveWorkDock) dockBuilds++;
+      if (element.widget is ProfileSubagentPanel) panelBuilds++;
+      if (element.widget is ProfileLiveExecution) activityBuilds++;
+      previous?.call(element, builtOnce);
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = previous);
+    for (var index = 0; index < 30; index++) {
+      state.controller!.current!.gateway.onEvent!(
+        StreamEvent(
+          type: 'message.delta',
+          sessionId: chat.runtime.runtimeId,
+          data: {'text': '.'},
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(chat.reading.streaming, '${streamingReplayInitial()}${'.' * 30}');
+    expect(notifications, 0, reason: 'Unchanged supervision stays quiet.');
+    expect(
+      dockBuilds,
+      0,
+      reason: 'Answer text does not rebuild work controls.',
+    );
+    expect(panelBuilds, 0, reason: 'Unchanged agent cards remain mounted.');
+    expect(
+      activityBuilds,
+      0,
+      reason: 'Answer text does not rebuild tool runs.',
+    );
+    state.controller!.current!.gateway.onEvent!(
+      StreamEvent(
+        type: 'subagent.progress',
+        sessionId: chat.runtime.runtimeId,
+        data: {'subagent_id': 'offline-agent-0', 'text': 'New progress'},
+      ),
+    );
+    await tester.pump();
+    expect(notifications, greaterThan(0));
+    expect(
+      panel.session.state.subagents.first.recentActivity,
+      contains('New progress'),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('work replay retains synthetic tasks, agents and live source', (
+    tester,
+  ) async {
+    final state = await _preparedWorkspace(tester, work: true);
+    final chat = state.controller!.current!.chat!;
+    expect(chat.todos, hasLength(7));
+    expect(chat.subagents, hasLength(2));
+    expect(chat.runtime.toolActivities, hasLength(1));
+    expect(state.controls().keys, containsAll(['tasks', 'subagents']));
+    await state.controller!.reconnect(chat.key.workspace);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.settleMarkdown();
+    expect(chat.runtime.executionActive, isTrue);
+    expect(chat.reading.streaming, streamingReplayInitial());
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   test('render verification rejects missing and stale mounted segments', () {
     const source = 'Visible prose.\n\n```dart\nfinal value = 1;\n```\n';
     final split = splitMarkdownCodeBlocks(source, streaming: true);

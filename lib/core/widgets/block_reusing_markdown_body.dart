@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'dart:convert';
 
 import 'package:flutter/cupertino.dart';
@@ -54,6 +55,8 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
   List<_RenderedBlock> _blocks = [];
   Widget? _content;
   bool _refreshBlocks = true;
+  Object? _renderingInputs;
+  Map<String, String>? _mentionNames;
 
   @override
   void initState() {
@@ -66,6 +69,19 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final inputs = (
+      Theme.of(context),
+      CupertinoTheme.of(context),
+      MediaQuery.sizeOf(context),
+      MediaQuery.textScalerOf(context),
+      Directionality.of(context),
+    );
+    final names = BotMentionScope.of(context)?.names;
+    // Reparenting a completed answer rechecks dependencies. Keep its rendered
+    // blocks when the actual environment is unchanged.
+    if (_renderingInputs == inputs && mapEquals(_mentionNames, names)) return;
+    _renderingInputs = inputs;
+    _mentionNames = names;
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.event('markdown.blocks.dependencies');
     }

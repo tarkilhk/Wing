@@ -13,6 +13,7 @@ final class ProfileSupervisionSession extends ChangeNotifier {
     required ProfileChat chat,
   }) : _chat = chat,
        _runtime = chat.runtime.runtimeId {
+    _publishedInputs = _changeInputs;
     _controller.addListener(_changed);
   }
   final ProfileWorkspaceController _controller;
@@ -25,6 +26,11 @@ final class ProfileSupervisionSession extends ChangeNotifier {
   final _stopping = <String>{};
   final _processErrors = <String, String>{};
   final _details = <SubagentSupervisionDetail>{};
+  Object? _publishedInputs;
+  Set<String> _publishedStopping = const {};
+  Map<String, String> _publishedProcessErrors = const {};
+  Object get _changeInputs =>
+      (active, _chat.workRevision, _actionBusy, _actionError);
   bool get active =>
       !_closed &&
       _controller.owns(_chat.key) &&
@@ -57,6 +63,15 @@ final class ProfileSupervisionSession extends ChangeNotifier {
         detail.setActive(false);
       }
     }
+    final inputs = _changeInputs;
+    if (_publishedInputs == inputs &&
+        setEquals(_publishedStopping, _stopping) &&
+        mapEquals(_publishedProcessErrors, _processErrors)) {
+      return;
+    }
+    _publishedInputs = inputs;
+    _publishedStopping = Set.of(_stopping);
+    _publishedProcessErrors = Map.of(_processErrors);
     _notificationDepth++;
     try {
       notifyListeners();

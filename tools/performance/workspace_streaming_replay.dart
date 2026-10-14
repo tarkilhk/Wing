@@ -1,4 +1,5 @@
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/connection_access.dart';
 // Offline profile fixture. Native draft storage is excluded: preferences use
 // an isolated in-memory store. Rendering, controller events and composer input
@@ -76,7 +77,7 @@ void main() {
 }
 
 class _ReplayGateway extends ProfileBrowserFixture {
-  _ReplayGateway({int? historyCount})
+  _ReplayGateway({int? historyCount, this.work = false})
     : rows = historyCount == null
           ? [
               {
@@ -95,6 +96,39 @@ class _ReplayGateway extends ProfileBrowserFixture {
             ];
 
   List<Map<String, dynamic>> rows;
+  final bool work;
+  List<Map<String, dynamic>> get agents => [
+    if (work)
+      for (var index = 0; index < 2; index++)
+        {
+          'subagent_id': 'offline-agent-$index',
+          'goal': 'Inspect synthetic section $index',
+          'status': 'running',
+        },
+  ];
+  String? liveSource;
+
+  @override
+  ProfileGateway gateway(WorkspaceScope scope) {
+    final base = super.gateway(scope);
+    return ProfileGateway(
+      scope: scope,
+      discover: base.discover,
+      connect: base.connect,
+      close: base.close,
+      get: base.read,
+      rpc: (method, params) async {
+        if (method == 'subagent.list') return {'subagents': agents};
+        final response = await base.call(method, params);
+        if (method != 'session.resume') return response;
+        return {
+          ...response,
+          'running': liveSource != null,
+          if (liveSource != null) 'inflight': {'assistant': liveSource},
+        };
+      },
+    );
+  }
 
   @override
   List<Map<String, dynamic>> historyRows(String profile, String id) => rows;
@@ -154,6 +188,9 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     'composerFocused': _composer?.widget.focusNode.hasFocus ?? false,
     'draft': _chat?.composer.observation.displayedText,
     'sourceCharacters': _chat?.reading.streaming.length ?? 0,
+    'execution': _chat?.runtime.execution.name,
+    'selectedChatMatches': identical(controller?.current?.chat, _chat),
+    'runtimeId': _chat?.runtime.runtimeId,
     'nativeDraftStorage': false,
   };
 
@@ -166,6 +203,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       for (final action in [
         'ready',
         'prepare',
+        'controls',
         'replay',
         'prepareIdle',
         'startProbe',
@@ -177,8 +215,12 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
         ) async {
           try {
             final result = switch (action) {
-              'prepare' => await prepare(),
-              'replay' => await replay(label: parameters['label'] ?? ''),
+              'prepare' => await prepare(work: parameters['work'] == 'true'),
+              'controls' => controls(),
+              'replay' => await replay(
+                label: parameters['label'] ?? '',
+                keyboardOpen: parameters['keyboard'] != 'closed',
+              ),
               'prepareIdle' => await prepareIdle(
                 int.tryParse(parameters['historyCount'] ?? '') ?? -1,
               ),
@@ -409,15 +451,83 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
   }
 
   void _emit(String type, Map<String, dynamic> data) {
+    // The workspace's passive monitoring reads must observe the same synthetic
+    // turn as its event stream, including while keyboard preparation settles.
+    if (type == 'message.start') {
+      _fixture!.liveSource = '';
+      _fixture!.liveSessions[_chat!.key.workspace.profileName] = [
+        {
+          'id': _chat!.runtime.runtimeId,
+          'session_key': _chat!.key.sessionId,
+          'status': 'working',
+          'last_active': _fixture!.now,
+        },
+      ];
+    } else if (type == 'message.delta') {
+      _fixture!.liveSource = '${_fixture!.liveSource ?? ''}${data['text']}';
+    } else if (type == 'message.complete') {
+      _fixture!.liveSource = null;
+      _fixture!.liveSessions.clear();
+    }
     _gateway!.onEvent!(
       StreamEvent(type: type, sessionId: _chat!.runtime.runtimeId, data: data),
     );
   }
 
+  // The same stock completion receipt used by the timed replay. Host checks
+  // can seal a prepared answer without waiting through the token schedule.
+  void complete() {
+    if (!_prepared || _running || _preparing || _idleHistoryCount != null) {
+      throw StateError('Prepare a stream before completing it');
+    }
+    _prepared = false;
+    _completeSource(_chat!.reading.streaming);
+  }
+
+  void _completeSource(String source) {
+    _fixture!.rows = [
+      ..._fixture!.rows,
+      {'id': 2, 'role': 'assistant', 'content': source},
+    ];
+    _emit('message.complete', {
+      'status': 'complete',
+      'text': source,
+      'persisted_turn': {
+        'row_ids': [2],
+        'complete': true,
+        'final_assistant_row_id': 2,
+      },
+    });
+  }
+
   // Tests may omit the physical keyboard precondition; the VM extension always
   // uses it. Preparation and renderer checks are outside measured intervals.
-  Future<Map<String, Object?>> prepare({bool requireKeyboard = true}) async {
-    return _prepare(requireKeyboard: requireKeyboard);
+  Future<Map<String, Object?>> prepare({
+    bool requireKeyboard = true,
+    bool work = false,
+  }) async {
+    return _prepare(requireKeyboard: requireKeyboard, work: work);
+  }
+
+  Map<String, Object?> controls() {
+    final result = <String, Object?>{};
+    for (final element in _walk(context as Element)) {
+      final name = switch (element.widget.key) {
+        ValueKey(value: ('live-work-tab', 0, false)) => 'subagents',
+        ValueKey(value: ('live-work-tab', 1, false)) => 'tasks',
+        _ => switch (element.widget) {
+          Text(data: 'Activity · 1 tool') => 'activity',
+          _ => null,
+        },
+      };
+      if (name == null) continue;
+      final render = element.findRenderObject();
+      if (render is! RenderBox || !render.hasSize) continue;
+      final center = render.localToGlobal(render.size.center(Offset.zero));
+      final ratio = View.of(context).devicePixelRatio;
+      result[name] = [(center.dx * ratio).round(), (center.dy * ratio).round()];
+    }
+    return result;
   }
 
   Future<Map<String, Object?>> prepareIdle(
@@ -436,6 +546,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
   Future<Map<String, Object?>> _prepare({
     required bool requireKeyboard,
     int? historyCount,
+    bool work = false,
   }) async {
     if (_preparing || _running) {
       throw StateError('Replay already active');
@@ -464,7 +575,10 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       final preferences = await SharedPreferences.getInstance();
       if (!mounted) throw StateError('Replay unmounted');
       _appPreferences ??= AppPreferences(preferences);
-      final fixture = _fixture = _ReplayGateway(historyCount: historyCount);
+      final fixture = _fixture = _ReplayGateway(
+        historyCount: historyCount,
+        work: work,
+      );
       _idleHistoryCount = historyCount;
       final next = ProfileWorkspaceController(
         access: ConnectionAccess(
@@ -502,9 +616,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       if (!mounted) throw StateError('Replay unmounted');
       setState(() {});
       if (historyCount == null) {
-        _emit('message.start', {});
-        _emit('message.delta', {'text': streamingReplayInitial()});
-        await _awaitRendered(streamingReplayInitial());
+        await _endFrame();
       } else {
         await _awaitIdleRendered();
       }
@@ -562,6 +674,36 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
         if (stable < 3) {
           throw StateError('Focus the composer and open the keyboard');
         }
+      }
+      if (historyCount == null) {
+        _emit('message.start', {});
+        if (work) {
+          _emit('todo.updated', {
+            'revision': 1,
+            'todos': [
+              for (var index = 0; index < 7; index++)
+                {
+                  'id': 'offline-task-$index',
+                  'content': 'Inspect synthetic section $index',
+                  'status': index < 3 ? 'completed' : 'pending',
+                },
+            ],
+          });
+          await next.refreshSubagents(_chat!);
+          _emit('tool.complete', {
+            'tool_id': 'offline-read',
+            'name': 'read_file',
+            'args': {'path': 'synthetic.md'},
+            'result': '## Synthetic receipt\n\nExact offline tool result.',
+            'duration_s': .2,
+          });
+          _emit('reasoning.available', {
+            'text':
+                'Check the **synthetic sections** before writing the answer.',
+          });
+        }
+        _emit('message.delta', {'text': streamingReplayInitial()});
+        await _awaitRendered(streamingReplayInitial());
       }
       _prepared = true;
       return {...ready(), 'preparing': false};
@@ -725,7 +867,10 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     _probeGeometry = null;
   }
 
-  Future<Map<String, Object?>> replay({String label = ''}) async {
+  Future<Map<String, Object?>> replay({
+    String label = '',
+    bool keyboardOpen = true,
+  }) async {
     if (!_prepared ||
         _canceled ||
         _running ||
@@ -749,13 +894,17 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
           chat.reading.streaming != streamingReplayInitial() ||
           !_rendered(streamingReplayInitial())) {
         throw StateError(
-          'Prepared source or selected chat changed; prepare again',
+          'Prepared source or selected chat changed; prepare again '
+          '(execution=${chat?.runtime.execution.name}, '
+          'source=${chat?.reading.streaming.length}, '
+          'selected=${identical(owner?.current?.chat, chat)}, '
+          'render=${renderedReadiness(streamingReplayInitial())})',
         );
       }
       final view = View.of(context);
-      if (view.viewInsets.bottom <= 0 ||
-          !_composer!.widget.focusNode.hasFocus) {
-        throw StateError('Open the keyboard and focus the prepared composer');
+      if ((view.viewInsets.bottom > 0) != keyboardOpen ||
+          (keyboardOpen && !_composer!.widget.focusNode.hasFocus)) {
+        throw StateError('Settle the requested keyboard state before replay');
       }
       final geometry = (
         view.physicalSize,
@@ -805,19 +954,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       }
       final streamEndUs = developer.Timeline.now;
       final finalSource = streamingReplayInitial() + growth;
-      _fixture!.rows = [
-        ..._fixture!.rows,
-        {'id': 2, 'role': 'assistant', 'content': finalSource},
-      ];
-      _emit('message.complete', {
-        'status': 'complete',
-        'text': finalSource,
-        'persisted_turn': {
-          'row_ids': [2],
-          'complete': true,
-          'final_assistant_row_id': 2,
-        },
-      });
+      _completeSource(finalSource);
       await _wait(const Duration(milliseconds: 500));
       final endUs = developer.Timeline.now;
       geometryStable =
@@ -887,6 +1024,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
         'focusHeld': focusHeld,
         'keyboardStartPx': keyboardStart,
         'keyboardEndPx': view.viewInsets.bottom,
+        'keyboardOpen': keyboardOpen,
         'displayRefreshHz': view.display.refreshRate,
         'physicalWidthPx': view.physicalSize.width,
         'physicalHeightPx': view.physicalSize.height,
@@ -898,8 +1036,8 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
             !_chat!.runtime.blocksTurnAdmission &&
             _rendered(finalSource) &&
             geometryStable &&
-            focusHeld &&
-            keyboardStart > 0 &&
+            (!keyboardOpen || focusHeld) &&
+            (keyboardStart > 0) == keyboardOpen &&
             frames.isNotEmpty,
         'frames': frames,
       };
