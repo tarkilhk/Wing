@@ -14891,6 +14891,31 @@
       "path": "tools/architecture/rules/compact_dialog_layout.dart",
       "area": "tools",
       "provenance": "tracked"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_notice_always.xml",
+      "area": "android",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_notice_deny.xml",
+      "area": "android",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_notice_once.xml",
+      "area": "android",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_notice_review.xml",
+      "area": "android",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_notice_session.xml",
+      "area": "android",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

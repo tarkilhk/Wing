@@ -162,7 +162,7 @@ def run(output):
     shade()
     shown = nodes()
     assert not any(n.get('resource-id') == PACKAGE + ':id/once' for n in shown)
-    assert any(n.get('text') == 'Review' for n in shown)
+    assert any(n.get('content-desc') == 'Review the full command' for n in shown)
     screenshot(output / 'private-preview.png')
     print('PASS: hidden previews expose Review only', flush=True)
     state('/preview', {'enabled': True})

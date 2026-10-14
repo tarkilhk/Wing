@@ -20,14 +20,12 @@ class StudioLoading extends StatefulWidget {
   State<StudioLoading> createState() => _StudioLoadingState();
 }
 
-/// Confirmed work pulses in its semantic status position, never a category slot.
-/// The conversation status takes priority over nested work and header refresh.
+/// A Wing-only mark for confirmed work. Callers render non-working states
+/// separately; the conversation pulse takes priority over nested work.
 class StudioWorkingIndicator extends StatefulWidget {
   const StudioWorkingIndicator({
     super.key,
-    required this.active,
     required this.label,
-    required this.icon,
     required this.color,
     this.size = 18,
     this.conversation = false,
@@ -36,18 +34,14 @@ class StudioWorkingIndicator extends StatefulWidget {
   /// Separate roster/card work has its own status, not a nested conversation cue.
   const StudioWorkingIndicator.independent({
     super.key,
-    required this.active,
     required this.label,
-    required this.icon,
     required this.color,
     this.size = 18,
   }) : conversation = false,
        _independent = true;
   final bool _independent;
-  final bool active;
   final bool conversation;
   final String label;
-  final IconData icon;
   final Color color;
   final double size;
   @override
@@ -70,8 +64,7 @@ class _StudioWorkingIndicatorState extends State<StudioWorkingIndicator> {
     }
     next.work(
       _identity,
-      widget.active &&
-          (ModalRoute.isCurrentOf(context) ?? true) &&
+      (ModalRoute.isCurrentOf(context) ?? true) &&
           TickerMode.valuesOf(context).enabled,
       conversation: widget.conversation,
     );
@@ -97,14 +90,21 @@ class _StudioWorkingIndicatorState extends State<StudioWorkingIndicator> {
 
   Widget _glyph(bool selected) => SizedBox.square(
     dimension: widget.size,
-    child:
-        widget.active && selected && (ModalRoute.isCurrentOf(context) ?? true)
+    child: selected && (ModalRoute.isCurrentOf(context) ?? true)
         ? StudioLoading(
             label: widget.label,
             color: widget.color,
             size: widget.size,
           )
-        : Icon(widget.icon, size: widget.size, color: widget.color),
+        : widget.conversation || widget._independent
+        ? _WingGlyph(
+            label: widget.label,
+            size: widget.size,
+            color: widget.color,
+            pulse: const AlwaysStoppedAnimation<double>(0),
+            animate: false,
+          )
+        : const SizedBox.shrink(),
   );
   @override
   Widget build(BuildContext context) => widget._independent
@@ -144,30 +144,51 @@ class _StudioLoadingState extends State<StudioLoading>
   }
 
   @override
-  Widget build(BuildContext context) {
-    final glyph = Semantics(
-      container: true,
-      liveRegion: true,
-      label: widget.label,
-      child: ExcludeSemantics(
-        child: IgnorePointer(
-          child: RepaintBoundary(
-            child: SizedBox.square(
-              dimension: widget.size,
-              child: CustomPaint(
-                painter: _Feathers(
-                  color: widget.color ?? Theme.of(context).colorScheme.primary,
-                  pulse: _pulse,
-                  animate: _animate,
-                ),
+  Widget build(BuildContext context) => _WingGlyph(
+    label: widget.label,
+    size: widget.size,
+    color: widget.color,
+    pulse: _pulse,
+    animate: _animate,
+  );
+}
+
+/// Animated and covered conversation states share the exact same Wing artwork.
+class _WingGlyph extends StatelessWidget {
+  const _WingGlyph({
+    required this.label,
+    required this.size,
+    required this.color,
+    required this.pulse,
+    required this.animate,
+  });
+  final String label;
+  final double size;
+  final Color? color;
+  final Animation<double> pulse;
+  final bool animate;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    liveRegion: true,
+    label: label,
+    child: ExcludeSemantics(
+      child: IgnorePointer(
+        child: RepaintBoundary(
+          child: SizedBox.square(
+            dimension: size,
+            child: CustomPaint(
+              painter: _Feathers(
+                color: color ?? Theme.of(context).colorScheme.primary,
+                pulse: pulse,
+                animate: animate,
               ),
             ),
           ),
         ),
       ),
-    );
-    return glyph;
-  }
+    ),
+  );
 }
 
 class _Feathers extends CustomPainter {

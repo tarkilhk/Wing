@@ -62,6 +62,16 @@ class BotGroupSession extends ChangeNotifier {
     } catch (_) {
       _draftError = 'The saved group draft could not be read on this device.';
     }
+    try {
+      for (final receipt in preferences.approvalReceipts(
+        group.scope.connectionIdentity,
+        group.id,
+      )) {
+        _approvalReceipts[receipt.action.key] = receipt;
+      }
+    } catch (_) {
+      _actionError = 'Saved approval details could not be read on this device.';
+    }
     // Discovery already obtained this exact room's bounded message tail.
     // It is passive reading, never runtime/action authority or a log cursor.
     final cache = groupMessages;
@@ -310,6 +320,41 @@ class BotGroupSession extends ChangeNotifier {
     );
   }
 
+  // A withdrawn request loses action authority, never its visible explanation.
+  final _approvalReceipts =
+      <String, ({BotGroupAction action, String? decision})>{};
+  List<({BotGroupAction action, String? decision})> get settledApprovals =>
+      List.unmodifiable(
+        _approvalReceipts.values.where(
+          (receipt) =>
+              receipt.decision != null ||
+              _runtime?.actions.any(
+                    (action) => action.key == receipt.action.key,
+                  ) !=
+                  true,
+        ),
+      );
+  String? approvalError(BotGroupAction action) => _approvalErrors[action.key];
+  final _approvalErrors = <String, String>{};
+  Future<void> _saveApprovalReceipts() => preferences.writeApprovalReceipts(
+    group.scope.connectionIdentity,
+    group.id,
+    _approvalReceipts.values,
+  );
+  bool get approvalAvailabilityKnown => _runtime != null;
+
+  List<BotGroupAction> get pendingApprovals {
+    final current = {
+      for (final action in runtime?.actions ?? const <BotGroupAction>[])
+        if (action.kind == 'approval' &&
+            _approvalReceipts[action.key]?.decision == null)
+          action.key: action,
+    };
+    return List.unmodifiable([
+      for (final key in _approvalReceipts.keys) ?current[key],
+    ]);
+  }
+
   _GroupContinuation? _continuation;
   bool get awaitingContinuation => _continuation?.stopped == true;
   int _recoveryRevision = 0;
@@ -426,6 +471,37 @@ class BotGroupSession extends ChangeNotifier {
       final nextRuntime = await repository.groupRuntime(group);
       if (_closed || _capturing || revision != _recoveryRevision) return;
       _runtime = nextRuntime;
+      var receiptsChanged = false;
+      for (final action in nextRuntime.actions.where(
+        (a) => a.kind == 'approval',
+      )) {
+        if (!_approvalReceipts.containsKey(action.key)) {
+          _approvalReceipts[action.key] = (action: action, decision: null);
+          receiptsChanged = true;
+        }
+      }
+      final pendingKeys = nextRuntime.actions
+          .map((action) => action.key)
+          .toSet();
+      final retiredErrors = _approvalErrors.entries
+          .where((entry) => !pendingKeys.contains(entry.key))
+          .toList();
+      if (retiredErrors.any((entry) => entry.value == _actionError)) {
+        _actionError = null;
+      }
+      _approvalErrors.removeWhere((key, _) => !pendingKeys.contains(key));
+      // Approval visibility must not wait on replay or device persistence.
+      notifyListeners();
+      if (receiptsChanged) {
+        try {
+          await _saveApprovalReceipts();
+        } catch (_) {
+          if (!_closed) {
+            _actionError =
+                'Approval details could not be saved on this device.';
+          }
+        }
+      }
       final observation = repository.groupObservations.beginRead(group);
       try {
         do {
@@ -576,11 +652,14 @@ class BotGroupSession extends ChangeNotifier {
     if (_closed ||
         _acting ||
         _sending ||
+        _approvalReceipts[action.key]?.decision != null ||
         runtime?.actions.any((a) => a.key == action.key) != true) {
       return;
     }
+    _recoveryRevision++;
     _acting = true;
     _actionError = null;
+    _approvalErrors.remove(action.key);
     repository.retain();
     notifyListeners();
     try {
@@ -591,10 +670,21 @@ class BotGroupSession extends ChangeNotifier {
         () => !_closed,
         () {},
       );
+      _approvalReceipts[action.key] = (action: action, decision: choice);
+      if (!_closed) notifyListeners();
+      try {
+        await _saveApprovalReceipts();
+      } catch (_) {
+        if (!_closed) {
+          _actionError =
+              'Decision accepted; its details could not be saved on this device.';
+        }
+      }
     } catch (_) {
       if (!_closed) {
         _actionError =
             'Group action could not be confirmed. Refresh before trying again.';
+        _approvalErrors[action.key] = _actionError!;
       }
     } finally {
       repository.release();

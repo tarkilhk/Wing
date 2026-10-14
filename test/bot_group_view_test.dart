@@ -113,6 +113,163 @@ void main() {
   });
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('group approval remains visible ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = BotsFixture();
+        fixture.events.addAll([
+          for (var i = 1; i <= 10; i++)
+            _event(
+              i,
+              'message.user',
+              'you',
+              'Review the changes and continue.',
+            ),
+        ]);
+        fixture.pending.add({
+          'kind': 'approval',
+          'task_id': 'task-1',
+          'member_id': 'atlas',
+          'request_id': 'approval-1',
+          'execution_generation': 1,
+          'approval': {
+            'command': '<write to AGENTS.md>',
+            'description':
+                'Write to protected agent-instruction file(s): AGENTS.md. These files steer future agent behavior; approval is always required (not bypassed by auto-approve).',
+            'choices': ['once', 'deny'],
+          },
+        });
+        final group = (await readFixtureGroups(
+          fixture.repository,
+          groupMessages: null,
+        )).first;
+        late BotGroupSession session;
+        final frame = GlobalKey();
+        Widget route() => RepaintBoundary(
+          key: frame,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: BotGroupScreen(
+              stopVoicePlayback: () async {},
+              voiceInputSettings: () =>
+                  const LocalVoiceInputSettings(language: ''),
+              createSession: () => session = BotGroupSession(
+                fixture.repository,
+                group,
+                reads: BotGroupReadState(),
+                preferences: groupPreferences,
+                groupMessages: null,
+                appearances: FixedGroupAppearances(const []),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpWidget(route());
+        await _settleGroupMarkdown(tester);
+        expect(find.text('<write to AGENTS.md>'), findsOneWidget);
+        final allow = find.byWidgetPredicate(
+          (w) => w is IconButton && w.tooltip == 'Allow once',
+        );
+        final deny = find.byWidgetPredicate(
+          (w) => w is IconButton && w.tooltip == 'Deny',
+        );
+        expect(tester.getSize(allow), const Size(48, 48));
+        final transcript = tester
+            .widget<ListView>(find.byKey(const ValueKey('group-transcript')))
+            .controller!;
+        transcript.jumpTo(transcript.position.maxScrollExtent);
+        await tester.pump();
+        final allowRect = tester.getRect(allow);
+        expect(
+          allowRect.bottom,
+          lessThan(
+            tester
+                .getRect(find.byKey(const ValueKey('group-message-composer')))
+                .top,
+          ),
+        );
+        await _render(
+          tester,
+          frame,
+          'approval-pinned-${brightness.name}-$scale',
+        );
+        tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+        await tester.pump();
+        expect(tester.getRect(allow).bottom, lessThan(844 - 260));
+        expect(tester.takeException(), isNull);
+        await _render(
+          tester,
+          frame,
+          'approval-keyboard-${brightness.name}-$scale',
+        );
+        tester.view.viewInsets = FakeViewPadding.zero;
+        await tester.pump();
+        final command = Completer<void>();
+        fixture.beforeCommand = () => command.future;
+        var fail = true;
+        fixture.commandHook = (_, method, params) async {
+          if (method == 'groups.approve' && fail) throw StateError('Offline');
+          return null;
+        };
+        await tester.tap(allow);
+        await tester.pump();
+        expect(tester.widget<IconButton>(allow).onPressed, isNull);
+        await tester.pump();
+        expect(find.byType(StudioLoading), findsOneWidget);
+        await _render(tester, frame, 'approval-held-${brightness.name}-$scale');
+        command.complete();
+        await _settleGroupMarkdown(tester);
+        expect(
+          session.approvalError(session.pendingApprovals.single),
+          isNotNull,
+        );
+        expect(tester.widget<IconButton>(deny).onPressed, isNotNull);
+        await _render(
+          tester,
+          frame,
+          'approval-failed-${brightness.name}-$scale',
+        );
+        fail = false;
+        fixture.pending.clear();
+        await session.refresh();
+        transcript.jumpTo(0);
+        await _settleGroupMarkdown(tester);
+        expect(find.text('<write to AGENTS.md>'), findsOneWidget);
+        expect(session.error, isNull);
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('No longer pending'), findsOneWidget);
+        expect(find.text('Group needs attention'), findsNothing);
+        expect(find.byTooltip('Allow once'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await _render(
+          tester,
+          frame,
+          'approval-withdrawn-${brightness.name}-$scale',
+        );
+        await tester.pumpWidget(const SizedBox());
+        // Reopening borrows saved explanation only; the server grants authority.
+        groupPreferences = await BotsPreferences.load();
+        await tester.pumpWidget(route());
+        await _settleGroupMarkdown(tester);
+        expect(find.text('<write to AGENTS.md>'), findsOneWidget);
+        expect(find.text('No longer pending'), findsOneWidget);
+        expect(find.byTooltip('Allow once'), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+  }
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
       testWidgets(
         'group mention picker preserves multiline composer ${brightness.name} $scale',
         (tester) async {
@@ -2447,7 +2604,7 @@ void main() {
             1,
             'message.member',
             'atlas',
-            '@bot_mira, I’m checking the evidence before the build. ${List.filled(8, 'The approved sources and calculation definitions are in our shared mission.').join(' ')}',
+            '@bot_mira, I’m checking the evidence before the build. ${List.filled(20, 'The approved sources and calculation definitions are in our shared mission.').join(' ')}',
           ),
           _event(
             2,
@@ -2593,6 +2750,27 @@ void main() {
           'Show group members · 2 bots',
         );
         await _render(tester, frame, 'working-${brightness.name}-$scale');
+        await tester.tap(find.byTooltip('Group options'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+        expect(find.text('Bot working histories'), findsOneWidget);
+        expect(find.byIcon(Icons.pending_outlined), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(ConversationActivityStatus),
+            matching: find.byType(CustomPaint),
+          ),
+          findsOneWidget,
+        );
+        await _render(tester, frame, 'working-menu-${brightness.name}-$scale');
+        await tester.tapAt(const Offset(4, 220));
+        await tester.pump();
+        expect(find.byIcon(Icons.pending_outlined), findsNothing);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+        expect(find.byType(StudioLoading), findsOneWidget);
+
         final transcript = tester
             .widget<ListView>(find.byKey(const ValueKey('group-transcript')))
             .controller!;
@@ -2600,11 +2778,17 @@ void main() {
         await tester.pump();
         await _settleGroupMarkdown(tester);
         final readingOffset = transcript.offset;
+        expect(
+          readingOffset,
+          greaterThanOrEqualTo(80),
+          reason:
+              'The fixture must be reading older history, outside the latest-follow threshold.',
+        );
         approval = true;
         await session.refresh();
         await tester.pump(const Duration(milliseconds: 300));
         expect(transcript.offset, readingOffset);
-        expect(find.text('Waiting for your approval'), findsOneWidget);
+        expect(find.text('Atlas needs approval'), findsOneWidget);
         expect(find.byType(ShaderMask), findsNothing);
         expect(find.byType(StudioLoading), findsNothing);
         await _render(tester, frame, 'approval-${brightness.name}-$scale');

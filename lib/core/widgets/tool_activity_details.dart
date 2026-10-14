@@ -126,9 +126,7 @@ class ActivityDetailStatus extends StatelessWidget {
                     child: Center(
                       child: working && !error && !warning
                           ? StudioWorkingIndicator(
-                              active: true,
                               label: label,
-                              icon: icon,
                               color: color,
                               size: 16,
                             )

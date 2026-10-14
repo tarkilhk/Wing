@@ -70,6 +70,22 @@ class NotificationInteractionSecurityTest {
         target.getJSONObject("focus").put("kind", "approval")
         assertNull(NotificationInteractionSchema.parse(value.put("payload", target.toString()).toString()))
     }
+    @Test fun groupApprovalsAdmitOnlyFencedOneTimeOrDenyActions() {
+        val target = JSONObject().put("connection", "host").put("connection_identity", "owner")
+            .put("room", "room-one").put("focus", JSONObject().put("kind", "approval")
+                .put("id", JSONArray().put("task").put("member").put("request").put(2).toString()))
+        for (choice in listOf("", "once", "deny")) {
+            val value = action(choice, false).put("payload", target.toString())
+            assertNotNull(NotificationInteractionSchema.parse(value.toString()))
+            assertNotNull(NotificationInteractionSchema.parse(value.put("review", true).toString()))
+        }
+        for (choice in listOf("session", "always")) {
+            assertNull(NotificationInteractionSchema.parse(action(choice).put("payload", target.toString()).toString()))
+        }
+        target.getJSONObject("focus").put("id", JSONArray().put("task").put("member").put("request").put(0).toString())
+        assertNull(NotificationInteractionSchema.parse(action().put("payload", target.toString()).toString()))
+    }
+
     private fun action(choice: String = "once", review: Boolean = false): JSONObject {
         val target = JSONObject().put("connection", "host").put("connection_identity", "credential-owner")
             .put("profile", "default").put("session", "chat-one")

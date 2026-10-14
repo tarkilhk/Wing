@@ -141,7 +141,7 @@ mentions. Leaving the group or restarting Wing restores its draft. Each server
 and room keeps its own draft. Sending clears the accepted text; a newer draft
 typed while sending stays available.
 
-An unconfirmed send stays available for review/retry. Paused work offers Continue group work to stop the paused attempt and send a continuation request. Approvals apply to the request shown in that discussion.
+An unconfirmed send stays available for review/retry. Paused work offers Continue group work to stop the paused attempt and send a continuation request. Pending approvals stay above the composer while you scroll. Use the checkmark to allow once or the cross to deny. Wing retains the details after Hermes withdraws a request, with a No longer pending status and no decision buttons. Saved details remain available after reopening the group. You can also answer group approvals from Wing notifications.
 
 Your bubbles show your message without a User label. Bot replies show the
 sender's saved avatar and name, formatted text, links, code and timestamps.
@@ -218,7 +218,8 @@ Send. A compact status above the composer shows sending, group updates, work or
 approval needs. The conversation working status uses Wing's feather pulse beside steady text. During a manual refresh, ongoing work keeps pulsing and the header shows a refresh symbol until the read settles.
 Automatic background refresh does not show a loading animation. Hermes
 currently exposes group activity rather than individual bots typing, so Wing
-displays “Bots are working…”.
+displays “Bots are working…”. The Wing keeps its shape while the menu is open;
+its pulse pauses until you return.
 
 Internal group workers stay out of the default Chats list and chat notifications,
 so they do not produce `Group: <UUID>` alerts, including after opening a worker
@@ -227,7 +228,7 @@ silent; replies to your own messages still notify you. Monitoring follows the
 shared discussion across pauses between bot turns. New shared replies update one
 notification per group; the latest reply replaces the previous one. Tap it to
 open the discussion. Reaching the reply clears it. Answer group approvals in the
-discussion. Unresolved requests in ordinary chats stay pending when newer replies
+discussion or its notification. Unresolved requests in ordinary chats stay pending when newer replies
 arrive.
 On Android 12 and later, the group transcript supports system scroll capture;
 the composer and keyboard are outside the capture area, and capture restores

@@ -83,32 +83,34 @@ class ProfileActivityStatus extends StatelessWidget {
     final text = label;
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
     final Widget leading;
-    if (chat.runtime.compacting &&
-        !chat.runtime.needsInput &&
-        !chat.runtime.reconnecting) {
-      leading = StudioWorkingIndicator(
-        conversation: true,
-        active:
-            !chat.runtime.opening &&
-            !chat.runtime.offline &&
-            chat.runtime.execution != ChatExecution.failed,
-        label: 'Summarizing conversation',
-        icon: Icons.compress_rounded,
-        color: WingTokens.of(context).running,
-      );
+    if (chat.runtime.compacting && !chat.runtime.needsInput && !chat.runtime.reconnecting) {
+      leading =
+          !chat.runtime.opening &&
+              !chat.runtime.offline &&
+              chat.runtime.execution != ChatExecution.failed
+          ? StudioWorkingIndicator(
+              conversation: true,
+              label: 'Summarizing conversation',
+              color: WingTokens.of(context).running,
+            )
+          : Icon(
+              Icons.compress_rounded,
+              size: 18,
+              color: WingTokens.of(context).running,
+            );
     } else if (chat.runtime.commandRunning &&
         !chat.runtime.needsInput &&
         !chat.runtime.reconnecting) {
-      leading = StudioWorkingIndicator(
-        conversation: true,
-        active:
-            !chat.runtime.opening &&
-            !chat.runtime.offline &&
-            chat.runtime.execution != ChatExecution.failed,
-        label: 'Running command',
-        icon: Icons.pending_outlined,
-        color: color,
-      );
+      leading =
+          !chat.runtime.opening &&
+              !chat.runtime.offline &&
+              chat.runtime.execution != ChatExecution.failed
+          ? StudioWorkingIndicator(
+              conversation: true,
+              label: 'Running command',
+              color: color,
+            )
+          : Icon(Icons.error_outline, size: 18, color: color);
     } else if (chat.runtime.execution == ChatExecution.idle &&
         chat.runtime.activity(
               backgroundWorking: chat.subagents.any(

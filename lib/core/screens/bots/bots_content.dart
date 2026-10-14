@@ -410,13 +410,10 @@ class _BotsContentState extends State<BotsContent> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (active) ...[
-          StudioWorkingIndicator.independent(
-            active: running,
-            label: label,
-            icon: Icons.chat_bubble_outline,
-            size: 14,
-            color: c,
-          ),
+          if (running)
+            StudioWorkingIndicator.independent(label: label, size: 14, color: c)
+          else
+            Icon(Icons.chat_bubble_outline, size: 14, color: c),
           const SizedBox(width: 6),
         ],
         Flexible(

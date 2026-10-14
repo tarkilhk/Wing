@@ -347,9 +347,11 @@ final class _NotificationApplication {
         if (!closed) await openPayload(value.payload);
         return;
       }
-      // Navigation accepts both shared rooms and profile sessions. Only an
-      // approval decision requires a profile-session target.
       final target = jsonDecode(value.payload) as Map<String, dynamic>;
+      if (target.containsKey('room')) {
+        await _groupDecision(target, value);
+        return;
+      }
       final key = ProfileSessionKey.fromJson(target);
       final focus = NotificationFocus.fromJson(
         Map<String, dynamic>.from(target['focus']),
@@ -427,6 +429,89 @@ final class _NotificationApplication {
       await native.finishDirectAction(value);
     }
   }
+
+  Future<void> _groupDecision(
+    Map<String, dynamic> payload,
+    NativeNotificationInteraction value,
+  ) async {
+    final target = GroupNotificationTarget.fromJson(payload);
+    final focus = NotificationFocus.fromJson(
+      Map<String, dynamic>.from(payload['focus']),
+    );
+    if (focus.kind != 'approval' || !{'once', 'deny'}.contains(value.choice)) {
+      return;
+    }
+    await ready;
+    final connection = (await manager.loadConnectionsWithSecrets())
+        .where((c) => c.id == target.scope.connectionId)
+        .firstOrNull;
+    if (closed) return;
+    if (connection == null) throw StateError('Original connection unavailable');
+    final owner = await registry.forConnection(connection);
+    if (closed) return;
+    if (owner.connectionIdentity != target.scope.connectionIdentity) {
+      throw StateError('Original connection changed');
+    }
+    if (value.review ||
+        (value.choice != 'deny' &&
+            !notices.appPreferences.current.notificationPreviewsAllowed)) {
+      await beforeNavigation();
+      if (!closed) await openPayload(value.payload);
+      return;
+    }
+    await _groupDecisionState(target, focus, submitting: true);
+    try {
+      final confirmed = await owner.approveGroupNotification(
+        target,
+        focus.id,
+        value.choice,
+        value.command,
+      );
+      if (!closed && !confirmed) {
+        await native.actionStatus('This approval is no longer pending.');
+      }
+    } catch (_) {
+      await _groupDecisionState(
+        target,
+        focus,
+        submitting: false,
+        error: 'Decision not confirmed. Open the group to review.',
+      );
+      rethrow;
+    } finally {
+      await _groupDecisionState(target, focus, submitting: false);
+    }
+  }
+
+  Future<void> _groupDecisionState(
+    GroupNotificationTarget target,
+    NotificationFocus focus, {
+    required bool submitting,
+    String? error,
+  }) => notices._serialize(() async {
+    if (closed) return;
+    final chat = jsonEncode(target.toJson());
+    final state = notices._chats[chat];
+    if (state == null || !state.inputs.any((input) => input.focus == focus)) {
+      return;
+    }
+    state.inputs = [
+      for (final input in state.inputs)
+        if (input.focus != focus)
+          input
+        else
+          NotificationInput(
+            focus: input.focus,
+            content: input.content,
+            choices: input.choices,
+            count: input.count,
+            submitting: submitting,
+            error: error ?? (submitting ? null : input.error),
+          ),
+    ];
+    await notices._render(chat, state, alert: false);
+    await notices._write();
+  });
 
   void _monitoringChanged() {
     if (closed) return;

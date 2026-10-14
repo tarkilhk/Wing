@@ -838,6 +838,110 @@ void main() {
   }
 
   test(
+    'group approval publishes before held log replay and saved details never grant authority',
+    () async {
+      final fixture = BotsFixture();
+      fixture.pending.add({
+        'kind': 'approval',
+        'task_id': 'task',
+        'member_id': 'atlas',
+        'request_id': 'request',
+        'execution_generation': 1,
+        'approval': {
+          'command': 'write AGENTS.md',
+          'choices': ['once', 'deny'],
+        },
+      });
+      final group = (await readFixtureGroups(
+        fixture.repository,
+        groupMessages: null,
+      )).first;
+      final entered = Completer<void>(), held = Completer<void>();
+      fixture.readHook = (_, method, params) async {
+        if (method == 'groups.log') {
+          if (!entered.isCompleted) entered.complete();
+          await held.future;
+        }
+        return null;
+      };
+      BotGroupSession create() => BotGroupSession(
+        fixture.repository,
+        group,
+        reads: BotGroupReadState(),
+        preferences: groupPreferences,
+        groupMessages: null,
+        appearances: FixedGroupAppearances(const []),
+      );
+      final session = create();
+      addTearDown(session.dispose);
+      final read = session.refresh();
+      await entered.future;
+      expect(session.pendingApprovals.single.command, 'write AGENTS.md');
+      held.complete();
+      await read;
+      fixture.pending.clear();
+      final restored = create();
+      addTearDown(restored.dispose);
+      expect(restored.pendingApprovals, isEmpty);
+      expect(restored.approvalAvailabilityKnown, false);
+      expect(
+        restored.settledApprovals.single.action.command,
+        'write AGENTS.md',
+      );
+      await restored.refresh();
+      expect(restored.pendingApprovals, isEmpty);
+      expect(restored.approvalAvailabilityKnown, true);
+    },
+  );
+
+  test(
+    'group approvals keep first-seen order when runtime member order changes',
+    () async {
+      final fixture = BotsFixture();
+      for (final request in ['first', 'second']) {
+        fixture.pending.add({
+          'kind': 'approval',
+          'task_id': 'task',
+          'member_id': 'atlas',
+          'request_id': request,
+          'execution_generation': 1,
+          'approval': {
+            'command': request,
+            'choices': ['once', 'deny'],
+          },
+        });
+      }
+      final group = (await readFixtureGroups(
+        fixture.repository,
+        groupMessages: null,
+      )).first;
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        reads: BotGroupReadState(),
+        preferences: groupPreferences,
+        groupMessages: null,
+        appearances: FixedGroupAppearances(const []),
+      );
+      addTearDown(session.dispose);
+      await session.refresh();
+      final reversed = fixture.pending.reversed.toList();
+      fixture.pending
+        ..clear()
+        ..addAll(reversed);
+      await session.refresh();
+      expect(session.pendingApprovals.map((a) => a.request), [
+        'first',
+        'second',
+      ]);
+      fixture.pending.removeWhere((a) => a['request_id'] == 'first');
+      await session.refresh();
+      expect(session.pendingApprovals.single.request, 'second');
+      expect(session.settledApprovals.single.action.request, 'first');
+    },
+  );
+
+  test(
     'continue group work waits for Stop and excludes duplicate taps',
     () async {
       final preparations = <String>[];

@@ -55,15 +55,26 @@ internal object NotificationInteractionSchema {
         if (!listOf("connection", "connection_identity").all { string(target, it, 4096, true) }) return false
         if (target.has("room")) {
             if (!string(target, "room", 4096, true) || target.has("session") || target.has("profile") ||
-                value.getString("choice").isNotEmpty() || value.getBoolean("review")) return false
+                value.getString("choice") !in setOf("", "once", "deny")) return false
         } else if (!listOf("profile", "session").all { string(target, it, 4096, true) }) return false
         val focus = target.optJSONObject("focus")
         if (focus != null) {
-            if (target.has("room") && focus.opt("kind") != "answer") return false
+            if (target.has("room")) {
+                when (focus.opt("kind")) {
+                    "answer" -> if (value.getString("choice").isNotEmpty() || value.getBoolean("review")) return false
+                    "approval" -> {
+                        val identity = try { JSONArray(focus.optString("id")) } catch (_: Exception) { return false }
+                        if (identity.length() != 4 || !(0..2).all { identity.opt(it) is String && identity.getString(it).isNotEmpty() } ||
+                            identity.opt(3) !is Int || identity.getInt(3) < 1) return false
+                    }
+                    else -> return false
+                }
+            }
             if (focus.opt("kind") !in setOf("answer", "side", "background", "approval", "question", "secure", "status") ||
                 !string(focus, "id", 4096, true)) return false
             if (focus.has("message_id") && focus.opt("message_id") !is Int && focus.opt("message_id") !is Long) return false
-        } else if (target.has("focus")) return false
+        } else if (target.has("focus") || (target.has("room") &&
+            (value.getString("choice").isNotEmpty() || value.getBoolean("review")))) return false
         return value.getString("choice").isEmpty() || focus?.opt("kind") == "approval"
     }
 }

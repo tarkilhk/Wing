@@ -798,6 +798,25 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> refreshGroupNotifications() => _groupNotificationsEnabled
       ? _groupNotifications.refresh()
       : Future.value();
+  Future<bool> approveGroupNotification(
+    GroupNotificationTarget target,
+    String focus,
+    String choice,
+    String? command,
+  ) {
+    if (_closed ||
+        target.scope.connectionId != connection.id ||
+        target.scope.connectionIdentity != connectionIdentity) {
+      throw StateError('The original connection is unavailable');
+    }
+    return _groupNotifications.resolveApproval(
+      target.roomId,
+      focus,
+      choice,
+      command,
+    );
+  }
+
   void setGroupNotificationsForeground(bool foreground) =>
       _groupNotifications.setForeground(foreground);
   void _requireGroupOwner(BotGroup group) {
@@ -877,6 +896,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     this.onNotificationRead,
     this.notificationResultFor,
     Future<void> Function(GroupAnswerNotification)? onGroupAnswer,
+    Future<void> Function(GroupInputNotification)? onGroupInputs,
     Future<void> Function(GroupNotificationTarget, int)? onGroupAnswerRead,
     List<NotificationInput> Function(ProfileSessionKey)? notificationInputsFor,
     // Keep the injected journal reader private behind the workspace boundary.
@@ -894,7 +914,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
         draftStore ??
         ComposerDraftStore(preferences, connectionIdentity: connectionIdentity);
     connectionStatus = ServerConnectionStatus(connection.label);
-    _groupNotificationsEnabled = onAttention != null || onGroupAnswer != null;
+    _groupNotificationsEnabled =
+        onAttention != null || onGroupAnswer != null || onGroupInputs != null;
     _groupNotifications = GroupNotificationSession(
       observations: groupObservations,
       scope: WorkspaceScope(
@@ -908,6 +929,21 @@ class ProfileWorkspaceController extends ChangeNotifier {
         final gateway = _resource('default').gateway;
         await gateway.connect();
         return gateway.call(method, params);
+      },
+      command: (method, params) async {
+        final gateway = _resource('default').gateway;
+        await gateway.connect();
+        if (_closed) throw StateError('Connection retired');
+        return gateway.call(method, params);
+      },
+      publishInputs: (inputs) async {
+        if (onGroupInputs == null) {
+          if (inputs.inputs.isNotEmpty) {
+            throw StateError('Group approval delivery unavailable');
+          }
+          return;
+        }
+        await onGroupInputs(inputs);
       },
       publish: (answer) async {
         if (onGroupAnswer == null) {

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/notification_delivery_ledger.dart';
 import 'dart:io';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/server_connection_status.dart';
@@ -56,6 +57,7 @@ Future<NotificationHarness> _harness({
   bool restoreCachedChat = false,
   List<Map<String, dynamic>>? indexedSessions,
   ProfileGateway Function(Host, WorkspaceScope)? makeGateway,
+  Future<void> Function(GroupInputNotification)? onGroupInputs,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
@@ -99,6 +101,7 @@ Future<NotificationHarness> _harness({
       connectionIdentity: resolvedIdentity,
       preferences: preferences,
       appPreferences: appPreferences,
+      onGroupInputs: onGroupInputs,
       gatewayFactory: (scope) =>
           makeGateway?.call(host, scope) ?? host.gateway(scope),
     ),
@@ -178,6 +181,131 @@ Future<void> _pumpNavigation(WidgetTester tester) async {
 const _nativeNotifications = MethodChannel(NativeNotificationSink.channelName);
 
 void main() {
+  for (final choice in ['once', 'deny', 'stale', 'review']) {
+    testWidgets(
+      'group approval native interaction uses exact room authority: $choice',
+      (tester) async {
+        final fixture = BotsFixture();
+        fixture.pending.add({
+          'kind': 'approval',
+          'task_id': 'task',
+          'member_id': 'atlas',
+          'request_id': 'request',
+          'execution_generation': 2,
+          'approval': {
+            'command': '<write to AGENTS.md>',
+            'description': 'Protected instructions',
+            'choices': ['once', 'deny'],
+          },
+        });
+        late ChatNotificationCoordinator notices;
+        final harness = await _harness(
+          onGroupInputs: (value) => notices.receiveGroupInputs(value),
+          makeGateway: (host, scope) {
+            final base = host.gateway(scope);
+            return ProfileGateway(
+              scope: scope,
+              discover: host.discover,
+              get: base.read,
+              rpc: (method, params) => method == 'groups.approve'
+                  ? fixture.command(
+                      scope.profileName,
+                      method,
+                      params,
+                      () => true,
+                      () {},
+                    )
+                  : method.startsWith('groups.')
+                  ? fixture.read(scope.profileName, method, params)
+                  : base.call(method, params),
+            );
+          },
+        );
+        final sink = RecordingTurnNotificationSink();
+        notices = ChatNotificationCoordinator(
+          harness.manager.prefs,
+          sink,
+          appPreferences: harness.appPreferences,
+        );
+        final native = NativeNotificationSink(onInteraction: (_) async {});
+        final monitoring = BackgroundMonitoringService(
+          preferences: harness.appPreferences,
+          hasActiveChats: () => false,
+          notificationsEnabled: () async => true,
+          supported: false,
+        );
+        addTearDown(monitoring.dispose);
+        final statuses = <String>[];
+        var opened = 0;
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        messenger.setMockMethodCallHandler(_nativeNotifications, (call) async {
+          if (call.method == 'actionStatus') {
+            statuses.add(call.arguments as String);
+          }
+          return null;
+        });
+        addTearDown(
+          () => messenger.setMockMethodCallHandler(_nativeNotifications, null),
+        );
+        notices.bindApplication(
+          manager: harness.manager,
+          registry: harness.registry,
+          native: native,
+          deliveries: NotificationDeliveryLedger(harness.manager.prefs),
+          ready: Future.value(),
+          monitoring: monitoring,
+          showChat: (_) async {},
+          showGroup: (route) async {
+            opened++;
+          },
+          reviewApproval: (_) async {},
+          deferShare: () {},
+          showOpenError: () {},
+          beforeNavigation: () async {},
+        );
+        addTearDown(notices.closeApplication);
+        await harness.controller.activateGroupNotifications();
+        final notice = sink.shown.last;
+        if (choice == 'stale') {
+          fixture.pending.single['execution_generation'] = 3;
+        }
+        await notices.receiveInteraction(
+          NativeNotificationInteraction.fromJson({
+            'payload': notice.payload,
+            'choice': choice == 'deny' ? 'deny' : 'once',
+            'review': choice == 'review',
+            'command': notice.expandedBody,
+          }),
+        );
+        if (choice == 'stale' || choice == 'review') {
+          expect(fixture.commands, isEmpty);
+          expect(opened, choice == 'review' ? 1 : 0);
+          if (choice == 'stale') {
+            expect(statuses.single, contains('no longer pending'));
+          }
+        } else {
+          expect(fixture.commands.single.$2, 'groups.approve');
+          expect(fixture.commands.single.$3, {
+            'room_id': 'room-1',
+            'task_id': 'task',
+            'member_id': 'atlas',
+            'request_id': 'request',
+            'execution_generation': 2,
+            'choice': choice,
+            'profile': 'default',
+          });
+        }
+        expect(
+          harness.host.calls.where((c) => c.$2 == 'session.resume'),
+          isEmpty,
+        );
+        // Retire watcher timers inside the widget-test body.
+        harness.registry.dispose();
+      },
+    );
+  }
+
   for (final entry in ['direct', 'native tap', 'native startup']) {
     testWidgets(
       'group notification opens the shared discussion without resuming a worker: $entry',

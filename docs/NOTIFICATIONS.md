@@ -15,3 +15,5 @@ Turning previews off also makes earlier allow actions require review. If an old 
 Monitoring stops when the work it is watching ends. If you restart the phone or force-stop Wing, reopen it to restore its connection. Very short turns in chats you have not opened may not produce an alert.
 
 [Good to know](KNOWN_LIMITATIONS.md) · [Notification details](BACKGROUND_NOTIFICATIONS.md)
+
+Group approvals use the same attention notifications. The checkmark allows once; the cross denies. The request stays visible while its decision is sent. Group approvals offer only the scopes Hermes permits: once or deny. Tap the eye to review a long command in the discussion.
