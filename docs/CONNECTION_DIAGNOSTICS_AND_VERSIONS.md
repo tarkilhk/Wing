@@ -32,6 +32,20 @@ App settings shows the installed Android version/build separately from the backe
 
 Versions & updates can check for a server update and request it explicitly. **Changes in this update** shows available commit summaries, with a partial-history notice when needed; the server returns at most 20 summaries.
 
+The server card shows its update channel. Use the tuning icon to choose **Stable
+releases** or **Main branch**, then the checkmark to save. This changes which
+updates the whole server follows; it does not install an update. Wing checks the
+saved channel immediately. A failed save keeps your selection open for retry.
+Named preview channels and custom branches are displayed when the server reports
+them; Wing does not provide a preview-channel catalog or change custom branches.
+
+Stable follows published releases and may have no commit count or changelog.
+Main shows commits behind its branch when Hermes can count them. A build newer
+than stable is identified separately, and moving back to an older release has an
+explicit warning before updating. If the check fails, Wing shows the server's
+explanation and leaves the update action unavailable. Unverified channel metadata
+also blocks updating. Check again before proceeding.
+
 Leaving the screen does not cancel an accepted server update. If acknowledgement is lost, the outcome stays uncertain; check its status and version before repeating the request. Request acceptance alone does not mean the update completed.
 
 When updating several configured hosts, review the targets and each host's result separately. Different addresses can refer to the same physical server. A messaging-gateway restart is separate from a TUI restart; Wing does not offer a verified remote TUI restart action.

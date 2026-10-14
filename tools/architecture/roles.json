@@ -2455,6 +2455,11 @@
       "role": "view",
       "feature": "chat-activity",
       "library": "lib/core/widgets/profile_live_work_dock.dart"
+    },
+    "lib/core/services/backend_update_channels.dart": {
+      "role": "data",
+      "feature": "versions-updates",
+      "library": "lib/core/services/backend_update_channels.dart"
     }
   }
 }

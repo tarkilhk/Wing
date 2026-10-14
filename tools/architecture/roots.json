@@ -8816,6 +8816,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/services/backend_update_channels.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/backend_update_controller.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -12816,6 +12821,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "test/support/backend_update_channel_fixture.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/support/bot_display_fixture.dart",
       "area": "test",
       "provenance": "intentional-untracked"
@@ -15769,6 +15779,7 @@
         "lib/core/models/profile_selection.dart",
         "lib/core/models/profile_skills.dart",
         "lib/core/services/app_preferences.dart",
+        "lib/core/services/backend_update_channels.dart",
         "lib/core/services/hermes_cloud.dart",
         "lib/core/services/profile_connection_identity.dart",
         "lib/core/services/turn_notification_service.dart",
@@ -15777,6 +15788,7 @@
         "test/profile_color_preferences_view_test.dart",
         "test/profile_colors_session_test.dart",
         "test/profile_selection_controller_test.dart",
+        "test/support/backend_update_channel_fixture.dart",
         "tools/architecture/dead_code/resolved_callers.dart",
         "tools/architecture/semantic_context.dart"
       ],

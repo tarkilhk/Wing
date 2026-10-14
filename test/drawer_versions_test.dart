@@ -113,7 +113,7 @@ void main() {
         expect(find.byType(VersionsUpdatesScreen), findsNothing);
         expect(find.text('Connection details'), findsOneWidget);
         expect(find.text('Connected'), findsOneWidget);
-        expect(reads, 2);
+        expect(reads, 3);
         await tester.tap(find.byTooltip('Close connection details'));
         await tester.pumpAndSettle();
         expect(
@@ -129,7 +129,7 @@ void main() {
       expect(find.text('View release'), findsNothing);
       expect(find.text('Releases'), findsNothing);
       expect(find.text('Home server'), findsOneWidget);
-      expect(reads, 4);
+      expect(reads, 6);
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(
