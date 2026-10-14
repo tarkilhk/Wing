@@ -2196,6 +2196,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     !savedCallIds.contains(entry.activity.toolId),
               )
               .toList(growable: false);
+    final joinedLiveActivity = liveAnswering && visibleActivity.isNotEmpty
+        ? timeline.adjacentLiveActivity
+        : null;
+    Widget buildMessage(TranscriptTimelineEntry entry) => _answer(
+      chat,
+      entry,
+      capturedRows: displayRows,
+      showCopyHeader: !activityReplies.values.any(
+        (reply) => reply.presentationId == entry.presentationId,
+      ),
+      allowSavedActions: nearby == null,
+    );
     final focus = _readingFocus(chat);
     return SkillReaderScope(
       createReader: (document) => controller.skillReader(
@@ -2230,6 +2242,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   onRefreshHistory: () => controller.refreshHistory(chat),
                   onLoadOlder: () => controller.loadOlderMessages(chat),
                   timeline: timeline,
+                  joinedLiveActivity: joinedLiveActivity,
                   activityTrailingBuilder: (section) {
                     if (bot != null) return null;
                     final reply = activityReplies[section.presentationIds.last];
@@ -2238,15 +2251,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         ? const SizedBox(width: 44, height: 48)
                         : ProfileMessage.copyAction(context, reply.message);
                   },
-                  messageBuilder: (entry) => _answer(
-                    chat,
-                    entry,
-                    capturedRows: displayRows,
-                    showCopyHeader: !activityReplies.values.any(
-                      (reply) => reply.presentationId == entry.presentationId,
-                    ),
-                    allowSavedActions: nearby == null,
-                  ),
+                  messageBuilder: buildMessage,
                   focusedMessageId: focus?.rowId,
                   notificationAnchors: _chatNotificationAnchors(chat),
                   onBackToLatest: _readingFocus(chat) == null
@@ -2257,7 +2262,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   onShareResource: (output) => _shareToolResource(chat, output),
                   liveExecution: !liveAnswering || visibleActivity.isEmpty
                       ? null
-                      : _retainedLiveExecution(chat, visibleActivity),
+                      : _retainedLiveExecution(
+                          chat,
+                          visibleActivity,
+                          savedActivity: joinedLiveActivity,
+                          noticeBuilder: buildMessage,
+                        ),
                   liveToolCount: liveAnswering
                       ? 0
                       : visibleActivity.whereType<ChatToolEntry>().length,
@@ -2516,19 +2526,31 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   ProfileChat? _liveExecutionChat;
   List<ChatActivityEntry> _liveExecutionEntries = const [];
+  List<Map<String, dynamic>>? _liveExecutionHistory;
+  List<Object> _liveExecutionSavedPresentations = const [];
   Widget? _liveExecutionView;
   Widget _retainedLiveExecution(
     ProfileChat chat,
-    List<ChatActivityEntry> entries,
-  ) {
+    List<ChatActivityEntry> entries, {
+    required TranscriptTimelineSection? savedActivity,
+    required Widget Function(TranscriptTimelineEntry) noticeBuilder,
+  }) {
+    final savedPresentations =
+        savedActivity?.presentationIds.toList() ?? const [];
     if (identical(_liveExecutionChat, chat) &&
-        listEquals(_liveExecutionEntries, entries)) {
+        listEquals(_liveExecutionEntries, entries) &&
+        identical(_liveExecutionHistory, chat.reading.messages) &&
+        listEquals(_liveExecutionSavedPresentations, savedPresentations)) {
       return _liveExecutionView!;
     }
     _liveExecutionChat = chat;
     _liveExecutionEntries = List.unmodifiable(entries);
+    _liveExecutionHistory = chat.reading.messages;
+    _liveExecutionSavedPresentations = List.unmodifiable(savedPresentations);
     return _liveExecutionView = ProfileLiveExecution(
       entries: _liveExecutionEntries,
+      savedActivity: savedActivity,
+      noticeBuilder: noticeBuilder,
       loadImage: (path) => _loadAttachmentImage(chat, path),
       onOpenResource: (output) => _openAnswerOutput(chat, output),
       onShareResource: (output) => _shareToolResource(chat, output),
@@ -2541,6 +2563,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _conversationHeaderInputs = _conversationHeader = null;
     _liveExecutionChat = null;
     _liveExecutionEntries = const [];
+    _liveExecutionHistory = null;
+    _liveExecutionSavedPresentations = const [];
     _liveExecutionView = null;
     _workDockInputs = _workDock = null;
     _contextRingInputs = _contextRing = null;

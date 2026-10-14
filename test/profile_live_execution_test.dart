@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/gateway_activity.dart';
+import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:wing/core/services/chat_runtime.dart' as execution;
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
@@ -14,6 +15,57 @@ import 'package:wing/core/widgets/tool_activity_details.dart';
 import 'helpers/pump_markdown_widget.dart';
 
 void main() {
+  test('live Activity association respects conversation boundaries', () {
+    final work = <Map<String, dynamic>>[
+      {'id': 1, 'role': 'user', 'content': 'Find local lunch.'},
+      {
+        'id': 2,
+        'role': 'assistant',
+        'content': '',
+        'reasoning': 'Earlier reasoning',
+      },
+    ];
+    TranscriptTimeline project(List<Map<String, dynamic>> rows, {int? live}) =>
+        TranscriptTimeline.project(
+          rows,
+          presentationId: (row) => row['id']!,
+          liveMessageIndex: live,
+        );
+    final pending = project(work);
+    expect(pending.adjacentLiveActivity, same(pending.sections.last));
+    final streaming = project([
+      ...work,
+      {'id': 3, 'role': 'assistant', 'content': 'Current answer'},
+    ], live: 2);
+    expect(
+      streaming.adjacentLiveActivity,
+      same(streaming.sections[streaming.sections.length - 2]),
+    );
+    expect(
+      project([
+        ...work,
+        {'id': 3, 'role': 'user', 'content': 'A later question'},
+        {'id': 4, 'role': 'assistant', 'content': 'A later answer'},
+      ], live: 3).adjacentLiveActivity,
+      isNull,
+    );
+    expect(
+      project([
+        ...work,
+        {'id': 3, 'role': 'assistant', 'content': 'A saved answer'},
+        {'id': 4, 'role': 'assistant', 'content': 'Another live answer'},
+      ], live: 3).adjacentLiveActivity,
+      isNull,
+    );
+    expect(
+      project([
+        ...work,
+        {'id': 3, 'role': 'system', 'content': 'review: Memory updated'},
+      ]).adjacentLiveActivity,
+      isNull,
+    );
+    expect(work, hasLength(2));
+  });
   ChatToolEntry tool(String id) => ChatToolEntry(
     GatewayToolActivity(
       toolId: id,
@@ -24,6 +76,46 @@ void main() {
       durationSeconds: .4,
     ),
   );
+  testWidgets('one live reply keeps completed cycles in a single Activity', (
+    tester,
+  ) async {
+    final runtime = execution.ChatRuntime(runtimeId: 'repeated-cycles');
+    runtime.beginTurn(submitting: false);
+    runtime.observeReasoning('reasoning.available', {
+      'text': 'First reasoning',
+    });
+    runtime.observeTool('tool.complete', {
+      'tool_id': 'one',
+      'name': 'read_file',
+      'result': 'First result',
+    });
+    runtime.observeReasoning('reasoning.available', {
+      'text': 'Second reasoning',
+    });
+    runtime.observeTool('tool.start', {'tool_id': 'two', 'name': 'web_search'});
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ProfileLiveExecution(
+              entries: runtime.observation.activityEntries,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    expect(find.text('Activity'), findsNothing);
+    expect(find.text('Activity · 1 tool'), findsOneWidget);
+    expect(find.text('Timeline'), findsOneWidget);
+    expect(find.byType(ProfileToolCall), findsOneWidget);
+    await tester.tap(find.text('Activity · 1 tool'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileReasoningDisclosure), findsNWidgets(2));
+    expect(find.byType(ProfileToolCall), findsNWidgets(2));
+  });
   testWidgets('tool-only live run has no intermediary Activity row', (
     tester,
   ) async {
@@ -101,6 +193,59 @@ void main() {
         matching: find.byType(ProfileActivitySection),
       ),
       findsOneWidget,
+    );
+  });
+  testWidgets('never-opened Activity retains expanded tools across cycles', (
+    tester,
+  ) async {
+    final firstReasoning = const ChatReasoningEntry(
+      identity: 'first-reasoning',
+      text: 'Check local lunch options.',
+      source: 'reasoning.available',
+    );
+    Future<void> show(List<ChatActivityEntry> entries) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ProfileLiveExecution(entries: entries),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await show([firstReasoning, tool('first')]);
+    final original = tester.element(find.byType(ProfileToolCall));
+    await tester.tap(find.text('Read file'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ToolActivityDetailsView), findsOneWidget);
+    await show([
+      firstReasoning,
+      tool('first'),
+      const ChatReasoningEntry(
+        identity: 'second-reasoning',
+        text: 'Confirm the restaurant hours.',
+        source: 'reasoning.available',
+      ),
+      tool('second'),
+    ]);
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    expect(find.byType(ToolActivityDetailsView), findsNothing);
+    await tester.tap(find.text('Activity · 1 tool'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileReasoningDisclosure), findsNWidgets(2));
+    expect(find.byType(ToolActivityDetailsView), findsOneWidget);
+    expect(
+      tester.element(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ProfileToolCall && widget.call.callId == 'first',
+        ),
+      ),
+      same(original),
     );
   });
   testWidgets('tool handoff folds reasoning while the turn remains running', (

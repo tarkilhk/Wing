@@ -451,7 +451,7 @@ void main() {
     await tester.tap(find.text('Activity · 67 tools'));
     await tester.pumpAndSettle();
     expect(find.text('Search'), findsNWidgets(67));
-    expect(find.text('Timeline'), findsOneWidget);
+    expect(find.text('Timeline'), findsNWidgets(2));
     await tester.enterText(
       find.byKey(const Key('profile-message-composer')),
       'Keep Activity open while typing',

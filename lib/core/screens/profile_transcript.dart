@@ -41,6 +41,7 @@ class ProfileTranscript extends StatefulWidget {
   final List<Widget> tail;
   final Future<void> Function() onLoadOlder;
   final Widget? liveExecution;
+  final timeline_facts.TranscriptTimelineSection? joinedLiveActivity;
   final List<Widget> currentActivity;
   final List<ProfileActivityTab> activityTabs;
   final int liveToolCount;
@@ -67,6 +68,7 @@ class ProfileTranscript extends StatefulWidget {
     required this.timeline,
     required this.tail,
     this.liveExecution,
+    this.joinedLiveActivity,
     this.currentActivity = const [],
     this.activityTabs = const [],
     this.liveToolCount = 0,
@@ -464,7 +466,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final reader = widget.reader;
     _scheduleNoticeVisibility();
     final timeline = widget.timeline;
-    final rows = timeline.sections.reversed.toList();
+    final rows = timeline.sections.reversed
+        .where((section) => !identical(section, widget.joinedLiveActivity))
+        .toList();
     final liveAnswerIndex = rows.indexWhere(
       (section) => !section.isActivity && section.messages.last.streaming,
     );

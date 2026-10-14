@@ -81,6 +81,91 @@ void main() {
           .load();
     }
   });
+  testWidgets('saved partial history shares the live reply Activity', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final app = AppPreferences(prefs);
+    final host = _LiveWorkHost()
+      ..historyMessages = [
+        {'id': 1, 'role': 'user', 'content': 'Find local lunch in Bangkok.'},
+      ];
+    final controller = ProfileWorkspaceController(
+      connectionIdentity: 'partial-live-activity',
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
+      preferences: prefs,
+      appPreferences: app,
+      gatewayFactory: host.gateway,
+    );
+    addTearDown(() {
+      controller.dispose();
+      app.dispose();
+    });
+    await controller.initialize();
+    final chat = await controller.createChat(canDispatch: () => true);
+    host.event('a', 'message.start');
+    host.event('a', 'tool.complete', {
+      'tool_id': 'one',
+      'name': 'web_search',
+      'result': 'First search result',
+    });
+    host.event('a', 'reasoning.available', {'text': 'Later live reasoning'});
+    host.event('a', 'tool.start', {'tool_id': 'two', 'name': 'web_extract'});
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: ProfileWorkspaceScreen(controller: controller),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.settleMarkdown();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    expect(find.text('Activity · 1 tool'), findsOneWidget);
+    expect(find.text('Activity'), findsNothing);
+    await tester.tap(find.text('Activity · 1 tool'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
+    final currentTool = tester.element(
+      find.byWidgetPredicate(
+        (widget) => widget is ProfileToolCall && widget.call.callId == 'two',
+      ),
+    );
+    host.historyMessages = [
+      {'id': 1, 'role': 'user', 'content': 'Find local lunch in Bangkok.'},
+      {
+        'id': 2,
+        'role': 'assistant',
+        'content': '',
+        'reasoning': 'Earlier saved reasoning',
+      },
+    ];
+    await controller.refreshHistory(chat);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.settleMarkdown();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    expect(find.text('Activity'), findsNothing);
+    expect(find.byType(ProfileReasoningDisclosure), findsNWidgets(2));
+    expect(
+      tester.element(
+        find.byWidgetPredicate(
+          (widget) => widget is ProfileToolCall && widget.call.callId == 'two',
+        ),
+      ),
+      same(currentTool),
+    );
+    expect(chat.reading.messages.where((row) => row['id'] == 2), hasLength(1));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('live work production route ${brightness.name} $scale', (
@@ -618,23 +703,111 @@ void main() {
           expect(tester.getRect(composer), bounds);
           expect(chat.composer.observation.displayedText, 'Keep my draft');
           await picture('folded');
-          await tester.tap(find.text('Activity · 1 tool'));
+          host.event('a', 'tool.complete', {
+            'tool_id': 'booking',
+            'name': 'web_search',
+            'result': 'Received booking search results.',
+          });
+          for (var i = 0; i < 11; i++) {
+            host.event('a', 'tool.complete', {
+              'tool_id': 'lunch-source-$i',
+              'name': 'web_search',
+              'args': {'query': 'Local Bangkok lunch source $i'},
+              'result': 'Received source $i.',
+              'duration_s': 32,
+            });
+          }
+          host.event('a', 'reasoning.available', {
+            'text': 'Check the restaurant menu and opening hours.',
+          });
+          for (final entry in {
+            'lunch-query': 'web_search',
+            'hours-query': 'web_search',
+            'lunch-page': 'web_extract',
+            'menu-image': 'vision_analyze',
+          }.entries) {
+            host.event('a', 'tool.complete', {
+              'tool_id': entry.key,
+              'name': entry.value,
+              'args': {'query': 'Bangkok local lunch ${entry.key}'},
+              'result': 'Received ${entry.key}.',
+              'duration_s': 32,
+            });
+          }
           await settle();
-          expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
-          expect(
-            find.ancestor(
-              of: find.byType(ProfileReasoningDisclosure),
-              matching: find.byType(ProfileActivitySection),
-            ),
-            findsOneWidget,
+          expect(find.byType(ProfileActivitySection), findsOneWidget);
+          expect(find.text('Activity · 13 tools'), findsOneWidget);
+          expect(find.text('Timeline'), findsOneWidget);
+          expect(tester.getRect(composer), bounds);
+          await picture('multiple-cycles-folded');
+          host.historyMessages = [
+            {
+              'id': 1,
+              'role': 'user',
+              'content': 'Find hotels within the travel policy.',
+            },
+            {
+              'id': 2,
+              'role': 'assistant',
+              'content': '',
+              'reasoning': 'Saved planning before the first tool.',
+            },
+            {
+              'id': 3,
+              'role': 'tool',
+              'tool_call_id': 'policy',
+              'tool_name': 'read_file',
+              'content': 'Use the official booking pages.',
+            },
+          ];
+          await controller.refreshHistory(chat);
+          await settle();
+          expect(find.byType(ProfileActivitySection), findsOneWidget);
+          expect(find.text('Activity · 13 tools'), findsOneWidget);
+          expect(find.text('Activity'), findsNothing);
+          expect(chat.reading.messages.any((row) => row['id'] == 3), isTrue);
+          expect(tester.getRect(composer), bounds);
+          await picture('history-refreshed-folded');
+          await tester.ensureVisible(find.text('Activity · 13 tools'));
+          await settle();
+          // Use the header's leading edge, clear of the centered Latest overlay
+          // when the ordinary test font wraps it at enlarged text.
+          final activityTitle = tester.getRect(
+            find.text('Activity · 13 tools'),
           );
+          await tester.tapAt(
+            Offset(activityTitle.left + 4, activityTitle.center.dy),
+          );
+          await settle();
+          expect(find.byType(ProfileReasoningDisclosure), findsNWidgets(3));
+          final archive = tester.element(find.byType(ProfileActivitySection));
+          for (var i = 0; i < 3; i++) {
+            expect(
+              tester.element(
+                find.ancestor(
+                  of: find.byType(ProfileReasoningDisclosure).at(i),
+                  matching: find.byType(ProfileActivitySection),
+                ),
+              ),
+              same(archive),
+            );
+          }
           expect(find.text('Timeline'), findsNWidgets(2));
-          await tester.ensureVisible(find.text('Reasoning'));
+          final streamedReasoning = find.byWidgetPredicate(
+            (widget) =>
+                widget is ProfileReasoningDisclosure &&
+                widget.text.startsWith('**$heading**'),
+          );
+          final reasoningLabel = find.descendant(
+            of: streamedReasoning,
+            matching: find.text('Reasoning'),
+          );
+          await tester.ensureVisible(reasoningLabel);
           await settle();
           await picture('activity');
           // The centered Latest overlay can cover the middle of an enlarged
           // title. Its leading edge remains part of the same tappable row.
-          final reasoningTitle = tester.getRect(find.text('Reasoning'));
+          final reasoningTitle = tester.getRect(reasoningLabel);
           await tester.tapAt(
             Offset(reasoningTitle.left + 4, reasoningTitle.center.dy),
           );
