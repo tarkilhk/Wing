@@ -327,7 +327,7 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
     _selected = null;
   }
 
-  Future<void> _keyboardMenu() async {
+  Future<void> _openMenu() async {
     if (widget.onChanged == null) return;
     _close();
     final revision = _revision;
@@ -483,8 +483,9 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
       button: true,
       label: 'Reasoning ${chatReasoningEffortLabel(widget.effort)}',
       hint:
-          'Hold, slide to a level, then release. Slide away to cancel. Keyboard: Down arrow opens levels.',
-      onLongPress: widget.onChanged == null ? null : _keyboardMenu,
+          'Tap to choose a level, or hold and slide, then release. Slide away to cancel. Keyboard: Down arrow opens levels.',
+      onTap: widget.onChanged == null ? null : _openMenu,
+      onLongPress: widget.onChanged == null ? null : _openMenu,
       customSemanticsActions: {
         if (widget.onChanged != null)
           for (final effort in _efforts)
@@ -505,7 +506,7 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
                 LogicalKeyboardKey.enter,
                 LogicalKeyboardKey.space,
               ].contains(event.logicalKey)) {
-            _keyboardMenu();
+            _openMenu();
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
@@ -514,6 +515,7 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
           child: GestureDetector(
             key: const Key('composer-reasoning-control'),
             behavior: HitTestBehavior.opaque,
+            onTap: widget.onChanged == null ? null : _openMenu,
             onLongPressStart: widget.onChanged == null ? null : _open,
             onLongPressMoveUpdate: _move,
             onLongPressEnd: _release,

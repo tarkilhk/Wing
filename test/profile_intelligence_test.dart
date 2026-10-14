@@ -693,10 +693,16 @@ void main() {
         await screenshot('');
         await tester.tap(thinking);
         await tester.pumpAndSettle();
+        expect(find.text('Medium').hitTestable(), findsOneWidget);
         expect(
           find.byKey(const Key('composer-reasoning-selector')),
           findsNothing,
         );
+        expect(host.writes, isEmpty);
+        await screenshot('-reasoning-tap');
+        await tester.tapAt(const Offset(2, 2));
+        await tester.pumpAndSettle();
+        expect(find.text('Medium'), findsNothing);
         expect(host.writes, isEmpty);
         final cancel = await tester.startGesture(tester.getCenter(thinking));
         await tester.pump(const Duration(milliseconds: 600));
@@ -723,9 +729,17 @@ void main() {
         expect(host.writes.single['key'], 'reasoning');
         expect(host.writes.single['value'], 'low');
         expect(controller.current!.chat!.reasoningEffort, 'low');
-        await tester.tap(lightning);
+        await tester.tap(thinking);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('High'));
         await tester.pumpAndSettle();
         expect(host.writes, hasLength(2));
+        expect(host.writes.last['key'], 'reasoning');
+        expect(host.writes.last['value'], 'high');
+        expect(controller.current!.chat!.reasoningEffort, 'high');
+        await tester.tap(lightning);
+        await tester.pumpAndSettle();
+        expect(host.writes, hasLength(3));
         expect(host.writes.last['key'], 'fast');
         expect(host.writes.last['value'], 'fast');
         await tester.tap(indicator);
@@ -733,10 +747,10 @@ void main() {
         expect(find.text('Models'), findsOneWidget);
         await tester.tap(find.byKey(const Key('chat-fast-control')));
         await tester.pumpAndSettle();
-        expect(host.writes, hasLength(2));
+        expect(host.writes, hasLength(3));
         await tester.tap(find.byTooltip('Close'));
         await tester.pumpAndSettle();
-        expect(host.writes, hasLength(2));
+        expect(host.writes, hasLength(3));
         expect(controller.current!.chat!.fastMode, ChatFastMode.fast);
       });
     }

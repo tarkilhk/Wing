@@ -8,7 +8,7 @@ import 'chat_model_controls.dart';
 import 'model_chooser.dart';
 import 'studio_error.dart';
 
-/// Small inline model, held reasoning selector and fast toggle for the chat.
+/// Small inline model, tap/held reasoning selector and fast toggle for the chat.
 class ChatIntelligenceButton extends StatelessWidget {
   const ChatIntelligenceButton({
     required this.model,
