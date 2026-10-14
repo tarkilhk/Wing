@@ -69,6 +69,7 @@ import '../presentation/attachment_preview_image.dart';
 import '../services/owned_remote_files.dart';
 import '../widgets/profile_message.dart';
 import '../widgets/profile_transcript_disclosure.dart';
+import '../widgets/profile_activity_tabs.dart';
 import '../models/gateway_todo.dart';
 import '../widgets/profile_queued_messages.dart';
 import '../models/composer_work.dart';
@@ -1790,12 +1791,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       );
     }
     final savedPrompt = allowSavedActions && entry.editablePrompt;
-    final previous = entry.sharedAnswerMessageId != null
-        ? displayedHistory[entry.sourceIndex - 1]
-        : null;
-    final sharesPreviousActions =
-        allowSavedActions && entry.sharedAnswerMessageId != null;
-    final sharesNextNotice = entry.followedByResultNotice;
     final savedAnswer = allowSavedActions && entry.branchAnswer;
     final enabled =
         !chat.runtime.opening &&
@@ -1826,14 +1821,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           onEdit: savedPrompt && controller.canEditSavedPrompt(chat, message)
               ? () => _editSavedMessage(chat, message)
               : null,
-          actions: sharesPreviousActions
-              ? _answerActions(
-                  chat,
-                  previous!,
-                  enabled: enabled,
-                  messageId: entry.sharedAnswerMessageId!,
-                )
-              : savedAnswer && !sharesNextNotice
+          actions: savedAnswer
               ? _answerActions(
                   chat,
                   message,
@@ -2108,9 +2096,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final groupStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
         : 0;
-    final activeEntries =
-        nearby == null &&
-            (chat.runtime.executionActive || chat.runtime.needsInput)
+    final liveAnswering = nearby == null && _liveAnswering(chat);
+    final activeEntries = liveAnswering
         ? chat.runtime.activityEntries
         : const <ChatActivityEntry>[];
     final activeCallIds = activeEntries
@@ -2213,7 +2200,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   messageBuilder: (entry) => _answer(
                     chat,
                     entry,
-                    capturedRows: capturedRows,
+                    capturedRows: displayRows,
                     showCopyHeader: !activityReplies.values.any(
                       (reply) => reply.presentationId == entry.presentationId,
                     ),
@@ -2227,7 +2214,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   loadImage: (path) => _loadAttachmentImage(chat, path),
                   onOpenResource: (output) => _openAnswerOutput(chat, output),
                   onShareResource: (output) => _shareToolResource(chat, output),
-                  liveExecution: visibleActivity.isEmpty
+                  liveExecution: !liveAnswering || visibleActivity.isEmpty
                       ? null
                       : ProfileLiveExecution(
                           entries: visibleActivity,
@@ -2237,8 +2224,90 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                           onShareResource: (output) =>
                               _shareToolResource(chat, output),
                         ),
+                  liveToolCount: liveAnswering
+                      ? 0
+                      : visibleActivity.whereType<ChatToolEntry>().length,
+                  currentActivity: liveAnswering
+                      ? const []
+                      : [
+                          if (chat.runtime.tool != null &&
+                              !chat.runtime.toolActivities.any(
+                                (activity) => !activity.isTerminal,
+                              ))
+                            ProfileTranscriptDisclosure(
+                              icon: Icons.terminal_rounded,
+                              label: 'Preparing ${chat.runtime.tool!}',
+                              children: const [
+                                Text('Hermes is preparing the tool call'),
+                              ],
+                            ),
+                          if (visibleActivity.isNotEmpty)
+                            ProfileExecutionActivity(
+                              entries: visibleActivity,
+                              loadImage: (path) =>
+                                  _loadAttachmentImage(chat, path),
+                              onOpenResource: (output) =>
+                                  _openAnswerOutput(chat, output),
+                              onShareResource: (output) =>
+                                  _shareToolResource(chat, output),
+                            ),
+                        ],
+                  activityTabs: liveAnswering
+                      ? const []
+                      : [
+                          if (chat.todos.isNotEmpty)
+                            ProfileActivityTab(
+                              id: 'tasks',
+                              label:
+                                  'Tasks ${chat.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${chat.todos.length}',
+                              child: ProfileTodoPanel(
+                                todos: chat.todos,
+                                embedded: true,
+                              ),
+                            ),
+                          if (chat.subagents.isNotEmpty)
+                            ProfileActivityTab(
+                              id: 'agents',
+                              label:
+                                  'Agents ${chat.subagents.where((agent) => !agent.isTerminal).length}/${chat.subagents.length}',
+                              onSelected: () => unawaited(
+                                _supervisionFor(chat).refreshSubagents(),
+                              ),
+                              child: ProfileSubagentPanel(
+                                key: ValueKey(('subagents', chat.key)),
+                                session: _supervisionFor(chat),
+                                embedded: true,
+                              ),
+                            ),
+                          if (chat.sessionControl?.goal != null ||
+                              chat.sessionControl?.loop != null ||
+                              chat.sessionControl?.heartbeat != null ||
+                              chat.processes.isNotEmpty)
+                            ProfileActivityTab(
+                              id: 'work',
+                              label: 'Work',
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (chat.sessionControl?.goal != null)
+                                    ProfileGoalPanel(
+                                      key: ValueKey(('goal', chat.key)),
+                                      session: _supervisionFor(chat),
+                                    ),
+                                  if (chat.sessionControl?.loop != null ||
+                                      chat.sessionControl?.heartbeat != null ||
+                                      chat.processes.isNotEmpty)
+                                    ProfileBackgroundWorkPanel(
+                                      key: ValueKey(('background', chat.key)),
+                                      session: _supervisionFor(chat),
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
                   tail: [
-                    if (chat.runtime.tool != null &&
+                    if (liveAnswering &&
+                        chat.runtime.tool != null &&
                         !chat.runtime.toolActivities.any(
                           (activity) => !activity.isTerminal,
                         ))
@@ -2249,14 +2318,15 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                           Text('Hermes is preparing the tool call'),
                         ],
                       ),
-                    if (chat.sessionControl?.goal != null)
+                    if (liveAnswering && chat.sessionControl?.goal != null)
                       ProfileGoalPanel(
                         key: ValueKey(('goal', chat.key)),
                         session: _supervisionFor(chat),
                       ),
-                    if (chat.sessionControl?.loop != null ||
-                        chat.sessionControl?.heartbeat != null ||
-                        chat.processes.isNotEmpty)
+                    if (liveAnswering &&
+                        (chat.sessionControl?.loop != null ||
+                            chat.sessionControl?.heartbeat != null ||
+                            chat.processes.isNotEmpty))
                       ProfileBackgroundWorkPanel(
                         key: ValueKey(('background', chat.key)),
                         session: _supervisionFor(chat),
@@ -2402,12 +2472,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
-  bool _showLiveWorkDock(ProfileChat chat) =>
+  bool _liveAnswering(ProfileChat chat) =>
       _readingFocus(chat) == null &&
-      (chat.runtime.executionActive ||
-          chat.runtime.needsInput ||
-          chat.runtime.activityEntries.isNotEmpty ||
-          chat.subagents.any((agent) => !agent.isTerminal)) &&
+      (chat.runtime.executionActive || chat.runtime.needsInput);
+
+  bool _showLiveWorkDock(ProfileChat chat) =>
+      _liveAnswering(chat) &&
       (chat.todos.isNotEmpty || chat.subagents.isNotEmpty);
 
   Widget _composerPanel(

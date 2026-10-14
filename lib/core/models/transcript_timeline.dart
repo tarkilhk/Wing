@@ -114,16 +114,6 @@ final class TranscriptTimeline {
           hasReasoning: _hasReasoning(row),
           savedMessageId: savedId,
           branchAnswer: branchAnswer,
-          sharedAnswerMessageId:
-              index > 0 &&
-                  transcriptNoticeKind(row) == 'async_delegation_complete' &&
-                  entries[index - 1].branchAnswer
-              ? answerMessageId(rows[index - 1])
-              : null,
-          followedByResultNotice:
-              index + 1 < rows.length &&
-              transcriptNoticeKind(rows[index + 1]) ==
-                  'async_delegation_complete',
         ),
       );
     }
@@ -270,8 +260,6 @@ final class TranscriptTimelineEntry {
     required this.hasReasoning,
     required this.savedMessageId,
     required this.branchAnswer,
-    required this.sharedAnswerMessageId,
-    required this.followedByResultNotice,
     required this.exchangeReceipts,
   }) : _row = row,
        isReview = review,
@@ -287,6 +275,9 @@ final class TranscriptTimelineEntry {
   final String role;
   final Object? id;
   final bool isReview;
+  bool get isAgentNotice =>
+      role == 'user' &&
+      transcriptNoticeKind(_row) == 'async_delegation_complete';
   late final TranscriptMessage message = TranscriptMessage.fromRow(_row);
   late final TranscriptToolResult? tool = role == 'tool'
       ? TranscriptToolResult.fromRow(_row, exchangeReceipts: exchangeReceipts)
@@ -302,8 +293,6 @@ final class TranscriptTimelineEntry {
   late final bool editablePrompt =
       savedMessageId != null && isHumanAnswerPrompt(_row);
   final bool branchAnswer;
-  final int? sharedAnswerMessageId;
-  final bool followedByResultNotice;
 }
 
 final class TranscriptTimelineGroup {
@@ -319,8 +308,10 @@ final class TranscriptTimelineGroup {
         : entry.presentationId,
   );
   bool get isTool => !isReasoning && messages.last.role == 'tool';
+  bool get isAgentNotice => !isReasoning && messages.last.isAgentNotice;
   String? get reviewText => messages.last.reviewText;
-  bool get isActivity => isReasoning || isTool || messages.last.isReview;
+  bool get isActivity =>
+      isReasoning || isTool || isAgentNotice || messages.last.isReview;
   List<TranscriptToolResult> get toolResults =>
       List.unmodifiable([for (final message in messages) ?message.tool]);
   bool containsMessage(int id) => messages.any((entry) => entry.id == id);

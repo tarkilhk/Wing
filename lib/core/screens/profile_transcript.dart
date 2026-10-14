@@ -19,6 +19,7 @@ import '../utils/expansion_scroll_controller.dart';
 import '../widgets/anchored_expansion_tile.dart';
 import '../widgets/background_markdown_content.dart';
 import '../widgets/profile_tool_activity.dart';
+import '../widgets/profile_activity_tabs.dart';
 import '../widgets/playful_portrait.dart';
 import '../widgets/transcript_latest_button.dart';
 
@@ -40,6 +41,9 @@ class ProfileTranscript extends StatefulWidget {
   final List<Widget> tail;
   final Future<void> Function() onLoadOlder;
   final Widget? liveExecution;
+  final List<Widget> currentActivity;
+  final List<ProfileActivityTab> activityTabs;
+  final int liveToolCount;
   final Future<Uint8List> Function(String)? loadImage;
   final Future<void> Function(ChatOutput)? onOpenResource;
   final Future<void> Function(ChatOutput)? onShareResource;
@@ -63,6 +67,9 @@ class ProfileTranscript extends StatefulWidget {
     required this.timeline,
     required this.tail,
     this.liveExecution,
+    this.currentActivity = const [],
+    this.activityTabs = const [],
+    this.liveToolCount = 0,
     this.loadImage,
     this.onOpenResource,
     this.onShareResource,
@@ -429,7 +436,12 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   @override
   Widget build(BuildContext context) {
-    assert(widget.identity != null || widget.liveExecution == null);
+    assert(
+      widget.identity != null ||
+          widget.liveExecution == null &&
+              widget.currentActivity.isEmpty &&
+              widget.activityTabs.isEmpty,
+    );
     if (widget.focusedMessageId != null) return _nearbyMessages(context);
     final buildStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
@@ -448,7 +460,35 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final rows = timeline.sections.reversed
         .where((section) => !identical(section, liveReply))
         .toList();
+    final joinCurrentActivity =
+        widget.liveExecution == null && timeline.joinsCurrentActivity;
+    final hasCurrentActivity =
+        widget.currentActivity.isNotEmpty || widget.activityTabs.isNotEmpty;
     final tailContent = [
+      if (hasCurrentActivity && !joinCurrentActivity)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
+          child: ProfileActivitySection(
+            label: widget.liveToolCount > 0
+                ? 'Activity · ${widget.liveToolCount} ${widget.liveToolCount == 1 ? 'tool' : 'tools'}'
+                : 'Activity',
+            key: ValueKey(('activity', widget.identity!)),
+            detailsBuilder: (_) => ProfileActivityTabs(
+              tabs: [
+                if (widget.currentActivity.isNotEmpty)
+                  ProfileActivityTab(
+                    id: 'timeline',
+                    label: 'Timeline',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: widget.currentActivity,
+                    ),
+                  ),
+                ...widget.activityTabs,
+              ],
+            ),
+          ),
+        ),
       if (widget.liveExecution != null)
         // Keep the live run mounted when the first answer chunk arrives.
         // Moving it from the tail into a new message row loses card state.
@@ -653,12 +693,24 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                       child: section.isActivity
                           ? ProfileToolActivitySection(
                               section: section,
+                              noticeBuilder: widget.messageBuilder,
                               trailing: widget.activityTrailingBuilder?.call(
                                 section,
                               ),
                               loadImage: widget.loadImage,
                               onOpenResource: widget.onOpenResource,
                               onShareResource: widget.onShareResource,
+                              tabs: rowIndex == 0 && joinCurrentActivity
+                                  ? widget.activityTabs
+                                  : const [],
+                              liveToolCount:
+                                  rowIndex == 0 && joinCurrentActivity
+                                  ? widget.liveToolCount
+                                  : 0,
+                              currentActivity:
+                                  rowIndex == 0 && joinCurrentActivity
+                                  ? widget.currentActivity
+                                  : const [],
                             )
                           : widget.messageBuilder(row),
                     ),
@@ -857,6 +909,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     child: section.isActivity
                         ? ProfileToolActivitySection(
                             section: section,
+                            noticeBuilder: widget.messageBuilder,
                             trailing: widget.activityTrailingBuilder?.call(
                               section,
                             ),

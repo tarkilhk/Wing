@@ -16,6 +16,8 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/profile_live_work_dock.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/profile_live_execution.dart';
 
 import 'helpers/pump_markdown_widget.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
@@ -61,6 +63,7 @@ void main() {
     for (final font in {
       'Roboto': 'build/studio-roboto.ttf',
       'MaterialIcons': 'build/studio-icons.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
     }.entries) {
       await (FontLoader(
             font.key,
@@ -241,6 +244,125 @@ void main() {
           find.text('The first answer text.', findRichText: true),
           findsOneWidget,
         );
+        keyboard.value = 0;
+        for (final agent in host.agents) {
+          agent['status'] = 'completed';
+        }
+        host.historyMessages = [
+          {'id': 1, 'role': 'user', 'content': 'Map the health metrics.'},
+          {
+            'id': 2,
+            'role': 'tool',
+            'tool_call_id': 'retained',
+            'tool_name': 'read_file',
+            'args': {'path': 'health/metrics.md'},
+            'content': 'Retained source units.',
+          },
+          {'id': 3, 'role': 'assistant', 'content': 'The mapping is underway.'},
+          {
+            'id': 4,
+            'role': 'user',
+            'display_kind': 'async_delegation_complete',
+            'display_metadata': {
+              'task_count': 1,
+              'display_text':
+                  'Subagent Task Completed: Inspect source mappings',
+            },
+            'content': 'Verified the health mappings.',
+          },
+          {
+            'id': 5,
+            'role': 'tool',
+            'tool_call_id': 'research',
+            'tool_name': 'web_search',
+            'args': {'query': 'health metric definitions'},
+            'content': 'Checked the metric definitions.',
+          },
+          {'id': 6, 'role': 'assistant', 'content': 'The saved final answer.'},
+        ];
+        host.event('a', 'message.complete', {
+          'text': 'The saved final answer.',
+        });
+        for (var i = 0; i < 8; i++) {
+          await settle();
+          if (!chat.runtime.executionActive) break;
+        }
+        expect(chat.runtime.executionActive, isFalse);
+        for (final agent in host.agents) {
+          host.event('a', 'subagent.complete', {
+            'subagent_id': agent['subagent_id'],
+            'status': 'completed',
+          });
+        }
+        await settle();
+        expect(chat.subagents.every((agent) => agent.isTerminal), isTrue);
+        expect(chat.reading.streamingMessage, isNull);
+        expect(find.byType(ProfileLiveWorkDock), findsNothing);
+        expect(find.byType(ProfileLiveExecution), findsNothing);
+        expect(find.text('Keep my draft'), findsOneWidget);
+        expect(
+          find.text('Subagent Task Completed: Inspect source mappings'),
+          findsNothing,
+        );
+        final saved = find.byWidgetPredicate(
+          (widget) =>
+              widget is ProfileToolActivitySection &&
+              widget.section.containsMessage(4),
+        );
+        await tester.ensureVisible(saved);
+        await picture('saved-folded');
+        await tester.tap(
+          find.descendant(of: saved, matching: find.text('Activity · 1 tool')),
+        );
+        await settle();
+        expect(
+          find.descendant(of: saved, matching: find.text('Timeline')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Subagent Task Completed: Inspect source mappings'),
+          findsNothing,
+        );
+        final agents = find.descendant(
+          of: saved,
+          matching: find.text('Agents'),
+        );
+        await tester.ensureVisible(agents);
+        await settle();
+        await tester.tap(agents);
+        await settle();
+        expect(
+          find.descendant(
+            of: saved,
+            matching: find.text(
+              'Subagent Task Completed: Inspect source mappings',
+            ),
+          ),
+          findsOneWidget,
+        );
+        final result = find.descendant(
+          of: saved,
+          matching: find.text('View result'),
+        );
+        await tester.ensureVisible(result);
+        await settle();
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(
+              const ValueKey<(String, Object?)>(('transcript-notice', 4)),
+            ),
+            matching: find.byIcon(Icons.expand_more),
+          ),
+        );
+        await settle();
+        final output = find.text(
+          'Verified the health mappings.',
+          findRichText: true,
+        );
+        expect(output, findsOneWidget);
+        await tester.ensureVisible(output);
+        await settle();
+        await picture('saved-agents');
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
         await tester.pump();

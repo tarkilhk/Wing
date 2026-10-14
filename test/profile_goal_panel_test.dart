@@ -423,6 +423,10 @@ void main() {
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
     await tester.pumpAndSettle();
+    expect(find.text('Goal'), findsNothing);
+    await tester.tap(find.text('Activity'));
+    await tester.pumpAndSettle();
+    expect(find.text('Work'), findsOneWidget);
     await tester.ensureVisible(find.text('Goal'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Goal'));

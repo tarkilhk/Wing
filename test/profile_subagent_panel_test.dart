@@ -11,11 +11,15 @@ import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
+import 'package:wing/core/widgets/profile_live_work_dock.dart';
+import 'package:wing/core/widgets/profile_live_execution.dart';
+import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
 import 'support/composer_fixture.dart' show emitChatEvent;
+import 'helpers/pump_markdown_widget.dart';
 
 class _SubagentFixture extends ProfileActionsFixture {
   int listCalls = 0;
@@ -608,6 +612,75 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  for (final status in ['running', 'completed']) {
+    testWidgets(
+      'idle conversation keeps $status subagents in Activity Agents',
+      (tester) async {
+        fixture.rows = [
+          {
+            'subagent_id': 'child-1',
+            'goal': 'Inspect the release',
+            'status': status,
+          },
+        ];
+        await controller.refreshSubagents(chat);
+        chat.reading.installSavedHistory([
+          {'id': 1, 'role': 'user', 'content': 'Inspect the release'},
+          {
+            'id': 2,
+            'role': 'assistant',
+            'content': 'The inspection is finished.',
+          },
+        ]);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!,
+            ),
+            home: ProfileWorkspaceScreen(controller: controller),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(chat.runtime.executionActive, isFalse);
+        expect(chat.reading.streamingMessage, isNull);
+        expect(find.byType(ProfileLiveWorkDock), findsNothing);
+        expect(find.byType(ProfileLiveExecution), findsNothing);
+        expect(find.text('Activity'), findsOneWidget);
+        expect(find.byType(ProfileSubagentPanel), findsNothing);
+        await tester.tap(find.text('Activity'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Agents ${status == 'completed' ? 0 : 1}/1'),
+          findsOneWidget,
+        );
+        final tabs = tester.widget<ProfileActivityTabs>(
+          find.byType(ProfileActivityTabs),
+        );
+        expect(tabs.tabs.map((tab) => tab.id), contains('agents'));
+        expect(find.byType(ProfileSubagentPanel), findsOneWidget);
+        expect(
+          find.text(status == 'completed' ? 'Completed' : 'Running'),
+          findsOneWidget,
+        );
+        final agent = find.byKey(ValueKey(('subagent', chat.key, 'child-1')));
+        await tester.ensureVisible(agent);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: agent,
+            matching: find.byIcon(Icons.chevron_right),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.settleMarkdown();
+        expect(find.text('Task'), findsOneWidget);
+        expect(find.byTooltip('Copy Task'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('live work Subagents opens this chat subagent roster', (
     tester,
   ) async {
@@ -616,6 +689,7 @@ void main() {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    emitChatEvent(controller, chat, 'message.start', {});
     emitChatEvent(controller, chat, 'subagent.start', {
       'subagent_id': 'child-1',
       'goal': 'Inspect the release',

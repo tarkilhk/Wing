@@ -391,6 +391,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.text('Background work'), findsNothing);
+    await tester.tap(find.text('Activity'));
+    await tester.pumpAndSettle();
+    expect(find.text('Work'), findsOneWidget);
     await tester.ensureVisible(find.text('Background work'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Background work'));

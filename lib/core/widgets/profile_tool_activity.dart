@@ -77,6 +77,7 @@ class ProfileToolActivitySection extends StatelessWidget {
     this.loadImage,
     this.onOpenResource,
     this.onShareResource,
+    this.noticeBuilder,
   });
   final TranscriptTimelineSection section;
   final int? expandedMessageId;
@@ -88,6 +89,7 @@ class ProfileToolActivitySection extends StatelessWidget {
   final Future<Uint8List> Function(String)? loadImage;
   final Future<void> Function(ChatOutput)? onOpenResource;
   final Future<void> Function(ChatOutput)? onShareResource;
+  final Widget Function(TranscriptTimelineEntry)? noticeBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -134,70 +136,112 @@ class ProfileToolActivitySection extends StatelessWidget {
       section.groups.expand((group) => group.toolResults),
     );
     final supplied = tabs.map((tab) => tab.id).toSet();
-    return ProfileActivityTabs(
-      tabs: [
-        ProfileActivityTab(
-          id: 'timeline',
-          label: 'Timeline',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final group in section.groups)
-                if (group.isReasoning)
-                  ProfileReasoningDisclosure(
-                    key:
-                        group.messages.first.emptyAssistant &&
-                            expandedMessageId != null &&
-                            group.containsMessage(expandedMessageId!)
-                        ? focusedMessageKey
-                        : ValueKey((
-                            'saved-reasoning',
-                            group.messages.first.presentationId,
-                          )),
-                    text: group.messages.first.reasoning,
-                    initiallyExpanded:
-                        group.messages.first.emptyAssistant &&
-                        expandedMessageId != null &&
-                        group.containsMessage(expandedMessageId!),
-                  )
-                else if (group.reviewText case final review?)
-                  ProfileReviewNoticeRow(
-                    key: group.messages.last.id == expandedMessageId
-                        ? focusedMessageKey
-                        : null,
-                    text: review,
-                    initiallyExpanded:
-                        expandedMessageId != null &&
-                        group.containsMessage(expandedMessageId!),
-                  )
-                else
-                  ProfileToolActivity(
-                    results: group.toolResults,
-                    loadImage: loadImage,
-                    onOpenResource: onOpenResource,
-                    onShareResource: onShareResource,
-                    initiallyExpanded:
-                        expandedMessageId != null &&
-                        group.containsMessage(expandedMessageId!),
-                    focusedMessageId: expandedMessageId,
-                    focusedMessageKey: focusedMessageKey,
-                  ),
-              ...currentActivity,
-            ],
+    final noticeEntries = [
+      for (final group in section.groups)
+        if (group.isAgentNotice) ...group.messages,
+    ];
+    assert(noticeEntries.isEmpty || noticeBuilder != null);
+    final notices = [
+      if (noticeBuilder case final builder?)
+        for (final entry in noticeEntries)
+          Container(
+            key: entry.id == expandedMessageId
+                ? focusedMessageKey
+                : ValueKey(('saved-agent-notice', entry.presentationId)),
+            child: Builder(builder: (_) => builder(entry)),
           ),
-        ),
-        ...tabs,
+    ];
+    return ProfileActivityTabs(
+      initialTabId: noticeEntries.any((entry) => entry.id == expandedMessageId)
+          ? 'agents'
+          : null,
+      tabs: [
+        if (section.groups.any((group) => !group.isAgentNotice) ||
+            currentActivity.isNotEmpty)
+          ProfileActivityTab(
+            id: 'timeline',
+            label: 'Timeline',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final group in section.groups)
+                  if (group.isReasoning)
+                    ProfileReasoningDisclosure(
+                      key:
+                          group.messages.first.emptyAssistant &&
+                              expandedMessageId != null &&
+                              group.containsMessage(expandedMessageId!)
+                          ? focusedMessageKey
+                          : ValueKey((
+                              'saved-reasoning',
+                              group.messages.first.presentationId,
+                            )),
+                      text: group.messages.first.reasoning,
+                      initiallyExpanded:
+                          group.messages.first.emptyAssistant &&
+                          expandedMessageId != null &&
+                          group.containsMessage(expandedMessageId!),
+                    )
+                  else if (group.reviewText case final review?)
+                    ProfileReviewNoticeRow(
+                      key: group.messages.last.id == expandedMessageId
+                          ? focusedMessageKey
+                          : null,
+                      text: review,
+                      initiallyExpanded:
+                          expandedMessageId != null &&
+                          group.containsMessage(expandedMessageId!),
+                    )
+                  else if (!group.isAgentNotice)
+                    ProfileToolActivity(
+                      results: group.toolResults,
+                      loadImage: loadImage,
+                      onOpenResource: onOpenResource,
+                      onShareResource: onShareResource,
+                      initiallyExpanded:
+                          expandedMessageId != null &&
+                          group.containsMessage(expandedMessageId!),
+                      focusedMessageId: expandedMessageId,
+                      focusedMessageKey: focusedMessageKey,
+                    ),
+                ...currentActivity,
+              ],
+            ),
+          ),
+        for (final tab in tabs)
+          if (tab.id == 'agents' && notices.isNotEmpty)
+            ProfileActivityTab(
+              id: tab.id,
+              label: tab.label,
+              onSelected: tab.onSelected,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [tab.child, ...notices],
+              ),
+            )
+          else
+            tab,
         if (saved.todos.isNotEmpty && !supplied.contains('tasks'))
           ProfileActivityTab(
             id: 'tasks',
             label: 'Tasks ${saved.todos.length}',
             child: ProfileTodoPanel(todos: saved.todos, embedded: true),
           ),
-        if (saved.agents.isNotEmpty && !supplied.contains('agents'))
+        if ((saved.agents.isNotEmpty || notices.isNotEmpty) &&
+            !supplied.contains('agents'))
           ProfileActivityTab(
             id: 'agents',
-            label: 'Agents ${saved.agents.length}',
-            child: ProfileSavedAgents(agents: saved.agents),
+            label: saved.agents.isEmpty
+                ? 'Agents'
+                : 'Agents ${saved.agents.length}',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (saved.agents.isNotEmpty)
+                  ProfileSavedAgents(agents: saved.agents),
+                ...notices,
+              ],
+            ),
           ),
       ],
     );

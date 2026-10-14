@@ -423,6 +423,7 @@ void main() {
           },
       ],
     ]);
+    emitChatEvent(controller, chat, 'message.start', {});
     emitChatEvent(controller, chat, 'tool.start', {
       'name': 'terminal',
       'tool_id': 'live',

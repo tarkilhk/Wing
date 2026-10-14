@@ -39,8 +39,9 @@ class ProfileActivityGuide extends StatelessWidget {
 }
 
 class ProfileActivityTabs extends StatefulWidget {
-  const ProfileActivityTabs({super.key, required this.tabs});
+  const ProfileActivityTabs({super.key, required this.tabs, this.initialTabId});
   final List<ProfileActivityTab> tabs;
+  final String? initialTabId;
   @override
   State<ProfileActivityTabs> createState() => _ProfileActivityTabsState();
 }
@@ -70,7 +71,15 @@ class _ProfileActivityTabsState extends State<ProfileActivityTabs> {
   @override
   void initState() {
     super.initState();
-    if (widget.tabs.isNotEmpty) _activate(widget.tabs.first, notify: false);
+    if (widget.tabs.isNotEmpty) {
+      _activate(
+        widget.tabs.firstWhere(
+          (tab) => tab.id == widget.initialTabId,
+          orElse: () => widget.tabs.first,
+        ),
+        notify: false,
+      );
+    }
   }
 
   @override

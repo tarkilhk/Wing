@@ -101,6 +101,24 @@ class _NoticeHistory extends ProfileHistoryFixture {
 }
 
 void main() {
+  test('saved subagent completion belongs to Activity, never a prose row', () {
+    final timeline = TranscriptTimeline.project([
+      {'id': 1, 'role': 'assistant', 'content': 'The change is underway.'},
+      _notice(),
+      {'id': 4, 'role': 'tool', 'tool_name': 'read_file', 'content': 'Checked'},
+      {'id': 5, 'role': 'assistant', 'content': 'Updated and deployed.'},
+    ], presentationId: (row) => row['id']!);
+    final completion = timeline.sections.singleWhere(
+      (s) => s.containsMessage(3),
+    );
+    expect(completion.isActivity, isTrue);
+    expect(completion.toolCount, 1);
+    expect(completion.messages.map((e) => e.id), [3, 4]);
+    expect(
+      completion.messages.first.message.noticeResult,
+      'First useful result\n\nSecond useful result',
+    );
+  });
   test('bot delivery projects sender, authored Markdown and timestamp', () {
     final row = {
       'id': 42,
@@ -482,10 +500,22 @@ void main() {
       );
       await tester.pumpAndSettle();
       for (var refresh = 0; refresh < 2; refresh++) {
+        final timeline = TranscriptTimeline.project(
+          chat.reading.messages,
+          presentationId: chat.reading.messagePresentationId,
+        );
+        for (final id in [3, 12]) {
+          expect(
+            timeline.sections
+                .singleWhere((s) => s.containsMessage(id))
+                .isActivity,
+            isTrue,
+          );
+        }
         await tester.settleMarkdown();
         expect(find.text(_envelope), findsNothing);
         expect(find.text('Private hidden instructions'), findsNothing);
-        expect(find.text('3 background agents finished'), findsOneWidget);
+        expect(find.text('3 background agents finished'), findsNothing);
         expect(find.byKey(const ValueKey('edit-message-3')), findsNothing);
         expect(find.byKey(const ValueKey('edit-message-1')), findsOneWidget);
         expect(find.byKey(const ValueKey('edit-message-5')), findsNothing);
