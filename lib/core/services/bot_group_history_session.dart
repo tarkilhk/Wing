@@ -16,13 +16,21 @@ class BotGroupHistorySession extends ChangeNotifier {
   _BotGroupHistoryReading _reading = _BotGroupHistoryReading(null);
   TranscriptReader get reader => _reading;
   bool get historyAvailable => _reading._available;
+  final _savedReadings = <(String, String), _BotGroupHistoryReading>{};
   bool _closed = false;
   int _generation = 0;
 
   Future<void> select(BotGroupMember member) async {
     if (_closed) return;
+    ++_generation;
     _member = member;
-    _reading = _BotGroupHistoryReading(member.id);
+    _reading =
+        _savedReadings[(member.id, member.profile)] ??
+        _BotGroupHistoryReading(member.id);
+    if (_reading._available) {
+      notifyListeners();
+      return;
+    }
     await _load(refresh: true);
   }
 
@@ -40,6 +48,8 @@ class BotGroupHistorySession extends ChangeNotifier {
     final member = _member!;
     final reading = _reading;
     final generation = ++_generation;
+    // Only settled successful readings can be borrowed by another selection.
+    _savedReadings.remove((member.id, member.profile));
     reading._loading = true;
     reading._paging = !refresh;
     reading._error = null;
@@ -88,6 +98,9 @@ class BotGroupHistorySession extends ChangeNotifier {
       if (!_closed && generation == _generation) {
         reading._loading = false;
         reading._paging = false;
+        if (reading._available && reading._error == null) {
+          _savedReadings[(member.id, member.profile)] = reading;
+        }
         notifyListeners();
       }
     }
@@ -97,12 +110,13 @@ class BotGroupHistorySession extends ChangeNotifier {
   void dispose() {
     _closed = true;
     ++_generation;
+    _savedReadings.clear();
     repository.release();
     super.dispose();
   }
 }
 
-/// A retired member keeps its own local scroll memory until its viewport disposes.
+/// Each member keeps its saved rows and scroll memory for this inspection visit.
 /// It holds saved facts only; all I/O remains in BotGroupHistorySession.
 final class _BotGroupHistoryReading implements TranscriptReader {
   _BotGroupHistoryReading(this._memberId);

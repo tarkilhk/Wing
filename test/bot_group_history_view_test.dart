@@ -18,6 +18,8 @@ import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
+import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/services/profile_gateway.dart';
 import 'support/bots_fixture.dart';
 
 const _capture = bool.fromEnvironment('CAPTURE_BOT_GROUPS');
@@ -78,8 +80,187 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('long working history opens at the tail and refresh settles '
+          '${brightness.name} $scale', (tester) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = BotsFixture();
+        final group = (await readFixtureGroups(
+          fixture.repository,
+          groupMessages: null,
+        )).single;
+        for (final member in group.members) {
+          fixture.workerRows[member.profile] = [
+            {
+              'id': '${member.profile}-root',
+              'resolved_id': '${member.profile}-tip',
+              'title': 'Group: room-1',
+              'source': 'bot_room',
+            },
+          ];
+          fixture.workerMessages[member.profile] = [
+            for (var id = 1; id <= 200; id++)
+              {
+                'id': id,
+                'role': 'assistant',
+                'content': '${member.name} saved $id',
+                'timestamp': 1791756000.0 + id,
+              },
+          ];
+        }
+        late BotGroupHistorySession session;
+        final frame = GlobalKey();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            debugShowCheckedModeBanner: false,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
+                disableAnimations: scale == 2,
+              ),
+              child: RepaintBoundary(key: frame, child: child!),
+            ),
+            home: BotGroupHistoryScreen(
+              appearanceForMember: (_) => null,
+              createSession: () =>
+                  session = BotGroupHistorySession(fixture.repository, group),
+            ),
+          ),
+        );
+        await _settle(tester);
+        expect(session.reader.messages, hasLength(20));
+        expect(session.reader.messages.first['id'], 181);
+        expect(fixture.historyReads.single, ('atlas', 'atlas-tip', 0));
+        expect(
+          find.textContaining('Atlas saved 200', findRichText: true),
+          findsWidgets,
+        );
+        expect(find.text('Atlas saved 1', findRichText: true), findsNothing);
+        expect(find.byType(ProfileMessage).evaluate().length, lessThan(10));
+        final memberBounds = tester.getRect(
+          find.widgetWithText(ChoiceChip, 'Mira'),
+        );
+        final transcriptBounds = tester.getRect(find.byType(ProfileTranscript));
+        final registry = Completer<void>();
+        final page = Completer<ProfileHistoryPage>();
+        addTearDown(() {
+          if (!registry.isCompleted) registry.complete();
+          if (!page.isCompleted) {
+            page.completeError(StateError('Retired test read'));
+          }
+        });
+        var registryReads = 0;
+        fixture.readHook = (_, method, _) async {
+          if (method == 'session.list') {
+            registryReads++;
+            await registry.future;
+          }
+          return null;
+        };
+        fixture.historyHook = (_, _, _) => page.future;
+        await tester.tap(find.byTooltip('Refresh working history'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(
+          find.bySemanticsLabel('Refreshing working history'),
+          findsOneWidget,
+        );
+        expect(
+          tester
+              .widget<IconButton>(
+                find.widgetWithIcon(IconButton, Icons.refresh),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(
+          tester.getRect(find.widgetWithText(ChoiceChip, 'Mira')),
+          memberBounds,
+        );
+        expect(
+          tester.getRect(find.byType(ProfileTranscript)),
+          transcriptBounds,
+        );
+        expect(
+          find.textContaining('Atlas saved 200', findRichText: true),
+          findsWidgets,
+        );
+        expect(registryReads, 1);
+        await _render(
+          tester,
+          frame,
+          'history-populated-refresh-${brightness.name}-$scale',
+        );
+        registry.complete();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(fixture.historyReads.length, 2);
+        expect(find.byType(StudioLoading), findsOneWidget);
+        page.completeError(StateError('Offline'));
+        await _settle(tester);
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(session.reader.historyError, isNotNull);
+        expect(session.reader.messages.last['id'], 200);
+        expect(
+          find.text('Working history could not load. Refresh to try again.'),
+          findsOneWidget,
+        );
+        await _render(
+          tester,
+          frame,
+          'history-populated-failed-${brightness.name}-$scale',
+        );
+        if (scale == 2) {
+          await tester.pump(const Duration(seconds: 5));
+          await _settle(tester);
+        }
+        fixture.readHook = null;
+        fixture.historyHook = null;
+        await tester.tap(find.byTooltip('Refresh working history'));
+        await _settle(tester);
+        expect(session.reader.historyError, isNull);
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(
+          find.text('Working history could not load. Refresh to try again.'),
+          findsNothing,
+        );
+        final scroll = tester
+            .widget<ListView>(find.byKey(const ValueKey('profile-transcript')))
+            .controller!;
+        scroll.jumpTo(120);
+        await _settle(tester);
+        final savedOffset = scroll.offset;
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Mira'));
+        await _settle(tester);
+        final reads = fixture.historyReads.length;
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Atlas'));
+        await _settle(tester);
+        expect(fixture.historyReads.length, reads);
+        expect(session.reader.messages.last['id'], 200);
+        expect(
+          tester
+              .widget<ListView>(
+                find.byKey(const ValueKey('profile-transcript')),
+              )
+              .controller!
+              .offset,
+          closeTo(savedOffset, 0.01),
+        );
+        expect(fixture.commands, isEmpty);
+        expect(tester.takeException(), isNull);
+        await _render(
+          tester,
+          frame,
+          'history-cached-${brightness.name}-$scale',
+        );
+        await tester.pumpWidget(const SizedBox());
+      });
+
       for (final absentWorker in [true, false]) {
-        testWidgets('empty working history refresh stays quiet '
+        testWidgets('empty working history refresh keeps visible feedback '
             '${absentWorker ? 'absent worker' : 'empty page'} '
             '${brightness.name} $scale', (tester) async {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
@@ -158,7 +339,11 @@ void main() {
           expect(reads, 2);
           expect(empty, findsOneWidget);
           expect(tester.getRect(empty), emptyBounds);
-          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(
+            find.bySemanticsLabel('Refreshing working history'),
+            findsOneWidget,
+          );
           final member = find.widgetWithText(ChoiceChip, 'Mira');
           expect(tester.widget<ChoiceChip>(member).onSelected, isNotNull);
           expect(tester.getRect(member), memberBounds);

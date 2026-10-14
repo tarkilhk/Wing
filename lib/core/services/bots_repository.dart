@@ -95,7 +95,7 @@ class BotsRepository {
         return await gateway.history(
           session,
           offset: offset,
-          limit: 100,
+          limit: 20,
           inlineImages: false,
         );
       } finally {

@@ -41,6 +41,68 @@ void main() {
   tearDown(() => session.dispose());
 
   test(
+    'opening a long worker history reads only a small newest page',
+    () async {
+      final server = AdministrationFixture();
+      server.rpcOverride = (method, params) async => {
+        'sessions': [_worker('atlas')],
+      };
+      int? requestedLimit;
+      server.override = (method, path, query, body) async {
+        if (path == 'profiles') return {'profiles': fixture.profiles};
+        if (path == 'profiles/active') {
+          return {'current': 'atlas', 'active': 'atlas'};
+        }
+        expect(path, 'sessions/atlas-tip/messages');
+        requestedLimit = int.parse(query['limit']!);
+        return {
+          'session_id': 'atlas-tip',
+          'messages': [
+            for (var id = 1001 - requestedLimit!; id <= 1000; id++)
+              _message(id, 'Saved tool result $id ${'output ' * 1000}'),
+          ],
+          'pagination': {
+            'limit': requestedLimit,
+            'offset': 0,
+            'order': 'latest',
+            'returned': requestedLimit,
+          },
+        };
+      };
+      final repository = BotsRepository.forServer(
+        server.server,
+        groupObservations: GroupObservations(
+          WorkspaceScope(
+            connectionId: server.server.connectionId,
+            connectionIdentity: server.server.connectionIdentity,
+            profileName: 'default',
+          ),
+        ),
+      );
+      final ownedGroup = BotGroup(
+        observationComplete: true,
+        scope: repository.scope,
+        instance: repository.instance,
+        id: group.id,
+        name: group.name,
+        members: group.members,
+      );
+      final viewer = BotGroupHistorySession(repository, ownedGroup);
+      addTearDown(viewer.dispose);
+      await viewer.select(ownedGroup.members.first);
+      expect(viewer.reader.historyError, isNull);
+      expect(
+        requestedLimit,
+        20,
+        reason: 'Opening should not transfer 100 potentially large tool rows',
+      );
+      expect(viewer.reader.messages, hasLength(20));
+      expect(viewer.reader.messages.last['id'], 1000);
+      expect(viewer.reader.nextHistoryOffset, 20);
+    },
+  );
+
+  test(
     'production viewer reads only the member profile with no runtime fallback',
     () async {
       final server = AdministrationFixture();
@@ -63,7 +125,7 @@ void main() {
         expect(path, 'sessions/atlas-tip/messages');
         expect(query, {
           'profile': 'atlas',
-          'limit': '100',
+          'limit': '20',
           'offset': '0',
           'order': 'latest',
           'include_compacted': 'true',
@@ -74,7 +136,7 @@ void main() {
           'session_id': 'atlas-tip',
           'messages': [_message(1, 'Production snapshot')],
           'pagination': {
-            'limit': 100,
+            'limit': 20,
             'offset': 0,
             'order': 'latest',
             'returned': 1,
@@ -137,15 +199,91 @@ void main() {
         'include_hidden': true,
       });
       expect(fixture.historyReads.single, ('atlas', 'atlas-tip', 0));
-      expect(session.reader.messages.length, 100);
-      await session.loadOlder();
+      expect(session.reader.messages.length, 20);
+      while (session.reader.nextHistoryOffset != null) {
+        await session.loadOlder();
+      }
       expect(session.reader.messages.length, 102);
+      expect(fixture.historyReads.map((read) => read.$3), [
+        0,
+        20,
+        40,
+        60,
+        80,
+        100,
+      ]);
       expect(session.reader.messages.first['content'], 'Saved 1');
       expect((session.reader.nextHistoryOffset != null), isFalse);
       fixture.workerRows['atlas'] = [_worker('atlas-new')];
       await session.refresh();
       expect(fixture.historyReads.last, ('atlas', 'atlas-new-tip', 0));
       expect(fixture.commands, isEmpty);
+    },
+  );
+
+  test(
+    'switching back reuses the member page and its reading position',
+    () async {
+      fixture.workerMessages['atlas'] = [_message(1, 'Atlas saved')];
+      fixture.workerMessages['mira'] = [_message(2, 'Mira saved')];
+      await session.select(group.members.first);
+      final atlasReader = session.reader;
+      atlasReader.recordScrollOffset(240);
+      await session.select(group.members.last);
+      final reads = fixture.historyReads.length;
+      await session.select(group.members.first);
+      expect(fixture.historyReads.length, reads);
+      expect(session.reader, same(atlasReader));
+      expect(session.reader.historyScrollOffset, 240);
+      fixture.workerMessages['atlas'] = [_message(3, 'Atlas refreshed')];
+      await session.refresh();
+      expect(session.reader.messages.single['content'], 'Atlas refreshed');
+      expect(fixture.historyReads.length, reads + 1);
+    },
+  );
+
+  test('a warm member retires another member’s held read', () async {
+    fixture.workerMessages['atlas'] = [_message(1, 'Atlas saved')];
+    await session.select(group.members.first);
+    final atlasReader = session.reader;
+    final held = Completer<ProfileHistoryPage>();
+    fixture.historyHook = (_, _, _) => held.future;
+    final mira = session.select(group.members.last);
+    await Future<void>.delayed(Duration.zero);
+    expect(session.reader.historyLoading, isTrue);
+    await session.select(group.members.first);
+    expect(session.reader, same(atlasReader));
+    expect(session.reader.historyLoading, isFalse);
+    held.complete(
+      ProfileHistoryPage('mira-tip', [_message(2, 'Late Mira')], 0, 20),
+    );
+    await mira;
+    expect(session.reader, same(atlasReader));
+    expect(session.reader.messages.single['content'], 'Atlas saved');
+    fixture.historyHook = null;
+    fixture.workerMessages['mira'] = [_message(3, 'Fresh Mira')];
+    await session.select(group.members.last);
+    expect(session.reader.messages.single['content'], 'Fresh Mira');
+  });
+
+  test(
+    'confirmed empty history is reused while failed selection retries',
+    () async {
+      fixture.workerRows['atlas'] = [];
+      await session.select(group.members.first);
+      expect(session.historyAvailable, isTrue);
+      final empty = session.reader;
+      fixture.historyHook = (_, _, _) async => throw StateError('Offline');
+      await session.select(group.members.last);
+      expect(session.reader.historyError, isNotNull);
+      await session.select(group.members.first);
+      expect(session.reader, same(empty));
+      expect(session.reader.historyError, isNull);
+      fixture.historyHook = null;
+      fixture.workerMessages['mira'] = [_message(1, 'Recovered Mira')];
+      await session.select(group.members.last);
+      expect(session.reader.messages.single['content'], 'Recovered Mira');
+      expect(fixture.historyReads, hasLength(2));
     },
   );
 

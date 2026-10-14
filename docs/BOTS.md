@@ -293,8 +293,10 @@ Internal group-worker sessions stay out of Recents and ordinary chat notificatio
 To inspect one, open the group, choose **⋯ → Bot working histories**, then select
 a bot. The viewer is read only: it loads saved messages without starting a bot
 turn. It uses the normal chat transcript, including reasoning and tool sections,
-automatic older-page loading and the latest-message arrow. Refresh rereads the
-saved history. Back returns to the shared group
+automatic older-page loading and the latest-message arrow. It opens with the
+newest 20 messages and loads older pages as you scroll. Switching back to a bot
+keeps its loaded history and reading position for this visit. Refresh rereads the
+saved history with progress in the header. Back returns to the shared group
 and preserves your draft. Send group messages from the group composer.
 
 If no current worker history is available, the viewer says so. A failed read
