@@ -124,6 +124,38 @@ void main() {
     });
   }
 
+  void expectCompactDialog(WidgetTester tester, String title, String action) {
+    final dialog = tester.getRect(
+      find
+          .descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(Material),
+          )
+          .first,
+    );
+    final heading = tester.getRect(find.text(title));
+    final cancel = tester.getRect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byTooltip('Cancel'),
+      ),
+    );
+    final commit = tester.getRect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byTooltip(action),
+      ),
+    );
+    expect(heading.left - dialog.left, closeTo(WingSpacing.md, 0.01));
+    expect(dialog.right - heading.right, closeTo(WingSpacing.md, 0.01));
+    expect(heading.top - dialog.top, closeTo(WingSpacing.md, 0.01));
+    expect(dialog.right - commit.right, closeTo(WingSpacing.md, 0.01));
+    expect(dialog.bottom - commit.bottom, closeTo(WingSpacing.md, 0.01));
+    expect(commit.left - cancel.right, closeTo(WingSpacing.sm, 0.01));
+    expect(cancel.size, const Size(48, 48));
+    expect(commit.size, cancel.size);
+  }
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
@@ -208,6 +240,10 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(find.text('Main branch').last);
           await tester.pumpAndSettle();
+          expectCompactDialog(tester, 'Update channel', 'Save update channel');
+          final saveRect = tester.getRect(
+            find.byTooltip('Save update channel'),
+          );
           await snapshot(tester, '${brightness.name}-$scale-editor');
           final write = Completer<void>();
           host.source
@@ -217,6 +253,14 @@ void main() {
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 32));
           expect(find.byType(CircularProgressIndicator), findsOneWidget);
+          // Measure the held save after the shared press feedback settles.
+          await tester.pump(WingMotion.buttonPress);
+          await tester.pump(WingMotion.buttonRelease);
+          expectCompactDialog(tester, 'Update channel', 'Save update channel');
+          expect(
+            tester.getRect(find.byTooltip('Save update channel')),
+            saveRect,
+          );
           expect(
             tester
                 .widget<IconButton>(
@@ -250,6 +294,7 @@ void main() {
             find.text('The channel save could not be confirmed. Try again.'),
             findsWidgets,
           );
+          expectCompactDialog(tester, 'Update channel', 'Save update channel');
           await snapshot(tester, '${brightness.name}-$scale-save-error');
 
           host.source
@@ -269,6 +314,17 @@ void main() {
           expect(host.posts, isEmpty);
           expect(tester.takeException(), isNull);
           await snapshot(tester, '${brightness.name}-$scale-main');
+          await tester.ensureVisible(find.byTooltip('Update backend'));
+          await tester.tap(find.byTooltip('Update backend'));
+          await tester.pumpAndSettle();
+          expectCompactDialog(
+            tester,
+            'Update backend on this server?',
+            'Update backend',
+          );
+          await snapshot(tester, '${brightness.name}-$scale-confirmation');
+          await tester.tap(find.byTooltip('Cancel'));
+          await tester.pumpAndSettle();
           host.source
             ..channel = 'stable'
             ..branch = null
@@ -287,6 +343,11 @@ void main() {
           await tester.ensureVisible(find.byTooltip('Update backend'));
           await tester.tap(find.byTooltip('Update backend'));
           await tester.pumpAndSettle();
+          expectCompactDialog(
+            tester,
+            'Update backend on this server?',
+            'Update backend',
+          );
           expect(
             find.textContaining('moves the server back to release 0.21.6'),
             findsOneWidget,

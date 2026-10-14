@@ -68,16 +68,29 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
       context: context,
       builder: (context) => AlertDialog(
         insetPadding: const EdgeInsets.all(WingSpacing.md),
-        titlePadding: const EdgeInsets.all(WingSpacing.md),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: WingSpacing.md,
-          vertical: WingSpacing.sm,
+        titlePadding: EdgeInsets.zero,
+        contentPadding: EdgeInsets.zero,
+        actionsPadding: const EdgeInsets.fromLTRB(
+          WingSpacing.md,
+          0,
+          WingSpacing.md,
+          WingSpacing.md,
         ),
+        buttonPadding: const EdgeInsets.symmetric(horizontal: WingSpacing.sm),
         scrollable: true,
-        title: Text('Update backend on $host?'),
-        content: Text(
-          '${controller.check?.rollbackTo != null || approvedChannel.rollback ? 'This moves the server back to release ${approvedChannel.targetVersion ?? controller.check?.rollbackTo ?? approvedChannel.name}. ' : ''}'
-          'Update the whole server using ${approvedChannel.name}. All profiles may disconnect while Hermes restarts.',
+        title: Padding(
+          padding: const EdgeInsets.all(WingSpacing.md),
+          child: Text('Update backend on $host?'),
+        ),
+        content: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: WingSpacing.md,
+            vertical: WingSpacing.sm,
+          ),
+          child: Text(
+            '${controller.check?.rollbackTo != null || approvedChannel.rollback ? 'This moves the server back to release ${approvedChannel.targetVersion ?? controller.check?.rollbackTo ?? approvedChannel.name}. ' : ''}'
+            'Update the whole server using ${approvedChannel.name}. All profiles may disconnect while Hermes restarts.',
+          ),
         ),
         actions: [
           StudioFormActions(
@@ -391,55 +404,70 @@ class _BackendChannelDialogState extends State<_BackendChannelDialog> {
     canPop: !_pending,
     child: AlertDialog(
       insetPadding: const EdgeInsets.all(WingSpacing.md),
-      titlePadding: const EdgeInsets.all(WingSpacing.md),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: WingSpacing.md,
-        vertical: WingSpacing.sm,
+      titlePadding: EdgeInsets.zero,
+      contentPadding: EdgeInsets.zero,
+      actionsPadding: const EdgeInsets.fromLTRB(
+        WingSpacing.md,
+        0,
+        WingSpacing.md,
+        WingSpacing.md,
       ),
+      buttonPadding: const EdgeInsets.symmetric(horizontal: WingSpacing.sm),
       scrollable: true,
-      title: const Text('Update channel'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(widget.host),
-          const SizedBox(height: 16),
-          StudioButtonPress(
-            child: DropdownButtonFormField<String>(
-              initialValue: _choice,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Channel'),
-              items: [
-                const DropdownMenuItem(
-                  value: 'stable',
-                  child: Text('Stable releases'),
-                ),
-                const DropdownMenuItem(
-                  value: 'main',
-                  child: Text('Main branch'),
-                ),
-                if (!{'stable', 'main'}.contains(widget.initial.name))
-                  DropdownMenuItem(
-                    value: widget.initial.name,
-                    child: Text(widget.initial.name),
+      title: Padding(
+        padding: const EdgeInsets.all(WingSpacing.md),
+        child: const Text('Update channel'),
+      ),
+      content: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: WingSpacing.md,
+          vertical: WingSpacing.sm,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.host),
+            const SizedBox(height: 16),
+            StudioButtonPress(
+              child: DropdownButtonFormField<String>(
+                initialValue: _choice,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Channel'),
+                items: [
+                  const DropdownMenuItem(
+                    value: 'stable',
+                    child: Text('Stable releases'),
                   ),
-              ],
-              onChanged: _pending
-                  ? null
-                  : (value) => setState(() => _choice = value!),
+                  const DropdownMenuItem(
+                    value: 'main',
+                    child: Text('Main branch'),
+                  ),
+                  if (!{'stable', 'main'}.contains(widget.initial.name))
+                    DropdownMenuItem(
+                      value: widget.initial.name,
+                      child: Text(widget.initial.name),
+                    ),
+                ],
+                onChanged: _pending
+                    ? null
+                    : (value) => setState(() => _choice = value!),
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _choice == 'main'
-                ? 'Follow commits on main.'
-                : _choice == 'stable'
-                ? 'Follow published releases.'
-                : 'Keep the configured preview channel.',
-          ),
-          const Text('Changes the whole server without installing an update.'),
-          if (_error != null) StudioError(_error!),
-        ],
+            const SizedBox(height: 12),
+            Text(
+              _choice == 'main'
+                  ? 'Follow commits on main.'
+                  : _choice == 'stable'
+                  ? 'Follow published releases.'
+                  : 'Keep the configured preview channel.',
+            ),
+            const Text(
+              'Changes the whole server without installing an update.',
+            ),
+            if (_error != null) StudioError(_error!),
+          ],
+        ),
       ),
       actions: [
         StudioFormActions(
