@@ -98,15 +98,19 @@ class BotGroupConversation extends StatelessWidget {
             ),
         ],
       ),
-      body: _GroupBubblePalette(
-        colors: palette,
-        child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(child: transcript),
-              ...beforeComposer,
-              composer,
-            ],
+      body: BotConversationScope(
+        bot: null,
+        name: null,
+        child: _GroupBubblePalette(
+          colors: palette,
+          child: SafeArea(
+            child: Column(
+              children: [
+                Expanded(child: transcript),
+                ...beforeComposer,
+                composer,
+              ],
+            ),
           ),
         ),
       ),

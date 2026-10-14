@@ -1398,7 +1398,7 @@ void main() {
           await tester.enterText(input, 'Keep my room draft');
           await tester.pumpAndSettle();
           final avatar = find.byTooltip('Options for Mira');
-          expect(tester.getSize(avatar), const Size(48, 48));
+          expect(tester.getSize(avatar), const Size(54, 54));
           final anchor = tester.getRect(avatar);
           final avatarBounds = tester.getRect(
             find.descendant(of: avatar, matching: find.byType(BotAvatar)),
@@ -1759,19 +1759,11 @@ void main() {
             )),
           );
           expect(
-            tester
-                .widget<ColoredBox>(
-                  find
-                      .descendant(
-                        of: botBubble,
-                        matching: find.byType(ColoredBox),
-                      )
-                      .first,
-                )
+            (tester.widget<Container>(botBubble).decoration as BoxDecoration)
                 .color,
             bubbleColors.fill,
           );
-          final botFooter = tester.widget<ColoredBox>(
+          final botFooter = tester.widget<Material>(
             find.byKey(
               const ValueKey<(String, Object?)>((
                 'bot-message-footer',
@@ -1856,17 +1848,26 @@ void main() {
               matching: find.byTooltip('Copy message'),
             );
             expect(copy, findsOneWidget);
-            expect(find.descendant(of: bubble, matching: copy), findsNothing);
+            expect(find.descendant(of: bubble, matching: copy), findsOneWidget);
             await tester.ensureVisible(copy);
             await tester.pumpAndSettle();
             final bubbleRect = tester.getRect(bubble);
             final copyRect = tester.getRect(copy);
-            expect(copyRect.size, const Size(44, 48));
-            expect(copyRect.left, closeTo(bubbleRect.right, .1));
-            expect(copyRect.top, closeTo(bubbleRect.top, .1));
+            expect(copyRect.size, const Size(48, 32));
+            expect(bubbleRect.contains(copyRect.center), isTrue);
+            expect(
+              copyRect.bottom,
+              closeTo(
+                bubbleRect.bottom - (kind == 'bot-message-bubble' ? 1 : 0),
+                .1,
+              ),
+            );
             expect(
               copyRect.right,
-              closeTo(tester.view.physicalSize.width - 16, .1),
+              closeTo(
+                bubbleRect.right - 2 - (kind == 'bot-message-bubble' ? 1 : 0),
+                .1,
+              ),
             );
             await tester.tapAt(Offset(copyRect.right - 2, copyRect.bottom - 2));
             expect(copied, expectedText);
@@ -2251,6 +2252,7 @@ void main() {
             .controller!;
         transcript.jumpTo(transcript.position.maxScrollExtent);
         await tester.pump();
+        await _settleGroupMarkdown(tester);
         final readingOffset = transcript.offset;
         approval = true;
         await session.refresh();

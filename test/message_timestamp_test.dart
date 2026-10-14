@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:wing/core/models/transcript_message.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -52,6 +53,7 @@ void main() {
     BotRecord? senderAppearance,
     double width = 320,
     double height = 640,
+    bool reducedMotion = false,
   }) async {
     await tester.binding.setSurfaceSize(Size(width, height));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -62,9 +64,10 @@ void main() {
           debugShowCheckedModeBanner: false,
           theme: wingTheme(brightness),
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(scale),
+              disableAnimations: reducedMotion,
+            ),
             child: child!,
           ),
           home: Scaffold(
@@ -167,21 +170,13 @@ void main() {
             theme,
           );
           expect(
-            tester
-                .widget<ColoredBox>(
-                  find
-                      .descendant(
-                        of: bubbleFinder,
-                        matching: find.byType(ColoredBox),
-                      )
-                      .first,
-                )
+            (tester.widget<Container>(bubbleFinder).decoration as BoxDecoration)
                 .color,
             palette.fill,
           );
           expect(
             tester
-                .widget<ColoredBox>(
+                .widget<Material>(
                   find.byKey(
                     const ValueKey<(String, Object?)>((
                       'bot-message-footer',
@@ -192,13 +187,12 @@ void main() {
                 .color,
             palette.footer,
           );
-          expect(
-            tester.widget<Text>(find.text('15 Sep, 14:07')).style?.color,
-            palette.timestamp,
-          );
           final avatar = tester.getRect(find.byType(BotAvatar));
-          expect(avatar.left, closeTo(16, .01));
-          expect(bubble.left, closeTo(avatar.right + 8, .01));
+          expect(avatar.left, greaterThan(bubble.left));
+          expect(avatar.right, lessThan(bubble.right));
+          final copy = tester.getRect(find.byTooltip('Copy message'));
+          expect(copy.bottom, lessThanOrEqualTo(bubble.bottom));
+          expect(copy.top, greaterThan(avatar.bottom));
           final date = tester.getRect(find.text('15 Sep, 14:07'));
           expect(bubble.contains(date.topLeft), isTrue);
           expect(bubble.contains(date.bottomRight), isTrue);
@@ -253,8 +247,8 @@ void main() {
             const ValueKey<(String, Object?)>(('user-message-bubble', 4)),
           ),
         );
-        expect(copy.left, closeTo(bubble.right, .01));
-        expect(copy.top, closeTo(bubble.top, .01));
+        expect(bubble.contains(copy.center), isTrue);
+        expect(copy.top, greaterThan(bubble.top));
         final body = tester.getRect(find.byType(SelectableText));
         expect(time.top, greaterThanOrEqualTo(body.bottom));
         expect(bubble.contains(time.topLeft), isTrue);
@@ -266,12 +260,13 @@ void main() {
         if (time.bottom > edit.top) {
           expect(time.right, lessThanOrEqualTo(edit.left));
         }
-        expect(restore.right, closeTo(bubble.right - 2, .01));
+        expect(copy.right, closeTo(bubble.right - 2, .01));
+        expect(restore.right, closeTo(copy.left, .01));
         expect(edit.right, closeTo(restore.left, .01));
-        expect(copy.right, closeTo(316, .01));
+        expect(copy.right, lessThanOrEqualTo(316));
         expect(edit.size, const Size(48, 32));
         expect(restore.size, const Size(48, 32));
-        expect(copy.size, const Size(44, 48));
+        expect(copy.size, const Size(48, 32));
         expect(find.text('Edit message'), findsNothing);
         expect(find.text('Copy message'), findsNothing);
         await tester.ensureVisible(find.byTooltip('Edit message'));
@@ -354,8 +349,8 @@ void main() {
             isNull,
           );
           expect(editTarget.size, const Size(48, 32));
-          expect(copyTarget.size, const Size(44, 48));
-          expect(body.right, lessThanOrEqualTo(copyTarget.left));
+          expect(copyTarget.size, const Size(48, 32));
+          expect(body.bottom, lessThanOrEqualTo(copyTarget.top));
           final bubble = tester.getRect(
             find.byKey(
               const ValueKey<(String, Object?)>(('user-message-bubble', 4)),
@@ -379,71 +374,377 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final role in ['user', 'assistant']) {
       for (final scale in [1.0, 2.0]) {
-        testWidgets('${brightness.name} $role at $scale uses no extra space', (
-          tester,
-        ) async {
-          for (final content in [
-            'A short message.',
-            'A longer message that wraps across multiple lines on a narrow phone.',
-          ]) {
-            await pump(
-              tester,
-              role: role,
-              brightness: brightness,
-              scale: scale,
-              content: content,
-            );
-            final size = tester.getSize(find.byType(ProfileMessage));
-            final copy = tester.getRect(find.byType(IconButton));
-            final body = tester.getRect(find.byType(SelectableText).first);
-            if (role == 'assistant') {
-              expect(copy.top, closeTo(body.top, .01));
-            }
-            await pump(
-              tester,
-              role: role,
-              brightness: brightness,
-              scale: scale,
-              content: content,
-              timestamp: _date.millisecondsSinceEpoch / 1000,
-            );
-            expect(find.text('15 Sep, 14:07'), findsOneWidget);
-            expect(tester.getSize(find.byType(ProfileMessage)), size);
-            expect(tester.getRect(find.byType(IconButton)), copy);
-            expect(tester.getRect(find.byType(SelectableText).first), body);
-            expect(copy.width, greaterThanOrEqualTo(44));
-            expect(copy.height, greaterThanOrEqualTo(48));
-          }
-          if (_capture) {
-            await tester.runAsync(() async {
-              final context = tester.element(find.byKey(_frame));
-              for (final widget in tester.widgetList<Image>(
-                find.byType(Image),
-              )) {
-                await precacheImage(widget.image, context);
-              }
-            });
-            await tester.pumpAndSettle();
-            final boundary = tester.renderObject<RenderRepaintBoundary>(
-              find.byKey(_frame),
-            );
-            await tester.runAsync(() async {
-              final image = await boundary.toImage();
-              final bytes = await image.toByteData(
-                format: ui.ImageByteFormat.png,
+        testWidgets(
+          '${brightness.name} $role at $scale keeps timestamp and copy within the footer',
+          (tester) async {
+            for (final content in [
+              'A short message.',
+              'A longer message that wraps across multiple lines on a narrow phone.',
+            ]) {
+              await pump(
+                tester,
+                role: role,
+                brightness: brightness,
+                scale: scale,
+                content: content,
               );
-              final directory = Directory('build/message-timestamps')
-                ..createSync(recursive: true);
-              await File(
-                '${directory.path}/${brightness.name}-$role-$scale.png',
-              ).writeAsBytes(bytes!.buffer.asUint8List());
-              image.dispose();
-            });
-          }
-        });
+              final size = tester.getSize(find.byType(ProfileMessage));
+              final copy = tester.getRect(find.byType(IconButton));
+              final body = tester.getRect(find.byType(SelectableText).first);
+              if (role == 'assistant') {
+                expect(copy.top, closeTo(body.top, .01));
+              }
+              await pump(
+                tester,
+                role: role,
+                brightness: brightness,
+                scale: scale,
+                content: content,
+                timestamp: _date.millisecondsSinceEpoch / 1000,
+              );
+              expect(find.text('15 Sep, 14:07'), findsOneWidget);
+              if (role == 'assistant') {
+                expect(tester.getSize(find.byType(ProfileMessage)), size);
+                expect(tester.getRect(find.byType(IconButton)), copy);
+              } else {
+                final currentCopy = tester.getRect(find.byType(IconButton));
+                final currentBody = tester.getRect(
+                  find.byType(SelectableText).first,
+                );
+                expect(
+                  currentCopy.top,
+                  greaterThanOrEqualTo(currentBody.bottom),
+                );
+              }
+              expect(tester.getRect(find.byType(SelectableText).first), body);
+              expect(copy.width, greaterThanOrEqualTo(44));
+              expect(
+                copy.height,
+                greaterThanOrEqualTo(role == 'user' ? 32 : 48),
+              );
+            }
+            if (_capture) {
+              await tester.runAsync(() async {
+                final context = tester.element(find.byKey(_frame));
+                for (final widget in tester.widgetList<Image>(
+                  find.byType(Image),
+                )) {
+                  await precacheImage(widget.image, context);
+                }
+              });
+              await tester.pumpAndSettle();
+              final boundary = tester.renderObject<RenderRepaintBoundary>(
+                find.byKey(_frame),
+              );
+              await tester.runAsync(() async {
+                final image = await boundary.toImage();
+                final bytes = await image.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final directory = Directory('build/message-timestamps')
+                  ..createSync(recursive: true);
+                await File(
+                  '${directory.path}/${brightness.name}-$role-$scale.png',
+                ).writeAsBytes(bytes!.buffer.asUint8List());
+                image.dispose();
+              });
+            }
+          },
+        );
       }
     }
   }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final surface in ['group', 'bot', 'history']) {
+        testWidgets(
+          'shared bot conversation $surface ${brightness.name} $scale',
+          (tester) async {
+            final width = scale == 1 ? 390.0 : 320.0;
+            await tester.binding.setSurfaceSize(Size(width, 844));
+            addTearDown(() => tester.binding.setSurfaceSize(null));
+            final bot = BotRecord(
+              scope: WorkspaceScope(
+                connectionId: 'host',
+                connectionIdentity: 'host-1',
+                profileName: 'pace',
+              ),
+              instance: 'Claw',
+              profile: const HermesProfile(name: 'pace'),
+              title: 'Pace',
+              shape: 'hexagon',
+              color: '#efa754',
+              pinned: false,
+              hidden: false,
+              hasAvatar: false,
+              revision: 1,
+              metadata: const {},
+            );
+            TranscriptMessage row(int id, String role, String text) =>
+                surface == 'group'
+                ? TranscriptMessage.discussion(
+                    id: id,
+                    text: text,
+                    timestamp: _date,
+                    sender: role == 'assistant' ? 'Pace' : null,
+                    senderHandle: role == 'assistant' ? 'pace' : null,
+                  )
+                : TranscriptMessage.fromRow({
+                    'id': id,
+                    'role': role,
+                    'content': text,
+                    'timestamp': _date.millisecondsSinceEpoch / 1000,
+                  });
+            final messages = [
+              row(
+                101,
+                'user',
+                'Please check whether we built the warehouse I requested. ' * 3,
+              ),
+              row(
+                102,
+                'assistant',
+                '**I share responsibility for the design failure.**\n\nThe domain model needs to match the warehouse.\n\n- Check the model\n- Review the handoff',
+              ),
+              row(103, 'user', 'Thanks.'),
+              row(
+                104,
+                'assistant',
+                'I will check the domain model before handoff.',
+              ),
+            ];
+            await tester.pumpMarkdownWidget(
+              MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  body: BotConversationScope(
+                    bot: bot,
+                    name: 'Pace',
+                    child: SingleChildScrollView(
+                      child: RepaintBoundary(
+                        key: _messageFrame,
+                        child: ColoredBox(
+                          color: wingTheme(brightness).colorScheme.surface,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 28, 12, 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (final message in messages)
+                                  ProfileMessage(
+                                    message: message,
+                                    senderAppearance:
+                                        message.role == 'assistant'
+                                        ? bot
+                                        : null,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+            final user = tester.getRect(
+              find.byKey(
+                const ValueKey<(String, Object?)>(('user-message-bubble', 101)),
+              ),
+            );
+            final answer = tester.getRect(
+              find.byKey(
+                const ValueKey<(String, Object?)>(('bot-message-bubble', 102)),
+              ),
+            );
+            final thanks = tester.getRect(
+              find.byKey(
+                const ValueKey<(String, Object?)>(('user-message-bubble', 103)),
+              ),
+            );
+            final short = tester.getRect(
+              find.byKey(
+                const ValueKey<(String, Object?)>(('bot-message-bubble', 104)),
+              ),
+            );
+            final avatar = tester.getRect(
+              find.byKey(
+                const ValueKey<(String, Object?)>((
+                  'bot-message-avatar-frame',
+                  102,
+                )),
+              ),
+            );
+            expect(answer.left, closeTo(12, .01));
+            expect(answer.right, closeTo(width - 12, .01));
+            expect(answer.top - user.bottom, closeTo(16, .01));
+            expect(thanks.top - answer.bottom, closeTo(16, .01));
+            expect(short.top - thanks.bottom, closeTo(16, .01));
+            expect(
+              user.left,
+              greaterThanOrEqualTo(avatar.right + 5 + 12 - .01),
+            );
+            expect(avatar.width, 54);
+            final decoration =
+                tester
+                        .widget<Container>(
+                          find.byKey(
+                            const ValueKey<(String, Object?)>((
+                              'bot-message-avatar-frame',
+                              102,
+                            )),
+                          ),
+                        )
+                        .decoration
+                    as BoxDecoration;
+            expect(decoration.border, isNotNull);
+            for (final id in [101, 102, 103, 104]) {
+              final footer = find.byKey(
+                ValueKey<(String, Object?)>((
+                  id == 101 || id == 103
+                      ? 'user-message-footer'
+                      : 'bot-message-footer',
+                  id,
+                )),
+              );
+              expect(
+                find.descendant(
+                  of: footer,
+                  matching: find.byTooltip('Copy message'),
+                ),
+                findsOneWidget,
+              );
+              if (scale == 1) expect(tester.getSize(footer).height, 32);
+            }
+            expect(tester.takeException(), isNull);
+            if (_capture) {
+              final boundary = tester.renderObject<RenderRepaintBoundary>(
+                find.byKey(_messageFrame),
+              );
+              await tester.runAsync(() async {
+                final image = await boundary.toImage();
+                final bytes = await image.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final directory = Directory(
+                  'build/design-previews/shared-bot-conversation',
+                )..createSync(recursive: true);
+                await File(
+                  '${directory.path}/$surface-${brightness.name}-$scale.png',
+                ).writeAsBytes(bytes!.buffer.asUint8List());
+                image.dispose();
+              });
+            }
+          },
+        );
+      }
+    }
+  }
+
+  testWidgets(
+    'message copy retains visible feedback through held clipboard and failure',
+    (tester) async {
+      var pending = Completer<void>();
+      var calls = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            calls++;
+            await pending.future;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await pump(
+        tester,
+        role: 'user',
+        content: 'Copy this exact body.',
+        reducedMotion: true,
+        timestamp: _date.millisecondsSinceEpoch / 1000,
+      );
+      final copy = find.byTooltip('Copy message');
+      await tester.tap(copy);
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(
+        tester
+            .widget<CircularProgressIndicator>(
+              find.byType(CircularProgressIndicator),
+            )
+            .value,
+        .75,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton && widget.tooltip == 'Copy message',
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(calls, 1);
+      pending.complete();
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton && widget.tooltip == 'Copy message',
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      pending = Completer<void>();
+      await tester.tap(copy);
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(
+        tester
+            .widget<CircularProgressIndicator>(
+              find.byType(CircularProgressIndicator),
+            )
+            .value,
+        .75,
+      );
+      pending.completeError(PlatformException(code: 'clipboard-failed'));
+      await tester.pumpAndSettle();
+      expect(find.text('Could not copy message. Try again.'), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton && widget.tooltip == 'Copy message',
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('incoming bot Copy keeps the exact authored Markdown', (
     tester,

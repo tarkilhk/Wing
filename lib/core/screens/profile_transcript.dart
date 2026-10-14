@@ -1,3 +1,4 @@
+import '../widgets/profile_message.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/recent_conversations/conversation_gestures.dart';
 import '../models/chat_output.dart';
@@ -460,9 +461,13 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             ),
             if (liveReply != null)
               Padding(
-                padding: const EdgeInsets.only(
-                  left: WingSpacing.lg,
-                  right: WingSpacing.xs,
+                padding: EdgeInsets.only(
+                  left: BotConversationScope.maybeOf(context) == null
+                      ? WingSpacing.lg
+                      : 12,
+                  right: BotConversationScope.maybeOf(context) == null
+                      ? WingSpacing.xs
+                      : 12,
                 ),
                 child: widget.messageBuilder(liveReply.messages.last),
               ),
@@ -614,7 +619,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               ),
               reverse: true,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.symmetric(vertical: WingSpacing.sm),
+              padding: BotConversationScope.maybeOf(context) == null
+                  ? const EdgeInsets.symmetric(vertical: WingSpacing.sm)
+                  : const EdgeInsets.only(top: 28, bottom: 8),
               findChildIndexCallback: (key) => indices[key],
               itemCount: tail.length + rows.length + 1,
               itemBuilder: (_, index) {
@@ -623,6 +630,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                 if (rowIndex < rows.length) {
                   final section = rows[rowIndex];
                   final row = section.messages.last;
+                  final clearActivity =
+                      !section.isActivity &&
+                      ProfileMessage.usesBotFrame(context, row.message) &&
+                      rowIndex + 1 < rows.length &&
+                      rows[rowIndex + 1].isActivity;
                   return TranscriptScrollAnchor(
                     key: keys[rowIndex],
                     initialHeight: _rowHeights[keys[rowIndex]] ?? 0,
@@ -630,8 +642,13 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                         _recordRowHeight(keys[rowIndex], row, height),
                     child: Padding(
                       padding: EdgeInsets.only(
-                        left: WingSpacing.lg,
-                        right: WingSpacing.xs,
+                        top: clearActivity ? 28 : 0,
+                        left: BotConversationScope.maybeOf(context) == null
+                            ? WingSpacing.lg
+                            : 12,
+                        right: BotConversationScope.maybeOf(context) == null
+                            ? WingSpacing.xs
+                            : 12,
                       ),
                       child: section.isActivity
                           ? ProfileToolActivitySection(

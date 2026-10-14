@@ -1595,7 +1595,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         ),
       ),
     );
-    return _withRecentSwitcher(chat, conversation);
+    return _withRecentSwitcher(
+      chat,
+      bot == null
+          ? conversation
+          : BotConversationScope(
+              bot: bot,
+              name: bot.title,
+              onSenderTap: (anchor) =>
+                  unawaited(_openBotSettings(bot, routeContext: anchor)),
+              child: conversation,
+            ),
+    );
   }
 
   Future<void> _openScreen(ProfileChat chat) async {
@@ -2199,6 +2210,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   onLoadOlder: () => controller.loadOlderMessages(chat),
                   timeline: timeline,
                   activityTrailingBuilder: (section) {
+                    if (bot != null) return null;
                     final reply = activityReplies[section.presentationIds.last];
                     if (reply == null) return null;
                     return reply.streaming

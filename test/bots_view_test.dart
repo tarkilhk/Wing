@@ -2630,9 +2630,9 @@ void main() {
             expect(controller.current!.chat!.markReadFailed, isFalse);
             expect(
               find.text(profile == 'personal' ? 'Personal Bot' : 'Work Bot'),
-              findsOneWidget,
+              findsNWidgets(2),
             );
-            expect(find.byType(BotAvatar), findsOneWidget);
+            expect(find.byType(BotAvatar), findsNWidgets(2));
             expect(find.byType(BotsContent), findsNothing);
             expect(bots.commands, isEmpty);
             expect(
@@ -2958,7 +2958,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.current!.chat!.key.sessionId, 'pin-one');
       expect(controller.current!.chat!.key.workspace.profileName, 'personal');
-      expect(find.byType(BotAvatar), findsOneWidget);
+      expect(find.byType(BotAvatar), findsNWidgets(2));
       final chatScaffold = tester.state<ScaffoldState>(
         find.byType(Scaffold).first,
       );
@@ -2973,12 +2973,19 @@ void main() {
       bots.profiles.single['ui_meta']['hermes-bots']['shape'] = 'triangle';
       await tester.tap(find.text('Atlas').last);
       await tester.pumpAndSettle();
-      expect(find.byType(BotAvatar), findsOneWidget);
+      expect(find.byType(BotAvatar), findsNWidgets(2));
       expect(
-        tester.widget<BotAvatar>(find.byType(BotAvatar)).shape,
+        tester
+            .widget<BotAvatar>(
+              find.descendant(
+                of: find.byType(AppBar),
+                matching: find.byType(BotAvatar),
+              ),
+            )
+            .shape,
         'triangle',
       );
-      expect(find.text('Atlas'), findsOneWidget);
+      expect(find.text('Atlas'), findsNWidgets(2));
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(BotsContent), findsOneWidget);
@@ -2999,7 +3006,7 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
-        'canonical bot avatar and name without repeated reply header in ${brightness.name} at $scale',
+        'canonical bot shares framed reply and footer design in ${brightness.name} at $scale',
         (tester) async {
           SharedPreferences.setMockInitialValues({});
           final preferences = await SharedPreferences.getInstance();
@@ -3094,7 +3101,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(find.text('Bot Chat'), findsNothing);
-          expect(find.text(botName), findsOneWidget);
+          expect(find.text(botName), findsNWidgets(2));
           final avatar = find.descendant(
             of: find.byType(AppBar),
             matching: find.byType(BotAvatar),
@@ -3132,11 +3139,31 @@ void main() {
           expect(tester.getSize(avatar), const Size(32, 32));
           expect(
             tester.getRect(avatar).right + 8,
-            closeTo(tester.getRect(find.text(botName)).left, 0.1),
+            closeTo(
+              tester
+                  .getRect(
+                    find.descendant(
+                      of: find.byType(AppBar),
+                      matching: find.text(botName),
+                    ),
+                  )
+                  .left,
+              0.1,
+            ),
           );
           expect(
             tester.getCenter(avatar).dy,
-            closeTo(tester.getCenter(find.text(botName)).dy, 0.1),
+            closeTo(
+              tester
+                  .getCenter(
+                    find.descendant(
+                      of: find.byType(AppBar),
+                      matching: find.text(botName),
+                    ),
+                  )
+                  .dy,
+              0.1,
+            ),
           );
           final reply = find.byWidgetPredicate(
             (widget) =>
@@ -3144,11 +3171,11 @@ void main() {
           );
           expect(
             find.descendant(of: reply, matching: find.byType(BotAvatar)),
-            findsNothing,
+            findsOneWidget,
           );
           expect(
             find.descendant(of: reply, matching: find.text(botName)),
-            findsNothing,
+            findsOneWidget,
           );
           final copy = find.descendant(
             of: reply,
@@ -3156,7 +3183,20 @@ void main() {
           );
           expect(
             tester.getRect(copy).right,
-            closeTo(tester.getRect(reply).right, 1),
+            closeTo(
+              tester
+                      .getRect(
+                        find.byKey(
+                          ValueKey<(String, Object?)>((
+                            'bot-message-bubble',
+                            tester.widget<ProfileMessage>(reply).message.id,
+                          )),
+                        ),
+                      )
+                      .right -
+                  3,
+              1,
+            ),
           );
           expect(find.byType(PlayfulPortrait), findsNothing);
           expect(find.text('Hermes'), findsNothing);
@@ -3188,7 +3228,13 @@ void main() {
             tester.getSize(find.byTooltip('Bot settings')).height,
             greaterThanOrEqualTo(48),
           );
-          for (final target in [avatar, find.text(botName)]) {
+          for (final target in [
+            avatar,
+            find.descendant(
+              of: find.byType(AppBar),
+              matching: find.text(botName),
+            ),
+          ]) {
             await tester.tap(target);
             await tester.pumpAndSettle();
             final settings = tester.widget<BotSettingsScreen>(
@@ -3240,7 +3286,7 @@ void main() {
             expect(controller.current!.chat, same(chat));
             expect(chat.composer.observation.text, 'Hello Atlas');
             expect(avatar, findsOneWidget);
-            expect(find.text(botName), findsOneWidget);
+            expect(find.text(botName), findsNWidgets(2));
           }
           await controller.openSession(
             ProfileSessionKey(scope, 'canonical-tip'),
@@ -3255,7 +3301,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           // The root and tip share the same confirmed bot identity.
-          expect(find.text(botName), findsOneWidget);
+          expect(find.text(botName), findsNWidgets(2));
           await controller.openSession(ProfileSessionKey(scope, 'ordinary'));
           await tester.pumpAndSettle();
           expect(find.byType(BotAvatar), findsNothing);
@@ -3373,7 +3419,13 @@ void main() {
         }
         expect(heldReadStarted, isTrue);
         expect(find.text('Bot Chat'), findsNothing);
-        expect(find.text('Atlas'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text('Atlas'),
+          ),
+          findsOneWidget,
+        );
         final avatar = find.descendant(
           of: find.byType(AppBar),
           matching: find.byType(BotAvatar),
@@ -3409,7 +3461,13 @@ void main() {
           retained == 'first read' ? {'found': true, 'data': png} : null,
         );
         await tester.pumpAndSettle();
-        expect(find.text('Atlas'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text('Atlas'),
+          ),
+          findsOneWidget,
+        );
         expect(tester.widget<BotAvatar>(avatar).image, base64Decode(png));
         expect(tester.getRect(avatar), bounds);
         expect(fixture.commands, isEmpty);

@@ -33,6 +33,7 @@ class BotBubbleColors {
       lightness = (lightness + (dark ? -.005 : .005)).clamp(0.0, 1.0);
       fill = oklchColor(lightness, chroma, hue);
     }
+    fill = Color.lerp(scheme.surfaceContainerLow, fill, .35)!;
     final footer = Color.lerp(scheme.surface, fill, .5)!;
     final backgrounds = [
       fill,

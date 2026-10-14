@@ -123,6 +123,7 @@ void main() {
                 child: RepaintBoundary(key: frame, child: child!),
               ),
               home: BotGroupHistoryScreen(
+                appearanceForMember: (_) => null,
                 createSession: () =>
                     BotGroupHistorySession(fixture.repository, group),
               ),
@@ -309,6 +310,20 @@ void main() {
             findsWidgets,
           );
           expect(fixture.commands, isEmpty);
+          if (scale == 1) {
+            final avatar = tester.getRect(
+              find.byKey(
+                const ValueKey<(String, Object?)>((
+                  'bot-message-avatar-frame',
+                  2,
+                )),
+              ),
+            );
+            final activity = tester.getRect(
+              find.byType(ProfileToolActivitySection).first,
+            );
+            expect(avatar.top - 5, greaterThanOrEqualTo(activity.bottom));
+          }
           await _render(tester, frame, 'history-${brightness.name}-$scale');
           final readsBeforeResume = groupReads;
           for (final state in [

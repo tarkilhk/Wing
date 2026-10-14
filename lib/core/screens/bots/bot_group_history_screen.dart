@@ -1,3 +1,4 @@
+import '../../models/bots.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
@@ -12,8 +13,10 @@ class BotGroupHistoryScreen extends StatefulWidget {
   const BotGroupHistoryScreen({
     super.key,
     required this.createSession,
+    required this.appearanceForMember,
     this.initialMemberId,
   });
+  final BotRecord? Function(String profile) appearanceForMember;
   final String? initialMemberId;
   final BotGroupHistorySession Function() createSession;
 
@@ -130,23 +133,31 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen> {
                               ),
                       ),
                     )
-                  : ProfileTranscript(
-                      key: ValueKey(('worker-history', _session.member?.id)),
-                      reader: reader,
-                      identity: null,
-                      needsInput: false,
-                      turnAdmissionBlocked: false,
-                      openingContent: null,
-                      notificationReading: null,
-                      onAnswerVisible: null,
-                      onRefreshHistory: _session.refresh,
-                      onLoadOlder: _session.loadOlder,
-                      timeline: timeline,
-                      tail: const [],
-                      messageBuilder: (entry) => ProfileMessage(
-                        message: entry.message,
-                        loadImages: false,
-                        attachmentImagesAvailable: false,
+                  : BotConversationScope(
+                      bot: _session.member == null
+                          ? null
+                          : widget.appearanceForMember(
+                              _session.member!.profile,
+                            ),
+                      name: _session.member?.name,
+                      child: ProfileTranscript(
+                        key: ValueKey(('worker-history', _session.member?.id)),
+                        reader: reader,
+                        identity: null,
+                        needsInput: false,
+                        turnAdmissionBlocked: false,
+                        openingContent: null,
+                        notificationReading: null,
+                        onAnswerVisible: null,
+                        onRefreshHistory: _session.refresh,
+                        onLoadOlder: _session.loadOlder,
+                        timeline: timeline,
+                        tail: const [],
+                        messageBuilder: (entry) => ProfileMessage(
+                          message: entry.message,
+                          loadImages: false,
+                          attachmentImagesAvailable: false,
+                        ),
                       ),
                     ),
             ),

@@ -9,8 +9,9 @@ Tap a bot's avatar to edit its appearance. Tap its name or message preview to op
 
 Messages received from other bots use left-aligned bubbles tinted from each
 sender’s avatar color, with the same readable text and timestamp styling as
-group discussions. Replies from the bot whose chat is open use the usual
-assistant layout.
+group discussions. Replies from the bot whose chat is open use that same
+message design: a framed avatar across the top-left edge, the sender name, and
+a colored footer with the timestamp and an icon-only Copy action.
 
 The chat screen opens immediately after the tap. Wing's feather pulse appears
 while the conversation loads. You can go Back during loading; a failed load
@@ -142,6 +143,9 @@ An unconfirmed send stays available for review/retry. Paused work offers Continu
 
 Your bubbles show your message without a User label. Bot replies show the
 sender's saved avatar and name, formatted text, links, code and timestamps.
+Bot and user Copy actions sit in their colored bottom rows. Long bot answers use
+the available reading width; your bubbles remain right-aligned and clear of the
+framed avatar. Discussions, Bot Chats and working histories use this same design.
 Tap a bot's avatar in the discussion to open a compact card over it, with the
 bot's saved avatar and name above three icon-and-text actions: **View working
 history**, **Chat directly** and **Bot settings**.

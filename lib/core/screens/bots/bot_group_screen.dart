@@ -480,8 +480,8 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       final rect = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
       return RelativeRect.fromRect(
         Rect.fromLTWH(
-          rect.center.dx - 14,
-          rect.center.dy - 14 - WingSpacing.xs,
+          rect.center.dx - 17,
+          rect.center.dy - 17 - WingSpacing.xs,
           0,
           0,
         ),
@@ -650,6 +650,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
             context,
             BotGroupHistoryScreen(
               initialMemberId: member?.id,
+              appearanceForMember: _session.appearance,
               createSession: () =>
                   BotGroupHistorySession(_session.repository, _session.group),
             ),
@@ -749,7 +750,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                       scrollCacheExtent: ScrollCacheExtent.pixels(
                         (constraints.maxHeight / 2).clamp(0.0, 250.0),
                       ),
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.fromLTRB(12, 28, 12, 8),
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       itemCount: messages.length + 1,
