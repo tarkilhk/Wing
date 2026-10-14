@@ -727,37 +727,37 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Future<void> _openRecentConversation(
     ProfileRecentChat item,
     List<WorkspaceRecentItem> displayed,
-  ) async {
-    _pendingRecentVisit?.dispose();
-    final visit = controller.recentConversationSession(
-      recents: _recents,
-      entries: displayed.map((item) => item.conversation),
-      onOpenGroup: _openRecentGroup,
-      activity: ChatNoticeActivityScope.of(context),
-    );
-    _pendingRecentVisit = visit;
-    final opened = await visit.select(RecentConversationKey.chat(item.key));
-    if (!mounted || _pendingRecentVisit != visit) {
-      visit.dispose();
-      return;
-    }
-    _pendingRecentVisit = null;
-    if (!opened || _destination != AppDestination.activity) {
-      if (visit.error case final error?) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: StudioError(error)));
+  ) => _openConversationDestination(
+    (current) async {
+      final visit = controller.recentConversationSession(
+        recents: _recents,
+        entries: displayed.map((item) => item.conversation),
+        onOpenGroup: _openRecentGroup,
+        activity: ChatNoticeActivityScope.of(context),
+      );
+      _pendingRecentVisit = visit;
+      final opened = await visit.select(RecentConversationKey.chat(item.key));
+      if (!current() || _pendingRecentVisit != visit) {
+        visit.dispose();
+        return null;
       }
-      visit.dispose();
-      return;
-    }
-    _selectDestination(AppDestination.chats);
-    setState(() {
-      _chatOrigin = AppDestination.activity;
+      _pendingRecentVisit = null;
+      if (!opened) {
+        final error =
+            visit.error ?? 'Could not open this conversation. Try again.';
+        visit.dispose();
+        throw StateError(error);
+      }
       _recentVisit = visit;
       _recentRenderedChat = controller.current?.chat;
-    });
-  }
+      return item.key;
+    },
+    title: item.title,
+    label: 'Opening chat',
+    owner: item.key.workspace,
+    resumeStoredChat: false,
+    origin: AppDestination.activity,
+  );
 
   Widget _withRecentSwitcher(ProfileChat chat, Widget child) {
     if (_recentVisit?.active != true) {
