@@ -1612,8 +1612,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         chat,
         _retainedConversationHeader(context, chat, bot),
         StudioPageLoading(
-          active: controller.refreshingWorkspace,
-          label: 'Refreshing workspace',
+          active:
+              controller.refreshingWorkspace ||
+              chat.changingIntelligence ||
+              _loadingIntelligence == chat.key,
+          label: controller.refreshingWorkspace
+              ? 'Refreshing workspace'
+              : 'Updating model settings',
           child: StudioLoadingRegion(
             busy: controller.switching || chat.refreshingConversation,
             available:

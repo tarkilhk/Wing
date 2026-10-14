@@ -8,6 +8,10 @@ import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_choice.dart';
+import 'package:wing/core/widgets/context_ring.dart';
+import 'package:wing/core/widgets/composer_action_button.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
+import 'package:wing/core/models/composer_action.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -70,6 +74,208 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  for (final brightness in Brightness.values) {
+    for (final (size, scale) in [
+      (const Size(390, 844), 1.0),
+      (const Size(320, 640), 2.0),
+    ]) {
+      testWidgets('Fast retains context and reports held writes '
+          '$brightness $size at text $scale', (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final chat = controller.current!.chat!;
+        chat.composer.editText('Keep this draft');
+        emitChatEvent(controller, chat, 'session.usage', {
+          'usage': {
+            'context_used': 360,
+            'context_max': 1000,
+            'context_percent': 36,
+          },
+        });
+        const frame = Key('fast-context-preview');
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: frame,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: scale == 2,
+                ),
+                child: child!,
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final ring = find.byType(ContextRing);
+        final fast = find.byKey(const Key('composer-fast-control'));
+        final send = find.byType(ComposerActionButton);
+        final ringRect = tester.getRect(ring);
+        final sendRect = tester.getRect(send);
+        final headerRect = tester.getRect(
+          find.byKey(const ValueKey('studio-loading-slot')),
+        );
+        expect(tester.widget<ContextRing>(ring).occupancy?.percent, 36);
+        Future<void> screenshot(String state) async {
+          if (!capture) return;
+          await tester.runAsync(() async {
+            final image = await tester
+                .renderObject<RenderRepaintBoundary>(find.byKey(frame))
+                .toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final directory = Directory('build/design-previews/fast-context');
+            await directory.create(recursive: true);
+            await File(
+              '${directory.path}/${brightness.name}-'
+              '${size.width.toInt()}-$state.png',
+            ).writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+
+        await screenshot('ready');
+        host.onAcceptedWrite = (params) {
+          // Stock config.set fast emits session.info before acknowledging.
+          emitChatEvent(controller, chat, 'session.info', {
+            'model': chat.model,
+            'provider': chat.provider,
+            'reasoning_effort': chat.reasoningEffort,
+          });
+        };
+        for (final fails in [true, false]) {
+          host.failFast = fails;
+          host.configSetDelay = Completer<void>();
+          host.contextResponse = Completer<Map<String, dynamic>>();
+          final heldWrite = host.configSetDelay!;
+          final heldContext = host.contextResponse!;
+          addTearDown(() {
+            if (!heldWrite.isCompleted) heldWrite.complete();
+            if (!heldContext.isCompleted) heldContext.complete({});
+          });
+          await tester.tap(fast);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 100));
+          expect(chat.changingIntelligence, isTrue);
+          expect(tester.widget<ContextRing>(ring).occupancy?.percent, 36);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(
+            tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
+            'Updating model settings',
+          );
+          expect(tester.getRect(ring), ringRect);
+          expect(tester.getRect(send), sendRect);
+          expect(
+            tester.getRect(find.byKey(const ValueKey('studio-loading-slot'))),
+            headerRect,
+          );
+          expect(
+            tester
+                .widget<ComposerActionButton>(send)
+                .unavailable[ComposerAction.send],
+            isNotNull,
+          );
+          expect(tester.widget<TextButton>(fast).onPressed, isNull);
+          expect(host.writes, hasLength(fails ? 1 : 2));
+          await tester.enterText(
+            find.byType(TextField).first,
+            'Draft edited while switching',
+          );
+          await screenshot(fails ? 'held-failure' : 'held-success');
+          heldWrite.complete();
+          await tester.pumpAndSettle();
+          expect(chat.changingIntelligence, isFalse);
+          expect(
+            chat.fastMode,
+            fails ? ChatFastMode.normal : ChatFastMode.fast,
+          );
+          expect(chat.contextLoading, !fails);
+          expect(tester.widget<ContextRing>(ring).occupancy?.percent, 36);
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(
+            tester
+                .widget<ComposerActionButton>(send)
+                .unavailable[ComposerAction.send],
+            isNull,
+          );
+          expect(tester.getRect(ring), ringRect);
+          expect(tester.getRect(send), sendRect);
+          expect(
+            chat.composer.observation.text,
+            'Draft edited while switching',
+          );
+          if (fails) {
+            expect(
+              find.text('Fast mode could not be confirmed. Try again.'),
+              findsOneWidget,
+            );
+          }
+          await screenshot(fails ? 'failed' : 'complete');
+          expect(tester.takeException(), isNull);
+          if (fails) {
+            await tester.pump(const Duration(seconds: 5));
+            await tester.pumpAndSettle();
+          }
+        }
+        final refresh = controller.refreshContext(chat);
+        host.contextResponse!.complete({
+          'context_used': 400,
+          'context_max': 1000,
+          'context_percent': 40,
+        });
+        await refresh;
+        await tester.pumpAndSettle();
+        expect(tester.widget<ContextRing>(ring).occupancy?.percent, 40);
+      });
+    }
+  }
+
+  for (final change in ['fast', 'reasoning', 'model', 'provider']) {
+    test(
+      '$change settings invalidate context only for a different route',
+      () async {
+        final chat = controller.current!.chat!;
+        await controller.loadIntelligence(chat);
+        emitChatEvent(controller, chat, 'session.usage', {
+          'usage': {
+            'context_used': 360,
+            'context_max': 1000,
+            'context_percent': 36,
+          },
+        });
+        host.contextResponse = Completer<Map<String, dynamic>>();
+        addTearDown(() {
+          if (!host.contextResponse!.isCompleted) {
+            host.contextResponse!.complete({});
+          }
+        });
+        await controller.setIntelligence(
+          chat,
+          ChatIntelligenceSelection(
+            choice: ModelChoice(
+              provider: change == 'provider' ? 'openrouter' : chat.provider!,
+              model: change == 'model' ? 'gpt-5.6-sol' : chat.model!,
+            ),
+            reasoningEffort: change == 'reasoning'
+                ? 'low'
+                : chat.reasoningEffort!,
+            fastMode: change == 'fast' ? ChatFastMode.fast : chat.fastMode!,
+          ),
+          confirmModelChange: (_) async => fail('Unexpected confirmation'),
+        );
+        final routeChanged = change == 'model' || change == 'provider';
+        expect(chat.contextLoading, routeChanged);
+        expect(chat.context?.percent, routeChanged ? null : 36);
+      },
+    );
+  }
 
   test(
     'selection writes the session and reopen uses server settings',

@@ -6297,6 +6297,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     chat._intelligenceRevision++;
     chat._changingIntelligence = true;
+    final previousModel = chat.model;
+    final previousProvider = chat.provider;
     _changed();
     try {
       final applied = await _writeIntelligence(
@@ -6305,9 +6307,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         confirmModelChange: confirmModelChange,
       );
       if (!applied) return false;
-      chat._context = null;
-      _invalidateContextDetails(chat);
-      unawaited(refreshContext(chat));
+      if (chat.model != previousModel || chat.provider != previousProvider) {
+        chat._context = null;
+        _invalidateContextDetails(chat);
+        unawaited(refreshContext(chat));
+      }
       return true;
     } finally {
       chat._changingIntelligence = false;

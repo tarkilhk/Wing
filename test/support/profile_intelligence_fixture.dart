@@ -28,6 +28,8 @@ Confirm only if you intend to switch now.''';
   final modelOptionReads = <Map<String, String>>[];
   Completer<void>? configGetStarted;
   Completer<void>? configGetDelay;
+  Completer<void>? configSetDelay;
+  Completer<Map<String, dynamic>>? contextResponse;
   String configGetValue = 'high';
   String resumedReasoningEffort = 'high';
   @override
@@ -82,6 +84,9 @@ Confirm only if you intend to switch now.''';
         return base.read(path, query);
       },
       rpc: (method, params) async {
+        if (method == 'session.context_breakdown' && contextResponse != null) {
+          return contextResponse!.future;
+        }
         if (method == 'config.get') {
           if (params['key'] == 'fast') return {'value': fastMode};
           final started = configGetStarted;
@@ -91,6 +96,7 @@ Confirm only if you intend to switch now.''';
         }
         if (method == 'config.set') {
           writes.add(Map.of(params));
+          await configSetDelay?.future;
           if (params['confirm_expensive_model'] == true && failConfirmedModel) {
             throw StateError('Model rejected');
           }
