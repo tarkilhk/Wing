@@ -15,6 +15,364 @@ import 'support/administration_fixture.dart';
 
 void main() {
   test(
+    'stale cached values stay available, failed refresh retains their timestamp',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      var now = DateTime.utc(2026, 10, 15, 1);
+      Map<String, dynamic> payload(int cost) => {
+        'models': [
+          {
+            'model': 'example',
+            'provider': 'example',
+            'estimated_cost': cost,
+            'input_tokens': cost * 100,
+            'cache_read_tokens': 0,
+            'output_tokens': 0,
+          },
+        ],
+        'daily': [],
+      };
+      fixture.override = (_, _, _, _) async => payload(3);
+      final first = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.usageAnalytics, [
+          'personal',
+        ], now: () => now),
+      );
+      await first.load();
+      final originalTime = first.state.updatedAt;
+      first.dispose();
+      now = now.add(const Duration(minutes: 5));
+      final held = Completer<Map<String, dynamic>>();
+      fixture.override = (_, _, _, _) => held.future;
+      final next = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.usageAnalytics, [
+          'personal',
+        ], now: () => now),
+      );
+      addTearDown(next.dispose);
+      expect(next.state.data!.models!.costs.total, 3);
+      expect(next.state.updatedAt, originalTime);
+      final before = fixture.requests.length;
+      final loading = next.load();
+      expect(next.state.data!.models!.costs.total, 3);
+      expect(next.state.loading, isTrue);
+      expect(fixture.requests.skip(before), hasLength(3));
+      held.complete(payload(7));
+      await loading;
+      expect(next.state.data!.models!.costs.total, 7);
+      expect(next.state.updatedAt, now);
+      final successfulTime = next.state.updatedAt;
+      now = now.add(const Duration(minutes: 1));
+      fixture.override = (_, _, _, _) async =>
+          throw const FormatException('Unavailable');
+      await next.refresh();
+      expect(next.state.data!.models!.costs.total, 7);
+      expect(next.state.updatedAt, successfulTime);
+      expect(next.state.data!.modelsError, isNotNull);
+      expect(next.state.yearError, isNotNull);
+    },
+  );
+
+  test(
+    'All and single profiles share facts and cached All includes a refreshed profile',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      var workCost = 7;
+      fixture.override = (_, path, query, _) async => path == 'analytics/models'
+          ? {
+              'models': [
+                {
+                  'model': 'example',
+                  'provider': 'example',
+                  'estimated_cost': query['profile'] == 'work' ? workCost : 3,
+                  'input_tokens': 100,
+                  'cache_read_tokens': 0,
+                  'output_tokens': 10,
+                },
+              ],
+            }
+          : {'daily': []};
+      UsageAnalyticsSession all() => UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.usageAnalytics, [
+          'personal',
+          'work',
+        ]),
+      );
+      final first = all();
+      await first.load();
+      first.dispose();
+      final before = fixture.requests.length;
+      final single = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.usageAnalytics, ['work']),
+      );
+      addTearDown(single.dispose);
+      expect(single.state.data!.models!.costs.total, 7);
+      await single.load();
+      expect(fixture.requests, hasLength(before));
+      workCost = 17;
+      await single.refresh();
+      expect(fixture.requests.skip(before), hasLength(3));
+      final next = all();
+      addTearDown(next.dispose);
+      expect(next.state.data!.models!.costs.total, 20);
+      final refreshedCount = fixture.requests.length;
+      await next.load();
+      expect(next.state.data!.models!.costs.total, 20);
+      expect(fixture.requests, hasLength(refreshedCount));
+    },
+  );
+
+  test(
+    'tokens publish before held shared prices and catalog reads are absent',
+    () async {
+      final fixture = AdministrationFixture()..pricingGate = Completer();
+      addTearDown(fixture.server.close);
+      fixture.override = (_, path, _, _) async {
+        if (path == 'model/options') {
+          throw StateError('Catalog must not be read');
+        }
+        return path == 'analytics/models'
+            ? {
+                'models': [
+                  {
+                    'model': 'gpt-6-astra',
+                    'provider': 'openai-codex',
+                    'input_tokens': 1000000,
+                    'cache_read_tokens': 0,
+                    'output_tokens': 0,
+                  },
+                ],
+              }
+            : {'daily': []};
+      };
+      final owner = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.usageAnalytics, [
+          'personal',
+          'work',
+        ]),
+      );
+      addTearDown(owner.dispose);
+      final loading = owner.load();
+      await Future<void>.delayed(Duration.zero);
+      expect(owner.state.data!.models!.tokens.total, 2000000);
+      expect(owner.state.data!.models!.costs.total, isNull);
+      expect(owner.state.data!.pricingLoading, isTrue);
+      expect(fixture.pricingRefreshes, [false]);
+      fixture.pricingGate!.complete(subscriptionApiPrices(input: 20));
+      await loading;
+      expect(owner.state.data!.models!.costs.total, 40);
+      expect(owner.state.data!.pricingLoading, isFalse);
+      expect(fixture.requests, hasLength(6));
+      expect(
+        fixture.requests.every((read) => read.$2.startsWith('analytics/')),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'overlapping visits share held requests and one disposed observer does not cancel the other',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      final held = Completer<Map<String, dynamic>>();
+      fixture.override = (_, _, _, _) => held.future;
+      final first = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
+      );
+      final firstLoad = first.load();
+      final next = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
+      );
+      addTearDown(next.dispose);
+      final nextLoad = next.load();
+      expect(fixture.requests, hasLength(3));
+      first.dispose();
+      held.complete({
+        'models': [
+          {
+            'model': 'example',
+            'provider': 'example',
+            'estimated_cost': 7,
+            'input_tokens': 100,
+            'cache_read_tokens': 0,
+            'output_tokens': 10,
+          },
+        ],
+        'daily': [],
+      });
+      await Future.wait([firstLoad, nextLoad]);
+      expect(next.state.data!.models!.costs.total, 7);
+      expect(next.state.loading, isFalse);
+      expect(first.state.data, isNull);
+      expect(fixture.requests, hasLength(3));
+    },
+  );
+
+  test(
+    'connection retirement fences held prices and new authority starts with an empty cache',
+    () async {
+      final fixture = AdministrationFixture()..pricingGate = Completer();
+      fixture.override = (_, path, _, _) async => path == 'analytics/models'
+          ? {
+              'models': [
+                {
+                  'model': 'gpt-6-astra',
+                  'provider': 'openai-codex',
+                  'input_tokens': 1000000,
+                  'cache_read_tokens': 0,
+                  'output_tokens': 0,
+                },
+              ],
+            }
+          : {'daily': []};
+      final owner = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
+      );
+      final loading = owner.load();
+      await Future<void>.delayed(Duration.zero);
+      owner.dispose();
+      fixture.server.close();
+      fixture.pricingGate!.complete(subscriptionApiPrices());
+      await loading;
+      final other = AdministrationFixture(fixture.id);
+      addTearDown(other.server.close);
+      final replacement = UsageAnalyticsSession(
+        UsageAnalyticsReader(other.server.usageAnalytics, ['personal']),
+      );
+      addTearDown(replacement.dispose);
+      expect(replacement.state.data, isNull);
+      expect(replacement.state.year, isNull);
+    },
+  );
+
+  test(
+    'cached analytics survives a disposed visit without another read',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      fixture.override = (_, path, _, _) async => path == 'analytics/models'
+          ? {
+              'models': [
+                {
+                  'model': 'example',
+                  'provider': 'example',
+                  'estimated_cost': 3,
+                  'input_tokens': 100,
+                  'cache_read_tokens': 0,
+                  'output_tokens': 10,
+                },
+              ],
+            }
+          : {'daily': []};
+      final first = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
+      );
+      await first.load();
+      first.dispose();
+      final before = fixture.requests.length;
+      final next = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
+      );
+      addTearDown(next.dispose);
+      expect(next.state.data?.models?.tokens.total, 110);
+      expect(next.state.year, isNotNull);
+      await next.load();
+      expect(fixture.requests, hasLength(before));
+    },
+  );
+
+  test(
+    'model totals publish while daily and year reads are still held',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      final held = Completer<Map<String, dynamic>>();
+      addTearDown(() {
+        if (!held.isCompleted) held.complete({'daily': []});
+      });
+      fixture.override = (_, path, _, _) async => path == 'analytics/models'
+          ? {
+              'models': [
+                {
+                  'model': 'example',
+                  'provider': 'example',
+                  'estimated_cost': 3,
+                  'input_tokens': 100,
+                  'cache_read_tokens': 0,
+                  'output_tokens': 10,
+                },
+              ],
+            }
+          : held.future;
+      final owner = UsageAnalyticsSession(
+        UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
+      );
+      addTearDown(owner.dispose);
+      final loading = owner.load();
+      await Future<void>.delayed(Duration.zero);
+      expect(owner.state.data?.models?.tokens.total, 110);
+      expect(owner.state.data?.daily, isNull);
+      expect(owner.state.loading, isTrue);
+      expect(fixture.requests.first.$3['days'], '7');
+      held.complete({'daily': []});
+      await loading;
+    },
+  );
+
+  for (final retire in [false, true]) {
+    test(
+      'All bounds concurrent reads to ten and ${retire ? "retires queued reads" : "drains the queue"}',
+      () async {
+        final fixture = AdministrationFixture();
+        addTearDown(fixture.server.close);
+        final held = Completer<void>();
+        var active = 0;
+        var peak = 0;
+        fixture.override = (_, path, _, _) async {
+          active++;
+          if (active > peak) peak = active;
+          try {
+            await held.future;
+            return path == 'analytics/models' ? {'models': []} : {'daily': []};
+          } finally {
+            active--;
+          }
+        };
+        final owner = UsageAnalyticsSession(
+          UsageAnalyticsReader(fixture.server.usageAnalytics, [
+            for (var i = 0; i < 12; i++) 'profile-$i',
+          ]),
+        );
+        addTearDown(owner.dispose);
+        final loading = owner.load();
+        expect(owner.state.loading, isTrue);
+        expect(fixture.requests, hasLength(10));
+        expect(
+          fixture.requests.map((r) => r.$3['profile']).toSet().length,
+          greaterThan(1),
+        );
+        if (retire) owner.dispose();
+        held.complete();
+        await loading;
+        expect(peak, 10);
+        expect(active, 0);
+        expect(fixture.requests, hasLength(retire ? 10 : 36));
+        if (retire) {
+          expect(owner.state.data, isNull);
+        } else {
+          expect(owner.state.loading, isFalse);
+          expect(owner.state.data!.models!.tokens.total, 0);
+          expect(owner.state.year!.days, isEmpty);
+          expect(owner.state.data!.needsRecovery, isFalse);
+        }
+      },
+    );
+  }
+
+  test(
     'Refresh reloads all unavailable analytics sections through real HTTP',
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -72,7 +430,7 @@ void main() {
         connectionStatus: status,
       );
       final owner = UsageAnalyticsSession(
-        UsageAnalyticsReader(repository.profile('default')),
+        UsageAnalyticsReader(repository.usageAnalytics, ['default']),
       );
       addTearDown(() async {
         owner.dispose();
@@ -199,7 +557,9 @@ void main() {
         connectionStatus: status,
       );
       final owner = UsageAnalyticsSession(
-        UsageAnalyticsReader(repository.profile('butler'), now: () => now),
+        UsageAnalyticsReader(repository.usageAnalytics, [
+          'butler',
+        ], now: () => now),
       );
       addTearDown(() async {
         owner.dispose();
@@ -252,7 +612,7 @@ void main() {
         };
       };
       final owner = UsageAnalyticsSession(
-        UsageAnalyticsReader(fixture.server.profile('personal')),
+        UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
       );
       addTearDown(owner.dispose);
       final loading = owner.load();
@@ -282,7 +642,7 @@ void main() {
       final held = Completer<Map<String, dynamic>>();
       fixture.override = (_, _, _, _) => held.future;
       final owner = UsageAnalyticsSession(
-        UsageAnalyticsReader(fixture.server.profile('personal')),
+        UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
       );
       var publications = 0;
       owner.addListener(() => publications++);
@@ -296,7 +656,7 @@ void main() {
       expect(owner.state.data, isNull);
       final before = fixture.requests.length;
       final reentrant = UsageAnalyticsSession(
-        UsageAnalyticsReader(fixture.server.profile('personal')),
+        UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
       );
       reentrant.addListener(reentrant.dispose);
       await reentrant.load();
@@ -304,45 +664,37 @@ void main() {
     },
   );
 
-  test(
-    'Refresh forwards catalog refresh and publishes changed API rates',
-    () async {
-      final fixture = AdministrationFixture();
-      addTearDown(fixture.server.close);
-      final catalog = subscriptionModelOptions();
-      fixture.override = (_, path, _, _) async => path == 'model/options'
-          ? catalog
-          : path == 'analytics/usage'
-          ? {'daily': []}
-          : {
-              'models': [
-                {
-                  'provider': 'openai-codex',
-                  'model': 'gpt-6-astra',
-                  'input_tokens': 1000000,
-                  'cache_read_tokens': 0,
-                  'output_tokens': 0,
-                },
-              ],
-            };
-      final owner = UsageAnalyticsSession(
-        UsageAnalyticsReader(fixture.server.profile('personal')),
-      );
-      addTearDown(owner.dispose);
-      await owner.load();
-      expect(owner.state.data!.models!.costs.total, 10);
-      fixture.apiPrices = subscriptionApiPrices(input: 20);
-      await owner.refresh();
-      expect(owner.state.data!.models!.costs.total, 20);
-      expect(
-        fixture.requests
-            .where((r) => r.$2 == 'model/options')
-            .last
-            .$3['refresh'],
-        '1',
-      );
-    },
-  );
+  test('Refresh revalidates shared API rates without catalog reads', () async {
+    final fixture = AdministrationFixture();
+    addTearDown(fixture.server.close);
+    final catalog = subscriptionModelOptions();
+    fixture.override = (_, path, _, _) async => path == 'model/options'
+        ? catalog
+        : path == 'analytics/usage'
+        ? {'daily': []}
+        : {
+            'models': [
+              {
+                'provider': 'openai-codex',
+                'model': 'gpt-6-astra',
+                'input_tokens': 1000000,
+                'cache_read_tokens': 0,
+                'output_tokens': 0,
+              },
+            ],
+          };
+    final owner = UsageAnalyticsSession(
+      UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
+    );
+    addTearDown(owner.dispose);
+    await owner.load();
+    expect(owner.state.data!.models!.costs.total, 10);
+    fixture.apiPrices = subscriptionApiPrices(input: 20);
+    await owner.refresh();
+    expect(owner.state.data!.models!.costs.total, 20);
+    expect(fixture.pricingRefreshes.last, isTrue);
+    expect(fixture.requests.where((r) => r.$2 == 'model/options'), isEmpty);
+  });
 
   test(
     'retirement cannot start a catalog read after held usage settles',
@@ -354,7 +706,7 @@ void main() {
           ? held.future
           : Future.value({'daily': []});
       final owner = UsageAnalyticsSession(
-        UsageAnalyticsReader(fixture.server.profile('personal')),
+        UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
       );
       final pending = owner.load();
       owner.dispose();

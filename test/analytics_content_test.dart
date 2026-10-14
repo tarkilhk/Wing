@@ -65,6 +65,8 @@ void main() {
         if (query['profile'] == 'personal') return pending.future;
         return models(7);
       };
+      String? profileName;
+      late StateSetter select;
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
@@ -73,9 +75,15 @@ void main() {
                 context: context,
                 title: const Text('Analytics'),
               ),
-              body: HermesAnalyticsContent(
-                controller: controller,
-                repository: server.server,
+              body: StatefulBuilder(
+                builder: (context, setState) {
+                  select = setState;
+                  return HermesAnalyticsContent(
+                    controller: controller,
+                    repository: server.server,
+                    profileName: profileName,
+                  );
+                },
               ),
             ),
           ),
@@ -86,20 +94,21 @@ void main() {
       expect(find.text('Loading usage…'), findsNothing);
       expect(find.byType(StudioLoading), findsOneWidget);
       expect(find.bySemanticsLabel('Loading usage'), findsOneWidget);
-      expect(server.requests, hasLength(3));
-      expect(
-        server.requests.every((r) => r.$3['profile'] == 'personal'),
-        isTrue,
-      );
+      expect(server.requests, hasLength(6));
+      expect(server.requests.map((r) => r.$3['profile']).toSet(), {
+        'personal',
+        'work',
+      });
       final callsBefore = browser.calls.length;
-      await controller.switchProfile('work');
+      select(() => profileName = 'work');
       await tester.pumpAndSettle();
-      expect(server.requests.skip(3), hasLength(3));
+      expect(server.requests.skip(6), isEmpty);
       expect(
-        server.requests.skip(3).every((r) => r.$3['profile'] == 'work'),
+        server.requests.skip(6).every((r) => r.$3['profile'] == 'work'),
         isTrue,
       );
       expect(find.text('USD 7.00'), findsOneWidget);
+      expect(controller.current!.scope.profileName, 'personal');
       pending.complete(models(99));
       await tester.pumpAndSettle();
       expect(find.text('USD 7.00'), findsOneWidget);
@@ -302,7 +311,7 @@ void main() {
             );
             break;
           }
-          expect(find.text('USD 2.00'), findsOneWidget);
+          expect(find.text('USD 4.00'), findsOneWidget);
           await tester.pumpWidget(const SizedBox.shrink());
         }
         expect(
@@ -315,11 +324,11 @@ void main() {
         final analytics = requests.where(
           (r) => r.$2.path.startsWith('/api/analytics/'),
         );
-        expect(analytics, hasLength(36));
-        expect(
-          analytics.every((r) => r.$2.queryParameters['profile'] == 'personal'),
-          isTrue,
-        );
+        expect(analytics, hasLength(6));
+        expect(analytics.map((r) => r.$2.queryParameters['profile']).toSet(), {
+          'personal',
+          'work',
+        });
         // Leaving Analytics retires its readers, not the shared host transport.
         final before = requests.length;
         host.refresh();

@@ -8,6 +8,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/analytics_content.dart';
+import 'package:wing/core/services/usage_analytics.dart';
+import 'package:wing/core/services/usage_analytics_session.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/screens/administration/usage_charts.dart';
 import 'support/administration_fixture.dart';
@@ -277,8 +279,20 @@ void main() {
               year.complete(dailyData());
             } else {
               models.complete({
-                'models': [_paid()],
+                'models': [_paid()..['cache_read_tokens'] = 0],
               });
+              await tester.pump();
+              await tester.pump();
+              expect(
+                find.descendant(
+                  of: find.byKey(const ValueKey('usage-token-total')),
+                  matching: find.text('120K'),
+                ),
+                findsOneWidget,
+              );
+              expect(find.text('USD 3.00'), findsOneWidget);
+              expectSameGeometry(await sectionGeometry(tester), original);
+              await snapshot(tester, 'models-first-${brightness.name}-$scale');
               daily.complete(dailyData());
             }
             await tester.pump();
@@ -491,7 +505,7 @@ void main() {
     await reveal(tester, find.byType(UsageAreaChart));
     expect(find.text('Trend per token type'), findsOneWidget);
     expect(find.byType(UsageAreaChart), findsOneWidget);
-    expect(fixture.requests.length, 4);
+    expect(fixture.requests.length, 3);
     expect(find.text('Cached input'), findsWidgets);
     final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
     await tap(tester, find.byKey(ValueKey('usage-day-$today')));
@@ -516,7 +530,7 @@ void main() {
     await tap(tester, find.text('Show token trend'));
     await reveal(tester, find.byType(UsageAreaChart));
     expect(find.byType(UsageAreaChart), findsOneWidget);
-    expect(fixture.requests.length, 4);
+    expect(fixture.requests.length, 3);
     await tap(tester, find.text('Selected period'));
     expect(find.text('300K'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -555,13 +569,13 @@ void main() {
     }
     expect(find.text('ALL'), findsNothing);
     await tap(tester, find.text('365D'));
-    expect(fixture.requests.length, 6);
+    expect(fixture.requests.length, 4);
     expect(
       fixture.requests.where((r) => r.$2 == 'analytics/models').last.$3['days'],
       '365',
     );
     await tap(tester, find.text('7D'));
-    expect(fixture.requests.length, 6);
+    expect(fixture.requests.length, 4);
     await tap(tester, find.text('365D'));
     await tester.drag(
       find.byKey(const ValueKey('usage-year-band')),
@@ -569,7 +583,7 @@ void main() {
     );
     await tester.pumpAndSettle(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('usage-year-band')), findsOneWidget);
-    expect(fixture.requests.length, 6);
+    expect(fixture.requests.length, 4);
     expect(tester.takeException(), isNull);
   });
 
@@ -668,6 +682,69 @@ void main() {
     expect(find.textContaining('Could not load'), findsNothing);
   });
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'stale visit is quiet and explicit refresh joins ${brightness.name} $scale',
+        (tester) async {
+          rows = [_paid()..['estimated_cost'] = 7];
+          final past = DateTime.now().subtract(const Duration(minutes: 6));
+          final warmup = UsageAnalyticsSession(
+            UsageAnalyticsReader(fixture.server.usageAnalytics, [
+              'personal',
+            ], now: () => past),
+          );
+          await warmup.load();
+          warmup.dispose();
+          final held = Completer<void>();
+          fixture.override = (_, path, _, _) async {
+            await held.future;
+            throw StateError('Offline');
+          };
+          await show(
+            tester,
+            brightness: brightness,
+            scale: scale,
+            settle: false,
+          );
+          expect(find.text('USD 7.00'), findsOneWidget);
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(fixture.requests.length, 6);
+          final refresh = find.byTooltip('Refresh usage');
+          await reveal(tester, refresh);
+          final updated = tester
+              .widget<Text>(find.textContaining('Updated '))
+              .data;
+          expect(updated, isNotNull);
+          await snapshot(tester, 'stale-quiet-${brightness.name}-$scale');
+          await tester.tap(refresh);
+          await tester.pump();
+          await tester.pump();
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(fixture.requests.length, 6);
+          await snapshot(tester, 'stale-refresh-${brightness.name}-$scale');
+          held.complete();
+          await tester.pumpAndSettle(const Duration(milliseconds: 250));
+          expect(find.byType(StudioLoading), findsNothing);
+          await reveal(tester, find.textContaining('Updated '));
+          expect(find.text(updated!), findsOneWidget);
+          await reveal(tester, find.text('USD 7.00'));
+          expect(find.text('USD 7.00'), findsOneWidget);
+          fixture.override = (_, path, _, _) async => path == 'analytics/models'
+              ? {
+                  'models': [_paid()..['estimated_cost'] = 5],
+                }
+              : dailyData();
+          await tap(tester, refresh);
+          await reveal(tester, find.text('USD 5.00'));
+          expect(find.text('USD 5.00'), findsOneWidget);
+          expect(fixture.requests.length, 9);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   testWidgets('initial failure is distinct from empty history and retries', (
     tester,
   ) async {
@@ -758,7 +835,7 @@ void main() {
       expect(find.text('456'), findsOneWidget);
       expect(find.text('789'), findsOneWidget);
       expect(find.text('Selected period'), findsOneWidget);
-      expect(fixture.requests.length, 4);
+      expect(fixture.requests.length, 3);
       await tap(tester, find.text('Selected period'));
       expect(find.text('Last 7 days · all models'), findsOneWidget);
     },
@@ -828,7 +905,7 @@ void main() {
           await tap(tester, find.byKey(const ValueKey('usage-day-2026-12-31')));
           await tap(tester, find.text('Show daily tokens'));
           expect(find.text('123'), findsOneWidget);
-          expect(fixture.requests.length, 4);
+          expect(fixture.requests.length, 3);
           await tap(tester, find.text('Selected period'));
           await reveal(tester, find.byType(UsageAreaChart));
           expect(find.text('150 tokens / day'), findsOneWidget);

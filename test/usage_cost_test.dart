@@ -39,7 +39,7 @@ void main() {
     'prices disjoint buckets without subtracting cache or adding reasoning',
     () {
       final input = usage();
-      final cost = ModelUsageCost.fromUsage(input, prices);
+      final cost = ModelUsageCost.fromUsage(input, prices.apiPrices);
       expect(cost.inputCost, 2);
       expect(cost.cachedInputCost, 0.5);
       expect(cost.outputCost, 1);
@@ -60,14 +60,17 @@ void main() {
       for (final reported in [0, 19.5]) {
         final cost = ModelUsageCost.fromUsage(
           usage()..addAll({'provider': provider, 'estimated_cost': reported}),
-          prices,
+          prices.apiPrices,
         );
         expect(cost.isApiEquivalent, isFalse);
         expect(cost.amount, reported);
       }
     }
     expect(
-      ModelUsageCost.fromUsage(usage()..['estimated_cost'] = 99, prices).amount,
+      ModelUsageCost.fromUsage(
+        usage()..['estimated_cost'] = 99,
+        prices.apiPrices,
+      ).amount,
       3.5,
     );
   });
@@ -81,7 +84,10 @@ void main() {
         'example-900k',
         'openai/example',
       ]) {
-        final cost = ModelUsageCost.fromUsage(usage()..['model'] = id, prices);
+        final cost = ModelUsageCost.fromUsage(
+          usage()..['model'] = id,
+          prices.apiPrices,
+        );
         expect(cost.amount, isNull);
         expect(cost.unavailable, UsageCostUnavailable.price);
       }
@@ -100,7 +106,10 @@ void main() {
         double.infinity,
         1e100,
       ]) {
-        final cost = ModelUsageCost.fromUsage(usage()..[key] = invalid, prices);
+        final cost = ModelUsageCost.fromUsage(
+          usage()..[key] = invalid,
+          prices.apiPrices,
+        );
         expect(cost.amount, isNull, reason: '$key=$invalid');
         expect(cost.unavailable, UsageCostUnavailable.tokens);
       }
@@ -111,7 +120,7 @@ void main() {
         'cache_read_tokens': 0,
         'output_tokens': 0,
       }),
-      prices,
+      prices.apiPrices,
     );
     expect(zero.amount, 0);
     expect(zero.unavailable, isNull);
@@ -119,13 +128,19 @@ void main() {
 
   test('mixed subtotals and partial coverage count each supplied row once', () {
     final summary = UsageCostSummary([
-      ModelUsageCost.fromUsage(usage(), prices),
-      ModelUsageCost.fromUsage(usage(), prices), // separate auxiliary row
+      ModelUsageCost.fromUsage(usage(), prices.apiPrices),
+      ModelUsageCost.fromUsage(
+        usage(),
+        prices.apiPrices,
+      ), // separate auxiliary row
       ModelUsageCost.fromUsage({
         'provider': 'openai',
         'estimated_cost': 2,
-      }, prices),
-      ModelUsageCost.fromUsage(usage()..['model'] = 'unknown', prices),
+      }, prices.apiPrices),
+      ModelUsageCost.fromUsage(
+        usage()..['model'] = 'unknown',
+        prices.apiPrices,
+      ),
     ]);
     expect(summary.isMixed, isTrue);
     expect(summary.isPartial, isTrue);
@@ -134,7 +149,10 @@ void main() {
     expect(summary.reported, 2);
     expect(summary.total, 9);
     final unknown = UsageCostSummary([
-      ModelUsageCost.fromUsage(usage()..['model'] = 'unknown', prices),
+      ModelUsageCost.fromUsage(
+        usage()..['model'] = 'unknown',
+        prices.apiPrices,
+      ),
     ]);
     expect(unknown.total, isNull);
     expect(unknown.apiEquivalent, isNull);
@@ -176,11 +194,11 @@ void main() {
       }
       final missingCache = catalog({'input': 0, 'output': 0});
       expect(
-        ModelUsageCost.fromUsage(usage(), missingCache).unavailable,
+        ModelUsageCost.fromUsage(usage(), missingCache.apiPrices).unavailable,
         UsageCostUnavailable.price,
       );
       final free = catalog({'input': 0, 'output': 0, 'cache_read': 0});
-      expect(ModelUsageCost.fromUsage(usage(), free).amount, 0);
+      expect(ModelUsageCost.fromUsage(usage(), free.apiPrices).amount, 0);
     },
   );
 
@@ -191,7 +209,10 @@ void main() {
         'providers': [],
       }, apiPrices: prices.apiPrices);
       expect(historical.choices, isEmpty);
-      expect(ModelUsageCost.fromUsage(usage(), historical).amount, 3.5);
+      expect(
+        ModelUsageCost.fromUsage(usage(), historical.apiPrices).amount,
+        3.5,
+      );
     },
   );
 
@@ -229,7 +250,7 @@ void main() {
         ],
       });
       expect(
-        ModelUsageCost.fromUsage(usage(), wrongSources).unavailable,
+        ModelUsageCost.fromUsage(usage(), wrongSources.apiPrices).unavailable,
         UsageCostUnavailable.price,
       );
       expect(wrongSources.choice('openai-codex', 'example')!.prices, isNull);

@@ -74,14 +74,14 @@ void main() {
       expect(subscription.cacheUsdPerMillion, 0.175);
       expect(subscription.apiEquivalent, isTrue);
       expect(subscription.free, isFalse);
-      expect(catalog.subscriptionPrices('retired')!.inputUsdPerMillion, 4);
+      expect(catalog.apiPrices.models['retired']!.inputUsdPerMillion, 4);
       expect(
         catalog.choice('openai-api', 'example')!.prices,
         same(subscription),
       );
       expect(catalog.choice('openrouter', 'example')!.prices!.input, r'$9.00');
       for (final id in ['example-pro', 'example-900k', 'openai/example']) {
-        expect(catalog.subscriptionPrices(id), isNull);
+        expect(catalog.apiPrices.models[id], isNull);
       }
       expect(() => api.models.clear(), throwsUnsupportedError);
     },

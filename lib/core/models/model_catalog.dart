@@ -14,7 +14,6 @@ class ModelCatalog {
   final ModelsDevPrices apiPrices;
   static bool isSubscriptionProvider(Object? provider) =>
       provider == 'openai-codex';
-  ModelPrices? subscriptionPrices(String model) => apiPrices.models[model];
   final List<ModelProvider> providers;
   final List<ModelChoice> choices;
 

@@ -34,6 +34,11 @@ class _UsageDashboardState extends State<UsageDashboard> {
   void initState() {
     super.initState();
     _session = widget.createSession();
+    final cached = _session.state;
+    _opening =
+        cached.data?.models == null &&
+        cached.data?.daily == null &&
+        cached.year == null;
     _session.addListener(_changed);
     _loadInitial();
   }
@@ -104,7 +109,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
     final models = data?.models;
     final daily = data?.daily;
     final summary = models?.costs;
-    final loading = observation.loading;
+    final updatedAt = observation.updatedAt?.toLocal();
     final selected = observation.year?.days
         .where((d) => d.id == _selected)
         .firstOrNull;
@@ -115,7 +120,9 @@ class _UsageDashboardState extends State<UsageDashboard> {
         : 'Estimated cost';
     return StudioPageLoading(
       active: _opening || _refreshing || _periodWait != null,
-      label: _opening || data == null ? 'Loading usage' : 'Refreshing usage',
+      label: _opening || _periodWait != null || data == null
+          ? 'Loading usage'
+          : 'Refreshing usage',
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
@@ -138,8 +145,9 @@ class _UsageDashboardState extends State<UsageDashboard> {
             builder: (context, constraints) {
               final stats = [
                 _Stat(
+                  key: const ValueKey('usage-token-total'),
                   label: 'Tokens',
-                  pending: data == null && observation.periodLoading,
+                  pending: models == null && observation.periodLoading,
                   value: models == null || models.rows.isEmpty
                       ? models == null
                             ? 'Unavailable'
@@ -154,8 +162,17 @@ class _UsageDashboardState extends State<UsageDashboard> {
                   exact: _number(models?.tokens.total),
                 ),
                 _Stat(
+                  key: const ValueKey('usage-cost-total'),
                   label: costTitle,
-                  pending: data == null && observation.periodLoading,
+                  pending:
+                      models == null && observation.periodLoading ||
+                      data?.pricingLoading == true &&
+                          models?.rows.any(
+                                (row) =>
+                                    row.unavailable ==
+                                    UsageCostUnavailable.price,
+                              ) ==
+                              true,
                   value: models?.rows.isEmpty == true
                       ? 'USD 0.00'
                       : formatUsageUsd(summary?.total),
@@ -239,7 +256,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
           _UsageChartSlot(
             identity: 'breakdown',
             height: _breakdownHeight(context),
-            pending: data == null && observation.periodLoading,
+            pending: models == null && observation.periodLoading,
             child: _breakdown(models, selected),
           ),
           const SizedBox(height: 24),
@@ -254,7 +271,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
           _UsageChartSlot(
             identity: 'trend',
             height: _trendHeight(context),
-            pending: data == null && observation.periodLoading,
+            pending: daily == null && observation.periodLoading,
             child: _trend(daily),
           ),
           const SizedBox(height: 20),
@@ -266,15 +283,23 @@ class _UsageDashboardState extends State<UsageDashboard> {
           if (observation.yearError != null)
             AdminNotice.error(observation.yearError!),
           const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: StudioButtonPress(
-              child: IconButton(
-                tooltip: 'Refresh usage',
-                onPressed: loading || _refreshing ? null : _refreshUsage,
-                icon: const Icon(Icons.refresh, size: 18),
+          Row(
+            children: [
+              Expanded(
+                child: updatedAt == null
+                    ? const SizedBox.shrink()
+                    : _quiet(
+                        'Updated ${MaterialLocalizations.of(context).formatShortDate(updatedAt)} · ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(updatedAt))}',
+                      ),
               ),
-            ),
+              StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Refresh usage',
+                  onPressed: _opening || _refreshing ? null : _refreshUsage,
+                  icon: const Icon(Icons.refresh, size: 18),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -610,6 +635,7 @@ class _Stat extends StatelessWidget {
   final String? exact;
   final bool pending;
   const _Stat({
+    super.key,
     required this.label,
     required this.pending,
     required this.value,

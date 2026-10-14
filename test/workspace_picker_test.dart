@@ -27,6 +27,7 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/main.dart';
 
@@ -351,13 +352,17 @@ void main() {
   });
 
   testWidgets(
-    'drawer analytics switches profiles without leaving its destination',
+    'drawer analytics defaults to All and filters without switching workspace',
     (tester) async {
       await show(tester, destination: AppDestination.analytics);
+      expect(find.text('Claw · All'), findsOneWidget);
       expect(find.byTooltip('Choose profile'), findsOneWidget);
       await tester.tap(picker);
       await tester.pumpAndSettle();
       expect(work, findsOneWidget);
+      final all = find.byKey(const ValueKey('workspace-all-profiles'));
+      expect(all, findsOneWidget);
+      expect(tester.getTopLeft(all).dy, lessThan(tester.getTopLeft(work).dy));
       expect(
         find.byKey(const ValueKey('workspace-connection-claw')),
         findsNothing,
@@ -368,13 +373,163 @@ void main() {
       );
       await tester.tap(work);
       await tester.pumpAndSettle();
-      expect(controller.current!.scope.profileName, 'work');
+      expect(controller.current!.scope.profileName, 'personal');
+      expect(find.text('Claw · work'), findsOneWidget);
       expect(find.text('Hermes analytics'), findsOneWidget);
       expect(find.byType(HermesAnalyticsContent), findsOneWidget);
       expect(find.byTooltip('Refresh profile status'), findsNothing);
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(all);
+      await tester.pumpAndSettle();
+      expect(find.text('Claw · All'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'All analytics picker and held reads ${brightness.name} at $scale',
+        (tester) async {
+          final administration = AdministrationFixture('Claw');
+          addTearDown(administration.server.close);
+          controller.healthSession(repository: administration.server);
+          Completer<void>? held;
+          var fail = false;
+          administration.override = (_, path, query, _) async {
+            if (path == 'analytics/models') {
+              if (query['profile'] == 'work') {
+                await held?.future;
+                if (fail) throw const FormatException('Unavailable');
+              }
+              return {
+                'models': [
+                  {
+                    'model': 'example',
+                    'provider': 'example',
+                    'estimated_cost': query['profile'] == 'work' ? 7 : 3,
+                    'input_tokens': 100,
+                    'cache_read_tokens': 0,
+                    'output_tokens': 10,
+                  },
+                ],
+              };
+            }
+            return {
+              'daily': [
+                {
+                  'day': '2026-10-14',
+                  'input_tokens': 100,
+                  'cache_read_tokens': 0,
+                  'output_tokens': 10,
+                },
+              ],
+            };
+          };
+          await show(
+            tester,
+            destination: AppDestination.analytics,
+            brightness: brightness,
+            scale: scale,
+          );
+          expect(find.text('Claw · All'), findsOneWidget);
+          expect(find.text('USD 10.00'), findsOneWidget);
+          await screenshot(tester, 'analytics-all-${brightness.name}-$scale');
+          await tester.tap(picker);
+          await tester.pumpAndSettle();
+          final all = find.byKey(const ValueKey('workspace-all-profiles'));
+          final selected = find.descendant(
+            of: all,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.selected == true,
+            ),
+          );
+          expect(selected, findsOneWidget);
+          expect(tester.getSize(all).height, greaterThanOrEqualTo(48));
+          await screenshot(
+            tester,
+            'analytics-picker-${brightness.name}-$scale',
+          );
+          final cachedReads = administration.requests.length;
+          await tester.tap(work);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.text('Claw · work'), findsOneWidget);
+          expect(controller.current!.scope.profileName, 'personal');
+          await screenshot(
+            tester,
+            'analytics-cached-${brightness.name}-$scale',
+          );
+          await tester.pumpAndSettle();
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.text('USD 7.00'), findsOneWidget);
+          expect(administration.requests.length, cachedReads);
+          await tester.tap(picker);
+          await tester.pumpAndSettle();
+          await tester.tap(all);
+          await tester.pumpAndSettle();
+          expect(find.text('USD 10.00'), findsOneWidget);
+          final refresh = find.byWidgetPredicate(
+            (widget) =>
+                widget is IconButton && widget.tooltip == 'Refresh usage',
+          );
+          Future<void> revealRefresh() async {
+            await tester.scrollUntilVisible(
+              refresh,
+              300,
+              scrollable: find
+                  .byWidgetPredicate(
+                    (widget) =>
+                        widget is Scrollable &&
+                        widget.axisDirection == AxisDirection.down,
+                  )
+                  .first,
+            );
+            await tester.pumpAndSettle();
+            await tester.ensureVisible(refresh);
+            await tester.pumpAndSettle();
+          }
+
+          await revealRefresh();
+          held = Completer<void>();
+          await tester.tap(refresh);
+          await tester.pump();
+          await tester.pump();
+          expect(find.byType(StudioLoading), findsOneWidget);
+          await screenshot(
+            tester,
+            'analytics-refresh-${brightness.name}-$scale',
+          );
+          fail = true;
+          held.complete();
+          held = null;
+          await tester.pumpAndSettle();
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(
+            find.textContaining('work: Could not load model totals.'),
+            findsOneWidget,
+          );
+          await screenshot(
+            tester,
+            'analytics-failed-${brightness.name}-$scale',
+          );
+          fail = false;
+          await revealRefresh();
+          await tester.tap(refresh);
+          await tester.pumpAndSettle();
+          expect(
+            find.textContaining('Could not load model totals.'),
+            findsNothing,
+          );
+          expect(controller.current!.scope.profileName, 'personal');
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
 
   testWidgets('Analytics offers only profiles and reloads the selected owner', (
     tester,

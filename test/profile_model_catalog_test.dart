@@ -67,10 +67,7 @@ void main() {
         },
       });
       held[1].complete(rates);
-      expect(
-        (await fresh).subscriptionPrices('example')!.inputUsdPerMillion,
-        2,
-      );
+      expect((await fresh).apiPrices.models['example']!.inputUsdPerMillion, 2);
       held[0].complete(ModelsDevPrices({}));
       await old;
       expect(owner.snapshot!.apiPrices, same(rates));

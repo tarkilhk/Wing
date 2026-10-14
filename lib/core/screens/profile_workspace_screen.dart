@@ -374,6 +374,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   final _fileReads = <OwnedRemoteFiles>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _settingsRevision = 0;
+  String? _analyticsProfileName;
   ProfileSessionKey? _composerKey;
   Future<BotRecord?>? _conversationBot;
   ProfileSessionKey? _loadingIntelligence;
@@ -1019,19 +1020,31 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       connections: widget.savedConnections?.call() ?? [controller.connection],
       connectionId: controller.connection.id,
       profiles: controller.discovery?.profiles ?? const [],
-      profileName: controller.current?.scope.profileName,
+      profileName: mode == WorkspacePickerMode.analytics
+          ? _analyticsProfileName
+          : controller.current?.scope.profileName,
       busy: controller.switching,
       mode: mode,
     );
     if (!mounted || !anchor.mounted || choice == null || controller.switching) {
       return;
     }
-    if (choice.isConnection && choice.id == controller.connection.id) return;
-    if (!choice.isConnection &&
+    if (mode == WorkspacePickerMode.analytics) {
+      if (_analyticsProfileName != choice.id) {
+        setState(() => _analyticsProfileName = choice.id);
+      }
+      return;
+    }
+    if (choice.kind == WorkspaceChoiceKind.connection &&
+        choice.id == controller.connection.id) {
+      return;
+    }
+    if (choice.kind == WorkspaceChoiceKind.profile &&
         choice.id == controller.current?.scope.profileName) {
       return;
     }
-    if (!choice.isConnection) {
+    if (choice.kind == WorkspaceChoiceKind.profile) {
+      final name = choice.id!;
       if (!_profileNavigation.canRequestSwitch) {
         ScaffoldMessenger.of(anchor).showSnackBar(
           const SnackBar(
@@ -1044,13 +1057,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       }
       await _run(() async {
         var attempted = false;
-        final changed = await _profileNavigation.switchTo(choice.id, () {
+        final changed = await _profileNavigation.switchTo(name, () {
           attempted = true;
           _cancelVoice();
           FocusManager.instance.primaryFocus?.unfocus();
           controller.cancelNotificationOpen();
           return controller.switchProfile(
-            choice.id,
+            name,
             resetNavigation: _destination == AppDestination.chats,
           );
         });
@@ -3810,10 +3823,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       label: controller.connection.label,
                       icon: controller.connection.icon,
                       pickerMode: _destination == AppDestination.analytics
-                          ? WorkspacePickerMode.profiles
+                          ? WorkspacePickerMode.analytics
                           : null,
                       suffix: _destination == AppDestination.activity
                           ? null
+                          : _destination == AppDestination.analytics
+                          ? _analyticsProfileName ?? 'All'
                           : controller.current?.scope.profileName,
                       status: controller.connectionStatus,
                     )
@@ -3868,6 +3883,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 AppDestination.analytics => HermesAnalyticsContent(
                   key: ValueKey(controller.connectionIdentity),
                   controller: controller,
+                  profileName: _analyticsProfileName,
                 ),
                 AppDestination.settings => AppSettingsContent(
                   key: ValueKey(_settingsRevision),
