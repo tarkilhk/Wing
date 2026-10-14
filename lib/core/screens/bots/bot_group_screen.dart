@@ -888,7 +888,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       beforeComposer: [
         if (_showReferences)
           Flexible(
-            flex: 3,
             child: MentionSuggestions(
               composer: _composer,
               composerFocus: _focus,
@@ -910,9 +909,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           controller: _composer,
           focusNode: _focus,
           readOnly: locked,
-          maxLines: _showReferences
-              ? 1
-              : (_voiceInput.active || keyboardOpen) && enlargedText
+          maxLines: (_voiceInput.active || keyboardOpen) && enlargedText
               ? 2
               : 5,
           microphone: VoiceInputButton(

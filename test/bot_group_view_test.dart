@@ -114,6 +114,131 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
+        'group mention picker preserves multiline composer ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          final group = (await readFixtureGroups(
+            fixture.repository,
+            groupMessages: null,
+          )).single;
+          final appearances = await fixture.repository.bots();
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: frame,
+                child: BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () => null,
+                  createSession: () => BotGroupSession(
+                    fixture.repository,
+                    group,
+                    reads: BotGroupReadState(),
+                    preferences: groupPreferences,
+                    groupMessages: null,
+                    appearances: FixedGroupAppearances(appearances),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final input = find.byKey(const ValueKey('group-message-composer'));
+          final composer = find.byKey(const ValueKey('group-composer'));
+          const draft =
+              'Keep working until done.\nAfter these steps we work on:\n'
+              '1. Daily ingestion\n@Atlas + ';
+          await tester.enterText(input, draft);
+          await tester.pumpAndSettle();
+          final before = tester.getRect(composer);
+          final inputBefore = tester.getRect(input);
+          final controller = tester.widget<TextField>(input).controller!;
+          final focus = tester.widget<TextField>(input).focusNode!;
+          expect(before.height, greaterThan(90));
+          await _render(
+            tester,
+            frame,
+            'mention-draft-${brightness.name}-$scale',
+          );
+
+          void expectStableComposer() {
+            expect(tester.getRect(composer), before);
+            expect(tester.getRect(input), inputBefore);
+            expect(focus.hasFocus, isTrue);
+            expect(tester.takeException(), isNull);
+          }
+
+          final value = TextEditingValue(
+            text: '$draft@',
+            selection: TextSelection.collapsed(offset: draft.length + 1),
+            composing: TextRange(start: draft.length, end: draft.length + 1),
+          );
+          tester.testTextInput.updateEditingValue(value);
+          await tester.pump();
+          expect(find.byType(MentionSuggestions), findsOneWidget);
+          expect(controller.value, value);
+          expectStableComposer();
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.pumpAndSettle();
+          expectStableComposer();
+          await _render(
+            tester,
+            frame,
+            'mention-open-${brightness.name}-$scale',
+          );
+          await tester.tap(find.byTooltip('Close references'));
+          await tester.pumpAndSettle();
+          expectStableComposer();
+          expect(controller.value, value);
+
+          tester.testTextInput.updateEditingValue(
+            TextEditingValue(
+              text: '$draft@Mi',
+              selection: TextSelection.collapsed(offset: draft.length + 3),
+              composing: TextRange(start: draft.length, end: draft.length + 3),
+            ),
+          );
+          await tester.pump();
+          expectStableComposer();
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.pumpAndSettle();
+          expectStableComposer();
+          await tester.tap(
+            find
+                .descendant(
+                  of: find.byType(MentionSuggestions),
+                  matching: find.text('Mira'),
+                )
+                .hitTestable(),
+          );
+          await tester.pumpAndSettle();
+          expect(controller.text, '$draft@Mira ');
+          expect(controller.value.composing, TextRange.empty);
+          expectStableComposer();
+          await _render(
+            tester,
+            frame,
+            'mention-selected-${brightness.name}-$scale',
+          );
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
         'group pass bubbles identify the member and retain chronology ${brightness.name} $scale',
         (tester) async {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
