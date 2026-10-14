@@ -4,32 +4,42 @@ import 'package:flutter/material.dart';
 
 import '../models/gateway_activity.dart';
 import '../theme/wing_theme.dart';
-import '../services/profile_workspace_controller.dart';
+import '../models/gateway_insight.dart';
 import 'conversation_activity_status.dart';
 import 'profile_chat_indicator.dart';
 
 /// A current activity summary, independent of the scrollable transcript.
 class ProfileActivityStatus extends StatelessWidget {
-  final ProfileChat chat;
+  final ChatRuntimeObservation runtime;
+  final List<GatewaySubagentActivity> subagents;
+  final Set<String> unconfirmedSubagentIds;
 
-  const ProfileActivityStatus({super.key, required this.chat});
+  const ProfileActivityStatus({
+    super.key,
+    required this.runtime,
+    required this.subagents,
+    required this.unconfirmedSubagentIds,
+    required this.saving,
+  });
+
+  final bool saving;
 
   String? get label {
-    if (chat.runtime.openingError != null) {
+    if (runtime.openingError != null) {
       return 'Chat unavailable · Your draft is kept';
     }
-    if (chat.runtime.opening || chat.runtime.offline) {
+    if (runtime.opening || runtime.offline) {
       return null;
     }
-    if (chat.runtime.reconnecting) {
+    if (runtime.reconnecting) {
       return null;
     }
-    if (chat.runtime.needsInput) {
-      return chat.runtime.approval != null
+    if (runtime.needsInput) {
+      return runtime.approval != null
           ? 'Waiting for your approval'
           : 'Waiting for your reply';
     }
-    switch (chat.runtime.execution) {
+    switch (runtime.execution) {
       case ChatExecution.submitting:
         return null;
       case ChatExecution.failed:
@@ -37,25 +47,24 @@ class ProfileActivityStatus extends StatelessWidget {
       default:
         break;
     }
-    final children = chat.subagents
+    final children = subagents
         .where(
           (item) =>
-              !item.isTerminal &&
-              !chat.unconfirmedSubagentIds.contains(item.id),
+              !item.isTerminal && !unconfirmedSubagentIds.contains(item.id),
         )
         .length;
     final childLabel = '$children subagent${children == 1 ? '' : 's'}';
-    if (chat.runtime.compacting) {
+    if (runtime.compacting) {
       const summary = 'Summarizing conversation…';
       return children > 0 ? '$summary · $childLabel active' : summary;
     }
-    if (chat.runtime.commandRunning) return 'Running command…';
-    if (chat.runtime.execution != ChatExecution.running) {
+    if (runtime.commandRunning) return 'Running command…';
+    if (runtime.execution != ChatExecution.running) {
       if (children > 0) return 'Waiting for $childLabel…';
-      if (chat.runtime.error != null) return 'History needs attention';
+      if (runtime.error != null) return 'History needs attention';
       return null;
     }
-    final mainLabel = switch (chat.runtime.mainActivity) {
+    final mainLabel = switch (runtime.mainActivity) {
       ChatMainActivity.writing => 'Writing response…',
       ChatMainActivity.thinking => 'Thinking…',
       ChatMainActivity.tool => _toolLabel,
@@ -65,11 +74,11 @@ class ProfileActivityStatus extends StatelessWidget {
   }
 
   String get _toolLabel {
-    final active = chat.runtime.mainToolActivity;
+    final active = runtime.mainToolActivity;
     if (active == null) {
-      return chat.runtime.tool == null
+      return runtime.tool == null
           ? 'Hermes is working…'
-          : 'Using ${chat.runtime.tool}';
+          : 'Using ${runtime.tool}';
     }
     final action = active.phase == GatewayToolActivityPhase.generating
         ? 'Preparing'
@@ -83,63 +92,65 @@ class ProfileActivityStatus extends StatelessWidget {
     final text = label;
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
     final Widget leading;
-    if (chat.runtime.compacting &&
-        !chat.runtime.needsInput &&
-        !chat.runtime.reconnecting) {
+    if (runtime.compacting && !runtime.needsInput && !runtime.reconnecting) {
       leading = StudioWorkingIndicator(
         conversation: true,
         active:
-            !chat.runtime.opening &&
-            !chat.runtime.offline &&
-            chat.runtime.execution != ChatExecution.failed,
+            !runtime.opening &&
+            !runtime.offline &&
+            runtime.execution != ChatExecution.failed,
         label: 'Summarizing conversation',
         icon: Icons.compress_rounded,
         color: WingTokens.of(context).running,
       );
-    } else if (chat.runtime.commandRunning &&
-        !chat.runtime.needsInput &&
-        !chat.runtime.reconnecting) {
+    } else if (runtime.commandRunning &&
+        !runtime.needsInput &&
+        !runtime.reconnecting) {
       leading = StudioWorkingIndicator(
         conversation: true,
         active:
-            !chat.runtime.opening &&
-            !chat.runtime.offline &&
-            chat.runtime.execution != ChatExecution.failed,
+            !runtime.opening &&
+            !runtime.offline &&
+            runtime.execution != ChatExecution.failed,
         label: 'Running command',
         icon: Icons.pending_outlined,
         color: color,
       );
-    } else if (chat.runtime.execution == ChatExecution.idle &&
-        chat.runtime.activity(
-              backgroundWorking: chat.subagents.any(
+    } else if (runtime.execution == ChatExecution.idle &&
+        runtime.activity(
+              backgroundWorking: subagents.any(
                 (item) =>
                     !item.isTerminal &&
-                    !chat.unconfirmedSubagentIds.contains(item.id),
+                    !unconfirmedSubagentIds.contains(item.id),
               ),
             ) ==
             null) {
       leading = Icon(Icons.chat_bubble_outline, size: 18, color: color);
     } else {
-      leading = ProfileChatIndicator(chat: chat);
+      leading = ProfileChatIndicator(
+        runtime: runtime,
+        subagents: subagents,
+        unconfirmedSubagentIds: unconfirmedSubagentIds,
+      );
     }
     final waiting =
-        chat.runtime.openingError == null &&
-        !chat.runtime.opening &&
-        !chat.runtime.offline &&
-        (chat.runtime.reconnecting ||
-            (chat.runtime.execution == ChatExecution.submitting &&
-                !chat.runtime.needsInput));
+        runtime.openingError == null &&
+        !runtime.opening &&
+        !runtime.offline &&
+        (runtime.reconnecting ||
+            (runtime.execution == ChatExecution.submitting &&
+                !runtime.needsInput));
     return StudioPageLoading(
-      active: waiting || chat.composer.observation.saving,
-      label: chat.runtime.reconnecting
+      active: waiting || saving,
+      label: runtime.reconnecting
           ? 'Reconnecting'
-          : chat.runtime.execution == ChatExecution.submitting
+          : runtime.execution == ChatExecution.submitting
           ? 'Sending message'
           : 'Saving message',
       child: ConversationActivityStatus(
         label: text,
         leading: leading,
-        wrap: chat.runtime.compacting,
+        wrap: runtime.compacting,
       ),
     );
   }

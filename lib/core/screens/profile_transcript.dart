@@ -27,7 +27,7 @@ import '../widgets/transcript_latest_button.dart';
 /// a visible durable row anchors the viewport when streaming changes the tail.
 class ProfileTranscript extends StatefulWidget {
   final TranscriptReader reader;
-  // Passive saved histories have no live chat identity or execution section.
+  // Keys execution presentation only; it grants no transport authority.
   final ProfileSessionKey? identity;
   final bool needsInput;
   final bool turnAdmissionBlocked;

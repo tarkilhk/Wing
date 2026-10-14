@@ -29,13 +29,13 @@ class ProfileLiveExecution extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final children = <Widget>[];
-    var tools = <ChatToolEntry>[];
+    var activity = <ChatActivityEntry>[];
     void flush({required bool sealed}) {
-      if (tools.isEmpty) return;
-      final run = List<ChatToolEntry>.unmodifiable(tools);
+      if (activity.isEmpty) return;
+      final run = List<ChatActivityEntry>.unmodifiable(activity);
       children.add(
-        _LiveToolRun(
-          key: ValueKey(('live-tool-run', run.first.identity)),
+        _LiveActivityRun(
+          key: ValueKey(('live-activity-run', run.first.identity)),
           entries: run,
           sealed: sealed,
           loadImage: loadImage,
@@ -43,16 +43,21 @@ class ProfileLiveExecution extends StatelessWidget {
           onShareResource: onShareResource,
         ),
       );
-      tools = [];
+      activity = [];
     }
 
     for (final entry in entries) {
       switch (entry) {
         case ChatToolEntry():
-          tools.add(entry);
+          if (activity.lastOrNull is ChatReasoningEntry) flush(sealed: true);
+          activity.add(entry);
         case ChatReasoningEntry():
-          flush(sealed: true);
           if (entry.text.trim().isEmpty) continue;
+          if (!entry.running) {
+            activity.add(entry);
+            continue;
+          }
+          flush(sealed: true);
           children.add(
             Padding(
               key: ValueKey(('live-reasoning', entry.identity)),
@@ -72,7 +77,7 @@ class ProfileLiveExecution extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        entry.running ? 'Thinking' : 'Reasoning',
+                        'Thinking',
                         style: WingTokens.of(context).typography.label.copyWith(
                           fontSize: 11,
                           color: WingTokens.of(context).muted,
@@ -92,7 +97,7 @@ class ProfileLiveExecution extends StatelessWidget {
           );
       }
     }
-    flush(sealed: false);
+    flush(sealed: activity.lastOrNull is ChatReasoningEntry);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: children,
@@ -100,8 +105,8 @@ class ProfileLiveExecution extends StatelessWidget {
   }
 }
 
-class _LiveToolRun extends StatefulWidget {
-  const _LiveToolRun({
+class _LiveActivityRun extends StatefulWidget {
+  const _LiveActivityRun({
     super.key,
     required this.entries,
     required this.sealed,
@@ -109,20 +114,28 @@ class _LiveToolRun extends StatefulWidget {
     this.onOpenResource,
     this.onShareResource,
   });
-  final List<ChatToolEntry> entries;
+  final List<ChatActivityEntry> entries;
   final bool sealed;
   final Future<Uint8List> Function(String)? loadImage;
   final Future<void> Function(ChatOutput)? onOpenResource;
   final Future<void> Function(ChatOutput)? onShareResource;
 
   @override
-  State<_LiveToolRun> createState() => _LiveToolRunState();
+  State<_LiveActivityRun> createState() => _LiveActivityRunState();
 }
 
-class _LiveToolRunState extends State<_LiveToolRun> {
+class _LiveActivityRunState extends State<_LiveActivityRun> {
+  final _timeline = GlobalKey();
+  late final bool _wasLive;
   ExpansibleController? _expansion;
   @override
-  void didUpdateWidget(_LiveToolRun oldWidget) {
+  void initState() {
+    super.initState();
+    _wasLive = !widget.sealed;
+  }
+
+  @override
+  void didUpdateWidget(_LiveActivityRun oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!oldWidget.sealed && widget.sealed) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -132,26 +145,41 @@ class _LiveToolRunState extends State<_LiveToolRun> {
   }
 
   @override
-  Widget build(BuildContext context) => ProfileActivitySection(
-    label:
-        'Activity · ${widget.entries.length} ${widget.entries.length == 1 ? 'tool' : 'tools'}',
-    initiallyExpanded: !widget.sealed,
-    detailsBuilder: (context) {
-      _expansion = ExpansibleController.of(context);
-      return ProfileActivityTabs(
-        tabs: [
-          ProfileActivityTab(
-            id: 'timeline',
-            label: 'Timeline',
-            child: ProfileExecutionActivity(
-              entries: widget.entries,
-              loadImage: widget.loadImage,
-              onOpenResource: widget.onOpenResource,
-              onShareResource: widget.onShareResource,
-            ),
+  Widget build(BuildContext context) {
+    final timeline = ProfileActivityTabs(
+      // Retain tool expansion state when this run moves into Activity.
+      key: _timeline,
+      tabs: [
+        ProfileActivityTab(
+          id: 'timeline',
+          label: 'Timeline',
+          child: ProfileExecutionActivity(
+            entries: widget.entries,
+            loadImage: widget.loadImage,
+            onOpenResource: widget.onOpenResource,
+            onShareResource: widget.onShareResource,
           ),
-        ],
+        ),
+      ],
+    );
+    if (!widget.sealed) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: timeline,
       );
-    },
-  );
+    }
+    final tools = widget.entries.whereType<ChatToolEntry>().length;
+    return ProfileActivitySection(
+      label: tools == 0
+          ? 'Activity'
+          : 'Activity · $tools ${tools == 1 ? 'tool' : 'tools'}',
+      // A previously visible body must mount before folding so its existing
+      // keyed subtree survives. Runs first received sealed stay lazy.
+      initiallyExpanded: _wasLive,
+      detailsBuilder: (context) {
+        _expansion = ExpansibleController.of(context);
+        return timeline;
+      },
+    );
+  }
 }

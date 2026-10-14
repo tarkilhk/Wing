@@ -16,12 +16,19 @@ import 'workspace_connection_failure.dart';
 /// Sole writer of a chat's transcript rows, read revisions and presentation IDs.
 /// It borrows transport; the coordinator supplies captured publication authority.
 final class TranscriptReading implements TranscriptReader {
-  TranscriptReading({required this._gateway});
+  TranscriptReading({required ProfileGateway gateway})
+    : _gateway = gateway,
+      scope = gateway.scope;
+
+  /// Saved rows and live display buffers without transport or command authority.
+  TranscriptReading.passive({required this.scope}) : _gateway = null;
 
   static const _observedToolLimit = 256;
 
-  final ProfileGateway _gateway;
-  WorkspaceScope get scope => _gateway.scope;
+  final ProfileGateway? _gateway;
+  final WorkspaceScope scope;
+  ProfileGateway get _transport =>
+      _gateway ?? (throw StateError('Passive reading has no transport'));
   List<Map<String, dynamic>> _messages = const [];
   String? _historySessionId;
   int? _nextHistoryOffset;
@@ -553,7 +560,11 @@ final class TranscriptReading implements TranscriptReader {
     int offset = 0,
   }) async {
     if (_closed) throw StateError('This chat reading owner is closed.');
-    final page = await _gateway.history(sessionId, offset: offset, limit: 500);
+    final page = await _transport.history(
+      sessionId,
+      offset: offset,
+      limit: 500,
+    );
     if (_closed) throw StateError('This chat reading owner is closed.');
     if (page.sessionId != sessionId) {
       throw const FormatException(
@@ -595,7 +606,7 @@ final class TranscriptReading implements TranscriptReader {
       return false;
     }
     try {
-      final historyRead = _gateway.history(sessionId, runtimeId: runtimeId);
+      final historyRead = _transport.history(sessionId, runtimeId: runtimeId);
       // The REST transcript omits durations. Recover actual completion receipts
       // alongside the page, including calls completed while Wing was detached.
       final toolRead = _readCompletedTools(sessionId, runtimeId);
@@ -631,7 +642,7 @@ final class TranscriptReading implements TranscriptReader {
           )) {
         onChanged();
         if (!valid()) return false;
-        final olderPage = await _gateway.history(
+        final olderPage = await _transport.history(
           _historySessionId!,
           offset: _nextHistoryOffset!,
         );
@@ -700,7 +711,7 @@ final class TranscriptReading implements TranscriptReader {
     String runtimeId,
   ) async {
     try {
-      return await _gateway.completedToolActivities(
+      return await _transport.completedToolActivities(
         runtimeId,
         sessionId: sessionId,
       );
@@ -736,7 +747,7 @@ final class TranscriptReading implements TranscriptReader {
       return;
     }
     try {
-      final page = await _gateway.history(_historySessionId!, offset: offset);
+      final page = await _transport.history(_historySessionId!, offset: offset);
       if (!valid()) return;
       if (page.sessionId != _historySessionId) {
         throw StateError('History moved to a new segment');

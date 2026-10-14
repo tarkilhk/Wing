@@ -1,21 +1,26 @@
 import 'studio_loading.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:flutter/material.dart';
-import '../services/profile_workspace_controller.dart';
+import '../models/gateway_insight.dart';
 import '../theme/wing_theme.dart';
 
 /// Precise state comes from the owned runtime and its active children.
 class ProfileChatIndicator extends StatelessWidget {
-  final ProfileChat chat;
-  const ProfileChatIndicator({super.key, required this.chat});
+  final ChatRuntimeObservation runtime;
+  final List<GatewaySubagentActivity> subagents;
+  final Set<String> unconfirmedSubagentIds;
+  const ProfileChatIndicator({
+    super.key,
+    required this.runtime,
+    required this.subagents,
+    required this.unconfirmedSubagentIds,
+  });
 
   @override
   Widget build(BuildContext context) {
     final tokens = WingTokens.of(context);
-    final runtime = chat.runtime;
-    final confirmedChildWork = chat.subagents.any(
-      (item) =>
-          !item.isTerminal && !chat.unconfirmedSubagentIds.contains(item.id),
+    final confirmedChildWork = subagents.any(
+      (item) => !item.isTerminal && !unconfirmedSubagentIds.contains(item.id),
     );
     final status =
         runtime.execution == ChatExecution.running || confirmedChildWork

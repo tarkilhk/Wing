@@ -15,7 +15,7 @@ import '../models/gateway_insight.dart';
 import '../services/profile_supervision_session.dart';
 
 class ProfileSubagentPanel extends StatefulWidget {
-  final ProfileSupervisionSession session;
+  final SubagentInspectionSession session;
   final bool initiallyExpanded;
   final bool embedded;
 
@@ -92,12 +92,17 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
         if (chat.subagentsError case final error?)
           Row(
             children: [
-              Expanded(child: StudioError(error)),
-              ActivityDetailAction(
-                label: 'Retry',
-                icon: Icons.refresh,
-                onPressed: _refresh,
+              Expanded(
+                child: StudioError(
+                  widget.embedded ? '$error Reopen to retry.' : error,
+                ),
               ),
+              if (!widget.embedded)
+                ActivityDetailAction(
+                  label: 'Retry',
+                  icon: Icons.refresh,
+                  onPressed: _refresh,
+                ),
             ],
           ),
         if (!chat.subagentsLoading &&
@@ -114,14 +119,15 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
             unconfirmed: chat.unconfirmedSubagentIds.contains(activity.id),
             onTap: () => _openSubagent(activity.id),
           ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: ActivityDetailAction(
-            onPressed: chat.subagentsLoading ? null : _refresh,
-            icon: Icons.refresh,
-            label: 'Refresh',
+        if (!widget.embedded)
+          Align(
+            alignment: Alignment.centerRight,
+            child: ActivityDetailAction(
+              onPressed: chat.subagentsLoading ? null : _refresh,
+              icon: Icons.refresh,
+              label: 'Refresh',
+            ),
           ),
-        ),
       ];
       if (widget.embedded) {
         return StudioLoadingRegion(
@@ -152,7 +158,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
 }
 
 class _SubagentDetailSheet extends StatefulWidget {
-  final SubagentSupervisionDetail session;
+  final SubagentInspectionDetail session;
   const _SubagentDetailSheet({required this.session});
 
   @override
@@ -293,7 +299,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                               ? Icons.error_outline
                               : Icons.info_outline,
                         ),
-                      _tailBody(current),
+                      if (widget.session.supportsTail) _tailBody(current),
                       ActivityDetailStatus(
                         working:
                             !unconfirmed &&

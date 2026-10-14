@@ -106,7 +106,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     appPreferences.dispose();
   });
 
-  String? label() => ProfileActivityStatus(chat: chat).label;
+  String? label() => ProfileActivityStatus(
+    runtime: chat.runtime,
+    subagents: chat.subagents,
+    unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+    saving: chat.composer.observation.saving,
+  ).label;
 
   testWidgets('opening and offline reading omit the composer status', (
     tester,
@@ -115,7 +120,14 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     runtime.beginOpening();
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: ProfileActivityStatus(chat: chat)),
+        home: Scaffold(
+          body: ProfileActivityStatus(
+            runtime: chat.runtime,
+            subagents: chat.subagents,
+            unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+            saving: chat.composer.observation.saving,
+          ),
+        ),
       ),
     );
     expect(label(), isNull);
@@ -125,7 +137,14 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     runtime.installOfflineReading();
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: ProfileActivityStatus(chat: chat)),
+        home: Scaffold(
+          body: ProfileActivityStatus(
+            runtime: chat.runtime,
+            subagents: chat.subagents,
+            unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+            saving: chat.composer.observation.saving,
+          ),
+        ),
       ),
     );
     expect(label(), isNull);
@@ -393,7 +412,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             'args': {'command': 'python report.py'},
           });
           await tester.pump(const Duration(milliseconds: 300));
-          expect(find.text('Activity · 1 tool'), findsOneWidget);
+          expect(find.text('Activity · 1 tool'), findsNothing);
+          expect(find.text('Timeline'), findsOneWidget);
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(find.byIcon(Icons.terminal_rounded), findsWidgets);
           await tester.ensureVisible(find.byType(ProfileToolCall));
@@ -599,7 +619,14 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       MaterialApp(
         home: MediaQuery(
           data: const MediaQueryData(disableAnimations: true),
-          child: Scaffold(body: ProfileActivityStatus(chat: chat)),
+          child: Scaffold(
+            body: ProfileActivityStatus(
+              runtime: chat.runtime,
+              subagents: chat.subagents,
+              unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+              saving: chat.composer.observation.saving,
+            ),
+          ),
         ),
       ),
     );
@@ -662,7 +689,16 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         home: MediaQuery(
           data: MediaQueryData(disableAnimations: reducedMotion),
           child: Scaffold(
-            body: Column(children: [ProfileActivityStatus(chat: chat)]),
+            body: Column(
+              children: [
+                ProfileActivityStatus(
+                  runtime: chat.runtime,
+                  subagents: chat.subagents,
+                  unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+                  saving: chat.composer.observation.saving,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -869,7 +905,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         home: Scaffold(
           body: ListenableBuilder(
             listenable: controller,
-            builder: (_, _) => ProfileActivityStatus(chat: chat),
+            builder: (_, _) => ProfileActivityStatus(
+              runtime: chat.runtime,
+              subagents: chat.subagents,
+              unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+              saving: chat.composer.observation.saving,
+            ),
           ),
         ),
       ),
@@ -961,7 +1002,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           child: Scaffold(
             body: SizedBox(
               width: 320,
-              child: ProfileActivityStatus(chat: chat),
+              child: ProfileActivityStatus(
+                runtime: chat.runtime,
+                subagents: chat.subagents,
+                unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+                saving: chat.composer.observation.saving,
+              ),
             ),
           ),
         ),

@@ -1674,7 +1674,13 @@ void main() {
         }
         await tester.pumpWidget(
           MaterialApp(
-            home: Scaffold(body: ProfileChatIndicator(chat: chat)),
+            home: Scaffold(
+              body: ProfileChatIndicator(
+                runtime: chat.runtime,
+                subagents: chat.subagents,
+                unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+              ),
+            ),
           ),
         );
         await tester.pump();

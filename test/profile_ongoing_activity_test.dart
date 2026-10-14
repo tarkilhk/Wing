@@ -99,7 +99,13 @@ void main() {
     startChild();
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: ProfileChatIndicator(chat: chat)),
+        home: Scaffold(
+          body: ProfileChatIndicator(
+            runtime: chat.runtime,
+            subagents: chat.subagents,
+            unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+          ),
+        ),
       ),
     );
     await tester.pump();
@@ -128,7 +134,11 @@ void main() {
               listenable: controller,
               builder: (context, _) => Column(
                 children: [
-                  ProfileChatIndicator(chat: chat),
+                  ProfileChatIndicator(
+                    runtime: chat.runtime,
+                    subagents: chat.subagents,
+                    unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+                  ),
                   Expanded(
                     child: WorkspaceActivityContent(
                       visible: false,
@@ -196,7 +206,13 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: ProfileChatIndicator(chat: chat)),
+        home: Scaffold(
+          body: ProfileChatIndicator(
+            runtime: chat.runtime,
+            subagents: chat.subagents,
+            unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+          ),
+        ),
       ),
     );
     expect(find.byTooltip('Input needed'), findsOneWidget);

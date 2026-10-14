@@ -2460,6 +2460,11 @@
       "role": "data",
       "feature": "versions-updates",
       "library": "lib/core/services/backend_update_channels.dart"
+    },
+    "lib/core/services/chat_transcript_events.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/chat_transcript_events.dart"
     }
   }
 }

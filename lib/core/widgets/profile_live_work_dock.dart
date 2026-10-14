@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/wing_theme.dart';
@@ -15,28 +16,47 @@ class ProfileLiveWorkDock extends StatefulWidget {
     required this.tasks,
     required this.subagents,
     required this.onAgentsSelected,
+    this.onOpenChanged,
   });
 
   static const slideDuration = Duration(milliseconds: 220);
   final int? taskCount, completedTasks, subagentCount;
   final Widget tasks, subagents;
   final Future<void> Function() onAgentsSelected;
+  final VoidCallback? onOpenChanged;
 
   @override
   ProfileLiveWorkDockState createState() => ProfileLiveWorkDockState();
 }
 
 class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _portal = OverlayPortalController();
   final _link = LayerLink();
   final _target = GlobalKey();
   final _pages = PageController();
-  late final AnimationController _reveal;
+  late final AnimationController _reveal, _split;
+  final _contentHeights = <int, double>{};
+  int _singleTab = 0;
   bool _open = false, _refreshingAgents = false, _openingPages = false;
+  bool _instantHeight = false;
   int _selected = 0, _generation = 0;
 
+  List<int> get _tabs => [
+    if ((widget.subagentCount ?? 0) > 0) 0,
+    if ((widget.taskCount ?? 0) > 0) 1,
+  ];
+
+  double get _pagePosition =>
+      !_openingPages &&
+          _pages.hasClients &&
+          _pages.position.hasContentDimensions
+      ? (_pages.page ?? 0).clamp(0.0, (_tabs.length - 1).toDouble())
+      : math.max(0, _tabs.indexOf(_selected)).toDouble();
+
   bool get _reduced => MediaQuery.disableAnimationsOf(context);
+
+  bool get isOpen => _open;
 
   /// Let the workspace consume Back before its own conversation navigation.
   bool dismiss() {
@@ -48,11 +68,69 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
   @override
   void initState() {
     super.initState();
+    _selected = _tabs.firstOrNull ?? 0;
+    _singleTab = _selected;
+    _split = AnimationController(
+      vsync: this,
+      duration: ProfileLiveWorkDock.slideDuration,
+      value: _tabs.length == 2 ? 1 : 0,
+    );
     _reveal = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 260),
       reverseDuration: const Duration(milliseconds: 180),
     );
+  }
+
+  @override
+  void didUpdateWidget(ProfileLiveWorkDock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldTabs = [
+      if ((oldWidget.subagentCount ?? 0) > 0) 0,
+      if ((oldWidget.taskCount ?? 0) > 0) 1,
+    ];
+    final tabs = _tabs;
+    if (oldTabs.length == tabs.length && oldTabs.every(tabs.contains)) return;
+    if (tabs.length == 2) {
+      _singleTab = oldTabs.firstOrNull ?? _selected;
+      if (_reduced) {
+        _split.value = 1;
+      } else {
+        _split.forward();
+      }
+    } else {
+      _split.value = 0;
+      _singleTab = tabs.firstOrNull ?? 0;
+    }
+    _contentHeights.removeWhere((id, _) => !tabs.contains(id));
+    if (tabs.isEmpty) {
+      ++_generation;
+      _open = false;
+      _reveal.value = 0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _tabs.isEmpty && _portal.isShowing) _portal.hide();
+        if (mounted) widget.onOpenChanged?.call();
+      });
+      return;
+    }
+    final selectionRemoved = !tabs.contains(_selected);
+    if (selectionRemoved) _selected = tabs.first;
+    if (_open) {
+      _openingPages = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_open || !_pages.hasClients) return;
+        _pages.jumpToPage(_tabs.indexOf(_selected));
+        setState(() => _openingPages = false);
+        if (selectionRemoved && _selected == 0) _refreshAgents();
+      });
+    }
+  }
+
+  void _measureContent(int id, double height) {
+    if (!mounted || !_tabs.contains(id) || _contentHeights[id] == height) {
+      return;
+    }
+    setState(() => _contentHeights[id] = height);
   }
 
   Future<void> _refreshAgents() async {
@@ -61,23 +139,26 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
     try {
       await widget.onAgentsSelected();
     } catch (_) {
-      // The borrowed supervision panel owns the error and retry action.
+      // The borrowed panel shows the error; reopening retries the roster read.
     } finally {
       if (mounted) setState(() => _refreshingAgents = false);
     }
   }
 
   void _select(int index, {bool keyboard = false}) {
+    if (!_tabs.contains(index)) return;
     if (_open && index == _selected) {
       _close(keyboard: keyboard);
       return;
     }
+    _instantHeight = keyboard;
     final wasOpen = _open;
     ++_generation;
     setState(() {
       _open = true;
       _selected = index;
     });
+    if (!wasOpen) widget.onOpenChanged?.call();
     _portal.show();
     if (!wasOpen) {
       _openingPages = true;
@@ -88,16 +169,16 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _open && _pages.hasClients) {
-          _pages.jumpToPage(index);
+          _pages.jumpToPage(_tabs.indexOf(index));
           _openingPages = false;
         }
       });
     } else if (_pages.hasClients) {
       if (_reduced || keyboard) {
-        _pages.jumpToPage(index);
+        _pages.jumpToPage(_tabs.indexOf(index));
       } else {
         _pages.animateToPage(
-          index,
+          _tabs.indexOf(index),
           duration: ProfileLiveWorkDock.slideDuration,
           curve: const _WorkPageCurve(),
         );
@@ -109,6 +190,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
   Future<void> _close({bool keyboard = false}) async {
     final generation = ++_generation;
     setState(() => _open = false);
+    widget.onOpenChanged?.call();
     if (_reduced || keyboard) {
       _reveal.value = 0;
     } else {
@@ -126,10 +208,17 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
     ++_generation;
     _pages.dispose();
     _reveal.dispose();
+    _split.dispose();
     super.dispose();
   }
 
-  Widget _bar(double width, double height, {required bool overlay}) {
+  Widget _bar(double width, double height, {required bool overlay}) =>
+      AnimatedBuilder(
+        animation: _split,
+        builder: (_, _) => _buildBar(width, height, overlay: overlay),
+      );
+
+  Widget _buildBar(double width, double height, {required bool overlay}) {
     final tokens = WingTokens.of(context);
     final large = MediaQuery.textScalerOf(context).scale(12) > 16;
     final labels = [
@@ -140,6 +229,12 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
           ? 'Tasks'
           : 'Tasks ${widget.completedTasks}/${widget.taskCount}',
     ];
+    final tabs = _tabs;
+    final split = Curves.easeOutCubic.transform(_split.value);
+    final firstWidth = tabs.length == 1
+        ? (tabs.first == 0 ? width : 0.0)
+        : width * (_singleTab == 0 ? 1 - split / 2 : split / 2);
+    final widths = [firstWidth, width - firstWidth];
     return Focus(
       onKeyEvent: (_, event) {
         if (event is! KeyDownEvent || !_open) return KeyEventResult.ignored;
@@ -185,14 +280,16 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
               AnimatedBuilder(
                 animation: _pages,
                 builder: (_, _) {
-                  final progress =
-                      _pages.hasClients && _pages.position.hasContentDimensions
-                      ? (_pages.page ?? _selected.toDouble()).clamp(0.0, 1.0)
-                      : _selected.toDouble();
+                  final progress = tabs.length == 1
+                      ? tabs.first.toDouble()
+                      : _pagePosition;
+                  final left = progress * firstWidth;
+                  final selectedWidth =
+                      widths[0] + (widths[1] - widths[0]) * progress;
                   return Positioned(
-                    left: 3 + progress * width / 2,
+                    left: 3 + left,
                     bottom: 3,
-                    width: width / 2 - 6,
+                    width: math.max(0, selectedWidth - 6),
                     height: height - 6,
                     child: DecoratedBox(
                       key: const ValueKey('live-work-selection'),
@@ -207,9 +304,9 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
                   );
                 },
               ),
-            if (!_open)
+            if (!_open && tabs.length == 2)
               Positioned(
-                left: width / 2,
+                left: firstWidth,
                 bottom: (height - 16) / 2,
                 child: Container(
                   key: const ValueKey('live-work-divider'),
@@ -221,73 +318,105 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
             Positioned.fill(
               child: Row(
                 children: [
-                  for (var index = 0; index < 2; index++)
-                    Expanded(
-                      child: Semantics(
-                        button: true,
-                        expanded: _open && _selected == index,
-                        label: labels[index],
-                        child: StudioButtonPress(
-                          child: TextButton(
-                            key: ValueKey(('live-work-tab', index, overlay)),
-                            onPressed: () => _select(index),
-                            style: TextButton.styleFrom(
-                              minimumSize: Size.zero,
-                              padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              foregroundColor: _open && _selected == index
-                                  ? tokens.accent
-                                  : tokens.muted,
-                              shape: const RoundedRectangleBorder(),
-                            ),
-                            child: Row(
-                              children: [
-                                if (!large) ...[
-                                  SizedBox.square(
-                                    dimension: 16,
-                                    child: index == 0 && _refreshingAgents
-                                        ? const CircularProgressIndicator(
+                  for (final index in tabs)
+                    SizedBox(
+                      key: ValueKey(('live-work-tab-slot', index, overlay)),
+                      width: widths[index],
+                      child: ClipRect(
+                        child: OverflowBox(
+                          alignment: index == 0
+                              ? Alignment.centerLeft
+                              : Alignment.centerRight,
+                          minHeight: height + 12,
+                          maxHeight: height + 12,
+                          minWidth: math.min(width / 2, widths[index]),
+                          maxWidth: math.max(width / 2, widths[index]),
+                          child: Opacity(
+                            opacity: tabs.length == 2 && index != _singleTab
+                                ? split
+                                : 1,
+                            child: Semantics(
+                              button: true,
+                              expanded: _open && _selected == index,
+                              label: labels[index],
+                              child: StudioButtonPress(
+                                child: TextButton(
+                                  key: ValueKey((
+                                    'live-work-tab',
+                                    index,
+                                    overlay,
+                                  )),
+                                  onPressed: () => _select(index),
+                                  style: TextButton.styleFrom(
+                                    minimumSize: Size.zero,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      8,
+                                      12,
+                                      8,
+                                      0,
+                                    ),
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    foregroundColor: _open && _selected == index
+                                        ? tokens.accent
+                                        : tokens.muted,
+                                    shape: const RoundedRectangleBorder(),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      if (!large) ...[
+                                        SizedBox.square(
+                                          dimension: 16,
+                                          child: index == 0 && _refreshingAgents
+                                              ? const CircularProgressIndicator(
+                                                  strokeWidth: 1.5,
+                                                  semanticsLabel:
+                                                      'Refreshing subagents',
+                                                )
+                                              : Icon(
+                                                  index == 0
+                                                      ? Icons.people_outline
+                                                      : Icons.checklist,
+                                                  size: 16,
+                                                ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                      ],
+                                      Expanded(
+                                        child: Text(
+                                          labels[index],
+                                          maxLines: 2,
+                                          style: TextStyle(
+                                            fontSize: large ? 11 : 12,
+                                            height: 1.1,
+                                            fontWeight: FontWeight.w400,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      if (large &&
+                                          index == 0 &&
+                                          _refreshingAgents)
+                                        const SizedBox.square(
+                                          dimension: 16,
+                                          child: CircularProgressIndicator(
                                             strokeWidth: 1.5,
                                             semanticsLabel:
                                                 'Refreshing subagents',
-                                          )
-                                        : Icon(
-                                            index == 0
-                                                ? Icons.people_outline
-                                                : Icons.checklist,
-                                            size: 16,
                                           ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-                                Expanded(
-                                  child: Text(
-                                    labels[index],
-                                    maxLines: 2,
-                                    style: TextStyle(
-                                      fontSize: large ? 11 : 12,
-                                      height: 1.1,
-                                      fontWeight: FontWeight.w400,
-                                    ),
+                                        )
+                                      else
+                                        Icon(
+                                          _open && _selected == index
+                                              ? Icons
+                                                    .keyboard_arrow_down_rounded
+                                              : Icons.keyboard_arrow_up_rounded,
+                                          size: 16,
+                                        ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                if (large && index == 0 && _refreshingAgents)
-                                  const SizedBox.square(
-                                    dimension: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 1.5,
-                                      semanticsLabel: 'Refreshing subagents',
-                                    ),
-                                  )
-                                else
-                                  Icon(
-                                    _open && _selected == index
-                                        ? Icons.keyboard_arrow_down_rounded
-                                        : Icons.keyboard_arrow_up_rounded,
-                                    size: 16,
-                                  ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
@@ -310,6 +439,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
         36.0,
         MediaQuery.textScalerOf(context).scale(12) * 3,
       );
+      if (_tabs.isEmpty) return const SizedBox.shrink();
       return OverlayPortal(
         controller: _portal,
         // Measure the anchor during overlay layout, after the composer has
@@ -326,7 +456,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
             );
             final panelHeight = math.min(
               available,
-              math.min(470.0, query.size.height * .55),
+              math.min(320.0, query.size.height * .4),
             );
             return Stack(
               children: [
@@ -347,77 +477,114 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
                     showWhenUnlinked: false,
                     child: SizedBox(
                       width: width,
-                      height: panelHeight + height,
-                      child: Stack(
-                        clipBehavior: Clip.none,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: height,
-                            height: panelHeight,
-                            child: AnimatedBuilder(
-                              animation: _reveal,
-                              builder: (_, child) => Align(
-                                alignment: Alignment.bottomCenter,
-                                child: ClipRect(
-                                  child: Align(
-                                    alignment: Alignment.bottomCenter,
-                                    heightFactor: Curves.easeOutCubic.transform(
-                                      _reveal.value,
-                                    ),
-                                    child: child,
+                          AnimatedBuilder(
+                            animation: Listenable.merge([_pages, _reveal]),
+                            builder: (context, _) {
+                              final tabs = _tabs;
+                              final position = _pagePosition;
+                              final from = position.floor();
+                              final to = position.ceil();
+                              double pageHeight(int page) => math.min(
+                                panelHeight,
+                                _contentHeights[tabs[page]] ?? panelHeight,
+                              );
+                              final fitted =
+                                  pageHeight(from) +
+                                  (pageHeight(to) - pageHeight(from)) *
+                                      (position - from);
+                              final scrolling =
+                                  _pages.hasClients &&
+                                  _pages.position.isScrollingNotifier.value;
+                              final ready = _contentHeights.containsKey(
+                                tabs[from],
+                              );
+                              return ClipRect(
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  heightFactor: Curves.easeOutCubic.transform(
+                                    _reveal.value,
                                   ),
-                                ),
-                              ),
-                              child: Material(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.surfaceContainerLow,
-                                shape: RoundedRectangleBorder(
-                                  side: BorderSide(
-                                    color: WingTokens.of(context).border,
-                                  ),
-                                  borderRadius: WingRadius.sheet,
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: WingRadius.sheet,
-                                  child: PageView(
-                                    controller: _pages,
-                                    pageSnapping: false,
-                                    allowImplicitScrolling: true,
-                                    physics: _WorkPagePhysics(
-                                      reducedMotion: _reduced,
-                                    ),
-                                    onPageChanged: (index) {
-                                      if (!_openingPages &&
-                                          _selected != index) {
-                                        setState(() => _selected = index);
-                                        if (index == 0) _refreshAgents();
-                                      }
-                                    },
-                                    children: [
-                                      _WorkPage(
-                                        key: const PageStorageKey(
-                                          'live-subagents',
+                                  child: AnimatedContainer(
+                                    key: const ValueKey('live-work-panel'),
+                                    duration:
+                                        _reduced ||
+                                            _instantHeight ||
+                                            scrolling ||
+                                            !ready
+                                        ? Duration.zero
+                                        : ProfileLiveWorkDock.slideDuration,
+                                    curve: Curves.easeOutCubic,
+                                    height: fitted,
+                                    child: Opacity(
+                                      opacity: ready ? 1 : 0,
+                                      child: Material(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.surfaceContainerLow,
+                                        shape: RoundedRectangleBorder(
+                                          side: BorderSide(
+                                            color: WingTokens.of(
+                                              context,
+                                            ).border,
+                                          ),
+                                          borderRadius: WingRadius.sheet,
                                         ),
-                                        child: widget.subagents,
+                                        child: ClipRRect(
+                                          borderRadius: WingRadius.sheet,
+                                          child: PageView(
+                                            controller: _pages,
+                                            pageSnapping: false,
+                                            allowImplicitScrolling: true,
+                                            physics: _WorkPagePhysics(
+                                              reducedMotion: _reduced,
+                                            ),
+                                            onPageChanged: (page) {
+                                              final id = _tabs[page];
+                                              if (!_openingPages &&
+                                                  _selected != id) {
+                                                setState(() => _selected = id);
+                                                if (id == 0) _refreshAgents();
+                                              }
+                                            },
+                                            children: [
+                                              for (final id in tabs)
+                                                _WorkPage(
+                                                  key: PageStorageKey((
+                                                    'live-work-page',
+                                                    id,
+                                                  )),
+                                                  onHeight: (value) =>
+                                                      _measureContent(
+                                                        id,
+                                                        value,
+                                                      ),
+                                                  child: id == 0
+                                                      ? widget.subagents
+                                                      : widget.tasks,
+                                                ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
-                                      _WorkPage(
-                                        key: const PageStorageKey('live-tasks'),
-                                        child: widget.tasks,
-                                      ),
-                                    ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
+                              );
+                            },
                           ),
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: _bar(width, height, overlay: true),
+                          // The 12dp hit-target extension overlaps the panel;
+                          // only the visible bar sits below its bottom edge.
+                          SizedBox(
+                            height: height,
+                            child: OverflowBox(
+                              alignment: Alignment.bottomCenter,
+                              minHeight: height + 12,
+                              maxHeight: height + 12,
+                              child: _bar(width, height, overlay: true),
+                            ),
                           ),
                         ],
                       ),
@@ -442,8 +609,9 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
 }
 
 class _WorkPage extends StatefulWidget {
-  const _WorkPage({super.key, required this.child});
+  const _WorkPage({super.key, required this.child, required this.onHeight});
   final Widget child;
+  final ValueChanged<double> onHeight;
   @override
   State<_WorkPage> createState() => _WorkPageState();
 }
@@ -456,9 +624,45 @@ class _WorkPageState extends State<_WorkPage>
   Widget build(BuildContext context) {
     super.build(context);
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
-      child: widget.child,
+      child: _WorkContentSize(
+        onHeight: widget.onHeight,
+        child: Padding(padding: const EdgeInsets.all(12), child: widget.child),
+      ),
     );
+  }
+}
+
+/// Measure real laid-out content, including text wrapping, without a duplicate
+/// tree or intrinsic passes through the borrowed panels.
+class _WorkContentSize extends SingleChildRenderObjectWidget {
+  const _WorkContentSize({required this.onHeight, required super.child});
+  final ValueChanged<double> onHeight;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _WorkContentSizeBox(onHeight);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _WorkContentSizeBox renderObject,
+  ) => renderObject.onHeight = onHeight;
+}
+
+class _WorkContentSizeBox extends RenderProxyBox {
+  _WorkContentSizeBox(this.onHeight);
+  ValueChanged<double> onHeight;
+  double? _reported;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    if (_reported == size.height) return;
+    _reported = size.height;
+    final height = size.height;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (attached && _reported == height) onHeight(height);
+    });
   }
 }
 

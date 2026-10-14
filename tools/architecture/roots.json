@@ -14844,6 +14844,11 @@
       "path": "test/support/form_family_capture.dart",
       "area": "test",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/chat_transcript_events.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

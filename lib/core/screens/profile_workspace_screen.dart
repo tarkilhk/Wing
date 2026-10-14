@@ -2100,25 +2100,15 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         ? CompletionDiagnostics.start()
         : 0;
     final liveAnswering = nearby == null && _liveAnswering(chat);
-    final activeEntries = liveAnswering
-        ? chat.runtime.activityEntries
-        : const <ChatActivityEntry>[];
-    final activeCallIds = activeEntries
-        .whereType<ChatToolEntry>()
-        .map((entry) => entry.activity.toolId)
-        .toSet();
-    final displayRows = capturedRows
-        .where(
-          (row) =>
-              row['role'] != 'tool' ||
-              !activeCallIds.contains(row['tool_call_id']),
-        )
-        .toList(growable: false);
-    final timeline = TranscriptTimeline.project(
-      displayRows,
+    final projection = ChatTranscriptProjection(
+      savedRows: nearby ?? chat.reading.messages,
+      streamingMessage: live,
+      runtime: chat.runtime,
       presentationId: chat.reading.messagePresentationId,
-      liveMessageIndex: live == null ? null : displayRows.length - 1,
+      liveAnswering: liveAnswering,
     );
+    final displayRows = projection.rows;
+    final timeline = projection.timeline;
     // Put the following reply's Copy beside its own Activity disclosure. The
     // immutable section identity keeps normal, paged and Find views consistent.
     final activityReplies = <Object, TranscriptTimelineEntry>{};
@@ -2144,20 +2134,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         },
       );
     }
-    final savedCallIds = <String>{
-      for (final row in capturedRows)
-        if (row['role'] == 'tool' && row['tool_call_id'] is String)
-          row['tool_call_id'] as String,
-    };
-    final visibleActivity = activeEntries.isNotEmpty
-        ? activeEntries
-        : chat.runtime.activityEntries
-              .where(
-                (entry) =>
-                    entry is! ChatToolEntry ||
-                    !savedCallIds.contains(entry.activity.toolId),
-              )
-              .toList(growable: false);
+    final visibleActivity = projection.activity;
     final focus = _readingFocus(chat);
     return SkillReaderScope(
       createReader: (document) => controller.skillReader(
@@ -2587,7 +2564,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     children: [
                       ProfileActivityStatus(
                         key: const ValueKey('profile-activity-status'),
-                        chat: chat,
+                        runtime: chat.runtime,
+                        subagents: chat.subagents,
+                        unconfirmedSubagentIds: chat.unconfirmedSubagentIds,
+                        saving: chat.composer.observation.saving,
                       ),
                       ListenableBuilder(
                         listenable: controller.connectionStatus,

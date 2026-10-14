@@ -121,8 +121,8 @@ class BotsFixture {
     }
     final rows = workerMessages[profile] ?? const <Map<String, dynamic>>[];
     final end = (rows.length - offset).clamp(0, rows.length);
-    final start = (end - 100).clamp(0, end);
-    return ProfileHistoryPage(session, rows.sublist(start, end), offset, 100);
+    final start = (end - 20).clamp(0, end);
+    return ProfileHistoryPage(session, rows.sublist(start, end), offset, 20);
   }
 
   static Map<String, dynamic> profile(

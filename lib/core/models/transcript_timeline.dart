@@ -1,3 +1,4 @@
+import 'chat_runtime.dart';
 import 'answer_versions.dart';
 import 'review_notice.dart';
 import 'transcript_message.dart';
@@ -564,4 +565,51 @@ String _reasoning(Map<String, dynamic> row) {
     ].where((text) => text.trim().isNotEmpty).join('\n\n');
   }
   return '';
+}
+
+/// One saved/live projection for normal chats and passive worker inspection.
+final class ChatTranscriptProjection {
+  ChatTranscriptProjection({
+    required List<Map<String, dynamic>> savedRows,
+    required Map<String, dynamic>? streamingMessage,
+    required ChatRuntimeObservation runtime,
+    required Object Function(Map<String, dynamic>) presentationId,
+    required bool liveAnswering,
+  }) {
+    final captured = [...savedRows, ?streamingMessage];
+    final active = liveAnswering
+        ? runtime.activityEntries
+        : const <ChatActivityEntry>[];
+    final activeCalls = active
+        .whereType<ChatToolEntry>()
+        .map((e) => e.activity.toolId)
+        .toSet();
+    rows = List.unmodifiable(
+      captured.where(
+        (row) =>
+            row['role'] != 'tool' || !activeCalls.contains(row['tool_call_id']),
+      ),
+    );
+    timeline = TranscriptTimeline.project(
+      rows,
+      presentationId: presentationId,
+      liveMessageIndex: streamingMessage == null ? null : rows.length - 1,
+    );
+    final savedCalls = savedRows
+        .where((row) => row['role'] == 'tool')
+        .map((row) => row['tool_call_id'])
+        .toSet();
+    activity = List.unmodifiable(
+      active.isNotEmpty
+          ? active
+          : runtime.activityEntries.where(
+              (e) =>
+                  e is! ChatToolEntry ||
+                  !savedCalls.contains(e.activity.toolId),
+            ),
+    );
+  }
+  late final List<Map<String, dynamic>> rows;
+  late final TranscriptTimeline timeline;
+  late final List<ChatActivityEntry> activity;
 }

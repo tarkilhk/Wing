@@ -284,16 +284,21 @@ Output to inspect the runner's command and result.
 
 ## Bot working histories
 
-Internal group-worker sessions stay out of Recents and ordinary chat notifications.
-To inspect one, open the group, choose **⋯ → Bot working histories**, then select
-a bot. The viewer is read only: it loads saved messages without starting a bot
-turn. It uses the normal chat transcript, including reasoning and tool sections,
-automatic older-page loading and the latest-message arrow. Refresh rereads the
-saved history. Back returns to the shared group
-and preserves your draft. Send group messages from the group composer.
+Open **Group menu → Bot working histories**, then choose a bot. This read-only
+viewer follows the bot's current work without starting a turn. It shares normal
+chat reasoning segments, tool timelines, Tasks/Subagents panels and the pulsating
+Wing with the same Thinking, Writing and working status. Live updates arrive
+about twice a second while the bot works; saved messages, older-page loading and
+the latest-message arrow remain available.
+It opens with the newest 20 messages and loads older pages as you scroll.
+Switching back to a bot keeps its loaded history and reading position for this
+visit. Refresh checks saved history and live updates with progress in the header.
+Back closes an open Tasks/Subagents drawer before returning to the group with
+your draft intact. Missing activity from Hermes's bounded replay buffer is
+labelled explicitly. Subagent details show received work and results; worker
+inspection does not offer steering or interruption.
 
-If no current worker history is available, the viewer says so. A failed read
-shows an error with Refresh; it does not claim the history is empty.
+Unavailable history is labelled separately from a failed read. Send messages
+from the shared group or the bot's continuing chat.
 
-See [Administration](ADMINISTRATION.md) for profile configuration and
-[Chats](CHATS.md) for conversation actions.
+[Administration](ADMINISTRATION.md) · [Chats](CHATS.md)

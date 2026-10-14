@@ -1,3 +1,4 @@
+import 'chat_transcript_events.dart';
 import 'group_observations.dart';
 import '../models/server_reference.dart';
 import '../models/composer_reference.dart';
@@ -3068,7 +3069,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         before,
         loadGeneration,
       )) {
-        chat._subagentsError = 'Subagents could not be refreshed. Retry.';
+        chat._subagentsError = 'Subagents could not be refreshed.';
       }
     } finally {
       if (!_closed &&
@@ -7652,34 +7653,23 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
       case 'message.start':
         _invalidateContextDetails(chat);
-        if (!chat.runtime.executionActive) {
-          chat._runtime.beginTurn(submitting: false);
-          chat.reading.cancelReads();
-          chat.reading.updateStreaming('');
-        }
+        applyChatTranscriptEvent(
+          runtime: chat._runtime,
+          reading: chat.reading,
+          type: event.type,
+          data: event.data,
+        );
       case 'message.delta':
-        chat.reading.appendStreaming(event.data['text']?.toString() ?? '');
-        chat._runtime.observeText(event.data['text']?.toString() ?? '');
       case 'message.interim':
-        final text = event.data['text']?.toString() ?? chat.reading.streaming;
-        if (text.isNotEmpty) {
-          chat.reading.appendAssistant(
-            text,
-            turnGeneration: chat._runtime.turnRevision,
-            reasoning: '',
-            responseReused: false,
-            interim: true,
-          );
-        }
-        chat.reading.updateStreaming('');
-        chat._runtime.finishSegment();
       case 'tool.generating':
       case 'tool.start':
       case 'tool.complete':
-        final activity = chat._runtime.observeTool(event.type, event.data);
-        if (activity != null && event.type != 'tool.generating') {
-          chat.reading.observeTool(activity);
-        }
+        applyChatTranscriptEvent(
+          runtime: chat._runtime,
+          reading: chat.reading,
+          type: event.type,
+          data: event.data,
+        );
       case 'todo.updated':
         _applyTodoSnapshot(chat, event.data);
       case 'subagent.spawn_requested':
@@ -7691,7 +7681,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
         _upsertSubagent(chat, event.type, event.data);
       case 'reasoning.delta':
       case 'reasoning.available':
-        chat._runtime.observeReasoning(event.type, event.data);
+        applyChatTranscriptEvent(
+          runtime: chat._runtime,
+          reading: chat.reading,
+          type: event.type,
+          data: event.data,
+        );
       case 'review.summary':
         final sequence = event.envelope['seq'];
         final notice = event.data['text'] is String

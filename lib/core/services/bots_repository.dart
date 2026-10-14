@@ -95,7 +95,7 @@ class BotsRepository {
         return await gateway.history(
           session,
           offset: offset,
-          limit: 100,
+          limit: 20,
           inlineImages: false,
         );
       } finally {
@@ -1034,6 +1034,27 @@ class BotsRepository {
       );
     }
     return page;
+  }
+
+  /// Passive inspection only. Never attaches, resumes or controls the worker.
+  Future<Map<String, dynamic>> groupMemberObservation(
+    BotGroup group,
+    BotGroupMember member,
+    String method,
+    Map<String, dynamic> params,
+  ) {
+    _ownsGroup(group);
+    if (!group.members.any(
+          (candidate) =>
+              candidate.id == member.id && candidate.profile == member.profile,
+        ) ||
+        !const {
+          'session.active_list',
+          'session.events.since',
+        }.contains(method)) {
+      throw ArgumentError('Invalid worker observation');
+    }
+    return _read(member.profile, method, params);
   }
 
   Future<BotGroupPage> groupLog(BotGroup group, {int since = 0}) async {

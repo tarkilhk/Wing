@@ -5,9 +5,28 @@ import '../models/profile_supervision.dart';
 import '../models/session_control.dart';
 import 'profile_workspace_controller.dart';
 
+/// Inspection facts and reads; control eligibility remains in each observation.
+abstract interface class SubagentInspectionSession implements Listenable {
+  ProfileSupervisionObservation get state;
+  Future<void> refreshSubagents();
+  SubagentInspectionDetail openSubagent(String id);
+}
+
+abstract interface class SubagentInspectionDetail implements Listenable {
+  SubagentSupervisionObservation get state;
+  bool get supportsTail;
+  void setActive(bool value);
+  Future<void> refreshTail();
+  void retryTail();
+  Future<bool> steer(String text);
+  Future<void> interrupt();
+  void dispose();
+}
+
 /// Captured supervision workflow; borrows canonical live facts and transport.
 /// One instance is shared by the current chat's goal, work and subagent views.
-final class ProfileSupervisionSession extends ChangeNotifier {
+final class ProfileSupervisionSession extends ChangeNotifier
+    implements SubagentInspectionSession {
   ProfileSupervisionSession({
     required this._controller,
     required ProfileChat chat,
@@ -30,6 +49,7 @@ final class ProfileSupervisionSession extends ChangeNotifier {
       _controller.owns(_chat.key) &&
       identical(_controller.findNotificationChat(_chat.key), _chat) &&
       _chat.runtime.runtimeId == _runtime;
+  @override
   ProfileSupervisionObservation get state => ProfileSupervisionObservation(
     key: _chat.key,
     subagents: _chat.subagents,
@@ -69,6 +89,7 @@ final class ProfileSupervisionSession extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> refreshSubagents() async {
     if (!active) return;
     try {
@@ -214,6 +235,7 @@ final class ProfileSupervisionSession extends ChangeNotifier {
     _changed();
   }
 
+  @override
   SubagentSupervisionDetail openSubagent(String id) {
     final activity = _chat.subagents.where((item) => item.id == id).firstOrNull;
     if (!active || activity == null) {
@@ -297,7 +319,8 @@ final class GoalCriterionEditor {
 
 /// One issued detail retains only this route's live tail; it never duplicates
 /// the parent roster or execution owner. Closing revokes further polling/send.
-final class SubagentSupervisionDetail extends ChangeNotifier {
+final class SubagentSupervisionDetail extends ChangeNotifier
+    implements SubagentInspectionDetail {
   SubagentSupervisionDetail._(this._owner, this._initial) {
     _owner.addListener(_changed);
   }
@@ -318,6 +341,9 @@ final class SubagentSupervisionDetail extends ChangeNotifier {
   GatewaySubagentActivity? get _activity => _owner._chat.subagents
       .where((item) => item.id == _initial.id)
       .firstOrNull;
+  @override
+  bool get supportsTail => true;
+  @override
   SubagentSupervisionObservation get state {
     final activity = _activity ?? _initial;
     final unconfirmed = _owner._chat.unconfirmedSubagentIds.contains(
@@ -356,6 +382,7 @@ final class SubagentSupervisionDetail extends ChangeNotifier {
     }
   }
 
+  @override
   void setActive(bool value) {
     _active = value;
     if (!value || !_current) {
@@ -372,6 +399,7 @@ final class SubagentSupervisionDetail extends ChangeNotifier {
     );
   }
 
+  @override
   Future<void> refreshTail() async {
     if (!_current || _loading) return;
     _loading = true;
@@ -407,7 +435,8 @@ final class SubagentSupervisionDetail extends ChangeNotifier {
     }
   }
 
-  void retryTail() {
+  @override
+  Future<void> retryTail() async {
     if (!_current) return;
     _failures = 0;
     _error = null;
@@ -416,6 +445,7 @@ final class SubagentSupervisionDetail extends ChangeNotifier {
     setActive(_active);
   }
 
+  @override
   Future<bool> steer(String text) async {
     final message = text.trim();
     if (message.isEmpty || _steering || !state.acceptsSteer) return false;
@@ -449,6 +479,7 @@ final class SubagentSupervisionDetail extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> interrupt() async {
     if (_interrupting || !state.canControl) return;
     _interrupting = true;
