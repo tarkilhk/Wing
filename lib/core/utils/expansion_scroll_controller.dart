@@ -181,7 +181,9 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
       _expansionMinScrollExtent = target < minScrollExtent ? target : 0;
       _expansionScrollExtent = target > 0 ? target : 0;
       if ((target - pixels).abs() > 0.01) {
-        correctBy(target - pixels);
+        // Reader movement already includes any expansion height consumed above.
+        // Do not subtract it again into the next pass's pending correction.
+        correctPixels(target);
         return false;
       }
     } else if (axisDirection == AxisDirection.up && delta.abs() > 0.01) {

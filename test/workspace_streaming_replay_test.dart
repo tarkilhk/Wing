@@ -1,3 +1,7 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
@@ -9,6 +13,7 @@ import 'package:wing/core/widgets/profile_live_work_dock.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
 import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
+import 'package:wing/core/utils/expansion_scroll_controller.dart';
 
 import '../tools/performance/streaming_replay_fixture.dart';
 import '../tools/performance/workspace_streaming_replay.dart';
@@ -18,17 +23,28 @@ Future<WorkspaceStreamingReplayState> _preparedWorkspace(
   WidgetTester tester, {
   int? historyCount,
   bool work = false,
+  Brightness brightness = Brightness.light,
+  double scale = 1,
 }) async {
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-  tester.view.physicalSize = const Size(390, 800);
+  tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final key = GlobalKey<WorkspaceStreamingReplayState>();
   await tester.pumpWidget(
-    MaterialApp(
-      theme: wingTheme(Brightness.light),
-      home: WorkspaceStreamingReplay(key: key),
+    RepaintBoundary(
+      key: const ValueKey('workspace-replay-capture'),
+      child: MaterialApp(
+        theme: wingTheme(brightness),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
+        home: WorkspaceStreamingReplay(key: key),
+      ),
     ),
   );
   Map<String, Object?>? result;
@@ -67,46 +83,109 @@ bool _canAddListener(ChangeNotifier notifier) {
   }
 }
 
-void main() {
-  testWidgets('completion retains the already rendered work-run answer', (
-    tester,
-  ) async {
-    final state = await _preparedWorkspace(tester, work: true);
-    final body = find.byWidgetPredicate(
-      (widget) =>
-          widget is MarkdownMessageContent &&
-          widget.data == streamingReplayInitial(),
-    );
-    final original = tester.element(body);
-    final prose = find.descendant(
-      of: body,
-      matching: find.byType(BlockReusingMarkdownBody),
-    );
-    final originalProse = tester
-        .widgetList<BlockReusingMarkdownBody>(prose)
-        .toList();
-    final paragraph = find.descendant(
-      of: prose.first,
-      matching: find.byType(SelectableText),
-    );
-    final originalParagraph = tester.widget<SelectableText>(paragraph.first);
-    state.complete();
-    await tester.pump();
-    await tester.settleMarkdown();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(state.controller!.current!.chat!.runtime.executionActive, isFalse);
-    expect(tester.element(body), same(original));
-    expect(
-      tester.widgetList<BlockReusingMarkdownBody>(prose).first,
-      same(originalProse.first),
-    );
-    expect(
-      tester.widget<SelectableText>(paragraph.first),
-      same(originalParagraph),
-    );
-    expect(tester.widget<MarkdownMessageContent>(body).streaming, isFalse);
-    await tester.pumpWidget(const SizedBox.shrink());
+Future<void> captureCompletion(WidgetTester tester, String name) async {
+  if (!const bool.fromEnvironment('CAPTURE_COMPLETION_LAYOUT')) return;
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(const ValueKey('workspace-replay-capture')),
+  );
+  await tester.runAsync(() async {
+    final image = await boundary.toImage(pixelRatio: 2);
+    try {
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      final target = File('build/design-previews/completion-layout/$name.png');
+      await target.parent.create(recursive: true);
+      await target.writeAsBytes(bytes!.buffer.asUint8List());
+    } finally {
+      image.dispose();
+    }
   });
+}
+
+void main() {
+  setUpAll(() async {
+    if (!const bool.fromEnvironment('CAPTURE_COMPLETION_LAYOUT')) return;
+    const directory = String.fromEnvironment('CAPTURE_FONT_DIR');
+    const monoFont = String.fromEnvironment('CAPTURE_MONO_FONT');
+    for (final entry in {
+      'Roboto': '$directory/Roboto-Regular.ttf',
+      'MaterialIcons': '$directory/MaterialIcons-Regular.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
+      'monospace': monoFont,
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            Future.value(
+              ByteData.sublistView(await File(entry.value).readAsBytes()),
+            ),
+          ))
+          .load();
+    }
+  });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('completion retains the already rendered work-run answer '
+          '${brightness.name} $scale', (tester) async {
+        final state = await _preparedWorkspace(
+          tester,
+          work: true,
+          brightness: brightness,
+          scale: scale,
+        );
+        final body = find.byWidgetPredicate(
+          (widget) =>
+              widget is MarkdownMessageContent &&
+              widget.data == streamingReplayInitial(),
+        );
+        final original = tester.element(body);
+        final answerSlot = find
+            .ancestor(of: body, matching: find.byType(TranscriptScrollAnchor))
+            .first;
+        final originalSlot = tester.element(answerSlot);
+        final prose = find.descendant(
+          of: body,
+          matching: find.byType(BlockReusingMarkdownBody),
+        );
+        final originalProse = tester
+            .widgetList<BlockReusingMarkdownBody>(prose)
+            .toList();
+        final paragraph = find.descendant(
+          of: prose.first,
+          matching: find.byType(SelectableText),
+        );
+        final originalParagraph = tester.widget<SelectableText>(
+          paragraph.first,
+        );
+        await captureCompletion(tester, 'streaming-${brightness.name}-$scale');
+        state.complete();
+        await tester.pump();
+        await tester.settleMarkdown();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(
+          state.controller!.current!.chat!.runtime.executionActive,
+          isFalse,
+        );
+        expect(state.controller!.current!.chat!.markReadFailed, isFalse);
+        expect(state.ready()['readReceiptWrites'], greaterThan(0));
+        expect(tester.element(body), same(original));
+        expect(
+          tester.element(answerSlot),
+          same(originalSlot),
+          reason:
+              'Completion updates the same transcript slot without reparenting.',
+        );
+        expect(
+          tester.widgetList<BlockReusingMarkdownBody>(prose).first,
+          same(originalProse.first),
+        );
+        expect(
+          tester.widget<SelectableText>(paragraph.first),
+          same(originalParagraph),
+        );
+        expect(tester.widget<MarkdownMessageContent>(body).streaming, isFalse);
+        await captureCompletion(tester, 'complete-${brightness.name}-$scale');
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
 
   testWidgets('answer chunks leave an open work drawer unchanged', (
     tester,
@@ -116,6 +195,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey(('live-work-tab', 0, false))));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
+    // Finish the drawer's post-layout content measurement before observing
+    // rebuilds caused by answer chunks.
+    await tester.pump();
     final panel = tester.widget<ProfileSubagentPanel>(
       find.byType(ProfileSubagentPanel),
     );

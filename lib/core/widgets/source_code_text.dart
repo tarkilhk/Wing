@@ -74,8 +74,18 @@ class _SourceCodeTextState extends State<SourceCodeText> {
       return;
     }
     ++_revision;
-    _document = SourceDocument.literal(widget.text);
-    _controller.setDocument(_document, _segmentLength, replaceText: true);
+    // Presentation changes (including final highlighting) keep the editor's
+    // line vector and selection. Replace visible text only when it changes.
+    if (oldWidget.text != widget.text) {
+      _document = SourceDocument.literal(widget.text);
+      _controller.setDocument(_document, _segmentLength, replaceText: true);
+    } else if (!widget.highlightingEnabled ||
+        oldWidget.language != widget.language ||
+        oldWidget.numberedLines != widget.numberedLines) {
+      _document = SourceDocument.literal(widget.text);
+      _controller.setDocument(_document, _segmentLength);
+      _refreshViewport();
+    }
     _ready = false;
     _debounce?.cancel();
     if (!widget.highlightingEnabled || !sourceHighlightEligible(_request)) {

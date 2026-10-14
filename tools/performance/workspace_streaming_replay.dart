@@ -97,6 +97,9 @@ class _ReplayGateway extends ProfileBrowserFixture {
 
   List<Map<String, dynamic>> rows;
   final bool work;
+  final _createdAt = DateTime.now().millisecondsSinceEpoch / 1000;
+  double? _readAt;
+  int readReceiptWrites = 0;
   List<Map<String, dynamic>> get agents => [
     if (work)
       for (var index = 0; index < 2; index++)
@@ -117,6 +120,19 @@ class _ReplayGateway extends ProfileBrowserFixture {
       connect: base.connect,
       close: base.close,
       get: base.read,
+      ownedPatch: (path, body, canDispatch, onDispatched) async {
+        if (!canDispatch() ||
+            path != 'sessions/new-chat' ||
+            body.length != 2 ||
+            body['profile'] != scope.profileName ||
+            body['unread'] != false) {
+          throw StateError('Invalid offline read acknowledgement');
+        }
+        onDispatched();
+        _readAt = DateTime.now().millisecondsSinceEpoch / 1000;
+        readReceiptWrites++;
+        return {'ok': true};
+      },
       rpc: (method, params) async {
         if (method == 'subagent.list') return {'subagents': agents};
         final response = await base.call(method, params);
@@ -142,7 +158,8 @@ class _ReplayGateway extends ProfileBrowserFixture {
       'id': 'new-chat',
       'title': 'Offline workspace replay',
       'profile': profile,
-      'last_active': 1800000000,
+      'last_active': _createdAt,
+      if (_readAt != null) 'last_read_at': _readAt,
     },
   ];
 }
@@ -192,6 +209,8 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     'selectedChatMatches': identical(controller?.current?.chat, _chat),
     'runtimeId': _chat?.runtime.runtimeId,
     'nativeDraftStorage': false,
+    'readReceiptWrites': _fixture?.readReceiptWrites ?? 0,
+    'markReadFailed': _chat?.markReadFailed ?? false,
   };
 
   @override
@@ -205,6 +224,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
         'prepare',
         'controls',
         'replay',
+        'recordedFrames',
         'prepareIdle',
         'startProbe',
         'stopProbe',
@@ -217,6 +237,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
             final result = switch (action) {
               'prepare' => await prepare(work: parameters['work'] == 'true'),
               'controls' => controls(),
+              'recordedFrames' => recordedFrames(),
               'replay' => await replay(
                 label: parameters['label'] ?? '',
                 keyboardOpen: parameters['keyboard'] != 'closed',
@@ -246,6 +267,24 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     if (_collecting) {
       _frames.addAll(frames);
     }
+  }
+
+  /// Includes the settling tail already collected after the replay's budget
+  /// window. Read only after measurement, so delayed work cannot hide a hitch.
+  Map<String, Object> recordedFrames() {
+    if (_running || _preparing || _probing) {
+      throw StateError('Frame recording is still in progress');
+    }
+    return {
+      'frames': [
+        for (final frame in _frames)
+          {
+            'startUs': frame.timestampInMicroseconds(FramePhase.buildStart),
+            'buildUs': frame.buildDuration.inMicroseconds,
+            'rasterUs': frame.rasterDuration.inMicroseconds,
+          },
+      ],
+    };
   }
 
   void _countProbeNotification() => _probeNotifications++;

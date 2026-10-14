@@ -21,6 +21,7 @@ import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
+import 'package:wing/core/widgets/transcript_latest_button.dart';
 
 import 'helpers/pump_markdown_widget.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
@@ -326,10 +327,27 @@ void main() {
         expect(find.byType(PageView), findsNothing);
         expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
         expect(find.text('Keep my draft'), findsOneWidget);
+        keyboard.value = 0;
+        await settle();
+        // The transcript is lazy: inspect retention while the tool is visible,
+        // rather than expecting an offscreen row to remain mounted.
+        await tester.scrollUntilVisible(
+          find.byType(ProfileToolCall),
+          120,
+          scrollable: find
+              .descendant(
+                of: find.byType(ProfileTranscript),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await settle();
         final liveTool = tester.element(find.byType(ProfileToolCall));
         host.event('a', 'message.delta', {'text': 'The first answer text.'});
         await settle();
         expect(tester.element(find.byType(ProfileToolCall)), same(liveTool));
+        await tester.tap(find.byType(TranscriptLatestButton));
+        await settle();
         expect(
           find.text('The first answer text.', findRichText: true),
           findsOneWidget,

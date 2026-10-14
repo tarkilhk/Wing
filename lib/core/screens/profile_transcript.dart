@@ -93,6 +93,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   final _viewport = GlobalKey();
   final _focusedRow = GlobalKey();
   final _tail = GlobalKey();
+  final _executionRow = GlobalKey();
   final _rows = <Object, GlobalKey>{};
   final _messageBodies = <Object, GlobalKey>{};
   final _rowHeights = <Key, double>{};
@@ -358,7 +359,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     _newestId = newest;
     _streaming = widget.reader.streaming;
     _segment = widget.reader.historySessionId;
-    _preserveReaderAnchor(growingRow);
+    if (_scroll.hasExpansionAnchor &&
+        oldWidget.timeline.hasLiveMessage != widget.timeline.hasLiveMessage) {
+      // First-token insertion can move an expanded sibling without changing
+      // its height. Retain its content position across this structural change.
+      _scroll.preserveReaderAnchor(_scroll.expansionRow);
+    } else {
+      _preserveReaderAnchor(growingRow);
+    }
     _streamingPresentationId = widget.timeline.entries
         .where((entry) => entry.streaming)
         .firstOrNull
@@ -412,7 +420,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           return;
         }
       }
-      for (final key in {..._rows.values, _tail}) {
+      for (final key in {..._rows.values, _tail, _executionRow}) {
         final box = key.currentContext?.findRenderObject();
         if (box is! RenderBox || !box.hasSize) continue;
         final y = box.localToGlobal(Offset.zero).dy;
@@ -456,17 +464,18 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final reader = widget.reader;
     _scheduleNoticeVisibility();
     final timeline = widget.timeline;
-    final liveReply = widget.liveExecution == null
+    final rows = timeline.sections.reversed.toList();
+    final liveAnswerIndex = rows.indexWhere(
+      (section) => !section.isActivity && section.messages.last.streaming,
+    );
+    // Live answers occupy their ordinary keyed transcript row from the first
+    // chunk. Keep work in its own sibling row so completion never reparents the
+    // answer, and first-token arrival never reparents the live work controls.
+    final executionIndex = widget.liveExecution == null
         ? null
-        : timeline.sections
-              .where(
-                (section) =>
-                    !section.isActivity && section.messages.last.streaming,
-              )
-              .firstOrNull;
-    final rows = timeline.sections.reversed
-        .where((section) => !identical(section, liveReply))
-        .toList();
+        : liveAnswerIndex < 0
+        ? 0
+        : liveAnswerIndex + 1;
     final joinCurrentActivity =
         widget.liveExecution == null && timeline.joinsCurrentActivity;
     final hasCurrentActivity =
@@ -495,30 +504,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               ],
             ),
           ),
-        ),
-      if (widget.liveExecution != null)
-        // Keep the live run mounted when the first answer chunk arrives.
-        // Moving it from the tail into a new message row loses card state.
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
-              child: widget.liveExecution!,
-            ),
-            if (liveReply != null)
-              Padding(
-                padding: EdgeInsets.only(
-                  left: BotConversationScope.maybeOf(context) == null
-                      ? WingSpacing.lg
-                      : 12,
-                  right: BotConversationScope.maybeOf(context) == null
-                      ? WingSpacing.xs
-                      : 12,
-                ),
-                child: _messageBody(liveReply.messages.last),
-              ),
-          ],
         ),
       ...widget.tail.map(
         (child) => Padding(
@@ -552,7 +537,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         reader.nextHistoryOffset == null &&
         reader.streaming.isEmpty &&
         !widget.turnAdmissionBlocked &&
-        tail.isEmpty;
+        tail.isEmpty &&
+        executionIndex == null;
     final keysStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
         : 0;
@@ -591,12 +577,21 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       usedKeys.add(key);
     }
     _rowHeights.removeWhere(
-      (key, _) => key != _tail && !usedKeys.contains(key),
+      (key, _) =>
+          key != _tail &&
+          !(executionIndex != null && key == _executionRow) &&
+          !usedKeys.contains(key),
     );
     final indices = <Key, int>{
       if (tail.isNotEmpty) _tail: 0,
-      for (var i = 0; i < keys.length; i++) keys[i]: tail.length + i,
-      const ValueKey('history-edge'): tail.length + rows.length,
+      if (executionIndex != null) _executionRow: tail.length + executionIndex,
+      for (var i = 0; i < keys.length; i++)
+        keys[i]:
+            tail.length +
+            i +
+            (executionIndex != null && i >= executionIndex ? 1 : 0),
+      const ValueKey('history-edge'):
+          tail.length + rows.length + (executionIndex == null ? 0 : 1),
     };
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.finish(
@@ -671,10 +666,33 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                   ? const EdgeInsets.symmetric(vertical: WingSpacing.sm)
                   : const EdgeInsets.only(top: 28, bottom: 8),
               findChildIndexCallback: (key) => indices[key],
-              itemCount: tail.length + rows.length + 1,
+              itemCount:
+                  tail.length +
+                  rows.length +
+                  1 +
+                  (executionIndex == null ? 0 : 1),
               itemBuilder: (_, index) {
                 if (index < tail.length) return tail[index];
-                final rowIndex = index - tail.length;
+                final contentIndex = index - tail.length;
+                if (executionIndex != null && contentIndex == executionIndex) {
+                  return TranscriptScrollAnchor(
+                    key: _executionRow,
+                    initialHeight: _rowHeights[_executionRow] ?? 0,
+                    onHeightChanged: (row, height) =>
+                        _recordRowHeight(_executionRow, row, height),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: WingSpacing.lg,
+                      ),
+                      child: widget.liveExecution!,
+                    ),
+                  );
+                }
+                final rowIndex =
+                    contentIndex -
+                    (executionIndex != null && contentIndex > executionIndex
+                        ? 1
+                        : 0);
                 if (rowIndex < rows.length) {
                   final section = rows[rowIndex];
                   final row = section.messages.last;
