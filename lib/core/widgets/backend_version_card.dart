@@ -118,9 +118,32 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
       final check = controller.check;
       final channel = controller.channel;
       final status = controller.status;
+      final tokens = WingTokens.of(context);
+      final initialCheck =
+          check == null && controller.phase == BackendUpdatePhase.idle;
+      final checking =
+          controller.checking ||
+          initialCheck ||
+          (controller.channelSaving && check == null);
+      final current =
+          controller.phase == BackendUpdatePhase.ready &&
+          check?.updateAvailable == false &&
+          check?.behind == 0;
+      final checkMessage =
+          controller.phase == BackendUpdatePhase.unknown &&
+              !controller.requestOutstanding &&
+              status == null
+          ? controller.message
+          : null;
+      final hideAvailability =
+          checking &&
+          (check == null ||
+              (check.updateAvailable != true &&
+                  !(check.updateAvailable == false && check.behind == 0)));
       final connectionLabel = widget.connectionLabel ?? 'Hermes backend';
       final busy =
-          controller.checking ||
+          checking ||
+          controller.versionLoading ||
           controller.channelSaving ||
           controller.starting ||
           controller.statusLoading;
@@ -132,37 +155,79 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
             ? 'Starting backend update'
             : controller.statusLoading
             ? 'Checking update progress'
+            : controller.versionLoading && !checking
+            ? 'Loading server version'
             : 'Checking for updates',
         child: Card(
+          margin: EdgeInsets.zero,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(
+              WingSpacing.md,
+              WingSpacing.md,
+              WingSpacing.md,
+              WingSpacing.sm,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.cloud_outlined),
-                    SizedBox(width: 12),
-                    Expanded(child: Text('Server version')),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Icon(
+                        Icons.cloud_outlined,
+                        size: 24,
+                        color: tokens.muted,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Server version',
+                            style: tokens.typography.label.copyWith(
+                              color: tokens.muted,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            controller.installedVersion ??
+                                (controller.versionLoading || initialCheck
+                                    ? '—'
+                                    : 'Version unavailable'),
+                            style: tokens.typography.title,
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  controller.installedVersion ??
-                      (controller.versionLoading
-                          ? 'Loading version…'
-                          : 'Current version unavailable'),
-                ),
+                const SizedBox(height: WingSpacing.sm),
                 if (controller.versionStale)
                   const Text(
                     'Last known version · server could not be reached',
                   ),
                 if (check?.installMethod case final method?)
-                  Text('Install method: $method'),
+                  Text(
+                    'Install method: $method',
+                    style: tokens.typography.label.copyWith(
+                      color: tokens.muted,
+                    ),
+                  ),
                 if (channel != null)
                   Row(
                     children: [
-                      Expanded(child: Text(channel.label)),
+                      Expanded(
+                        child: Text(
+                          channel.label,
+                          style: tokens.typography.label.copyWith(
+                            color: tokens.muted,
+                          ),
+                        ),
+                      ),
                       if (channel.canSelect)
                         StudioButtonPress(
                           child: IconButton(
@@ -176,33 +241,59 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                     ],
                   ),
                 if (channel?.targetVersion case final version?)
-                  Text('Release: $version'),
-                const SizedBox(height: 4),
-                Text(_checkStatus(check, channel, controller.phase)),
-                if (check?.canApply == false)
-                  const Text('Updates must be applied from the server host.'),
-                if (check?.updateAvailable == true)
-                  StudioButtonPress(
-                    child: IconButton(
-                      tooltip: 'Changes in this update',
-                      onPressed: controller.checking || controller.starting
-                          ? null
-                          : () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => BackendUpdateChangesScreen(
-                                  check: check!,
-                                  connectionLabel: connectionLabel,
-                                ),
-                              ),
-                            ),
-                      icon: const Icon(Icons.notes_outlined, size: 18),
+                  Text(
+                    'Release: $version',
+                    style: tokens.typography.label.copyWith(
+                      color: tokens.muted,
                     ),
                   ),
-                if (controller.phase != BackendUpdatePhase.idle &&
+                const Divider(height: WingSpacing.lg),
+                if (checkMessage != null)
+                  StudioError(checkMessage)
+                else
+                  Visibility(
+                    visible: !hideAvailability,
+                    maintainSize: true,
+                    maintainState: true,
+                    maintainAnimation: true,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Icon(
+                            current
+                                ? Icons.check_circle_outline
+                                : check?.updateAvailable == true
+                                ? Icons.system_update_alt
+                                : Icons.help_outline,
+                            size: 20,
+                            color: current
+                                ? tokens.success
+                                : check?.updateAvailable == true
+                                ? tokens.accent
+                                : tokens.muted,
+                          ),
+                        ),
+                        const SizedBox(width: WingSpacing.md),
+                        Expanded(
+                          child: Text(
+                            _checkStatus(check, channel, controller.phase),
+                            style: tokens.typography.body,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (check?.canApply == false)
+                  const Text('Updates must be applied from the server host.'),
+                if (!controller.starting &&
+                    controller.phase != BackendUpdatePhase.idle &&
                     controller.phase != BackendUpdatePhase.ready &&
                     controller.message == null)
                   Text(_phaseLabel(controller.phase)),
-                if (controller.message case final message?)
+                if (controller.message case final message?
+                    when message != checkMessage)
                   const {
                         BackendUpdatePhase.failed,
                         BackendUpdatePhase.refused,
@@ -232,44 +323,67 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                       ),
                     ],
                   ),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    StudioButtonPress(
-                      child: IconButton(
-                        tooltip: 'Check for updates',
-                        onPressed: busy || controller.requestOutstanding
-                            ? null
-                            : controller.checkForUpdate,
-                        icon: const Icon(Icons.search, size: 18),
-                      ),
-                    ),
-                    if (check?.canStart == true &&
-                        channel?.error == null &&
-                        channel?.targetSha != null)
-                      StudioButtonPress(
-                        child: IconButton.filled(
-                          tooltip: 'Update backend',
-                          onPressed: controller.canStart
-                              ? _confirmAndStart
-                              : null,
-                          icon: const Icon(Icons.system_update_alt, size: 18),
-                        ),
-                      ),
-                    if (controller.requestOutstanding ||
-                        controller.status != null)
+                const SizedBox(height: 8),
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
                       StudioButtonPress(
                         child: IconButton(
-                          tooltip: 'Check update progress',
-                          onPressed:
-                              controller.statusLoading || controller.starting
+                          tooltip: 'Check for updates',
+                          onPressed: busy || controller.requestOutstanding
                               ? null
-                              : controller.refreshStatus,
-                          icon: const Icon(Icons.refresh, size: 18),
+                              : controller.checkForUpdate,
+                          icon: const Icon(Icons.search, size: 18),
                         ),
                       ),
-                  ],
+                      if (check?.updateAvailable == true)
+                        StudioButtonPress(
+                          child: IconButton(
+                            tooltip: 'Changes in this update',
+                            onPressed:
+                                controller.checking || controller.starting
+                                ? null
+                                : () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) =>
+                                          BackendUpdateChangesScreen(
+                                            check: check!,
+                                            connectionLabel: connectionLabel,
+                                          ),
+                                    ),
+                                  ),
+                            icon: const Icon(Icons.notes_outlined, size: 18),
+                          ),
+                        ),
+                      if (check?.canStart == true &&
+                          channel?.error == null &&
+                          channel?.targetSha != null)
+                        StudioButtonPress(
+                          child: IconButton.filled(
+                            tooltip: 'Update backend',
+                            onPressed: controller.canStart
+                                ? _confirmAndStart
+                                : null,
+                            icon: const Icon(Icons.system_update_alt, size: 18),
+                          ),
+                        ),
+                      if (controller.requestOutstanding ||
+                          controller.status != null)
+                        StudioButtonPress(
+                          child: IconButton(
+                            tooltip: 'Check update progress',
+                            onPressed:
+                                controller.statusLoading || controller.starting
+                                ? null
+                                : controller.refreshStatus,
+                            icon: const Icon(Icons.refresh, size: 18),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),

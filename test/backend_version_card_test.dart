@@ -1,5 +1,6 @@
 import 'support/backend_update_channel_fixture.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
+import 'package:wing/core/widgets/studio_error.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -48,6 +49,7 @@ class _UpdateHost {
     },
     'summary': 'success',
   };
+  Completer<Map<String, dynamic>>? pendingHealth;
   Completer<Map<String, dynamic>>? pendingCheck;
   Completer<Map<String, dynamic>>? pendingStatus;
   bool statusFails = false;
@@ -61,6 +63,7 @@ class _UpdateHost {
       final metadata = source.read(endpoint, query);
       if (metadata != null) return metadata;
       if (endpoint == 'health') {
+        if (pendingHealth != null) return pendingHealth!.future;
         return {
           'ok': true,
           'version': checkResponse['current_version'],
@@ -158,6 +161,149 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'version route ${brightness.name} $scale loading, unknown, retry and success',
+        (tester) async {
+          final semantics = tester.ensureSemantics();
+          try {
+            final health = Completer<Map<String, dynamic>>();
+            final check = Completer<Map<String, dynamic>>();
+            final host = _UpdateHost()
+              ..pendingHealth = health
+              ..pendingCheck = check;
+            tester.view.physicalSize = Size(scale == 2 ? 320 : 390, 844);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: wingTheme(brightness),
+                debugShowCheckedModeBanner: false,
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(scale),
+                    disableAnimations: scale == 2,
+                  ),
+                  child: RepaintBoundary(
+                    key: const ValueKey('channels-capture'),
+                    child: child!,
+                  ),
+                ),
+                home: VersionsUpdatesScreen(
+                  controllerFactory: (_) =>
+                      VersionsController(gateway: host.gateway),
+                ),
+              ),
+            );
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 200));
+            expect(find.text('Loading version…'), findsNothing);
+            expect(find.text('—'), findsOneWidget);
+            expect(find.text('Checking for updates…'), findsNothing);
+            expect(
+              find.text('Update availability unknown.').hitTestable(),
+              findsNothing,
+            );
+            expect(
+              find.bySemanticsLabel('Update availability unknown.'),
+              findsNothing,
+            );
+            expect(find.byType(StudioLoading), findsOneWidget);
+            await snapshot(tester, '${brightness.name}-$scale-initial');
+
+            host.pendingHealth = null;
+            health.complete({
+              'ok': true,
+              'version': '0.22.0',
+              'commit': BackendUpdateChannelFixture.currentSha,
+            });
+            await tester.pump();
+            await tester.pump();
+            expect(find.text('0.22.0'), findsOneWidget);
+            expect(find.text('Checking for updates…'), findsNothing);
+            expect(find.byType(StudioLoading), findsOneWidget);
+            await snapshot(tester, '${brightness.name}-$scale-version-ready');
+
+            check.complete({
+              'current_version': '0.22.0',
+              'behind': -1,
+              'can_apply': false,
+            });
+            await tester.pumpAndSettle();
+            expect(find.text('Update availability unknown.'), findsOneWidget);
+            expect(find.byType(StudioLoading), findsNothing);
+            await snapshot(tester, '${brightness.name}-$scale-unknown');
+
+            final retry = Completer<Map<String, dynamic>>();
+            host.pendingCheck = retry;
+            await tester.ensureVisible(find.byTooltip('Check for updates'));
+            final header = tester.getRect(find.text('Versions & updates'));
+            await tester.tap(find.byTooltip('Check for updates'));
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 200));
+            expect(find.text('Checking for updates…'), findsNothing);
+            expect(
+              find.text('Update availability unknown.').hitTestable(),
+              findsNothing,
+            );
+            expect(
+              find.bySemanticsLabel('Update availability unknown.'),
+              findsNothing,
+            );
+            expect(find.byType(StudioLoading), findsOneWidget);
+            expect(tester.getRect(find.text('Versions & updates')), header);
+            final button = tester.widget<IconButton>(
+              find.byWidgetPredicate(
+                (w) => w is IconButton && w.tooltip == 'Check for updates',
+              ),
+            );
+            expect(button.onPressed, isNull);
+            retry.completeError(StateError('unreachable'));
+            await tester.pumpAndSettle();
+            expect(find.text('Could not check for updates.'), findsNothing);
+            expect(
+              find.text('Update availability could not be checked. Try again.'),
+              findsOneWidget,
+            );
+            expect(find.byType(StudioError), findsOneWidget);
+            expect(find.byType(StudioLoading), findsNothing);
+            await snapshot(tester, '${brightness.name}-$scale-check-failed');
+
+            host.pendingCheck = null;
+            host.checkResponse = {
+              ..._available,
+              'behind': 0,
+              'update_available': false,
+            };
+            await tester.tap(find.byTooltip('Check for updates'));
+            await tester.pumpAndSettle();
+            expect(find.text('Up to date on main'), findsOneWidget);
+            expect(find.byType(StudioLoading), findsNothing);
+            expect(tester.takeException(), isNull);
+            await snapshot(tester, '${brightness.name}-$scale-current');
+
+            host.checkResponse = _available;
+            await tester.tap(find.byTooltip('Check for updates'));
+            await tester.pumpAndSettle();
+            await tester.ensureVisible(find.byTooltip('Update backend'));
+            await tester.tap(find.byTooltip('Update backend'));
+            await tester.pumpAndSettle();
+            final startCheck = Completer<Map<String, dynamic>>();
+            host.pendingCheck = startCheck;
+            await tester.tap(find.byTooltip('Update backend').last);
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 200));
+            expect(find.byType(StudioLoading), findsOneWidget);
+            expect(find.text('Starting backend update…'), findsNothing);
+            expect(find.text('Checking for updates…'), findsNothing);
+            startCheck.complete(_available);
+            await tester.pumpAndSettle();
+            expect(find.byType(StudioLoading), findsNothing);
+            expect(host.posts, hasLength(1));
+          } finally {
+            semantics.dispose();
+          }
+        },
+      );
       testWidgets(
         'channel route ${brightness.name} $scale held refresh, save failure and retry',
         (tester) async {
