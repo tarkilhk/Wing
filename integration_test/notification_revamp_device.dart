@@ -4,6 +4,14 @@ library;
 
 import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:flutter/services.dart';
+import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/models/chat_notification_content.dart';
+import 'package:wing/core/models/group_notification.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/models/notification_focus.dart';
+import 'package:wing/core/services/native_notification_sink.dart';
+import 'package:wing/core/services/turn_notification_service.dart';
 
 import 'dart:async';
 import '../test/support/composer_fixture.dart';
@@ -125,6 +133,15 @@ Future<void> main() async {
 
   var sequence = prefs.getInt('notification_qa_sequence') ?? 0;
   Completer<void>? notificationHistory;
+  final nativeGroupTarget = GroupNotificationTarget(
+    WorkspaceScope(
+      connectionId: connection.id,
+      connectionIdentity: controller.connectionIdentity,
+      profileName: 'a',
+    ),
+    'native-render-qa-room',
+  );
+  final nativeGroupChat = jsonEncode(nativeGroupTarget.toJson());
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 18766);
   await for (final request in server) {
     try {
@@ -132,6 +149,49 @@ Future<void> main() async {
           ? jsonDecode(await utf8.decoder.bind(request).join()) as Map
           : const {};
       switch (request.uri.path) {
+        case '/native-group-approval':
+          final action = BotGroupAction(
+            kind: 'approval',
+            task: 'qa-task',
+            member: 'qa-member',
+            request: 'qa-request',
+            generation: 1,
+            command: data['long'] == true
+                ? List.filled(80, 'echo group approval').join(' ')
+                : 'echo group approval',
+            choices: const ['once', 'deny'],
+          );
+          final focus = NotificationFocus(
+            action.kind,
+            groupApprovalFocusId(action),
+          );
+          final notification = TurnNotification.chat(
+            title: 'Native group approval',
+            content: ChatNotificationContent.approval(action.command, ''),
+            showPreview: true,
+            scopeLabel: 'Home server / Group',
+            payload: jsonEncode({
+              ...nativeGroupTarget.toJson(),
+              'focus': focus.toJson(),
+            }),
+            focus: focus,
+            chatIdentity: nativeGroupChat,
+            revision: focus.identity,
+            choices: action.choices,
+            pending: '1 approval',
+          );
+          // Exercise the actual native renderer without installing another
+          // sink handler or creating actionable backend work.
+          await const MethodChannel(
+            NativeNotificationSink.channelName,
+          ).invokeMethod<void>('show', notification.toJson());
+        case '/cancel-native-group-approval':
+          await const MethodChannel(
+            NativeNotificationSink.channelName,
+          ).invokeMethod<void>(
+            'cancel',
+            TurnNotificationService.notificationIdFor(nativeGroupChat),
+          );
         case '/hold-history':
           notificationHistory = Completer<void>();
           host.heldHistoryDelay = notificationHistory;

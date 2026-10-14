@@ -31,22 +31,47 @@ class NotificationCaptureTest(unittest.TestCase):
             self.assertEqual(driver.nodes()[0].get('text'), 'current reply')
 
 
+class NotificationFixtureSetupTest(unittest.TestCase):
+    def test_provisions_only_qa_permissions_before_first_launch(self):
+        calls = []
+        with patch.object(driver, 'SERIAL', 'emulator-5562'), \
+             patch.object(driver, 'adb', side_effect=lambda *args: calls.append(args)), \
+             patch.object(driver, 'until'), patch.object(driver, 'state'), \
+             patch.object(driver, 'check_content_tap_clear', side_effect=RuntimeError('journey reached')):
+            with self.assertRaisesRegex(RuntimeError, 'journey reached'):
+                driver.run(Path('unused'), tap_only=True)
+        clear = calls.index(('shell', 'pm', 'clear', driver.PACKAGE))
+        grant = calls.index(('shell', 'pm', 'grant', driver.PACKAGE,
+                             'android.permission.POST_NOTIFICATIONS'))
+        exempt = calls.index(('shell', 'dumpsys', 'deviceidle', 'whitelist', '+' + driver.PACKAGE))
+        launch = calls.index(('shell', 'am', 'start', '-n',
+                              driver.PACKAGE + '/com.tarkilhk.wing.MainActivity'))
+        self.assertLess(clear, grant)
+        self.assertLess(grant, launch)
+        self.assertLess(exempt, launch)
+
+
 class NotificationDismissalTest(unittest.TestCase):
-    def exercise(self, notification_dump, selected_is_target=True):
+    def exercise(self, notification_dump, selected_is_target=True, delayed_publication=False):
+        replied = False
+        publication_reads = 0
         held = False
         released = False
 
         def state(path='/', data=None):
-            nonlocal held, released
+            nonlocal held, released, replied, publication_reads
             if path == '/reply':
-                return {'notices': json.dumps({json.dumps({'profile': 'a'}): {
-                    'result': True, 'rendered': json.dumps({'id': 42001}),
-                }})}
+                replied = True
+            elif path == '/' and replied and not held:
+                publication_reads += 1
             if path == '/hold-history':
                 held = True
             if path == '/release-history':
                 released = True
-            return {'lifecycle': 'resumed' if held else 'paused',
+            return {'notices': json.dumps({json.dumps({'profile': 'a'}): {
+                        'result': not delayed_publication or publication_reads >= 2,
+                        'rendered': json.dumps({'id': 42001}),
+                    }}), 'lifecycle': 'resumed' if held else 'paused',
                     'chat_visible': held, 'history_held': held,
                     'read_guards': {'selected_is_target': selected_is_target}}
 
@@ -66,6 +91,10 @@ class NotificationDismissalTest(unittest.TestCase):
                 driver.check_content_tap_clear()
         finally:
             self.assertTrue(released, 'Release held history even after assertion failure')
+        return publication_reads
+
+    def test_waits_for_actual_publication_before_opening_the_shade(self):
+        self.assertGreaterEqual(self.exercise('', delayed_publication=True), 2)
 
     def test_same_native_slot_remaining_is_a_failure(self):
         with self.assertRaisesRegex(AssertionError, 'left its notification'):
@@ -87,6 +116,9 @@ class NotificationGateTest(unittest.TestCase):
         location = patch.object(gate, 'OUTPUT', Path(output.name))
         location.start()
         self.addCleanup(location.stop)
+        sdk = patch.dict(os.environ, {'ANDROID_HOME': output.name})
+        sdk.start()
+        self.addCleanup(sdk.stop)
 
     @unittest.skipUnless(os.name == 'posix', 'Exercises the Linux CI SDK executables')
     def test_real_ci_entry_point_propagates_device_driver_failure(self):
@@ -100,12 +132,18 @@ class NotificationGateTest(unittest.TestCase):
                 path.chmod(0o700)
 
             executable('bin/flutter', 'print("QA fixture build reached")\n')
-            executable('bin/adb', '''import sys
+            executable('sdk/platform-tools/adb', '''import sys
 if sys.argv[1:] == ['devices']:
     print('List of devices attached')
 elif sys.argv[3:] in (['shell', 'getprop', 'ro.kernel.qemu'],
                        ['shell', 'getprop', 'sys.boot_completed']):
     print('1')
+elif sys.argv[3:] == ['shell', 'cmd', 'package', 'resolve-activity', '--brief', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.HOME']:
+    print('com.android.launcher/.Home')
+elif sys.argv[3:6] == ['shell', 'uiautomator', 'dump']:
+    print('UI hierarchy dumped to: /sdcard/wing-boot-ui.xml')
+elif sys.argv[3:5] == ['shell', 'cat']:
+    print('<hierarchy><node package="com.android.launcher"/></hierarchy>')
 elif sys.argv[3] == 'forward':
     sys.exit(23)
 ''')
@@ -116,7 +154,7 @@ elif sys.argv[3] == 'forward':
             result = subprocess.run(
                 [sys.executable, str(Path(gate.__file__).resolve())], cwd=root,
                 env={**os.environ, 'ANDROID_HOME': str(root / 'sdk'),
-                     'PATH': str(root / 'bin') + os.pathsep + os.environ['PATH']},
+                     'PATH': str(root / 'bin')},
                 capture_output=True, text=True, timeout=20)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('QA fixture build reached', result.stdout)
@@ -150,6 +188,97 @@ elif sys.argv[3] == 'forward':
             with self.assertRaises(subprocess.CalledProcessError):
                 gate.check_on_emulator('emulator-5562')
         self.assertEqual(len(calls), 2)
+
+
+class OwnedAndroidBootTest(unittest.TestCase):
+    def exercise(self, title=None, installed=False, repeat=False, failed_dump=False):
+        launcher = '<hierarchy><node package="com.android.launcher"/></hierarchy>'
+        alert = ('<hierarchy><node resource-id="android:id/alertTitle" text="' +
+                 (title or '') + '"/><node resource-id="android:id/aerr_wait" '
+                 'bounds="[0,0][100,100]"/></hierarchy>')
+        reads = iter([alert, alert if repeat else launcher] if title else [launcher])
+        calls = []
+        dumped = False
+
+        def device(serial, *args):
+            nonlocal dumped
+            calls.append(args)
+            if args[:4] == ('shell', 'pm', 'list', 'packages'):
+                return 'package:com.tarkilhk.wing.notificationqa' if installed else ''
+            if args[:4] == ('shell', 'cmd', 'package', 'resolve-activity'):
+                return 'com.android.launcher/.Home'
+            if args[:3] == ('shell', 'uiautomator', 'dump'):
+                if failed_dump and not dumped:
+                    dumped = True
+                    return 'ERROR: null root node'
+                return 'UI hierarchy dumped to: /sdcard/wing-boot-ui.xml'
+            if args[:2] == ('shell', 'cat'):
+                return next(reads)
+            return ''
+
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(gate, 'OUTPUT', Path(directory)), \
+             patch.object(gate, 'device', side_effect=device), \
+             patch.object(gate.time, 'sleep'):
+            gate.prepare_owned_android('emulator-5562')
+        return calls
+
+    def test_requires_a_healthy_launcher_and_rejects_stale_dump(self):
+        calls = self.exercise(failed_dump=True)
+        self.assertEqual(sum(args[:3] == ('shell', 'uiautomator', 'dump') for args in calls), 2)
+        self.assertEqual(sum(args[:2] == ('shell', 'cat') for args in calls), 1)
+
+    def test_system_ui_boot_wait_is_allowed_once_before_fixture_installation(self):
+        calls = self.exercise(title="System UI isn't responding")
+        self.assertEqual(sum(args[:3] == ('shell', 'input', 'tap') for args in calls), 1)
+
+    def test_never_recovers_a_fixture_anr_or_a_repeated_system_ui_anr(self):
+        for title, repeat in [("Wing isn't responding", False),
+                              ("System UI isn't responding", True)]:
+            with self.subTest(title=title, repeat=repeat), self.assertRaises(RuntimeError):
+                self.exercise(title=title, repeat=repeat)
+
+    def test_never_runs_boot_recovery_when_fixture_is_installed(self):
+        with self.assertRaises(ValueError):
+            self.exercise(installed=True)
+
+
+class GroupApprovalControlsTest(unittest.TestCase):
+    def controls(self, *names):
+        return [ET.Element('node', {'resource-id': driver.PACKAGE + ':id/' + name})
+                for name in names]
+
+    def test_expands_the_exact_group_card_when_another_chat_is_first(self):
+        root = ET.fromstring('''<hierarchy><node><node>
+            <node text="Other chat"/>
+            <node resource-id="android:id/expand_button" content-desc="Expand" bounds="[0,0][100,100]"/>
+            </node><node><node text="Native group approval"/>
+            <node resource-id="android:id/expand_button" content-desc="Expand" bounds="[200,200][300,300]"/>
+            </node></node></hierarchy>''')
+        shown = list(root.iter('node'))
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(driver, 'state'), patch.object(driver, 'shade'), \
+             patch.object(driver, 'screenshot'), \
+             patch.object(driver.time, 'sleep'), patch.object(driver, 'adb') as adb, \
+             patch.object(driver, 'nodes', side_effect=[shown, self.controls('once', 'deny'),
+                                                       shown, self.controls('review', 'review_deny')]):
+            driver.check_group_approval_rendering(Path(directory))
+        taps = [call.args for call in adb.call_args_list
+                if call.args[:3] == ('shell', 'input', 'tap')]
+        self.assertEqual(taps, [('shell', 'input', 'tap', '250', '250')] * 2)
+
+    def test_supported_short_and_review_layouts_are_accepted(self):
+        driver.assert_group_approval_controls(self.controls('once', 'deny'), False)
+        driver.assert_group_approval_controls(self.controls('review', 'review_deny'), True)
+
+    def test_unsupported_session_and_always_are_rejected(self):
+        with self.assertRaisesRegex(AssertionError, 'NATIVE_GROUP_APPROVAL_RENDER'):
+            driver.assert_group_approval_controls(self.controls('once', 'deny', 'session', 'always'), False)
+
+    def test_missing_decision_or_wrong_layout_is_rejected(self):
+        for names, review in [(('once',), False), (('once', 'deny'), True)]:
+            with self.subTest(names=names, review=review), self.assertRaisesRegex(AssertionError, 'NATIVE_GROUP_APPROVAL_RENDER'):
+                driver.assert_group_approval_controls(self.controls(*names), review)
 
 
 if __name__ == '__main__':

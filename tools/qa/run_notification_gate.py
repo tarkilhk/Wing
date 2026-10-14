@@ -11,9 +11,15 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import tempfile
+import xml.etree.ElementTree as ET
 
 IMAGE = 'system-images;android-36;google_apis;x86_64'
 OUTPUT = Path('build/notification-gate')
+
+
+def adb_path():
+    return str(Path(os.environ['ANDROID_HOME']) / 'platform-tools/adb')
 
 
 def command(*args, **kwargs):
@@ -22,7 +28,7 @@ def command(*args, **kwargs):
 
 def device(serial, *args):
     return subprocess.check_output(
-        ['adb', '-s', serial, *args], text=True, timeout=25,
+        [adb_path(), '-s', serial, *args], text=True, timeout=25,
         stderr=subprocess.PIPE).strip()
 
 
@@ -37,14 +43,14 @@ def check_on_emulator(serial):
     # frame, and the real shade gesture requires an unlocked display.
     device(serial, 'shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
     device(serial, 'shell', 'wm', 'dismiss-keyguard')
-    command('adb', '-s', serial, 'install', '--no-incremental', '-r', '-g',
+    command(adb_path(), '-s', serial, 'install', '--no-incremental', '-r', '-g',
             'build/app/outputs/flutter-apk/app-debug.apk')
     try:
         command(sys.executable, 'tools/qa/check_notification_revamp.py',
                 '--serial', serial, '--output', str(OUTPUT), '--tap-only')
     except subprocess.CalledProcessError:
         for name, args in [
-            ('app.log', ('logcat', '-d', '-t', '500', '-s',
+            ('app.log', ('logcat', '-d', '-s',
                          'flutter:V', 'AndroidRuntime:E', 'ActivityTaskManager:I')),
             ('activity.txt', ('shell', 'dumpsys', 'activity', 'activities')),
         ]:
@@ -55,15 +61,68 @@ def check_on_emulator(serial):
         raise
 
 
+def prepare_owned_android(serial):
+    """Require a healthy launcher before installing Wing on a fresh AVD."""
+    if device(serial, 'shell', 'pm', 'list', 'packages',
+              'com.tarkilhk.wing.notificationqa'):
+        raise ValueError('Boot provisioning requires an AVD without the Wing fixture')
+    launcher = device(serial, 'shell', 'cmd', 'package', 'resolve-activity',
+                      '--brief', '-a', 'android.intent.action.MAIN',
+                      '-c', 'android.intent.category.HOME').splitlines()[-1].split('/')[0]
+    if '.' not in launcher:
+        raise ValueError('Android did not resolve its home launcher')
+    device(serial, 'shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
+    device(serial, 'shell', 'wm', 'dismiss-keyguard')
+    device(serial, 'shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    waited = False
+    deadline = time.monotonic() + 150
+    while time.monotonic() < deadline:
+        try:
+            result = device(serial, 'shell', 'uiautomator', 'dump',
+                            '/sdcard/wing-boot-ui.xml')
+            if 'dumped to:' not in result:
+                time.sleep(1)
+                continue
+            xml = device(serial, 'shell', 'cat', '/sdcard/wing-boot-ui.xml')
+            (OUTPUT / 'boot-ui.txt').write_text(xml)
+            nodes = list(ET.fromstring(xml).iter('node'))
+            alerts = [node for node in nodes
+                      if node.get('resource-id') == 'android:id/alertTitle']
+            if alerts:
+                if waited or any(node.get('text') != "System UI isn't responding"
+                                 for node in alerts):
+                    raise RuntimeError('Android boot has an unexpected or repeated ANR')
+                button = next(node for node in nodes
+                              if node.get('resource-id') == 'android:id/aerr_wait')
+                coordinates = button.get('bounds').replace('][', ',').strip('[]')
+                left, top, right, bottom = map(int, coordinates.split(','))
+                print('Fresh Android boot: waiting once for System UI before installing Wing',
+                      flush=True)
+                device(serial, 'shell', 'input', 'tap',
+                       str((left + right) // 2), str((top + bottom) // 2))
+                waited = True
+            elif any(node.get('package') == launcher for node in nodes):
+                return
+        except subprocess.SubprocessError:
+            pass
+        time.sleep(1)
+    raise TimeoutError('Android launcher did not become healthy before Wing installation')
+
+
 @contextmanager
 def owned_emulator():
     sdk = Path(os.environ['ANDROID_HOME'])
     serial = 'emulator-5562'
-    connected = subprocess.check_output(['adb', 'devices'], text=True, timeout=25)
+    connected = subprocess.check_output([adb_path(), 'devices'], text=True, timeout=25)
     if any(line.split()[0] == serial for line in connected.splitlines()[1:] if line.split()):
         raise ValueError(f'{serial} is occupied; refusing to replace another emulator')
-    avds = OUTPUT.resolve() / 'avd'
-    avds.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='avd-', dir=OUTPUT.resolve()) as directory:
+        with start_owned_emulator(sdk, serial, Path(directory)) as started:
+            yield started
+
+
+@contextmanager
+def start_owned_emulator(sdk, serial, avds):
     env = {**os.environ, 'ANDROID_AVD_HOME': str(avds)}
     command(str(sdk / 'cmdline-tools/latest/bin/avdmanager'), 'create', 'avd',
             '--force', '--name', 'wing_notification_gate', '--package', IMAGE,
@@ -73,7 +132,7 @@ def owned_emulator():
             str(sdk / 'emulator/emulator'), '-avd', 'wing_notification_gate',
             '-port', '5562', '-no-window', '-no-audio', '-no-boot-anim',
             '-no-snapshot', '-gpu', 'swiftshader', '-feature', '-Vulkan',
-            '-memory', '2048', '-cores', '2', '-skin', '720x1280',
+            '-memory', '4096', '-cores', '4',
             '-no-metrics', '-show-kernel',
         ], stdout=log, stderr=subprocess.STDOUT, env=env)
         try:
@@ -89,6 +148,7 @@ def owned_emulator():
                 time.sleep(1)
             else:
                 raise TimeoutError('Notification emulator did not boot within 300 seconds')
+            prepare_owned_android(serial)
             yield serial
         finally:
             process.terminate()

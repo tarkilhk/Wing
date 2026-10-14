@@ -35,7 +35,7 @@ jobs:
           java-version: '17'
 
       - name: Install pinned Android SDK
-        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "emulator" "system-images;android-36;google_apis;x86_64"'
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-36" "build-tools;36.0.0" "emulator" "system-images;android-36;google_apis;x86_64"'
 
       - name: Allow runner user to accelerate the Android emulator
         run: sudo chmod a+rw /dev/kvm

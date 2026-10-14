@@ -2,11 +2,13 @@
 """Native smoke test for notification_revamp_device.dart, isolated emulator only."""
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import shlex
 import subprocess
 import time
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -16,7 +18,8 @@ _fixture_http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def adb(*args):
-    return subprocess.check_output(['adb', '-s', SERIAL, *args], text=True, timeout=25)
+    return subprocess.check_output([str(Path(os.environ['ANDROID_HOME']) / 'platform-tools/adb'),
+                                   '-s', SERIAL, *args], text=True, timeout=25)
 
 
 def state(path='/', data=None):
@@ -81,7 +84,9 @@ def shade():
 def screenshot(path):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(subprocess.check_output(['adb', '-s', SERIAL, 'exec-out', 'screencap', '-p']))
+    path.write_bytes(subprocess.check_output([
+        str(Path(os.environ['ANDROID_HOME']) / 'platform-tools/adb'),
+        '-s', SERIAL, 'exec-out', 'screencap', '-p']))
 
 
 def check_untrusted_main_intents():
@@ -127,10 +132,12 @@ def check_content_tap_clear():
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     until(lambda: state()['lifecycle'] == 'paused', 'Fixture did not enter the background')
     answer = 'Read this notification while history is held.'
-    current = state('/reply', {'text': answer})
-    notices = json.loads(current['notices'])
-    notice = next(value for key, value in notices.items()
-                  if json.loads(key).get('profile') == 'a' and value['result'])
+    state('/reply', {'text': answer})
+    def published_notice():
+        notices = json.loads(state()['notices'] or '{}')
+        return next((value for key, value in notices.items()
+                     if json.loads(key).get('profile') == 'a' and value['result']), None)
+    notice = until(published_notice, 'Captured chat notification was not published')
     notification_id = json.loads(notice['rendered'])['id']
     state('/hold-history', {})
     try:
@@ -152,18 +159,73 @@ def check_content_tap_clear():
     print('PASS: body tap opens the captured chat and clears the shade before history completes', flush=True)
 
 
+def assert_group_approval_controls(shown, review):
+    names = {'once', 'session', 'always', 'deny', 'review', 'review_deny'}
+    visible = {node.get('resource-id', '').removeprefix(PACKAGE + ':id/')
+               for node in shown} & names
+    expected = {'review', 'review_deny'} if review else {'once', 'deny'}
+    assert visible == expected, f'NATIVE_GROUP_APPROVAL_RENDER: expected {expected}, found {visible}'
+
+
+def check_group_approval_rendering(output):
+    """Unsupported hidden buttons must not prevent a group alert being posted."""
+    component = PACKAGE + '/com.tarkilhk.wing.MainActivity'
+    for review in (False, True):
+        try:
+            adb('shell', 'am', 'start', '-W', '-n', component)
+            try:
+                state('/native-group-approval', {'long': review})
+            except urllib.error.HTTPError as error:
+                raise AssertionError('NATIVE_GROUP_APPROVAL_RENDER: Android rejected the group alert: '
+                                     + error.read().decode(errors='replace')) from error
+            shade()
+            shown = nodes()
+            # Android may collapse a new card when another chat already has an
+            # alert. Expand this exact group card before asserting its controls.
+            cards = [node for node in shown
+                     if any(child.get('text') == 'Native group approval' for child in node.iter('node'))
+                     and any(child.get('resource-id') == 'android:id/expand_button' for child in node.iter('node'))]
+            if cards:
+                card = min(cards, key=lambda node: len(list(node.iter('node'))))
+                button = next(child for child in card.iter('node')
+                              if child.get('resource-id') == 'android:id/expand_button')
+                if button.get('content-desc', '').lower().startswith('expand'):
+                    x1, y1, x2, y2 = map(int, re.findall(r'\d+', button.get('bounds')))
+                    adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+                    time.sleep(.5)
+                    shown = nodes()
+            output.mkdir(parents=True, exist_ok=True)
+            (output / ('group-review-ui.txt' if review else 'group-once-ui.txt')).write_text(
+                '\n'.join(ET.tostring(node, encoding='unicode') for node in shown[:1]))
+            screenshot(output / ('group-review.png' if review else 'group-once.png'))
+            assert_group_approval_controls(shown, review)
+        finally:
+            # Android may freeze a cached app behind the shade. Wake the QA
+            # control server before asking it to clean up its synthetic alert.
+            adb('shell', 'am', 'start', '-W', '-n', component)
+            state('/cancel-native-group-approval', {})
+    print('PASS: group approvals render only Once/Deny or Review/Deny without hidden unsupported actions', flush=True)
+
+
 def run(output, tap_only=False):
     assert SERIAL.startswith('emulator-'), 'Use a disposable emulator, never a phone'
     adb('forward', 'tcp:18766', 'tcp:18766')
     adb('shell', 'pm', 'clear', PACKAGE)
     adb('shell', 'pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS')
+    # This journey assumes background monitoring was enabled during onboarding.
+    # Provision that prerequisite only for the disposable QA package.
+    adb('shell', 'dumpsys', 'deviceidle', 'whitelist', '+' + PACKAGE)
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
     adb('shell', 'cmd', 'uimode', 'night', 'no')
     adb('shell', 'am', 'start', '-n', PACKAGE + '/com.tarkilhk.wing.MainActivity')
-    until(lambda: state()['ready'], 'Fixture did not start')
+    until(lambda: (current := state())['ready'] and current['lifecycle'] == 'resumed',
+          'Fixture did not start in the foreground', timeout=120)
+    # Keep the production work lease alive while its loopback QA control
+    # server is behind the notification shade.
     state('/work', {})
     if tap_only:
         check_content_tap_clear()
+        check_group_approval_rendering(output)
         return
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     state('/approval', {})
@@ -235,6 +297,7 @@ def run(output, tap_only=False):
     until(lambda: all(v['result'] is None for k, v in json.loads(state()['notices']).items() if json.loads(k)['profile'] == 'a'), 'Reading the latest answer did not clear its notification')
     print('PASS: body tap opens latest reply and visibility clears its notification', flush=True)
     check_content_tap_clear()
+    check_group_approval_rendering(output)
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     state('/error', {})
     shade()
@@ -324,6 +387,9 @@ def check_recents_visibility(output):
     adb('shell', 'am', 'force-stop', PACKAGE)
     adb('shell', 'pm', 'clear', PACKAGE)
     adb('shell', 'pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS')
+    # This journey assumes background monitoring was enabled during onboarding.
+    # Provision that prerequisite only for the disposable QA package.
+    adb('shell', 'dumpsys', 'deviceidle', 'whitelist', '+' + PACKAGE)
     component = PACKAGE + '/com.tarkilhk.wing.MainActivity'
     adb('shell', 'am', 'start', '-n', component)
     until(lambda: state()['ready'], 'Notification fixture did not start')
@@ -407,7 +473,7 @@ if __name__ == '__main__':
     parser.add_argument('--recents-only', action='store_true',
                         help='Check real notification task visibility with absent/existing app tasks')
     parser.add_argument('--tap-only', action='store_true',
-                        help='Check shade dismissal while the tapped chat history is held')
+                        help='Check shade dismissal with held history and native group approval rendering')
     args = parser.parse_args()
     SERIAL = args.serial
     try:

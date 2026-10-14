@@ -275,15 +275,16 @@ object ChatNotifications {
             views.setViewVisibility(R.id.review_actions, if (needsReview) View.VISIBLE else View.GONE)
             views.setViewVisibility(R.id.approval_actions, if (needsReview) View.GONE else View.VISIBLE)
             views.setBoolean(R.id.review, "setEnabled", !busy)
-            views.setOnClickPendingIntent(R.id.review, intent(context, data, "", true))
+            if (needsReview) views.setOnClickPendingIntent(R.id.review, intent(context, data, "", true))
             views.setViewVisibility(R.id.review_deny, if (choices.contains("deny")) View.VISIBLE else View.GONE)
             views.setBoolean(R.id.review_deny, "setEnabled", !busy)
-            views.setOnClickPendingIntent(R.id.review_deny, intent(context, data, "deny", false))
+            if (needsReview && choices.contains("deny")) views.setOnClickPendingIntent(R.id.review_deny, intent(context, data, "deny", false))
             views.setViewVisibility(R.id.notice_scope, if (!needsReview && choices.contains("session")) View.VISIBLE else View.GONE)
             for ((choice, viewId) in listOf("once" to R.id.once, "session" to R.id.session, "always" to R.id.always, "deny" to R.id.deny)) {
-                views.setViewVisibility(viewId, if (choices.contains(choice) && (!needsReview || choice == "deny")) View.VISIBLE else View.GONE)
+                val visible = !needsReview && choices.contains(choice)
+                views.setViewVisibility(viewId, if (visible) View.VISIBLE else View.GONE)
                 views.setBoolean(viewId, "setEnabled", !busy)
-                views.setOnClickPendingIntent(viewId, intent(context, data, choice, choice == "always"))
+                if (visible) views.setOnClickPendingIntent(viewId, intent(context, data, choice, choice == "always"))
             }
             builder.setStyle(NotificationCompat.DecoratedCustomViewStyle()).setCustomBigContentView(views)
         } else {
