@@ -147,7 +147,12 @@ Your bubbles show your message without a User label. Bot replies show the
 sender's saved avatar and name, formatted text, links, code and timestamps.
 Bot and user Copy actions sit in their colored bottom rows. Long bot answers use
 the available reading width; your bubbles remain right-aligned and clear of the
-framed avatar. Discussions, Bot Chats and working histories use this same design.
+framed avatar. Discussions, Bot Chats and working histories use the same transcript renderer,
+including reading-position anchoring, Latest/New activity navigation, Copy and
+message viewers. Bot Chats and Working history use the same streamed reasoning,
+tool timeline, Tasks/Agents viewers and working Wing. Group discussions show the
+public room messages and room status supplied by Hermes; select a member’s
+Working history to inspect that bot’s private activity.
 Tap a bot's avatar in the discussion to open a compact card over it, with the
 bot's saved avatar and name above three icon-and-text actions: **View working
 history**, **Chat directly** and **Bot settings**.

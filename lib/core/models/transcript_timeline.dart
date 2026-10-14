@@ -37,10 +37,25 @@ final class TranscriptTimeline {
   final bool hasLiveMessage;
   final Map<Object, Duration> _replyDurations;
 
+  /// The current reading window admits older pages while holding newer saved
+  /// rows until the reader reaches Latest. Input facts remain unchanged.
+  TranscriptTimeline through(Object presentationId) {
+    final end = entries.indexWhere(
+      (entry) => entry.presentationId == presentationId,
+    );
+    if (end < 0) return this; // The selected row was retired by its source.
+    return TranscriptTimeline._(
+      entries.take(end + 1),
+      hasLiveMessage: false,
+      replyDurations: _replyDurations,
+    );
+  }
+
   factory TranscriptTimeline.project(
     List<Map<String, dynamic>> rows, {
     required Object Function(Map<String, dynamic>) presentationId,
     int? liveMessageIndex,
+    TranscriptMessage Function(Map<String, dynamic>)? messageProjection,
   }) {
     final entries = <TranscriptTimelineEntry>[];
     // Saved outputs refer to assistant calls by their backend identity. Calls
@@ -102,6 +117,7 @@ final class TranscriptTimeline {
           sourceIndex: index,
           presentationId: presentationId(row),
           row: readingRow,
+          messageProjection: messageProjection,
           review:
               row['role'] == 'system' &&
               answerMessageText(row).startsWith('review:'),
@@ -262,6 +278,7 @@ final class TranscriptTimelineEntry {
     required this.savedMessageId,
     required this.branchAnswer,
     required this.exchangeReceipts,
+    required this.messageProjection,
   }) : _row = row,
        isReview = review,
        role = row['role']?.toString() ?? '',
@@ -279,7 +296,9 @@ final class TranscriptTimelineEntry {
   bool get isAgentNotice =>
       role == 'user' &&
       transcriptNoticeKind(_row) == 'async_delegation_complete';
-  late final TranscriptMessage message = TranscriptMessage.fromRow(_row);
+  final TranscriptMessage Function(Map<String, dynamic>)? messageProjection;
+  late final TranscriptMessage message =
+      messageProjection?.call(_row) ?? TranscriptMessage.fromRow(_row);
   late final TranscriptToolResult? tool = role == 'tool'
       ? TranscriptToolResult.fromRow(_row, exchangeReceipts: exchangeReceipts)
       : null;

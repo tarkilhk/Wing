@@ -2465,6 +2465,11 @@
       "role": "application",
       "feature": "conversation",
       "library": "lib/core/services/chat_transcript_events.dart"
+    },
+    "lib/core/widgets/conversation_activity.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/conversation_activity.dart"
     }
   }
 }

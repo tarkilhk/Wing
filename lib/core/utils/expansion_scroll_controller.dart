@@ -156,6 +156,29 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
   }
 
   @override
+  bool applyViewportDimension(double nextViewport) {
+    final previous = hasViewportDimension ? viewportDimension : null;
+    final accepted = super.applyViewportDimension(nextViewport);
+    if (previous != null &&
+        hasPixels &&
+        axisDirection == AxisDirection.up &&
+        pixels > .5 &&
+        !isScrollingNotifier.value &&
+        !controller._restoringInitialOffset &&
+        previous != nextViewport) {
+      // Bottom controls can animate through several heights without a new
+      // transcript update. Keep the visible row fixed through every frame.
+      final target = (pixels + previous - nextViewport).clamp(
+        0.0,
+        double.infinity,
+      );
+      correctPixels(target);
+      _expansionScrollExtent = target;
+    }
+    return accepted;
+  }
+
+  @override
   bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
     if (controller._restoringInitialOffset) {
       final target = controller.initialScrollOffset.clamp(

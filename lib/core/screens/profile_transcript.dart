@@ -1,4 +1,6 @@
 import '../widgets/profile_message.dart';
+import '../widgets/conversation_activity.dart';
+import '../widgets/scroll_capture_viewport.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/recent_conversations/conversation_gestures.dart';
 import '../models/chat_output.dart';
@@ -23,6 +25,12 @@ import '../widgets/profile_activity_tabs.dart';
 import '../widgets/playful_portrait.dart';
 import '../widgets/transcript_latest_button.dart';
 
+/// Presentation commands stay with the shared viewport, independently of I/O.
+final class ConversationTranscriptController {
+  _ProfileTranscriptState? _state;
+  Future<void> showLatest() => _state?._latest() ?? Future<void>.value();
+}
+
 /// Reversed layout opens at the newest row. Older pages grow at the far end;
 /// a visible durable row anchors the viewport when streaming changes the tail.
 class ProfileTranscript extends StatefulWidget {
@@ -40,10 +48,12 @@ class ProfileTranscript extends StatefulWidget {
   activityTrailingBuilder;
   final List<Widget> tail;
   final Future<void> Function() onLoadOlder;
-  final Widget? liveExecution;
-  final List<Widget> currentActivity;
-  final List<ProfileActivityTab> activityTabs;
-  final int liveToolCount;
+  final ConversationActivity? activity;
+  final List<ProfileActivityTab> additionalActivityTabs;
+  final ValueChanged<bool>? onCaptureChanged;
+  final VoidCallback? onLatestVisible;
+  final Widget? emptyContent;
+  final ConversationTranscriptController? controller;
   final Future<Uint8List> Function(String)? loadImage;
   final Future<void> Function(ChatOutput)? onOpenResource;
   final Future<void> Function(ChatOutput)? onShareResource;
@@ -66,10 +76,12 @@ class ProfileTranscript extends StatefulWidget {
     this.activityTrailingBuilder,
     required this.timeline,
     required this.tail,
-    this.liveExecution,
-    this.currentActivity = const [],
-    this.activityTabs = const [],
-    this.liveToolCount = 0,
+    this.activity,
+    this.additionalActivityTabs = const [],
+    this.onCaptureChanged,
+    this.onLatestVisible,
+    this.emptyContent,
+    this.controller,
     this.loadImage,
     this.onOpenResource,
     this.onShareResource,
@@ -110,8 +122,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   bool _noticeFrameScheduled = false;
   bool _olderLoadScheduled = false;
   bool _jumping = false;
+  bool _capturing = false;
   bool _hasNewContent = false;
-  Object? _newestId;
+  Object? _newestId, _readingThrough;
+  bool _admittingLatest = false;
   late String _streaming;
   Object? _streamingPresentationId;
   String? _segment;
@@ -126,10 +140,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   @override
   void initState() {
     super.initState();
+    widget.controller?._state = this;
     _newestId = widget.timeline.entries
         .where((entry) => !entry.streaming)
         .lastOrNull
-        ?.id;
+        ?.presentationId;
     _streaming = widget.reader.streaming;
     _streamingPresentationId = widget.timeline.entries
         .where((entry) => entry.streaming)
@@ -302,7 +317,23 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (!mounted || !_scroll.hasClients) return;
     _scheduleNoticeVisibility();
     final distance = _scroll.offset.abs();
-    if (distance <= 24) _hasNewContent = false;
+    if (distance <= 24) {
+      _hasNewContent = false;
+      if (_readingThrough != null && !_admittingLatest) {
+        _admittingLatest = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _admittingLatest = false;
+          if (mounted &&
+              !_capturing &&
+              _scroll.hasClients &&
+              _scroll.offset.abs() <= 24) {
+            setState(() => _readingThrough = null);
+          }
+        });
+      } else if (!_capturing && _readingThrough == null) {
+        widget.onLatestVisible?.call();
+      }
+    }
     final attention = widget.needsInput;
     _jumpLabel.value =
         distance <= 24 || (distance <= 48 && !_hasNewContent && !attention)
@@ -315,9 +346,15 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   }
 
   Future<void> _latest() async {
+    if (!_scroll.hasClients) return;
     _cancelMarkdownRestoration();
     _scroll.releaseExpansionAnchor();
     _jumping = true;
+    if (_readingThrough != null) {
+      setState(() => _readingThrough = null);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !_scroll.hasClients) return;
+    }
     await scrollToTranscriptLatest(context, _scroll, offset: 0);
     _jumping = false;
     _updateJump();
@@ -326,6 +363,12 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   @override
   void didUpdateWidget(covariant ProfileTranscript oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      if (oldWidget.controller?._state == this) {
+        oldWidget.controller?._state = null;
+      }
+      widget.controller?._state = this;
+    }
     if (widget.focusedMessageId != null) return;
     if (!_scroll.hasClients) return;
     final atBottom =
@@ -336,7 +379,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final newest = widget.timeline.entries
         .where((entry) => !entry.streaming)
         .lastOrNull
-        ?.id;
+        ?.presentationId;
     final segmentChanged = _segment != widget.reader.historySessionId;
     final growingRow =
         _rows[_streamingPresentationId]?.currentContext?.findRenderObject()
@@ -347,6 +390,19 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             (widget.reader.streaming.isNotEmpty &&
                 widget.reader.streaming != _streaming))) {
       _hasNewContent = true;
+    }
+    if (segmentChanged ||
+        atBottom ||
+        widget.notificationReading?.notificationFocus != null) {
+      _readingThrough = null;
+    } else if (_readingThrough == null &&
+        newest != _newestId &&
+        !oldWidget.timeline.hasLiveMessage &&
+        !widget.timeline.hasLiveMessage) {
+      _readingThrough = oldWidget.timeline.entries
+          .where((entry) => !entry.streaming)
+          .lastOrNull
+          ?.presentationId;
     }
     _newestId = newest;
     _streaming = widget.reader.streaming;
@@ -424,6 +480,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   @override
   void dispose() {
+    if (widget.controller?._state == this) widget.controller?._state = null;
     if (widget.focusedMessageId == null &&
         !_restoringMarkdown &&
         _scroll.hasClients) {
@@ -434,22 +491,35 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     super.dispose();
   }
 
+  Widget? get _liveExecution => widget.activity?.liveExecution(
+    loadImage: widget.loadImage,
+    onOpenResource: widget.onOpenResource,
+    onShareResource: widget.onShareResource,
+  );
+  List<Widget> get _currentActivity =>
+      widget.activity?.currentActivity(
+        loadImage: widget.loadImage,
+        onOpenResource: widget.onOpenResource,
+        onShareResource: widget.onShareResource,
+      ) ??
+      const [];
+  List<ProfileActivityTab> get _activityTabs => [
+    ...?widget.activity?.tabs,
+    ...widget.additionalActivityTabs,
+  ];
+
   @override
   Widget build(BuildContext context) {
-    assert(
-      widget.identity != null ||
-          widget.liveExecution == null &&
-              widget.currentActivity.isEmpty &&
-              widget.activityTabs.isEmpty,
-    );
     if (widget.focusedMessageId != null) return _nearbyMessages(context);
     final buildStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
         : 0;
     final reader = widget.reader;
     _scheduleNoticeVisibility();
-    final timeline = widget.timeline;
-    final liveReply = widget.liveExecution == null
+    final timeline = _readingThrough == null
+        ? widget.timeline
+        : widget.timeline.through(_readingThrough!);
+    final liveReply = _liveExecution == null
         ? null
         : timeline.sections
               .where(
@@ -461,35 +531,40 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         .where((section) => !identical(section, liveReply))
         .toList();
     final joinCurrentActivity =
-        widget.liveExecution == null && timeline.joinsCurrentActivity;
+        _liveExecution == null && timeline.joinsCurrentActivity;
     final hasCurrentActivity =
-        widget.currentActivity.isNotEmpty || widget.activityTabs.isNotEmpty;
+        _currentActivity.isNotEmpty || _activityTabs.isNotEmpty;
     final tailContent = [
       if (hasCurrentActivity && !joinCurrentActivity)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
           child: ProfileActivitySection(
-            label: widget.liveToolCount > 0
-                ? 'Activity · ${widget.liveToolCount} ${widget.liveToolCount == 1 ? 'tool' : 'tools'}'
+            label: (widget.activity?.toolCount ?? 0) > 0
+                ? 'Activity · ${(widget.activity?.toolCount ?? 0)} ${(widget.activity?.toolCount ?? 0) == 1 ? 'tool' : 'tools'}'
                 : 'Activity',
-            key: ValueKey(('activity', widget.identity!)),
+            key: ValueKey((
+              'activity',
+              widget.identity ??
+                  widget.reader.historySessionId ??
+                  widget.reader,
+            )),
             detailsBuilder: (_) => ProfileActivityTabs(
               tabs: [
-                if (widget.currentActivity.isNotEmpty)
+                if (_currentActivity.isNotEmpty)
                   ProfileActivityTab(
                     id: 'timeline',
                     label: 'Timeline',
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: widget.currentActivity,
+                      children: _currentActivity,
                     ),
                   ),
-                ...widget.activityTabs,
+                ..._activityTabs,
               ],
             ),
           ),
         ),
-      if (widget.liveExecution != null)
+      if (_liveExecution != null)
         // Keep the live run mounted when the first answer chunk arrives.
         // Moving it from the tail into a new message row loses card state.
         Column(
@@ -497,7 +572,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
-              child: widget.liveExecution!,
+              child: _liveExecution!,
             ),
             if (liveReply != null)
               Padding(
@@ -513,7 +588,12 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               ),
           ],
         ),
-      ...widget.tail.map(
+      ...[
+        if (widget.activity case final activity?
+            when activity.live && activity.preparingTool)
+          activity.preparing,
+        ...widget.tail,
+      ].map(
         (child) => Padding(
           padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
           child: ConversationGestureBoundary(blocked: true, child: child),
@@ -701,15 +781,15 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                               onOpenResource: widget.onOpenResource,
                               onShareResource: widget.onShareResource,
                               tabs: rowIndex == 0 && joinCurrentActivity
-                                  ? widget.activityTabs
+                                  ? _activityTabs
                                   : const [],
                               liveToolCount:
                                   rowIndex == 0 && joinCurrentActivity
-                                  ? widget.liveToolCount
+                                  ? (widget.activity?.toolCount ?? 0)
                                   : 0,
                               currentActivity:
                                   rowIndex == 0 && joinCurrentActivity
-                                  ? widget.currentActivity
+                                  ? _currentActivity
                                   : const [],
                             )
                           : widget.messageBuilder(row),
@@ -753,20 +833,22 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                                 padding: const EdgeInsets.symmetric(
                                   vertical: WingSpacing.xl,
                                 ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const PlayfulPortrait(size: 104),
-                                    const SizedBox(height: WingSpacing.lg),
-                                    Text(
-                                      'Start a conversation',
-                                      textAlign: TextAlign.center,
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleMedium,
+                                child:
+                                    widget.emptyContent ??
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const PlayfulPortrait(size: 104),
+                                        const SizedBox(height: WingSpacing.lg),
+                                        Text(
+                                          'Start a conversation',
+                                          textAlign: TextAlign.center,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.titleMedium,
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
                               ),
                             ),
                           )
@@ -818,22 +900,29 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               key: _viewport,
               fit: StackFit.expand,
               children: [
-                NotificationListener<MarkdownContentWillChange>(
-                  onNotification: (event) {
-                    _preserveReaderAnchor(
-                      event.source
-                          .findAncestorRenderObjectOfType<
-                            TranscriptAnchorBox
-                          >(),
-                    );
-                    if (_restoringMarkdown) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        _finishMarkdownRestoration();
-                      });
-                    }
-                    return false;
+                ScrollCaptureViewport(
+                  controller: _scroll,
+                  onCaptureChanged: (active) {
+                    _capturing = active;
+                    widget.onCaptureChanged?.call(active);
                   },
-                  child: transcript,
+                  child: NotificationListener<MarkdownContentWillChange>(
+                    onNotification: (event) {
+                      _preserveReaderAnchor(
+                        event.source
+                            .findAncestorRenderObjectOfType<
+                              TranscriptAnchorBox
+                            >(),
+                      );
+                      if (_restoringMarkdown) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _finishMarkdownRestoration();
+                        });
+                      }
+                      return false;
+                    },
+                    child: transcript,
+                  ),
                 ),
                 if (!needsInput)
                   Positioned(bottom: 8, left: 0, right: 0, child: navigation),
@@ -958,7 +1047,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final reader = widget.reader;
     return reader.historyLoading &&
         (reader.historyPaging ||
-            reader.historySessionId == null &&
+            !reader.historyAvailable &&
                 reader.messages.isEmpty &&
                 reader.streaming.isEmpty);
   }

@@ -6,6 +6,9 @@ abstract interface class TranscriptReader {
   int? get nextHistoryOffset;
   bool get historyLoading;
 
+  /// Includes a successful observation that no conversation exists yet.
+  bool get historyAvailable;
+
   /// Loading requested older rows, rather than refreshing retained history.
   bool get historyPaging;
   String? get historyError;

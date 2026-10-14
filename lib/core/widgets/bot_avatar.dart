@@ -76,14 +76,13 @@ class _BorrowedBotAvatarState extends State<BorrowedBotAvatar>
       _scroll = scroll;
       _scroll?.addListener(_queueAdmission);
     }
-    _syncDemand();
     _queueAdmission();
   }
 
   @override
   void didUpdateWidget(BorrowedBotAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _syncDemand();
+    // Retained sliver rows can be between positions until layout completes.
     _queueAdmission();
   }
 
@@ -94,7 +93,25 @@ class _BorrowedBotAvatarState extends State<BorrowedBotAvatar>
         : _owner?.cachedProfileAppearance(captured.scope) ?? captured;
   }
 
+  bool _presented = true;
+
+  @override
+  void deactivate() {
+    _presented = false;
+    _active = false;
+    _borrower?.replaceDemand(<WorkspaceScope>{});
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _presented = true;
+    _queueAdmission();
+  }
+
   void _syncDemand() {
+    if (!_presented) return;
     final bot = _currentBot;
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     _active =
@@ -138,7 +155,7 @@ class _BorrowedBotAvatarState extends State<BorrowedBotAvatar>
     _admissionQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _admissionQueued = false;
-      if (!mounted) return;
+      if (!mounted || !_presented) return;
       final wasActive = _active;
       _syncDemand();
       if (wasActive != _active) _changed();
@@ -147,8 +164,13 @@ class _BorrowedBotAvatarState extends State<BorrowedBotAvatar>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _syncDemand();
-    _changed();
+    if (state != AppLifecycleState.resumed) {
+      _active = false;
+      _borrower?.replaceDemand(<WorkspaceScope>{});
+      if (_presented) _changed();
+    } else {
+      _queueAdmission();
+    }
   }
 
   void _changed() {
@@ -178,7 +200,7 @@ class _BorrowedBotAvatarState extends State<BorrowedBotAvatar>
   Widget build(BuildContext context) {
     // Owner notifications may change image mode while a sender future or frozen
     // selection still supplies the original metadata-only observation.
-    _syncDemand();
+    _queueAdmission();
     final bot = _currentBot;
     final name = widget.name ?? bot?.title ?? '';
     if (bot == null) {

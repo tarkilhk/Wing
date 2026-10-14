@@ -174,14 +174,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                         height: 60 + ((m.message.id as int?) ?? 0) % 3 * 20,
                         child: Text(m.message.text),
                       ),
-                liveExecution: currentActivity.isEmpty
-                    ? null
-                    : ProfileActivitySection(
-                        label: 'Activity',
-                        detailsBuilder: (_) =>
-                            Column(children: currentActivity),
-                      ),
                 tail: [
+                  if (currentActivity.isNotEmpty)
+                    ProfileActivitySection(
+                      label: 'Activity',
+                      detailsBuilder: (_) => Column(children: currentActivity),
+                    ),
                   if (tailHeight > 0) SizedBox(height: tailHeight),
                   ...extraTail,
                 ],

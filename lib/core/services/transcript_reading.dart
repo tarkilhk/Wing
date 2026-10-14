@@ -199,6 +199,9 @@ final class TranscriptReading implements TranscriptReader {
   @override
   bool get historyUnavailable => _historyUnavailable;
   @override
+  bool get historyAvailable =>
+      _historySessionId != null || _messages.isNotEmpty;
+  @override
   double get historyScrollOffset => _historyScrollOffset;
   @override
   String get streaming => _streaming;

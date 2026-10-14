@@ -1,3 +1,5 @@
+import 'package:wing/core/widgets/bot_group_conversation.dart';
+import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/bots_preferences.dart';
 import 'package:wing/core/models/bots.dart';
 import 'package:wing/core/screens/bots/bot_group_history_screen.dart';
@@ -9,7 +11,6 @@ import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/core/widgets/workspace_picker.dart';
 import 'package:wing/core/services/recent_conversation_snapshots.dart';
-import 'package:wing/core/widgets/bot_group_conversation.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
 import 'package:wing/core/services/bot_group_read_state.dart';
@@ -159,6 +160,7 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
+          expect(find.byType(ProfileTranscript), findsOneWidget);
           await _settleGroupMarkdown(tester);
           for (final (previousId, nextId, kind) in [
             ('room-1:1', 'room-1:2', 'user-message-bubble'),
@@ -614,7 +616,7 @@ void main() {
           final input = find.byType(TextField);
           await tester.enterText(input, 'Keep this draft');
           await tester.pumpAndSettle();
-          final transcript = find.byKey(const ValueKey('group-transcript'));
+          final transcript = find.byKey(const ValueKey('profile-transcript'));
           final transcriptRect = tester.getRect(transcript);
           final composerRect = tester.getRect(input);
           final menuRect = tester.getRect(find.byTooltip('Group options'));
@@ -933,7 +935,7 @@ void main() {
             ),
           ),
         );
-        final viewport = find.byKey(const ValueKey('group-transcript'));
+        final viewport = find.byKey(const ValueKey('profile-transcript'));
         final reply = find.byKey(const ValueKey(('group-message', 1)));
         final before = tester.getRect(viewport);
         final bottom = tester.getRect(reply).bottom;
@@ -941,9 +943,9 @@ void main() {
         expect(tester.getRect(viewport), before);
         expect(tester.getRect(reply).bottom, closeTo(bottom, .01));
         await tester.pump();
-        expect(find.text('Loading conversation…'), findsNothing);
+        expect(find.text('Loading history…'), findsNothing);
         expect(find.byType(StudioLoading), findsNothing);
-        expect(find.bySemanticsLabel('Loading conversation'), findsNothing);
+        expect(find.bySemanticsLabel('Loading history'), findsNothing);
         waiting.complete();
         await _settleGroupMarkdown(tester);
         await tester.pump(const Duration(milliseconds: 300));
@@ -2100,7 +2102,9 @@ void main() {
           expect(controller.text, 'Review @Atlas this evidence');
           expect(tester.widget<TextField>(input).focusNode!.hasFocus, isTrue);
           final transcript = tester
-              .widget<ListView>(find.byKey(const ValueKey('group-transcript')))
+              .widget<ListView>(
+                find.byKey(const ValueKey('profile-transcript')),
+              )
               .controller!;
           fixture.events.add(
             _event(
@@ -2115,7 +2119,35 @@ void main() {
           await _settleGroupMarkdown(tester);
           transcript.jumpTo(transcript.position.maxScrollExtent);
           await tester.pumpAndSettle();
-          final anchor = find.byKey(const ValueKey(('group-message', 1)));
+          await _settleGroupMarkdown(tester);
+          for (
+            var frame = 0;
+            frame < 30 && transcript.position.isScrollingNotifier.value;
+            frame++
+          ) {
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+          final viewport = tester.getRect(
+            find.byKey(const ValueKey('profile-transcript')),
+          );
+          final visibleMessages =
+              find
+                  .byType(BotGroupMessage)
+                  .evaluate()
+                  .where(
+                    (element) => tester
+                        .getRect(find.byWidget(element.widget))
+                        .overlaps(viewport),
+                  )
+                  .toList()
+                ..sort(
+                  (a, b) => tester
+                      .getRect(find.byWidget(a.widget))
+                      .top
+                      .compareTo(tester.getRect(find.byWidget(b.widget)).top),
+                );
+          final visibleMessage = visibleMessages.first;
+          final anchor = find.byKey(visibleMessage.widget.key!);
           final before = tester.getRect(anchor);
           fixture.events.add(
             _event(
@@ -2129,9 +2161,9 @@ void main() {
           await tester.pumpAndSettle();
           await _settleGroupMarkdown(tester);
           expect(tester.getRect(anchor).top, closeTo(before.top, 1));
-          expect(find.byTooltip('Jump to latest messages'), findsOneWidget);
+          expect(find.byTooltip('New activity'), findsOneWidget);
           await _render(tester, frame, 'reading-${brightness.name}-$scale');
-          await tester.tap(find.byTooltip('Jump to latest messages'));
+          await tester.tap(find.byTooltip('New activity'));
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 70));
           expect(transcript.offset, greaterThan(0));
@@ -2285,9 +2317,9 @@ void main() {
         );
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pump();
-        expect(find.text('Loading conversation…'), findsNothing);
+        expect(find.text('Loading history…'), findsNothing);
         expect(find.byType(StudioLoading), findsOneWidget);
-        expect(find.bySemanticsLabel('Loading conversation'), findsOneWidget);
+        expect(find.bySemanticsLabel('Loading history'), findsOneWidget);
         expect(find.byType(CircularProgressIndicator), findsNothing);
         await _render(tester, frame, 'loading-${brightness.name}-$scale');
         initialRead.complete();
@@ -2342,16 +2374,25 @@ void main() {
         );
         await _render(tester, frame, 'working-${brightness.name}-$scale');
         final transcript = tester
-            .widget<ListView>(find.byKey(const ValueKey('group-transcript')))
+            .widget<ListView>(find.byKey(const ValueKey('profile-transcript')))
             .controller!;
         transcript.jumpTo(transcript.position.maxScrollExtent);
         await tester.pump();
         await _settleGroupMarkdown(tester);
-        final readingOffset = transcript.offset;
+        for (
+          var frame = 0;
+          frame < 30 && transcript.position.isScrollingNotifier.value;
+          frame++
+        ) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(transcript.position.isScrollingNotifier.value, isFalse);
+        final readingAnchor = find.byKey(const ValueKey(('group-message', 1)));
+        final readingTop = tester.getRect(readingAnchor).top;
         approval = true;
         await session.refresh();
         await tester.pump(const Duration(milliseconds: 300));
-        expect(transcript.offset, readingOffset);
+        expect(tester.getRect(readingAnchor).top, closeTo(readingTop, 1));
         expect(find.text('Waiting for your approval'), findsOneWidget);
         expect(find.byType(ShaderMask), findsNothing);
         expect(find.byType(StudioLoading), findsNothing);

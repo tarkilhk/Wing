@@ -1,10 +1,5 @@
-import '../../models/gateway_todo.dart';
-import '../../widgets/profile_activity_status.dart';
-import '../../widgets/profile_activity_tabs.dart';
-import '../../widgets/profile_execution_activity.dart';
-import '../../widgets/profile_live_execution.dart';
+import '../../widgets/conversation_activity.dart';
 import '../../widgets/profile_live_work_dock.dart';
-import '../../widgets/profile_subagent_panel.dart';
 import '../../models/bots.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -102,8 +97,15 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
       liveAnswering: _session.liveAnswering,
     );
     final timeline = projection.timeline;
-    final agents = ProfileSubagentPanel(session: _session, embedded: true);
-    final tasks = ProfileTodoPanel(todos: _session.todos, embedded: true);
+    final activity = ConversationActivity(
+      runtime: runtime,
+      entries: projection.activity,
+      todos: _session.todos,
+      inspection: _session,
+      live: _session.liveAnswering,
+      taskCount: _session.todos.length,
+      agentCount: _session.subagents.length,
+    );
     final colors = Theme.of(context).colorScheme;
     return PopScope(
       canPop: _dock.currentState?.isOpen != true,
@@ -178,124 +180,52 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
                   ),
                 ),
                 Expanded(
-                  child:
-                      timeline.sections.isEmpty &&
-                          projection.activity.isEmpty &&
-                          reader.historyError == null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child:
-                                reader.historyLoading &&
-                                    !_session.historyAvailable
-                                ? const SizedBox.shrink()
-                                : Text(
-                                    'No working history is available for ${_session.member?.name ?? 'this bot'}.',
-                                    textAlign: TextAlign.center,
-                                  ),
-                          ),
-                        )
-                      : BotConversationScope(
-                          bot: _session.member == null
-                              ? null
-                              : widget.appearanceForMember(
-                                  _session.member!.profile,
-                                ),
-                          name: _session.member?.name,
-                          child: ProfileTranscript(
-                            key: ValueKey((
-                              'worker-history',
-                              _session.member?.id,
-                            )),
-                            reader: reader,
-                            identity: _session.key,
-                            needsInput: runtime.needsInput,
-                            turnAdmissionBlocked: _session.liveAnswering,
-                            openingContent: null,
-                            notificationReading: null,
-                            onAnswerVisible: null,
-                            onRefreshHistory: _session.refresh,
-                            onLoadOlder: _session.loadOlder,
-                            timeline: timeline,
-                            liveExecution:
-                                !_session.liveAnswering ||
-                                    projection.activity.isEmpty
-                                ? null
-                                : ProfileLiveExecution(
-                                    entries: projection.activity,
-                                  ),
-                            liveToolCount: _session.liveAnswering
-                                ? 0
-                                : runtime.toolActivities.length,
-                            currentActivity:
-                                _session.liveAnswering ||
-                                    projection.activity.isEmpty
-                                ? const []
-                                : [
-                                    ProfileExecutionActivity(
-                                      entries: projection.activity,
-                                    ),
-                                  ],
-                            activityTabs: _session.liveAnswering
-                                ? const []
-                                : [
-                                    if (_session.todos.isNotEmpty)
-                                      ProfileActivityTab(
-                                        id: 'tasks',
-                                        label:
-                                            'Tasks ${_session.todos.where((todo) => todo.status == GatewayTodoStatus.completed).length}/${_session.todos.length}',
-                                        child: tasks,
-                                      ),
-                                    if (_session.subagents.isNotEmpty)
-                                      ProfileActivityTab(
-                                        id: 'agents',
-                                        label:
-                                            'Agents ${_session.subagents.where((agent) => !agent.isTerminal).length}/${_session.subagents.length}',
-                                        onSelected: () => unawaited(
-                                          _session.refreshSubagents(),
-                                        ),
-                                        child: agents,
-                                      ),
-                                  ],
-                            tail: const [],
-                            messageBuilder: (entry) => ProfileMessage(
-                              message: entry.message,
-                              loadImages: false,
-                              attachmentImagesAvailable: false,
-                            ),
-                          ),
+                  child: BotConversationScope(
+                    bot: _session.member == null
+                        ? null
+                        : widget.appearanceForMember(_session.member!.profile),
+                    name: _session.member?.name,
+                    child: ProfileTranscript(
+                      key: ValueKey(('worker-history', _session.member?.id)),
+                      reader: reader,
+                      identity: _session.key,
+                      needsInput: runtime.needsInput,
+                      turnAdmissionBlocked: _session.liveAnswering,
+                      openingContent: null,
+                      notificationReading: null,
+                      onAnswerVisible: null,
+                      onRefreshHistory: _session.refresh,
+                      onLoadOlder: _session.loadOlder,
+                      timeline: timeline,
+                      activity: activity,
+                      emptyContent: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'No working history is available for ${_session.member?.name ?? 'this bot'}.',
+                          textAlign: TextAlign.center,
                         ),
+                      ),
+                      tail: const [],
+                      messageBuilder: (entry) => ProfileMessage(
+                        message: entry.message,
+                        loadImages: false,
+                        attachmentImagesAvailable: false,
+                      ),
+                    ),
+                  ),
                 ),
                 if (_session.liveError case final error?)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: StudioError(error),
                   ),
-                ProfileActivityStatus(
-                  runtime: runtime,
-                  subagents: _session.subagents,
-                  unconfirmedSubagentIds: _session.state.unconfirmedSubagentIds,
-                  saving: false,
+                activity.status(saving: false),
+                activity.dock(
+                  key: _dock,
+                  onOpenChanged: () {
+                    if (mounted) setState(() {});
+                  },
                 ),
-                if (_session.liveAnswering &&
-                    (_session.todos.isNotEmpty ||
-                        _session.subagents.isNotEmpty))
-                  ProfileLiveWorkDock(
-                    key: _dock,
-                    onOpenChanged: () {
-                      if (mounted) setState(() {});
-                    },
-                    taskCount: _session.todos.length,
-                    completedTasks: _session.todos
-                        .where(
-                          (todo) => todo.status == GatewayTodoStatus.completed,
-                        )
-                        .length,
-                    subagentCount: _session.subagents.length,
-                    tasks: tasks,
-                    subagents: agents,
-                    onAgentsSelected: _session.refreshSubagents,
-                  ),
               ],
             ),
           ),

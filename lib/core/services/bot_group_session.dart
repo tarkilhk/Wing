@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/bots.dart';
+import '../models/transcript_reader.dart';
+import '../models/transcript_message.dart';
 import 'bots_repository.dart';
 import 'bots_preferences.dart';
 import 'bot_group_read_state.dart';
@@ -108,6 +110,8 @@ class BotGroupSession extends ChangeNotifier {
       /* Keep unread until the device receipt can be saved. */
     }
   }
+
+  late final reading = BotGroupTranscriptReading._(this);
 
   final BotsRepository repository;
   BotGroup _group;
@@ -740,4 +744,64 @@ final class _GroupContinuation {
   final String cancelId = const Uuid().v4();
   final String eventId = const Uuid().v4();
   bool stopped = false;
+}
+
+/// Discussion input adapter. It lends reading facts to the same transcript used
+/// by Bot Chats and Working history, without lending room command authority.
+final class BotGroupTranscriptReading implements TranscriptReader {
+  BotGroupTranscriptReading._(this._session);
+  final BotGroupSession _session;
+  double _offset = 0;
+  @override
+  List<Map<String, dynamic>> get messages => List.unmodifiable([
+    for (final event in _session.events.where((event) => event.isMessage))
+      Map<String, dynamic>.unmodifiable({
+        'id': '${_session.group.id}:${event.sequence}',
+        'role': event.kind == 'message.user' ? 'user' : 'assistant',
+        'content': event.text,
+        '_discussion_event': event,
+      }),
+  ]);
+  TranscriptMessage messageForRow(Map<String, dynamic> row) {
+    final event = row['_discussion_event'] as BotGroupEvent;
+    final member = _session.group.members
+        .where((member) => member.id == event.actorId)
+        .firstOrNull;
+    final user = event.kind == 'message.user';
+    return TranscriptMessage.discussion(
+      id: '${_session.group.id}:${event.sequence}',
+      text: event.text,
+      timestamp: event.timestamp,
+      sender: user
+          ? null
+          : member?.name ??
+                (event.actorName.isNotEmpty ? event.actorName : event.actor),
+      senderHandle: member?.handle,
+    );
+  }
+
+  @override
+  Object messagePresentationId(Map<String, dynamic> row) =>
+      ('group-message', (row['_discussion_event'] as BotGroupEvent).sequence);
+  @override
+  String? get historySessionId =>
+      _session.loading && messages.isEmpty ? null : _session.group.id;
+  @override
+  int? get nextHistoryOffset => null;
+  @override
+  bool get historyLoading => _session.loading;
+  @override
+  bool get historyPaging => false;
+  @override
+  String? get historyError => null; // The room owner presents its operation errors.
+  @override
+  bool get historyUnavailable => false;
+  @override
+  bool get historyAvailable => _session.runtime != null || messages.isNotEmpty;
+  @override
+  double get historyScrollOffset => _offset;
+  @override
+  String get streaming => '';
+  @override
+  void recordScrollOffset(double offset) => _offset = offset;
 }

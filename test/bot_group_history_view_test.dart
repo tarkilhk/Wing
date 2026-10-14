@@ -325,6 +325,11 @@ void main() {
               () => Future<void>.delayed(const Duration(milliseconds: 10)),
             );
           }
+          final sharedTranscript = tester.widget<ProfileTranscript>(
+            find.byType(ProfileTranscript),
+          );
+          expect(sharedTranscript.activity?.inspection, same(session));
+          expect(sharedTranscript.activity?.live, isTrue);
           expect(find.byType(ProfileLiveExecution), findsOneWidget);
           expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
           expect(

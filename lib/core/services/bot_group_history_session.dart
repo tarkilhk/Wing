@@ -585,6 +585,8 @@ final class _BotGroupHistoryReading implements TranscriptReader {
   @override
   bool get historyUnavailable => false;
   @override
+  bool get historyAvailable => _available;
+  @override
   String get streaming => _reading.streaming;
   @override
   double get historyScrollOffset => _scrollOffset;

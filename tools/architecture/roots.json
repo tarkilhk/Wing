@@ -14849,6 +14849,11 @@
       "path": "lib/core/services/chat_transcript_events.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/conversation_activity.dart",
+      "area": "lib",
+      "provenance": "tracked"
     }
   ],
   "direct_dependencies": {

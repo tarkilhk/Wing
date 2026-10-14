@@ -204,6 +204,11 @@ void main() {
         Finder tab(int i, {bool overlay = true}) =>
             find.byKey(ValueKey(('live-work-tab', i, overlay)));
         await settle();
+        final sharedTranscript = tester.widget<ProfileTranscript>(
+          find.byType(ProfileTranscript),
+        );
+        expect(sharedTranscript.activity?.runtime.runtimeId, chat.runtime.runtimeId);
+        expect(sharedTranscript.activity?.live, isTrue);
         expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
         expect(find.text('Tasks 3/7'), findsNothing);
         expect(find.text('2 subagents'), findsOneWidget);
