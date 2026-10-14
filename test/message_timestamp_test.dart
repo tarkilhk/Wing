@@ -513,6 +513,7 @@ void main() {
                 'assistant',
                 'I will check the domain model before handoff.',
               ),
+              row(105, 'assistant', 'The review is complete.'),
             ];
             await tester.pumpMarkdownWidget(
               MaterialApp(
@@ -586,13 +587,28 @@ void main() {
             );
             expect(answer.left, closeTo(12, .01));
             expect(answer.right, closeTo(width - 12, .01));
-            expect(answer.top - user.bottom, closeTo(16, .01));
-            expect(thanks.top - answer.bottom, closeTo(16, .01));
-            expect(short.top - thanks.bottom, closeTo(16, .01));
+            expect(answer.top - user.bottom, closeTo(32, .01));
+            expect(thanks.top - answer.bottom, closeTo(32, .01));
+            expect(short.top - thanks.bottom, closeTo(32, .01));
             expect(
               user.left,
               greaterThanOrEqualTo(avatar.right + 5 + 12 - .01),
             );
+            final consecutive = tester.getRect(
+              find.byKey(
+                const ValueKey<(String, Object?)>(('bot-message-bubble', 105)),
+              ),
+            );
+            final consecutiveAvatar = tester.getRect(
+              find.byKey(
+                const ValueKey<(String, Object?)>((
+                  'bot-message-avatar-frame',
+                  105,
+                )),
+              ),
+            );
+            expect(consecutive.top - short.bottom, closeTo(32, .01));
+            expect(consecutiveAvatar.top - 5 - short.bottom, closeTo(5, .01));
             expect(avatar.width, 54);
             final decoration =
                 tester
@@ -607,7 +623,7 @@ void main() {
                         .decoration
                     as BoxDecoration;
             expect(decoration.border, isNotNull);
-            for (final id in [101, 102, 103, 104]) {
+            for (final id in [101, 102, 103, 104, 105]) {
               final footer = find.byKey(
                 ValueKey<(String, Object?)>((
                   id == 101 || id == 103

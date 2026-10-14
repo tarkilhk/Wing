@@ -12,6 +12,8 @@ sender’s avatar color, with the same readable text and timestamp styling as
 group discussions. Replies from the bot whose chat is open use that same
 message design: a framed avatar across the top-left edge, the sender name, and
 a colored footer with the timestamp and an icon-only Copy action.
+Spacing keeps each floating avatar clear of the preceding reply’s timestamp
+and Copy action, including consecutive bot replies.
 
 The chat screen opens immediately after the tap. Wing's feather pulse appears
 while the conversation loads. You can go Back during loading; a failed load

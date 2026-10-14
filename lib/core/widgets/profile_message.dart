@@ -36,7 +36,7 @@ class BotConversationScope extends InheritedTheme {
   static const avatarClearance = 12.0;
   static const userInset =
       1 + avatarInset + avatarSize + avatarSurround + avatarClearance;
-  static const messageGap = 16.0;
+  static const messageGap = 32.0;
   static BotConversationScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<BotConversationScope>();
   @override
@@ -220,7 +220,9 @@ class ProfileMessage extends StatelessWidget {
     final date = _timestamp(context, color: palette.timestamp);
     final tap = onSenderTap ?? (incoming ? null : scope?.onSenderTap);
     return Padding(
-      padding: const EdgeInsets.only(bottom: BotConversationScope.messageGap),
+      padding: const EdgeInsets.symmetric(
+        vertical: BotConversationScope.messageGap / 2,
+      ),
       child: LayoutBuilder(
         builder: (context, bounds) {
           var width = bounds.maxWidth;
@@ -652,13 +654,13 @@ class ProfileMessage extends StatelessWidget {
     );
     if (user) {
       return Padding(
-        padding: EdgeInsets.only(
-          bottom:
-              BotConversationScope.maybeOf(context) != null ||
-                  message.kind == TranscriptMessageKind.discussion
-              ? BotConversationScope.messageGap
-              : WingSpacing.md,
-        ),
+        padding:
+            BotConversationScope.maybeOf(context) != null ||
+                message.kind == TranscriptMessageKind.discussion
+            ? const EdgeInsets.symmetric(
+                vertical: BotConversationScope.messageGap / 2,
+              )
+            : const EdgeInsets.only(bottom: WingSpacing.md),
         child: _userBubble(context, content, timestamp),
       );
     }

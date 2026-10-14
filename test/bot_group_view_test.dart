@@ -111,6 +111,100 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     groupPreferences = await BotsPreferences.load();
   });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'consecutive bot avatars clear the previous footer ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          fixture.events.addAll([
+            _event(1, 'message.user', 'you', 'Check the sources.'),
+            _event(2, 'message.member', 'atlas', 'Sources checked.'),
+            _event(3, 'message.member', 'mira', 'Review complete.'),
+          ]);
+          final group = (await readFixtureGroups(
+            fixture.repository,
+            groupMessages: null,
+          )).first;
+          final appearances = await fixture.repository.bots();
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: frame,
+                child: BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () =>
+                      const LocalVoiceInputSettings(language: ''),
+                  createSession: () => BotGroupSession(
+                    fixture.repository,
+                    group,
+                    reads: BotGroupReadState(),
+                    preferences: groupPreferences,
+                    groupMessages: null,
+                    appearances: FixedGroupAppearances(appearances),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await _settleGroupMarkdown(tester);
+          for (final (previousId, nextId, kind) in [
+            ('room-1:1', 'room-1:2', 'user-message-bubble'),
+            ('room-1:2', 'room-1:3', 'bot-message-bubble'),
+          ]) {
+            final previous = tester.getRect(
+              find.byKey(
+                ValueKey<(String, Object?)>((kind, previousId)),
+                skipOffstage: false,
+              ),
+            );
+            final next = tester.getRect(
+              find.byKey(
+                ValueKey<(String, Object?)>(('bot-message-bubble', nextId)),
+                skipOffstage: false,
+              ),
+            );
+            final avatar = tester.getRect(
+              find.byKey(
+                ValueKey<(String, Object?)>((
+                  'bot-message-avatar-frame',
+                  nextId,
+                )),
+                skipOffstage: false,
+              ),
+            );
+            expect(next.top - previous.bottom, closeTo(32, .01));
+            expect(
+              avatar.top - 5 - previous.bottom,
+              closeTo(5, .01),
+              reason:
+                  'The avatar surround must clear the preceding timestamp/copy row.',
+            );
+          }
+          expect(tester.takeException(), isNull);
+          await _render(
+            tester,
+            frame,
+            'consecutive-bots-${brightness.name}-$scale',
+          );
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
   testWidgets('group message draft survives leaving and reopening', (
     tester,
   ) async {
