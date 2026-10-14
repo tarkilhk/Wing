@@ -346,8 +346,12 @@ void main() {
         host.event('a', 'message.delta', {'text': 'The first answer text.'});
         await settle();
         expect(tester.element(find.byType(ProfileToolCall)), same(liveTool));
-        await tester.tap(find.byType(TranscriptLatestButton));
-        await settle();
+        // The shorter direct Timeline may already be at the newest edge.
+        final latest = find.byType(TranscriptLatestButton);
+        if (latest.evaluate().isNotEmpty) {
+          await tester.tap(latest);
+          await settle();
+        }
         expect(
           find.text('The first answer text.', findRichText: true),
           findsOneWidget,
@@ -489,6 +493,164 @@ void main() {
         await tester.pumpWidget(const SizedBox());
         await tester.pump();
       });
+      testWidgets(
+        'reasoning handoff production route ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          SharedPreferences.setMockInitialValues({});
+          final prefs = await SharedPreferences.getInstance();
+          final app = AppPreferences(prefs);
+          final host = _LiveWorkHost()
+            ..historyMessages = [
+              {
+                'id': 1,
+                'role': 'user',
+                'content': 'Find hotels within the travel policy.',
+              },
+            ];
+          final controller = ProfileWorkspaceController(
+            connectionIdentity: 'reasoning-handoff-render',
+            access: ConnectionAccess(
+              connection: identityTestConnection(),
+              dashboardOAuth: null,
+            ),
+            preferences: prefs,
+            appPreferences: app,
+            gatewayFactory: host.gateway,
+          );
+          addTearDown(() {
+            controller.dispose();
+            app.dispose();
+          });
+          await controller.initialize();
+          final chat = await controller.createChat(canDispatch: () => true);
+          host.event('a', 'message.start');
+          host.event('a', 'tool.complete', {
+            'tool_id': 'policy',
+            'name': 'read_file',
+            'args': {'path': 'business-trip-policy.md'},
+            'result': 'Use the official booking pages.',
+          });
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          );
+          Future<void> settle() async {
+            await tester.pump(const Duration(milliseconds: 300));
+            await tester.settleMarkdown();
+            await tester.pump(const Duration(milliseconds: 300));
+          }
+
+          Future<void> picture(String state) async {
+            if (!capture) return;
+            await tester.runAsync(() async {
+              final bitmap =
+                  await (frame.currentContext!.findRenderObject()!
+                          as RenderRepaintBoundary)
+                      .toImage();
+              try {
+                final bytes = await bitmap.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final dir = Directory('build/design-previews/live-work-native')
+                  ..createSync(recursive: true);
+                await File(
+                  '${dir.path}/handoff-${brightness.name}-$scale-$state.png',
+                ).writeAsBytes(bytes!.buffer.asUint8List());
+              } finally {
+                bitmap.dispose();
+              }
+            });
+          }
+
+          await settle();
+          expect(find.text('Timeline'), findsOneWidget);
+          expect(find.text('Activity · 1 tool'), findsNothing);
+          await tester.enterText(
+            find.byKey(const Key('profile-message-composer')),
+            'Keep my draft',
+          );
+          await settle();
+          final composer = find.byKey(const ValueKey('conversation-composer'));
+          final bounds = tester.getRect(composer);
+          await picture('tools-only');
+          const heading = 'Searching for Tokyo hotels';
+          host.event('a', 'reasoning.delta', {
+            'text':
+                '**$heading**\n\nCheck the official booking pages for Gotanda.',
+          });
+          await settle();
+          expect(find.text('Thinking'), findsOneWidget);
+          expect(find.text(heading, findRichText: true), findsOneWidget);
+          expect(tester.getRect(composer), bounds);
+          await picture('thinking');
+          host.event('a', 'tool.start', {
+            'tool_id': 'booking',
+            'name': 'web_search',
+            'args': {'query': 'Tokyo Gotanda official booking'},
+          });
+          await settle();
+          expect(chat.runtime.executionActive, isTrue);
+          expect(find.text('Thinking'), findsNothing);
+          expect(find.text(heading, findRichText: true), findsNothing);
+          expect(find.text('Activity · 1 tool'), findsOneWidget);
+          expect(find.text('Timeline'), findsOneWidget);
+          expect(
+            find.descendant(
+              of: find.byType(ProfileActivitySection),
+              matching: find.byIcon(Icons.keyboard_arrow_right_rounded),
+            ),
+            findsOneWidget,
+          );
+          expect(find.byType(ProfileToolCall), findsOneWidget);
+          expect(tester.getRect(composer), bounds);
+          expect(chat.composer.observation.displayedText, 'Keep my draft');
+          await picture('folded');
+          await tester.tap(find.text('Activity · 1 tool'));
+          await settle();
+          expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
+          expect(
+            find.ancestor(
+              of: find.byType(ProfileReasoningDisclosure),
+              matching: find.byType(ProfileActivitySection),
+            ),
+            findsOneWidget,
+          );
+          expect(find.text('Timeline'), findsNWidgets(2));
+          await tester.ensureVisible(find.text('Reasoning'));
+          await settle();
+          await picture('activity');
+          // The centered Latest overlay can cover the middle of an enlarged
+          // title. Its leading edge remains part of the same tappable row.
+          final reasoningTitle = tester.getRect(find.text('Reasoning'));
+          await tester.tapAt(
+            Offset(reasoningTitle.left + 4, reasoningTitle.center.dy),
+          );
+          await settle();
+          expect(find.text(heading, findRichText: true), findsOneWidget);
+          expect(find.byTooltip('Copy Reasoning'), findsOneWidget);
+          await tester.ensureVisible(find.byTooltip('Copy Reasoning'));
+          await settle();
+          await tester.ensureVisible(find.text(heading, findRichText: true));
+          await settle();
+          await picture('reasoning');
+          expect(tester.getRect(composer), bounds);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
     }
   }
 }

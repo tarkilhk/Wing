@@ -393,7 +393,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             'args': {'command': 'python report.py'},
           });
           await tester.pump(const Duration(milliseconds: 300));
-          expect(find.text('Activity · 1 tool'), findsOneWidget);
+          expect(find.text('Activity · 1 tool'), findsNothing);
+          expect(find.text('Timeline'), findsOneWidget);
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(find.byIcon(Icons.terminal_rounded), findsWidgets);
           await tester.ensureVisible(find.byType(ProfileToolCall));

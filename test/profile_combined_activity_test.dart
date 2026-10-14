@@ -440,11 +440,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-      findsNWidgets(2),
+      findsOneWidget,
     );
     expect(find.text('Tool activity'), findsNothing);
     expect(find.text('Activity · 67 tools'), findsOneWidget);
-    expect(find.text('Activity · 1 tool'), findsOneWidget);
+    expect(find.text('Activity · 1 tool'), findsNothing);
+    expect(find.text('Timeline'), findsOneWidget);
     expect(find.text('Running command'), findsOneWidget);
     expect(find.text('Search'), findsNothing);
     await tester.tap(find.text('Activity · 67 tools'));
