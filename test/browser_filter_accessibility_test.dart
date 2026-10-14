@@ -16,6 +16,7 @@ import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/project_icon_glyphs.dart';
 import 'package:wing/core/widgets/profile_selector.dart';
 
 import 'support/browser_mutations_fixture.dart';
@@ -240,7 +241,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('chat-profile-work')));
         await tester.pumpAndSettle();
         final headingIcon = tester.widget<Icon>(
-          find.byIcon(Icons.star_outline),
+          find.byIcon(ProjectIconGlyphs.of('star-full')),
         );
         await tester.tap(find.byKey(const ValueKey('chat-filter-project')));
         await tester.pumpAndSettle();
@@ -255,14 +256,14 @@ void main() {
         expect(project.hitTestable(), findsOneWidget);
         final menuIcon = find.descendant(
           of: project,
-          matching: find.byIcon(Icons.star_outline),
+          matching: find.byIcon(ProjectIconGlyphs.of('star-full')),
         );
         expect(menuIcon, findsOneWidget);
         expect(tester.widget<Icon>(menuIcon).color, headingIcon.color);
         expect(
           find.descendant(
             of: project,
-            matching: find.byIcon(Icons.folder_outlined),
+            matching: find.byIcon(ProjectIconGlyphs.of('folder-library')),
           ),
           findsNothing,
         );
@@ -280,7 +281,7 @@ void main() {
         // Selecting an option keeps its project glyph and color.
         expect(menuIcon, findsOneWidget);
         expect(tester.widget<Icon>(menuIcon).color, headingIcon.color);
-        await tester.tap(find.text('Done'));
+        await tester.tap(find.byTooltip('Close Project'));
         await tester.pumpAndSettle();
         expect(find.text('Project 1'), findsOneWidget);
         expectSelectedPadding(tester, 'Project');
@@ -361,7 +362,7 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(find.byKey(const ValueKey('chat-menu-idle')));
           await tester.pumpAndSettle();
-          await tester.tap(find.text('Done'));
+          await tester.tap(find.byTooltip('Close Status'));
           await tester.pumpAndSettle();
           expect(find.text('Status 1'), findsOneWidget);
           final clear = find.byKey(const ValueKey('workspace-clear-filters'));
@@ -388,7 +389,7 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(find.byKey(const ValueKey('chat-menu-work')));
           await tester.pumpAndSettle();
-          await tester.tap(find.text('Done'));
+          await tester.tap(find.byTooltip('Close Profile'));
           await tester.pumpAndSettle();
           expectSelectedPadding(tester, 'Profile');
           expectDistributedFilters(tester, width);

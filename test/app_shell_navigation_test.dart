@@ -41,6 +41,14 @@ import 'home_config_restore_test.dart'
     show createHomeFixture, homeEntryFactory, profileController;
 
 class _ShellFixture extends ProfileBrowserFixture {
+  final createdSessions = <String, List<Map<String, dynamic>>>{};
+
+  @override
+  List<Map<String, dynamic>> sessions(String profile) => [
+    ...super.sessions(profile),
+    ...?createdSessions[profile],
+  ];
+
   @override
   List<Map<String, dynamic>> historyRows(String profile, String id) => [
     for (final row in sessions(profile).where((row) => row['id'] == id))
@@ -71,7 +79,7 @@ void main() {
     }
   });
 
-  late ProfileBrowserFixture fixture;
+  late _ShellFixture fixture;
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
   late ValueNotifier<ChatNoticeActivity?> activity;
@@ -217,6 +225,14 @@ void main() {
           'session_id': chat.key.sessionId,
           'title': 'Recent conversation',
         });
+        fixture.createdSessions[chat.key.workspace.profileName] = [
+          {
+            'id': chat.key.sessionId,
+            'title': 'Recent conversation',
+            'profile': chat.key.workspace.profileName,
+            'last_active': fixture.now,
+          },
+        ];
         emitChatEvent(controller, chat, 'approval', {
           'request_id': 'fixture-approval',
           'command': 'Review fixture command',
@@ -264,6 +280,14 @@ void main() {
           'session_id': chat.key.sessionId,
           'title': 'Choose deployment region',
         });
+        fixture.createdSessions[chat.key.workspace.profileName] = [
+          {
+            'id': chat.key.sessionId,
+            'title': 'Choose deployment region',
+            'profile': chat.key.workspace.profileName,
+            'last_active': fixture.now,
+          },
+        ];
         emitChatEvent(controller, chat, 'approval', {
           'request_id': 'fixture-approval',
           'command': 'Review fixture command',
@@ -675,6 +699,14 @@ void main() {
         'id': personal.runtime.runtimeId,
         'session_key': personal.key.sessionId,
         'status': 'waiting',
+      },
+    ];
+    fixture.createdSessions[personal.key.workspace.profileName] = [
+      {
+        'id': personal.key.sessionId,
+        'title': personal.title,
+        'profile': personal.key.workspace.profileName,
+        'last_active': fixture.now,
       },
     ];
     await show(tester);

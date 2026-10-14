@@ -15,6 +15,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/wing_icons.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/profile_live_execution.dart';
 import 'support/profile_actions_fixture.dart';
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'helpers/pump_markdown_widget.dart';
@@ -367,17 +368,8 @@ void main() {
       }
       await show(tester);
       expect(find.text('Memory and skills review'), findsNothing);
-      final live = find.byKey(ValueKey(('activity', chat.key)));
+      final live = find.byType(ProfileLiveExecution);
       expect(live, findsOneWidget);
-      await tester.tap(
-        find.descendant(
-          of: live,
-          matching: find.textContaining(
-            RegExp(r'^Activity(?: · \d+ tools?)?$'),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
       expect(
         find.text(activity == 'tool' ? 'Running command' : 'Reasoning'),
         findsOneWidget,
@@ -451,7 +443,7 @@ void main() {
   });
 
   testWidgets(
-    'current execution stays in one collapsed Activity section per chat',
+    'live reasoning stays visible outside the sealed tool disclosure',
     (tester) async {
       final chat = await controller.createChat(canDispatch: () => true);
       chat.reading.installSavedHistory([
@@ -480,7 +472,7 @@ void main() {
         findsNWidgets(2),
       );
       expect(find.text('Running command'), findsNothing);
-      expect(find.text('Current private reasoning'), findsNothing);
+      expect(find.text('Current private reasoning'), findsOneWidget);
       expect(
         find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
         findsNWidgets(2),
@@ -507,7 +499,7 @@ void main() {
       );
 
       final currentHeader = find.descendant(
-        of: find.byKey(ValueKey(('activity', chat.key))),
+        of: find.byType(ProfileLiveExecution),
         matching: find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
       );
       await tester.tap(currentHeader);
@@ -528,6 +520,7 @@ void main() {
       await tester.tapAt(tester.getTopLeft(currentHeader) + const Offset(8, 8));
       await tester.pumpAndSettle();
       expect(find.text('Running command'), findsNothing);
+      expect(find.text('Current private reasoning'), findsOneWidget);
       expect(
         find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
         findsNWidgets(2),

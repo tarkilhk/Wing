@@ -30,6 +30,7 @@ dependencies:
   file_picker: 13.1.0
 
   # Data models
+  meta: 1.18.0
   uuid: ^4.6.0
   crypto: ^3.0.7
   # Strict stock identity metadata reads and canonical server paths.

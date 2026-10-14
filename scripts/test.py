@@ -87,6 +87,8 @@ def prepare_proof_commands(dart, directory, proofs, archive):
     (archive / 'proof-compilation.stdout').write_text(compilation.stdout)
     (archive / 'proof-compilation.stderr').write_text(compilation.stderr)
     if compilation.returncode or not snapshot.is_file():
+        sys.stderr.write(compilation.stdout)
+        sys.stderr.write(compilation.stderr)
         raise ValueError('architecture proof dispatcher did not compile; see private evidence')
     shim_directory = directory / 'bin'
     shim_directory.mkdir()

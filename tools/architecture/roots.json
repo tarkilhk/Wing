@@ -14890,7 +14890,6 @@
         "lib/core/controllers/voice_output_controller.dart",
         "lib/core/models/chat_notification_content.dart",
         "lib/core/models/chat_reading.dart",
-        "lib/core/models/hermes_profile.dart",
         "lib/core/models/profile_selection.dart",
         "lib/core/presentation/attachment_preview_image.dart",
         "lib/core/screens/administration/admin_connector_routes.dart",
@@ -16537,6 +16536,14 @@
       ],
       "status": "retain",
       "dynamic_evidence": "Preserve Unicode grapheme boundaries when splitting wrapped source into viewport-sized display ranges"
+    },
+    "meta": {
+      "kind": "dependencies",
+      "import_consumers": [
+        "lib/core/models/hermes_profile.dart"
+      ],
+      "status": "retain",
+      "dynamic_evidence": "HermesProfile and WorkspaceScope use standalone immutable annotations without importing Flutter into native Dart proofs"
     }
   }
 }

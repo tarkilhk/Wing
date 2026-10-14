@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import signal
 import sys
 import tempfile
@@ -233,6 +234,43 @@ time.sleep(30)
             except ProcessLookupError:
                 pass
             leader.wait()
+
+
+@unittest.skipUnless(shutil.which('dart'), 'activate the project Dart SDK')
+class TestProofCompilation(unittest.TestCase):
+    def test_compilation_failure_is_visible_and_retains_evidence(self):
+        with tempfile.TemporaryDirectory(prefix='wing-proof-error-') as scratch:
+            directory = Path(scratch)
+            dart = directory / 'dart'
+            (directory / 'dartaotruntime').touch()
+            error = io.StringIO()
+            with (mock.patch.object(runner.subprocess, 'run', return_value=
+                  subprocess.CompletedProcess([], 1, 'compiler output\n', 'specific compiler error\n')),
+                  contextlib.redirect_stderr(error),
+                  self.assertRaisesRegex(ValueError, 'dispatcher did not compile')):
+                runner.prepare_proof_commands(str(dart), directory, [], directory)
+            self.assertIn('specific compiler error', error.getvalue())
+            self.assertEqual((directory / 'proof-compilation.stdout').read_text(), 'compiler output\n')
+            self.assertEqual((directory / 'proof-compilation.stderr').read_text(), 'specific compiler error\n')
+
+    def test_current_dispatcher_compiles_and_runs_task_intent_probe(self):
+        with tempfile.TemporaryDirectory(prefix='wing-proof-compilation-') as scratch:
+            directory = Path(scratch)
+            planning = subprocess.run([
+                shutil.which('dart'), '--packages=.dart_tool/package_config.json',
+                'tools/testing/test_batches.dart', str(directory), '2', 'full',
+            ], cwd=runner.ROOT, capture_output=True, text=True)
+            self.assertEqual(planning.returncode, 0, planning.stderr)
+            plan = json.loads(planning.stdout)
+            environment = runner.prepare_proof_commands(
+                plan['dart_executable'], directory, plan['proof_commands'], directory,
+            )
+            result = subprocess.run([
+                str(directory / 'bin/dart'), 'run',
+                'tools/architecture/tests/task_edit_intent_test.dart',
+            ], cwd=runner.ROOT, capture_output=True, text=True, env=environment)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('checks passed', result.stdout)
 
 
 if __name__ == '__main__':

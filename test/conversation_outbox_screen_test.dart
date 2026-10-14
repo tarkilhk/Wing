@@ -160,6 +160,10 @@ void main() {
         host.discoveryFailure = const SocketException('Offline');
         controller.networkUnavailable();
         await render(tester, controller, brightness: brightness, scale: scale);
+        controller.connectionStatus.liveChanged(
+          chat.key.workspace.profileName,
+          false,
+        );
         for (final message in [
           'First offline message',
           'Second offline message',

@@ -364,7 +364,7 @@ void main() {
     await tester.tap(find.byTooltip('Clear heartbeat'));
     await tester.pumpAndSettle();
     expect(find.text('Clear heartbeat?'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
+    await tester.tap(find.byTooltip('Clear heartbeat').last);
     await tester.pumpAndSettle();
     expect(
       fixture.requests.any(
@@ -377,7 +377,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Activity Work opens background work without any tools', (
+  testWidgets('conversation opens background work without any tools', (
     tester,
   ) async {
     await supervision.refreshWork();
@@ -391,14 +391,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Activity'));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey(('activity-tab', 'work'))),
-      findsOneWidget,
-    );
-    await tester.pumpAndSettle();
-
     await tester.ensureVisible(find.text('Background work'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Background work'));

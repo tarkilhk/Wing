@@ -415,18 +415,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Activity Work opens server goal details', (tester) async {
+  testWidgets('conversation goal panel opens server goal details', (
+    tester,
+  ) async {
     await supervision.refreshWork();
     await tester.pumpWidget(
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Activity'));
-    await tester.pumpAndSettle();
-    final work = find.byKey(const ValueKey(('activity-tab', 'work')));
-    await tester.ensureVisible(work);
-    await tester.pumpAndSettle();
-    await tester.tap(work);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Goal'));
     await tester.pumpAndSettle();

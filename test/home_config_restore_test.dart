@@ -255,7 +255,7 @@ void main() {
     expect(find.text('Server access'), findsNothing);
     expect(find.byType(ProfileWorkspaceScreen), findsNothing);
     await tester.tap(find.byKey(const ValueKey('connection-icon-home')));
-    await tester.tap(find.text('Save icon'));
+    await tester.tap(find.byTooltip('Save connection icon'));
     await tester.pumpAndSettle();
     expect(manager.getConnections().single.icon, ConnectionIcon.home);
     await tester.tap(led);
@@ -288,7 +288,7 @@ void main() {
     await tester.tap(find.byTooltip('Change connection icon'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('connection-icon-rocket')));
-    await tester.tap(find.text('Save icon'));
+    await tester.tap(find.byTooltip('Save connection icon'));
     await tester.pumpAndSettle();
     expect(manager.getConnections().single.icon, ConnectionIcon.rocket);
     expect(manager.getConnections().single.id, connection.id);
@@ -337,13 +337,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
+    expect(find.byTooltip('New chat'), findsOneWidget);
     expect(
-      tester
-          .widget<FloatingActionButton>(
-            find.byKey(const ValueKey('workspace-new-chat')),
-          )
-          .tooltip,
-      'New chat',
+      find.byKey(const ValueKey('workspace-new-chat')).hitTestable(),
+      findsOneWidget,
     );
     expect(find.byKey(const ValueKey('chat-filter-profile')), findsOneWidget);
     expect(find.byTooltip('Chat list options'), findsOneWidget);
@@ -827,18 +824,18 @@ void main() {
         'https://hermes.example.com',
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Continue'));
+      await tester.ensureVisible(find.byKey(const Key('connection-primary')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Continue'));
+      await tester.tap(find.byKey(const Key('connection-primary')));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Custom setup'));
       await tester.tap(find.text('Custom setup'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Access headers'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Add header'));
+      await tester.ensureVisible(find.byTooltip('Add header'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Add header'));
+      await tester.tap(find.byTooltip('Add header'));
       await tester.pump();
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Header name'),
@@ -851,8 +848,8 @@ void main() {
       await tester.ensureVisible(find.text('Access headers'));
       await tester.tap(find.text('Access headers'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Use these settings'));
-      await tester.tap(find.text('Use these settings'));
+      await tester.ensureVisible(find.byTooltip('Use connection settings'));
+      await tester.tap(find.byTooltip('Use connection settings'));
       await tester.pumpAndSettle();
       expect(find.textContaining('managed by Hermes'), findsOneWidget);
       expect(manager.getConnections(), isEmpty);
@@ -950,9 +947,9 @@ void main() {
       'https://hermes.example.com',
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Continue'));
+    await tester.ensureVisible(find.byKey(const Key('connection-primary')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.byKey(const Key('connection-primary')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Custom setup'));
     await tester.tap(find.text('Custom setup'));

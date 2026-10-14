@@ -21,6 +21,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/project_icon_glyphs.dart';
 
 const _capture = bool.fromEnvironment('CAPTURE_RECENTS');
 
@@ -292,7 +293,7 @@ void main() {
         expect(find.text('Room discussion excerpt'), findsOneWidget);
         expect(find.text('New answer'), findsWidgets);
         expect(find.text('Sync'), findsOneWidget);
-        expect(find.byIcon(Icons.account_tree_outlined), findsOneWidget);
+        expect(find.byIcon(ProjectIconGlyphs.of('repo')), findsOneWidget);
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
         await tester.pumpAndSettle();
         final botRow = find.byKey(const ValueKey('activity-main-running'));

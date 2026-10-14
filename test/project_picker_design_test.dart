@@ -169,6 +169,12 @@ void main() {
             findsNothing,
           );
           expect(find.byTooltip('Move to project'), findsNothing);
+          expect(
+            find.byKey(const ValueKey('chat-rename-title')),
+            findsOneWidget,
+          );
+          await tester.tap(find.byTooltip('Cancel'));
+          await tester.pumpAndSettle();
           await screenshot(tester, 'header-${brightness.name}-$scale');
           // Even the edge of the project's 48 dp target opens the selector.
           await tester.tapAt(
@@ -181,7 +187,7 @@ void main() {
           );
           expect(tester.takeException(), isNull);
           await screenshot(tester, 'projects-${brightness.name}-$scale');
-          await tester.tap(find.text('Cancel'));
+          await tester.tap(find.byTooltip('Cancel project selection'));
           await tester.pumpAndSettle();
           await tester.tap(
             find.byKey(const ValueKey('connection-status-target')),
@@ -224,6 +230,12 @@ void main() {
           await tester.tap(find.text('Find budget car rental in Perth'));
           await tester.pumpAndSettle();
           expect(
+            find.byKey(const ValueKey('chat-rename-title')),
+            findsOneWidget,
+          );
+          await tester.tap(find.byTooltip('Cancel'));
+          await tester.pumpAndSettle();
+          expect(
             find.byKey(const ValueKey('chat-project-sheet')),
             findsNothing,
           );
@@ -233,7 +245,7 @@ void main() {
             find.byKey(const ValueKey('chat-project-sheet')),
             findsOneWidget,
           );
-          await tester.tap(find.text('Cancel'));
+          await tester.tap(find.byTooltip('Cancel project selection'));
           await tester.pumpAndSettle();
           final nameStyle = tester.widget<Text>(projectText).style;
           expect(
@@ -286,7 +298,7 @@ void main() {
       expect(tester.widget<TextField>(search).controller!.text, isEmpty);
       expect(find.byKey(const ValueKey('move-project-p1')), findsOneWidget);
       expect(tester.takeException(), isNull);
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.byTooltip('Cancel project selection'));
       await tester.pumpAndSettle();
       expect(host.moves, isEmpty);
     },
@@ -302,7 +314,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('chat-project-sheet')), findsOneWidget);
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.byTooltip('Cancel project selection'));
       await tester.pumpAndSettle();
       host.mutationDelay = Completer<void>();
       addTearDown(() {
@@ -344,7 +356,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('project-picker-search')), findsNothing);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byTooltip('Cancel project selection'));
     await tester.pumpAndSettle();
     expect(host.moves, isEmpty);
   });

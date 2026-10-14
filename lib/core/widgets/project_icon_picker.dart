@@ -203,7 +203,8 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      '${choices.length} icons',
+                      '${choices.length}',
+                      semanticsLabel: '${choices.length} icons',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],

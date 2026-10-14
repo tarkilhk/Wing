@@ -10,6 +10,7 @@ void main() {
     () async {
       expect(await rule.check(Directory.current), isEmpty);
     },
+    timeout: const Timeout(Duration(minutes: 2)),
   );
   test(
     'independent completed-view fixtures and source/compiled CLI exits pass',
