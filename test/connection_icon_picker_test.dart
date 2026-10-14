@@ -149,6 +149,13 @@ void main() {
         await capture(tester, 'connection-icons-row-${brightness.name}-$width');
         await tester.tap(find.byTooltip('Change connection icon'));
         await tester.pumpAndSettle();
+        final heading = find.text('Instance icon');
+        expect(
+          tester.widget<Text>(heading).style!.fontSize,
+          Theme.of(
+            tester.element(heading),
+          ).dialogTheme.titleTextStyle!.fontSize,
+        );
         await capture(
           tester,
           'connection-icons-picker-${brightness.name}-$width',

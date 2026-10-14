@@ -161,7 +161,10 @@ class _ConnectionIconPickerState extends State<_ConnectionIconPicker> {
         progressLabel: 'Saving connection icon',
       ),
       children: [
-        Text('Instance icon', style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          'Instance icon',
+          style: Theme.of(context).dialogTheme.titleTextStyle,
+        ),
         const SizedBox(height: 16),
         Row(
           children: [
