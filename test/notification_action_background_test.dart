@@ -134,7 +134,7 @@ Future<void> checkDisconnectedNotification(
       findsOneWidget,
     );
     expect(host.calls.where((c) => c.$2 == 'approval.respond'), isEmpty);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byTooltip('Cancel approval decision'));
     await tester.pumpAndSettle();
   }
   for (var frame = 0; frame < 10 && !handled; frame++) {

@@ -342,13 +342,15 @@ final class _NotificationApplication {
         return;
       }
       if (value.payload.isEmpty) return;
-      final target = jsonDecode(value.payload) as Map<String, dynamic>;
-      final key = ProfileSessionKey.fromJson(target);
       if (value.choice.isEmpty) {
         await beforeNavigation();
         if (!closed) await openPayload(value.payload);
         return;
       }
+      // Navigation accepts both shared rooms and profile sessions. Only an
+      // approval decision requires a profile-session target.
+      final target = jsonDecode(value.payload) as Map<String, dynamic>;
+      final key = ProfileSessionKey.fromJson(target);
       final focus = NotificationFocus.fromJson(
         Map<String, dynamic>.from(target['focus']),
       );
