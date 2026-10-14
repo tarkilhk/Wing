@@ -1,3 +1,4 @@
+import 'package:wing/core/screens/profile_transcript.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -309,7 +310,21 @@ void main() {
               widget is ProfileToolActivitySection &&
               widget.section.containsMessage(4),
         );
-        await tester.ensureVisible(saved);
+        expect(chat.reading.messages.any((row) => row['id'] == 4), isTrue);
+        await tester.scrollUntilVisible(
+          saved,
+          200,
+          scrollable: find
+              .descendant(
+                of: find.byType(ProfileTranscript),
+                matching: find.byWidgetPredicate(
+                  (widget) =>
+                      widget is Scrollable &&
+                      widget.axisDirection == AxisDirection.up,
+                ),
+              )
+              .first,
+        );
         await picture('saved-folded');
         await tester.tap(
           find.descendant(of: saved, matching: find.text('Activity · 1 tool')),
