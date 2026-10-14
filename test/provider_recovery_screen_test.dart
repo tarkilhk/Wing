@@ -159,7 +159,7 @@ void main() {
           expect(find.text('Renew shared sign-in?'), findsOneWidget);
           expect(fixture.consoleRequests.where((r) => r.$3), isEmpty);
           await shot(tester, '${brightness.name}-${scale.toInt()}-confirm');
-          await tester.tap(find.text('Cancel'));
+          await tester.tap(find.byTooltip('Cancel'));
           await tester.pumpAndSettle();
           await reveal(tester, 'Delete saved credentials');
           await tester.tap(find.text('Delete saved credentials'));
@@ -203,7 +203,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(AlertDialog),
-        matching: find.text('Renew access'),
+        matching: find.byTooltip('Renew access'),
       ),
     );
     await tester.pumpAndSettle();
@@ -294,7 +294,7 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byType(AlertDialog),
-          matching: find.text('Delete credentials'),
+          matching: find.byTooltip('Delete credentials'),
         ),
       );
       await tester.pumpAndSettle();
@@ -327,7 +327,7 @@ void main() {
     await tester.tap(find.text('Remove saved sign-in'));
     await tester.pumpAndSettle();
     expect(find.textContaining('personal on Claw'), findsOneWidget);
-    await tester.tap(find.text('Remove sign-in'));
+    await tester.tap(find.byTooltip('Remove sign-in'));
     await tester.pumpAndSettle();
     expect(fixture.requests.where((r) => r.$1 == 'DELETE').single.$3, {
       'profile': 'personal',

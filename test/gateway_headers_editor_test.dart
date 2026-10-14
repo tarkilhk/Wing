@@ -88,7 +88,7 @@ void main() {
     expect(find.text('Value is required'), findsOneWidget);
 
     await tester.enterText(find.byType(TextFormField).at(1), 'secret');
-    await tester.tap(find.text('Add header'));
+    await tester.tap(find.byTooltip('Add header'));
     await tester.pump();
     await tester.enterText(find.byType(TextFormField).at(2), 'x-renamed');
     await tester.enterText(find.byType(TextFormField).at(3), 'another');
@@ -152,7 +152,7 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('Add header'));
+    await tester.tap(find.byTooltip('Add header'));
     await tester.pump();
     await tester.enterText(find.byType(TextFormField).first, 'X-Test');
     expect(formKey.currentState!.validate(), isFalse);

@@ -757,7 +757,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('3500'), findsOneWidget);
       expect(controller.current!.scope.profileName, 'work');
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       expect(
         (administration.configs['work']!['memory'] as Map)['memory_char_limit'],

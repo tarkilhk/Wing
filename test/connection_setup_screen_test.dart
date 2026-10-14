@@ -26,7 +26,14 @@ const _frame = Key('connection-render');
 
 Future<void> _tap(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
-  final finder = find.text(label);
+  final finder = switch (label) {
+    'Save connection icon' ||
+    'Cancel' ||
+    'Use connection settings' ||
+    'Save and open' ||
+    'Save changes' => find.byTooltip(label),
+    _ => find.text(label),
+  };
   if (finder.evaluate().isEmpty) {
     await tester.scrollUntilVisible(
       finder,
@@ -189,12 +196,12 @@ void main() {
       await tester.tap(find.byTooltip('Change connection icon'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('connection-icon-rocket')));
-      await _tap(tester, 'Save icon');
+      await _tap(tester, 'Save connection icon');
       await tester.pumpAndSettle();
       expect(savedIcon, ConnectionIcon.cloud);
       expect(find.text('Couldn’t save this icon. Try again.'), findsOneWidget);
       fail = false;
-      await _tap(tester, 'Save icon');
+      await _tap(tester, 'Save connection icon');
       await tester.pumpAndSettle();
       expect(savedIcon, ConnectionIcon.rocket);
       expect(
@@ -238,7 +245,7 @@ void main() {
     await tester.tap(find.byTooltip('Change connection icon'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('connection-icon-home')));
-    await _tap(tester, 'Save icon');
+    await _tap(tester, 'Save connection icon');
     await tester.pumpAndSettle();
     expect(saved, isNull);
     await _tap(tester, 'Check connection');
@@ -283,7 +290,7 @@ void main() {
       await _tap(tester, 'Instance icon');
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('connection-icon-home')));
-      await _tap(tester, 'Save icon');
+      await _tap(tester, 'Save connection icon');
       await tester.pumpAndSettle();
       await _tap(tester, 'Save and open');
       await tester.pumpAndSettle();
@@ -388,7 +395,7 @@ void main() {
         find.byKey(const Key('connection-chat-address')),
         'https://hermes.example.com:8443/chat/',
       );
-      await _tap(tester, 'Use these settings');
+      await _tap(tester, 'Use connection settings');
       await tester.pumpAndSettle();
       expect(find.text('Connect through your proxy'), findsOneWidget);
       await _tap(tester, 'Check connection');
@@ -427,14 +434,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('hidden-secret'), findsNothing);
       await _tap(tester, 'Use a separate chat address');
-      await _tap(tester, 'Use these settings');
+      await _tap(tester, 'Use connection settings');
       await tester.pumpAndSettle();
       await _tap(tester, 'Check connection');
       await tester.pumpAndSettle();
       expect(checked?.desktopGatewayUrl, isNull);
       expect(checked?.gatewayHeaders, initial.gatewayHeaders);
       expect(checked?.dashboardPassword, ' exact password ');
-      expect(find.text('Save changes'), findsOneWidget);
+      expect(find.byTooltip('Save changes'), findsOneWidget);
     },
   );
 
@@ -537,7 +544,7 @@ void main() {
           expect(find.text('Chat gateway base address'), findsOneWidget);
           await _capture(tester, '${brightness.name}-custom-filled-${scale}x');
           await tester.enterText(chatAddress, 'ws://chat.example.com');
-          await _tap(tester, 'Use these settings');
+          await _tap(tester, 'Use connection settings');
           // The submit button is below this lazy field. A large default test
           // font can scroll the field out of the tree while reaching it.
           await tester.scrollUntilVisible(

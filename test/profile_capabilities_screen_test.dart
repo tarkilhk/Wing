@@ -179,7 +179,7 @@ void main() {
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
       expect(find.textContaining('existing setup process'), findsOneWidget);
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.byTooltip('Cancel'));
       await tester.pumpAndSettle();
       expect(writes, 0);
     },

@@ -356,6 +356,7 @@ void main() {
         },
         {'id': 2, 'role': 'system', 'content': 'review: Saved review context'},
       ]);
+      emitChatEvent(controller, chat, 'message.start');
       if (activity == 'tool') {
         emitChatEvent(controller, chat, 'tool.start', {
           'name': 'terminal',
@@ -458,6 +459,7 @@ void main() {
           {'id': 2, 'role': 'assistant', 'content': 'Visible saved reply'},
         ],
       ]);
+      emitChatEvent(controller, chat, 'message.start');
       emitChatEvent(controller, chat, 'tool.start', {
         'name': 'terminal',
         'tool_id': 'live',

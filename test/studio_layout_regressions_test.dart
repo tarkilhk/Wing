@@ -106,7 +106,7 @@ void main() {
       final group = find.byKey(const ValueKey('usage-breakdown-group'));
       await tester.scrollUntilVisible(
         group,
-        120,
+        300,
         scrollable: find
             .descendant(
               of: find.byType(ListView),
@@ -117,7 +117,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('example/long-production-model'),
-        120,
+        300,
         scrollable: find
             .descendant(
               of: find.byType(ListView),
@@ -189,7 +189,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         expect(
-          tester.getRect(find.byType(FilledButton)).right,
+          tester.getRect(find.byTooltip('Save skill')).right,
           lessThanOrEqualTo(304),
         );
         await capture(tester, 'skill-editor-${brightness.name}-200-keyboard');
@@ -435,7 +435,7 @@ void main() {
         );
         expect(tester.takeException(), isNull);
         await capture(tester, 'default-model-${brightness.name}-200-keyboard');
-        await tester.tap(find.text('Cancel'));
+        await tester.tap(find.byTooltip('Cancel'));
         await tester.pumpAndSettle();
         expect(find.text('Open models'), findsOneWidget);
       },

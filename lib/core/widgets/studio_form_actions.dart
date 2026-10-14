@@ -107,6 +107,7 @@ class StudioFormActions extends StatelessWidget {
   Widget build(BuildContext context) => Align(
     alignment: AlignmentDirectional.centerEnd,
     heightFactor: 1,
+    widthFactor: 1,
     child: Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.end,

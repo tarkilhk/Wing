@@ -580,7 +580,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(AlertDialog),
-        matching: find.text('Cancel'),
+        matching: find.byTooltip('Cancel'),
       ),
     );
     await pumpFrames(tester, count: 4);
@@ -593,7 +593,12 @@ void main() {
     await pumpFrames(tester, count: 4);
     await tester.tap(find.byTooltip('Delete queued message'));
     await pumpFrames(tester, count: 4);
-    await tester.tap(find.text('Delete'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byTooltip('Delete queued message'),
+      ),
+    );
     await pumpFrames(tester, count: 4);
     expect(chat.composer.observation.queue, isEmpty);
     expect(chat.composer.observation.displayedText, 'Separate draft');
@@ -612,7 +617,7 @@ void main() {
     await tester.longPress(find.text('Original'));
     await pumpFrames(tester, count: 4);
     await tester.enterText(editor, 'Discarded edit');
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byTooltip('Cancel queued message editing'));
     await pumpFrames(tester, count: 4);
     expect(chat.composer.observation.queue.first.text, 'Original');
     expect(chat.composer.observation.displayedText, 'Separate draft');

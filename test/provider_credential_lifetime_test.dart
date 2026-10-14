@@ -42,7 +42,7 @@ void main() {
     );
     await tester.enterText(find.byType(TextField), 'synthetic-new-key');
     await tester.pump();
-    await tester.tap(find.text('Save credential'));
+    await tester.tap(find.byTooltip('Save credential'));
     await tester.pump();
     expect(entered.isCompleted, true);
     await tester.pumpWidget(const SizedBox.shrink());

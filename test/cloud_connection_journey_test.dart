@@ -73,9 +73,12 @@ class _Cloud extends HermesCloud {
 }
 
 Future<void> _tap(WidgetTester tester, String label) async {
-  await tester.ensureVisible(find.text(label));
+  final finder = label == 'Save and open'
+      ? find.byTooltip(label)
+      : find.text(label);
+  await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
-  await tester.tap(find.text(label));
+  await tester.tap(finder);
   await tester.pumpAndSettle();
 }
 

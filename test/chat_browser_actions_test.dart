@@ -457,7 +457,7 @@ void main() {
         );
         await tester.tap(find.byKey(const ValueKey('chat-rename-save')));
       } else if (action == 'Delete') {
-        await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+        await tester.tap(find.byTooltip('Delete chat'));
       }
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump();
@@ -572,7 +572,7 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(find.byKey(const ValueKey('chat-menu-tokens')));
           await tester.pumpAndSettle();
-          await tester.tap(find.text('Done'));
+          await tester.tap(find.byTooltip('Close filters'));
           await tester.pumpAndSettle();
           final gate = Completer<void>();
           host.pageDelays[('personal', 0)] = gate;

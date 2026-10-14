@@ -19,6 +19,7 @@ import 'package:wing/core/screens/administration/administration_content.dart';
 import 'package:wing/core/widgets/profile_selector.dart';
 import 'support/administration_fixture.dart';
 import 'support/administration_design_fixture.dart';
+import 'support/backend_update_channel_fixture.dart';
 import 'support/scheduled_tasks_fixture.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profiles_repository.dart';
@@ -43,6 +44,43 @@ class _AdministrationProfilesFixture extends ProfileBrowserFixture {
       get: wire.read,
       rpc: wire.call,
     );
+  }
+}
+
+class _UpdateAdministrationFixture extends AdministrationFixture {
+  final channels = BackendUpdateChannelFixture();
+
+  @override
+  Future<Map<String, dynamic>> send(
+    String method,
+    String path,
+    Map<String, String> query,
+    Map<String, dynamic>? body,
+  ) async {
+    if (method == 'GET' && path == 'health') {
+      requests.add((method, path, {...query}, body));
+      return {
+        'ok': true,
+        'version': updateCheck['current_version'],
+        'commit': BackendUpdateChannelFixture.currentSha,
+      };
+    }
+    if (method == 'GET' && path == 'hermes/update/check') {
+      channels.fetchedAt++;
+    }
+    final channelRead = method != 'GET'
+        ? null
+        : path == 'profiles'
+        ? {
+            'profiles': [
+              for (final name in configs.keys)
+                {'name': name, 'path': BackendUpdateChannelFixture.home},
+            ],
+          }
+        : channels.read(path, query);
+    if (channelRead == null) return super.send(method, path, query, body);
+    requests.add((method, path, {...query}, body == null ? null : {...body}));
+    return channelRead;
   }
 }
 
@@ -447,6 +485,7 @@ void main() {
       testWidgets('versions and updates ${brightness.name} at $scale text', (
         tester,
       ) async {
+        admin = _UpdateAdministrationFixture();
         await show(
           tester,
           brightness,
@@ -468,7 +507,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('1.2.3'), findsOneWidget);
         expect(
-          find.text('Update available · 3 commits behind'),
+          find.text('Update available · 3 commits behind main'),
           findsOneWidget,
         );
         expect(find.text('Reconnect MCP tools'), findsNothing);

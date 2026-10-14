@@ -67,7 +67,7 @@ void main() {
                   of: find.byType(ListView),
                   matching: find.byType(Scrollable),
                 )
-                .last,
+                .first,
           )
           .position
           .jumpTo(0);
@@ -157,9 +157,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Add service key'));
+      await tester.ensureVisible(find.byTooltip('Add service key'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Add service key'));
+      await tester.tap(find.byTooltip('Add service key'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Search service'));
       await tester.pumpAndSettle();

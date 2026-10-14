@@ -3716,7 +3716,13 @@ void main() {
           expect(controller.current!.chat!.key.workspace.profileName, 'work');
           expect(controller.current!.chat!.key.sessionId, 'canonical-root');
           expect(find.byType(BotGroupScreen), findsNothing);
-          expect(find.text('Mira'), findsOneWidget);
+          expect(
+            find.descendant(
+              of: find.byTooltip('Bot settings'),
+              matching: find.text('Mira'),
+            ),
+            findsOneWidget,
+          );
           expect(find.byType(StudioLoading), findsNothing);
           expect(
             tester.getRect(find.byTooltip('Open navigation menu')),

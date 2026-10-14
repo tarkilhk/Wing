@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -1207,6 +1208,23 @@ fixture-value-amber-729
     );
     await tester.pumpAndSettle();
     final actions = find.byKey(const ValueKey('answer-actions-3'));
+    final section = find.byWidgetPredicate(
+      (widget) =>
+          widget is ProfileToolActivitySection &&
+          widget.section.containsMessage(6),
+    );
+    await tester.ensureVisible(section);
+    await tester.tap(
+      find.descendant(
+        of: section,
+        matching: find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(of: section, matching: find.text('Agents')),
+    );
+    await tester.pumpAndSettle();
     final notice = find.text('1 background agent finished');
     expect(actions, findsOneWidget);
     expect(notice, findsOneWidget);

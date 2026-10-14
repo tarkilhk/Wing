@@ -63,9 +63,9 @@ void main() {
     );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Allow once'));
+    await tester.tap(find.byTooltip('Allow once'));
     await tester.pump();
-    expect(find.text('Sending…'), findsOneWidget);
+    expect(find.bySemanticsLabel('Sending approval decision'), findsOneWidget);
     expect(find.text('Sending decision…'), findsNothing);
     gate.complete();
     await tester.pumpAndSettle();
@@ -77,7 +77,7 @@ void main() {
     changes.notifyListeners();
     await tester.pumpAndSettle();
     expect(attempts, 1);
-    await tester.tap(find.text('Allow once'));
+    await tester.tap(find.byTooltip('Allow once'));
     await tester.pumpAndSettle();
     expect(attempts, 2);
     expect(find.text('Review command'), findsNothing);
@@ -151,7 +151,10 @@ void main() {
               .bottom,
           lessThan(915),
         );
-        expect(tester.getRect(find.text('Always allow')).bottom, lessThan(915));
+        expect(
+          tester.getRect(find.byTooltip('Always allow')).bottom,
+          lessThan(915),
+        );
         expect(tester.takeException(), isNull);
         if (capture) {
           await tester.runAsync(() async {

@@ -270,7 +270,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(
-      find.descendant(of: find.byType(AlertDialog), matching: find.text('Run')),
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byTooltip('Run'),
+      ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));

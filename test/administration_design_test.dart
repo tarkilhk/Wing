@@ -197,7 +197,7 @@ void main() {
           await tester.tap(
             find.descendant(
               of: find.byType(AlertDialog),
-              matching: find.text('Run'),
+              matching: find.byTooltip('Run'),
             ),
           );
           await tester.pumpAndSettle();
@@ -220,7 +220,7 @@ void main() {
             'A long draft kept after a partially applied save.\n' * 12,
           );
           await tester.pumpAndSettle();
-          await tester.tap(find.text('Save'));
+          await tester.tap(find.byTooltip('Save changes'));
           await tester.pumpAndSettle();
           expect(find.text('1 unsaved change'), findsOneWidget);
           await snapshot(tester, '$mode-identity-partial');
@@ -234,11 +234,16 @@ void main() {
           fixture.ignoreSave = true;
           final gate = Completer<void>();
           fixture.writeGate = gate;
-          await tester.tap(find.text('Save'));
+          await tester.tap(find.byTooltip('Save changes'));
           await tester.pump(const Duration(milliseconds: 300));
           expect(
             tester
-                .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save'))
+                .widget<IconButton>(
+                  find.ancestor(
+                    of: find.byTooltip('Save changes'),
+                    matching: find.byType(IconButton),
+                  ),
+                )
                 .onPressed,
             isNull,
           );

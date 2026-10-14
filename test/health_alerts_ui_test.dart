@@ -1033,7 +1033,7 @@ void main() {
             );
             await tester.tap(find.text('Test connection'));
             await tester.pumpAndSettle();
-            await tester.tap(find.widgetWithText(FilledButton, 'Test'));
+            await tester.tap(find.byTooltip('Test'));
             await tester.pumpAndSettle();
             expect(
               admin.requests.last.$2,

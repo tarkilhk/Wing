@@ -427,7 +427,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Apply'));
+      await tester.tap(find.byTooltip('Apply model settings'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
 
@@ -439,14 +439,14 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(AlertDialog),
-          matching: find.text('Cancel'),
+          matching: find.byTooltip('Cancel'),
         ),
         findsOneWidget,
       );
-      expect(find.text('Switch model'), findsOneWidget);
+      expect(find.byTooltip('Switch model'), findsOneWidget);
       expect(host.writes, hasLength(1));
       expect(controller.current!.chat!.model, 'gpt-6-astra');
-      await tester.tap(find.text('Switch model'));
+      await tester.tap(find.byTooltip('Switch model'));
       await tester.pumpAndSettle();
       expect(host.writes, hasLength(3));
       expect(host.writes[1], {
@@ -476,14 +476,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Apply'));
+    await tester.tap(find.byTooltip('Apply model settings'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('model changed, but reasoning'), findsOneWidget);
     expect(find.text('Models'), findsOneWidget);
     expect(host.writes, hasLength(2));
     host.failReasoning = false;
-    await tester.tap(find.text('Apply'));
+    await tester.tap(find.byTooltip('Apply model settings'));
     await tester.pumpAndSettle();
     expect(host.writes, hasLength(3));
     expect(host.writes.last['key'], 'reasoning');
@@ -512,7 +512,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('reasoning-xhigh')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Apply'));
+      await tester.tap(find.byTooltip('Apply model settings'));
       await tester.pumpAndSettle();
       expect(find.text('5.6 Sol'), findsOneWidget);
       expect(controller.current!.chat!.reasoningEffort, 'xhigh');
@@ -589,7 +589,7 @@ void main() {
           find.byKey(const Key('model-openrouter-gpt-6.1-sol')),
           findsNothing,
         );
-        await tester.tap(find.text('Apply'));
+        await tester.tap(find.byTooltip('Apply model settings'));
         await tester.pumpAndSettle();
         expect(chat.model, 'gpt-6.1-sol');
         expect(chat.provider, 'openai-codex');

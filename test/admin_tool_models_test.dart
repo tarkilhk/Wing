@@ -111,19 +111,19 @@ void main() {
       findsOneWidget,
     );
     expect(fixture.requests.where((request) => request.$1 == 'PUT'), isEmpty);
-    await tester.tap(find.text('Use model'));
+    await tester.tap(find.byTooltip('Save tool model'));
     await tester.pump();
     await tester.pump();
     expect(find.text('Saving…'), findsNothing);
-    expect(find.text('Use model'), findsOneWidget);
-    expect(find.bySemanticsLabel('Saving model'), findsOneWidget);
+    expect(find.byTooltip('Save tool model'), findsOneWidget);
+    expect(find.bySemanticsLabel('Saving tool model'), findsOneWidget);
     write.complete();
     await tester.pumpAndSettle();
     expect(find.textContaining('Your edits are kept'), findsOneWidget);
     expect(current, 'old-model');
 
     failWrite = false;
-    await tester.tap(find.text('Use model'));
+    await tester.tap(find.byTooltip('Save tool model'));
     await tester.pumpAndSettle();
     expect(current, 'new-model');
     expect(

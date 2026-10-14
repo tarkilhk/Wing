@@ -33,11 +33,11 @@ Future<void> _show(WidgetTester tester, AdministrationRepository server) async {
 }
 
 Future<void> _create(WidgetTester tester) async {
-  await tester.tap(find.text('Create profile'));
+  await tester.tap(find.byTooltip('Create profile'));
   await tester.pumpAndSettle();
   await tester.enterText(find.byType(TextFormField), 'studio');
   await tester.pump();
-  await tester.tap(find.text('Continue'));
+  await tester.tap(find.byKey(const ValueKey('profile-name-save')));
   await tester.pump();
 }
 
@@ -49,14 +49,13 @@ Future<void> _manage(WidgetTester tester, String action) async {
   if (action == 'Rename') {
     await tester.enterText(find.byType(TextFormField), 'studio');
     await tester.pump();
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.byKey(const ValueKey('profile-name-save')));
     await tester.pumpAndSettle();
   }
   await tester.tap(
-    find.widgetWithText(
-      FilledButton,
-      action == 'Delete' ? 'Delete profile' : 'Rename',
-    ),
+    action == 'Delete'
+        ? find.byTooltip('Delete profile')
+        : find.byTooltip('Rename'),
   );
   await tester.pumpAndSettle();
 }
@@ -98,7 +97,13 @@ void main() {
           ),
           findsNothing,
         );
-        expect(find.textContaining('could not be confirmed'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.textContaining('could not be confirmed'),
+          ),
+          findsOneWidget,
+        );
       },
     );
   }

@@ -54,15 +54,13 @@ void main() {
     expect(values, ['synthetic-password']);
     expect(
       tester
-          .widget<FilledButton>(
-            find.byKey(const Key('sensitive-prompt-submit')),
-          )
+          .widget<IconButton>(find.byKey(const Key('sensitive-prompt-submit')))
           .onPressed,
       isNull,
     );
     expect(
       tester
-          .widget<TextButton>(find.byKey(const Key('sensitive-prompt-cancel')))
+          .widget<IconButton>(find.byKey(const Key('sensitive-prompt-cancel')))
           .onPressed,
       isNull,
     );

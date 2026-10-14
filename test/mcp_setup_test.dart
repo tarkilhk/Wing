@@ -246,12 +246,12 @@ void main() {
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Add and sign in'),
+        find.byTooltip('Add connector and sign in'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Add and sign in'));
+      await tester.tap(find.byTooltip('Add connector and sign in'));
       await tester.pumpAndSettle();
       expect(calls.last.$2['name'], 'work-docs');
       expect((calls.last.$2['config'] as Map)['auth'], 'oauth');

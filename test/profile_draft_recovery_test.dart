@@ -287,7 +287,7 @@ void main() {
     expect(find.text('Continue editing'), findsOneWidget);
     await tester.tap(find.text('Discard draft'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();
     expect(
       await store.read(profileName: 'default', sessionId: 'orphan-draft'),
@@ -297,7 +297,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Discard draft'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Discard'));
+    await tester.tap(find.byTooltip('Discard draft'));
     await tester.pumpAndSettle();
     expect(row, findsNothing);
     expect(

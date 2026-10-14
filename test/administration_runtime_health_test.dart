@@ -147,7 +147,7 @@ void main() {
           await tester.tap(
             find.descendant(
               of: find.byType(AlertDialog),
-              matching: find.text('Run'),
+              matching: find.byTooltip('Run'),
             ),
           );
           await tester.pumpAndSettle();
@@ -229,7 +229,7 @@ void main() {
         await tester.tap(
           find.descendant(
             of: find.byType(AlertDialog),
-            matching: find.text('Run'),
+            matching: find.byTooltip('Run'),
           ),
         );
         await tester.pump();
@@ -285,7 +285,7 @@ void main() {
         await tester.tap(
           find.descendant(
             of: find.byType(AlertDialog),
-            matching: find.text('Run'),
+            matching: find.byTooltip('Run'),
           ),
         );
         await tester.pumpAndSettle();
@@ -342,7 +342,7 @@ void main() {
         await tester.tap(
           find.descendant(
             of: find.byType(AlertDialog),
-            matching: find.text('Run'),
+            matching: find.byTooltip('Run'),
           ),
         );
         await tester.pumpAndSettle();

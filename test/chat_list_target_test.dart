@@ -304,7 +304,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(ValueKey('chat-menu-$id')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Done'));
+    await tester.tap(find.byTooltip('Close filters'));
     await tester.pumpAndSettle();
   }
 
@@ -502,7 +502,7 @@ void main() {
             tester,
             '${brightness.name}-$scale-projects-filtered',
           );
-          await tester.tap(find.text('Done'));
+          await tester.tap(find.byTooltip('Close filters'));
           await tester.pumpAndSettle();
 
           await tester.tap(find.byKey(const ValueKey('chat-profile-personal')));
@@ -514,7 +514,7 @@ void main() {
             findsOneWidget,
           );
           expect(find.byKey(const ValueKey('chat-menu-work/p0')), findsNothing);
-          await tester.tap(find.text('Done'));
+          await tester.tap(find.byTooltip('Close filters'));
           await tester.pumpAndSettle();
 
           await tester.tap(find.byKey(const ValueKey('chat-profile-personal')));
@@ -529,7 +529,7 @@ void main() {
             find.byKey(const ValueKey('chat-menu-work/p0')),
             findsOneWidget,
           );
-          await tester.tap(find.text('Done'));
+          await tester.tap(find.byTooltip('Close filters'));
           await tester.pumpAndSettle();
           expect(controller.current!.scope, owner);
           expect(tester.takeException(), isNull);
@@ -551,7 +551,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('chat-menu-draft')));
       await tester.pumpAndSettle();
       expect(find.text('Status 2'), findsOneWidget);
-      await tester.tap(find.text('Done'));
+      await tester.tap(find.byTooltip('Close filters'));
       await tester.pumpAndSettle();
       await select(tester, 'profile', 'work');
       expect(controller.current!.scope.profileName, 'personal');
@@ -929,7 +929,7 @@ void main() {
     await openViewMenu(tester, 'show-details');
     await tester.tap(find.byKey(const ValueKey('chat-menu-tokens')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Done'));
+    await tester.tap(find.byTooltip('Close filters'));
     await tester.pumpAndSettle();
     expect(find.text('9.0k'), findsOneWidget);
     final list = find.byKey(const ValueKey('chat-list-false'));
@@ -1123,7 +1123,7 @@ void main() {
           .hitTestable();
       await tester.tap(choices.first);
       await tester.pumpAndSettle();
-      expect(find.text('Done'), findsOneWidget);
+      expect(find.byTooltip('Close filters'), findsOneWidget);
       expect(
         tester
             .state<ScrollableState>(
@@ -1186,10 +1186,10 @@ void main() {
         isEmpty,
       );
       expect(find.text('$title 2'), findsOneWidget);
-      await tester.tap(find.text('Clear'));
+      await tester.tap(find.byTooltip('Clear filters'));
       await tester.pumpAndSettle();
       expect(find.text('$title 2'), findsNothing);
-      await tester.tap(find.text('Done'));
+      await tester.tap(find.byTooltip('Close filters'));
       await tester.pumpAndSettle();
       expect(search, findsNothing);
     });
@@ -1205,7 +1205,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('chat-menu-tokens')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Done'));
+      await tester.tap(find.byTooltip('Close filters'));
       await tester.pumpAndSettle();
       expect(find.text('9.0k'), findsOneWidget);
       expect(find.text('Show more'), findsWidgets);
@@ -1248,7 +1248,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('chat-menu-updated')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Done'));
+      await tester.tap(find.byTooltip('Close filters'));
       await tester.pumpAndSettle();
       expect(find.text('Unread'), findsOneWidget);
       expect(find.text('1.5k'), findsWidgets);
@@ -1382,11 +1382,11 @@ void main() {
           find.byKey(const ValueKey('chat-menu-profile')).hitTestable(),
           findsOneWidget,
         );
-        expect(find.text('Done').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Close filters').hitTestable(), findsOneWidget);
         await screenshot(tester, '${brightness.name}-$scale-show-details');
         await tester.tap(find.byKey(const ValueKey('chat-menu-tokens')));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Done'));
+        await tester.tap(find.byTooltip('Close filters'));
         await tester.pumpAndSettle();
         await screenshot(tester, '${brightness.name}-$scale-tokens');
         await tester.tap(find.byKey(const ValueKey('chat-filter-status')));
@@ -1414,9 +1414,9 @@ void main() {
             kind == 'project' ? 'research-notes' : 'work',
           );
           await tester.pumpAndSettle();
-          expect(find.text('Done').hitTestable(), findsOneWidget);
+          expect(find.byTooltip('Close filters').hitTestable(), findsOneWidget);
           await screenshot(tester, '${brightness.name}-$scale-$kind-keyboard');
-          await tester.tap(find.text('Done'));
+          await tester.tap(find.byTooltip('Close filters'));
           tester.view.resetViewInsets();
           await tester.pumpAndSettle();
         }

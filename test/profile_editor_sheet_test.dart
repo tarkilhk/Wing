@@ -132,9 +132,9 @@ void main() {
   Finder field(String key) => find.byKey(ValueKey(key));
 
   Future<void> tapSave(WidgetTester tester, {bool settle = true}) async {
-    await tester.ensureVisible(find.text('Save'));
+    await tester.ensureVisible(find.byTooltip('Save changes'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.byTooltip('Save changes'));
     if (settle) {
       await tester.pumpAndSettle();
     } else {
@@ -204,10 +204,10 @@ void main() {
       fixture.calls.where((call) => call.$1.startsWith('profiles/work/')),
       hasLength(2),
     );
-    await tester.tap(find.widgetWithText(TextButton, 'Close'));
+    await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('Discard unsaved changes?'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Discard'));
+    await tester.tap(find.byTooltip('Discard edits'));
     await tester.pumpAndSettle();
     expect(result, isTrue);
   });
@@ -274,9 +274,9 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     await tester.enterText(field('profile-soul-field'), 'Phone edit');
-    await tester.ensureVisible(find.text('Save'));
+    await tester.ensureVisible(find.byTooltip('Save changes'));
     await tester.pumpAndSettle();
-    expect(find.text('Save'), findsOneWidget);
+    expect(find.byTooltip('Save changes'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -293,8 +293,11 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pump();
     expect(find.text('Identity'), findsOneWidget);
-    final close = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'Close'),
+    final close = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byTooltip('Cancel'),
+        matching: find.byType(IconButton),
+      ),
     );
     expect(close.onPressed, isNull);
 

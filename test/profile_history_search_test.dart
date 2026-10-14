@@ -451,7 +451,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Done'));
+      await tester.tap(find.byTooltip('Close filters'));
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
       await tester.pumpAndSettle();

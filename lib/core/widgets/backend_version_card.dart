@@ -404,25 +404,30 @@ class _BackendChannelDialogState extends State<_BackendChannelDialog> {
         children: [
           Text(widget.host),
           const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: _choice,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Channel'),
-            items: [
-              const DropdownMenuItem(
-                value: 'stable',
-                child: Text('Stable releases'),
-              ),
-              const DropdownMenuItem(value: 'main', child: Text('Main branch')),
-              if (!{'stable', 'main'}.contains(widget.initial.name))
-                DropdownMenuItem(
-                  value: widget.initial.name,
-                  child: Text(widget.initial.name),
+          StudioButtonPress(
+            child: DropdownButtonFormField<String>(
+              initialValue: _choice,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Channel'),
+              items: [
+                const DropdownMenuItem(
+                  value: 'stable',
+                  child: Text('Stable releases'),
                 ),
-            ],
-            onChanged: _pending
-                ? null
-                : (value) => setState(() => _choice = value!),
+                const DropdownMenuItem(
+                  value: 'main',
+                  child: Text('Main branch'),
+                ),
+                if (!{'stable', 'main'}.contains(widget.initial.name))
+                  DropdownMenuItem(
+                    value: widget.initial.name,
+                    child: Text(widget.initial.name),
+                  ),
+              ],
+              onChanged: _pending
+                  ? null
+                  : (value) => setState(() => _choice = value!),
+            ),
           ),
           const SizedBox(height: 12),
           Text(

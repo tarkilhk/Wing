@@ -86,7 +86,7 @@ void main() {
       find.widgetWithText(ExpansionTile, 'Saved /srv/latest.pdf'),
       findsOneWidget,
     );
-    expect(find.text('Search older messages'), findsOneWidget);
+    expect(find.byTooltip('Search older messages'), findsOneWidget);
     final reads = host.reads
         .where((read) => read.$1.endsWith('/messages'))
         .toList();
@@ -107,7 +107,7 @@ void main() {
       ),
       'Saved /srv/earlier.pdf',
     );
-    await tester.tap(find.text('Search older messages'));
+    await tester.tap(find.byTooltip('Search older messages'));
     await tester.pumpAndSettle();
     expect(
       find.widgetWithText(ExpansionTile, 'Saved /srv/earlier.pdf'),

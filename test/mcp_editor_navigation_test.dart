@@ -108,7 +108,12 @@ void main() {
     expect(navigation.canRequestSwitch, isTrue);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byTooltip('Cancel'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(
       tester.widget<TextField>(name).controller!.text,
@@ -116,7 +121,7 @@ void main() {
     );
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Discard'));
+    await tester.tap(find.byTooltip('Discard'));
     await tester.pumpAndSettle();
     expect(find.text('Open setup'), findsOneWidget);
     expect(fixture.requests, isEmpty);
@@ -136,7 +141,12 @@ void main() {
       expect(find.text('Discard edits?'), findsNothing);
       await chooseWork(tester);
       expect(find.text('Discard edits?'), findsOneWidget);
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byTooltip('Cancel'),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(selected, isEmpty);
       expect(
@@ -144,7 +154,7 @@ void main() {
         'Transient draft',
       );
       await chooseWork(tester);
-      await tester.tap(find.text('Discard'));
+      await tester.tap(find.byTooltip('Discard'));
       await tester.pumpAndSettle();
       expect(selected, ['work']);
       expect(find.text('Server A / work'), findsOneWidget);
@@ -214,14 +224,14 @@ void main() {
       );
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.scrollUntilVisible(
-        find.text('Add and sign in'),
+        find.byTooltip('Add connector and sign in'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Add and sign in'));
+      await tester.ensureVisible(find.byTooltip('Add connector and sign in'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Add and sign in'));
+      await tester.tap(find.byTooltip('Add connector and sign in'));
       await tester.pump();
       expect(fixture.rpcRequests, [
         ('personal', 'mcp.servers.list'),

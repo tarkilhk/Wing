@@ -115,7 +115,7 @@ void main() {
     expect(platform.entered.isCompleted, isTrue);
     await tester.tap(find.byKey(const ValueKey('chat-menu-work')));
     await tester.pump();
-    await tester.tap(find.text('Done'));
+    await tester.tap(find.byTooltip('Close filters'));
     await tester.pump();
     platform.release.complete();
     await settlePreferenceWrites(tester);
@@ -136,7 +136,7 @@ void main() {
       await openProfiles(tester);
       await tester.tap(find.byKey(const ValueKey('chat-menu-personal')));
       await settlePreferenceWrites(tester);
-      await tester.tap(find.text('Done'));
+      await tester.tap(find.byTooltip('Close filters'));
       await tester.pumpAndSettle();
       expect((await platform.getAll()).containsKey(storageKey), isFalse);
       expect(platform.writes, hasLength(1));
@@ -203,7 +203,7 @@ void main() {
       expect((await platform.getAll()).containsKey(storageKey), isFalse);
       expect(platform.writes, hasLength(1));
       expect(find.text('Profile 1'), findsNothing);
-      expect(find.text('Done'), findsOneWidget);
+      expect(find.byTooltip('Close filters'), findsOneWidget);
       expect(personal, findsOneWidget);
       expect(tester.takeException(), isNull);
       expect(

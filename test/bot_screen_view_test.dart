@@ -256,12 +256,12 @@ void main() {
     await tester.tap(find.byTooltip('Hand control back (force)'));
     await tester.pumpAndSettle();
     expect(f.calls.where((c) => c.$3['force'] == true), isEmpty);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();
     expect(f.holder, 'human');
     await tester.tap(find.byTooltip('Hand control back (force)'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Hand back'));
+    await tester.tap(find.byTooltip('Hand control back'));
     await tester.pumpAndSettle();
     expect(f.holder, 'agent');
     expect(tester.takeException(), isNull);

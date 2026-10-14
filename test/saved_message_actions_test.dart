@@ -174,8 +174,8 @@ void main() {
           bottom: 240 * tester.view.devicePixelRatio,
         );
         await tester.pumpAndSettle();
-        final submit = find.widgetWithText(FilledButton, 'Replace and resend');
-        final close = find.byTooltip('Cancel editing');
+        final submit = find.byTooltip('Replace message and resend');
+        final close = find.byTooltip('Cancel');
         expect(tester.getRect(submit).bottom, lessThanOrEqualTo(400));
         expect(tester.getRect(close).top, greaterThanOrEqualTo(0));
         expect(tester.getSize(close), const Size(48, 48));
@@ -185,7 +185,14 @@ void main() {
         await tester.ensureVisible(field);
         await tester.enterText(field, 'Corrected follow-up');
         await tester.pumpAndSettle();
-        expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+        expect(
+          tester
+              .widget<IconButton>(
+                find.ancestor(of: submit, matching: find.byType(IconButton)),
+              )
+              .onPressed,
+          isNotNull,
+        );
         host.submitError = JsonRpcError(
           'prompt.submit',
           'Session busy',
@@ -331,7 +338,6 @@ void main() {
           find.text('Checked upstream issue and pull request.'),
           findsNothing,
         );
-        final answerRight = tester.getRect(answerCopy).right;
         ScaffoldMessenger.of(tester.element(answerCopy)).hideCurrentSnackBar();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
@@ -348,7 +354,23 @@ void main() {
           of: userMessage,
           matching: find.byTooltip('Copy message'),
         );
-        expect(tester.getRect(userCopy).right, closeTo(answerRight, .1));
+        expect(
+          tester.getRect(userCopy).right,
+          closeTo(
+            tester
+                    .getRect(
+                      find.byKey(
+                        const ValueKey<(String, Object?)>((
+                          'user-message-bubble',
+                          1,
+                        )),
+                      ),
+                    )
+                    .right -
+                2,
+            .1,
+          ),
+        );
         expect(find.text('10 Oct, 16:38'), findsOneWidget);
         await tester.pump();
         await capture(tester, 'target-${brightness.name}-$scale');
@@ -776,7 +798,7 @@ void main() {
       matching: find.byTooltip('Copy message'),
     );
     final copyTarget = tester.getRect(copy);
-    expect(copyTarget.size, const Size(44, 48));
+    expect(copyTarget.size, const Size(48, 32));
     await tester.tapAt(Offset(copyTarget.right - 2, copyTarget.bottom - 2));
     await tester.pumpAndSettle();
     expect(copied, 'Follow-up');
@@ -797,12 +819,19 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Follow-up'), findsWidgets);
-    expect(find.text('Replace and resend'), findsOneWidget);
+    expect(find.byTooltip('Replace message and resend'), findsOneWidget);
     expect(
-      tester.widget<FilledButton>(find.byType(FilledButton).last).onPressed,
+      tester
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byTooltip('Replace message and resend'),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed,
       isNull,
     );
-    await tester.tap(find.byTooltip('Cancel editing'));
+    await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();
     expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
   });
@@ -826,7 +855,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), 'Corrected followup');
     await tester.pump();
-    await tester.tap(find.text('Replace and resend'));
+    await tester.tap(find.byTooltip('Replace message and resend'));
     await tester.runAsync(() async {
       for (
         var i = 0;
@@ -875,7 +904,7 @@ void main() {
         final field = find.byKey(const ValueKey('saved-message-edit-input'));
         await tester.enterText(field, 'Retained correction');
         await tester.pump();
-        await tester.tap(find.text('Replace and resend'));
+        await tester.tap(find.byTooltip('Replace message and resend'));
         await tester.pump();
         for (
           var i = 0;

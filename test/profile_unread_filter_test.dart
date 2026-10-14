@@ -59,7 +59,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('chat-menu-unread')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Done'));
+      await tester.tap(find.byTooltip('Close filters'));
       await tester.pumpAndSettle();
       expect(find.text('personal chat 50'), findsOneWidget);
       expect(find.text('work chat 50'), findsOneWidget);

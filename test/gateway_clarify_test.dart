@@ -171,7 +171,7 @@ void main() {
 
       expect(
         tester
-            .widget<FilledButton>(find.byKey(const Key('clarify-continue')))
+            .widget<IconButton>(find.byKey(const Key('clarify-continue')))
             .onPressed,
         isNull,
       );

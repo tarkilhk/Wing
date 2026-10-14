@@ -957,7 +957,7 @@ void main({
               await tester.drag(explanationScroll, const Offset(0, -3000));
               await tester.pumpAndSettle();
               await snapshot(tester, '$name-explanation-lower');
-              await tester.tap(find.text('Close'));
+              await tester.tap(find.byTooltip('Close'));
               await tester.pumpAndSettle();
               expect(find.byType(AlertDialog), findsNothing);
             }

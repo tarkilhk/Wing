@@ -136,7 +136,10 @@ void main() {
         await tester.tap(find.text('Open models'));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        expect(find.text('Apply').hitTestable(), findsOneWidget);
+        expect(
+          find.byTooltip('Apply model settings').hitTestable(),
+          findsOneWidget,
+        );
         expect(
           tester.getRect(find.text('Models')).top -
               tester.getRect(find.byType(BottomSheet)).top,
@@ -216,7 +219,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('chat-fast-control')));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Apply'));
+        await tester.tap(find.byTooltip('Apply model settings'));
         await tester.pumpAndSettle();
         expect(result?.reasoningEffort, 'ultra');
         expect(result?.fastMode, ChatFastMode.fast);
@@ -350,7 +353,10 @@ void main() {
             reason:
                 'Header, search and tabs stay compact independently of units text wrapping',
           );
-          expect(find.text('Apply').hitTestable(), findsOneWidget);
+          expect(
+            find.byTooltip('Apply model settings').hitTestable(),
+            findsOneWidget,
+          );
           if (capture) {
             await tester.runAsync(() async {
               final image = await tester

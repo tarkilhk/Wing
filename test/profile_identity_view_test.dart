@@ -63,8 +63,8 @@ void main() {
     await tester.enterText(field, 'My pending edit');
     await tester.pumpAndSettle();
     description = 'Changed elsewhere';
-    await tester.ensureVisible(find.text('Save'));
-    await tester.tap(find.text('Save'));
+    await tester.ensureVisible(find.byTooltip('Save changes'));
+    await tester.tap(find.byTooltip('Save changes'));
     await tester.pumpAndSettle();
     expect(description, 'Changed elsewhere');
     expect(fixture.requests.where((request) => request.$1 != 'GET'), isEmpty);

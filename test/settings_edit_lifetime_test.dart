@@ -36,7 +36,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField), '2500');
       await tester.pump();
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pump();
       expect(configs, 2);
       await tester.pumpWidget(const SizedBox.shrink());

@@ -23,7 +23,7 @@ void main() {
       fixture.vision['base_url'] = 'https://external.invalid';
       await tester.tap(find.byKey(const Key('admin-model-p-after')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Set helper model'));
+      await tester.tap(find.byTooltip('Set helper model'));
       await tester.pumpAndSettle();
       expect(fixture.posts, isEmpty);
       expect(fixture.vision['model'], 'before');
