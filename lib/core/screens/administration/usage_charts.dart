@@ -188,10 +188,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
     final offset = days.first.date.weekday % 7;
     final weeks = ((days.length + offset) / 7).ceil();
     // A single band of compact week columns fills the available width.
-    final columns = math.min(
-      weeks,
-      math.max(1, ((width - inset * 2 + gap) / 15).floor()),
-    );
+    final columns = usageCalendarColumns(width);
     final pitch = (width - inset * 2 + gap) / columns;
     final square = pitch - gap;
     final maximum = days.fold<int>(
@@ -314,10 +311,13 @@ class _UsageCalendarState extends State<UsageCalendar> {
                   .clamp(firstWeek + 1, weeks);
               final first = math.max(0, firstWeek * 7 - offset);
               final end = math.min(days.length, endWeek * 7 - offset);
-              return Text(
-                '${locale.formatShortDate(days[first].date)} – ${locale.formatShortDate(days[end - 1].date)}',
-                key: const ValueKey('usage-visible-dates'),
-                style: Theme.of(context).textTheme.bodySmall,
+              return SizedBox(
+                height: usageCalendarDateHeight(context, width),
+                child: Text(
+                  '${locale.formatShortDate(days[first].date)} – ${locale.formatShortDate(days[end - 1].date)}',
+                  key: const ValueKey('usage-visible-dates'),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               );
             },
           ),
@@ -403,38 +403,68 @@ class _UsageCalendarState extends State<UsageCalendar> {
       children: [
         band(),
         const SizedBox(height: 8),
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          spacing: 8,
-          runSpacing: 4,
+        const UsageCalendarLegend(),
+      ],
+    );
+  }
+}
+
+// The year always reserves a band of up to 52 visible week columns.
+// Shared geometry also sizes the dashboard's loading/empty/error calendar.
+int usageCalendarColumns(double width) =>
+    math.min(52, math.max(1, ((width - 3) / 15).floor()));
+
+double usageCalendarDateHeight(BuildContext context, double width) {
+  final locale = MaterialLocalizations.of(context);
+  final sample = locale.formatShortDate(DateTime(2000, 9, 30));
+  final painter = TextPainter(
+    text: TextSpan(
+      text: '$sample – $sample',
+      style: Theme.of(context).textTheme.bodySmall,
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout(maxWidth: width);
+  final height = painter.height;
+  painter.dispose();
+  return height;
+}
+
+class UsageCalendarLegend extends StatelessWidget {
+  const UsageCalendarLegend({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final tokens = WingTokens.of(context);
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        Text(
+          'Year view · Server dates',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Year view · Server dates',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Less', style: Theme.of(context).textTheme.labelSmall),
-                const SizedBox(width: 6),
-                for (var i = 0; i < 5; i++)
-                  Container(
-                    width: 9,
-                    height: 9,
-                    margin: const EdgeInsets.only(right: 3),
-                    decoration: BoxDecoration(
-                      color: Color.lerp(
-                        tokens.border.withValues(alpha: .45),
-                        tokens.accent,
-                        i / 4,
-                      ),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+            Text('Less', style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(width: 6),
+            for (var i = 0; i < 5; i++)
+              Container(
+                width: 9,
+                height: 9,
+                margin: const EdgeInsets.only(right: 3),
+                decoration: BoxDecoration(
+                  color: Color.lerp(
+                    tokens.border.withValues(alpha: .45),
+                    tokens.accent,
+                    i / 4,
                   ),
-                const SizedBox(width: 3),
-                Text('More', style: Theme.of(context).textTheme.labelSmall),
-              ],
-            ),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            const SizedBox(width: 3),
+            Text('More', style: Theme.of(context).textTheme.labelSmall),
           ],
         ),
       ],

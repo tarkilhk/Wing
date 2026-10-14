@@ -105,6 +105,8 @@ void main() {
     WidgetTester tester, {
     Brightness brightness = Brightness.dark,
     double scale = 1,
+    bool settle = true,
+    bool reducedMotion = false,
   }) async {
     tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
     tester.view.devicePixelRatio = 1;
@@ -114,9 +116,10 @@ void main() {
         debugShowCheckedModeBanner: false,
         theme: wingTheme(brightness),
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(scale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            disableAnimations: reducedMotion,
+          ),
           child: RepaintBoundary(
             key: const ValueKey('usage-capture'),
             child: child!,
@@ -125,7 +128,12 @@ void main() {
         home: AnalyticsPage(profile: fixture.server.profile('personal')),
       ),
     );
-    await tester.pumpAndSettle(const Duration(milliseconds: 250));
+    if (settle) {
+      await tester.pumpAndSettle(const Duration(milliseconds: 250));
+    } else {
+      await tester.pump();
+      await tester.pump();
+    }
   }
 
   Future<void> snapshot(WidgetTester tester, String name) async {
@@ -153,18 +161,24 @@ void main() {
                 axisDirectionToAxis(widget.axisDirection) == Axis.vertical,
           ),
         )
-        .last;
+        .first;
+    final position = tester.state<ScrollableState>(scrollable).position;
     if (target.evaluate().isEmpty) {
-      tester.state<ScrollableState>(scrollable).position.jumpTo(0);
+      position.jumpTo(0);
       await tester.pumpAndSettle(const Duration(milliseconds: 250));
-      if (target.evaluate().isEmpty) {
-        await tester.scrollUntilVisible(
-          target,
-          180,
-          scrollable: scrollable,
-          maxScrolls: 80,
+      // A drag over a chart can belong to its local scroll frame. Advance the
+      // page's own position when locating an off-screen control instead.
+      for (
+        var attempts = 0;
+        target.evaluate().isEmpty && attempts < 80;
+        attempts++
+      ) {
+        position.jumpTo(
+          (position.pixels + 180).clamp(0, position.maxScrollExtent),
         );
+        await tester.pumpAndSettle(const Duration(milliseconds: 250));
       }
+      expect(target, findsOneWidget);
     }
     await tester.ensureVisible(target);
     await tester.pumpAndSettle(const Duration(milliseconds: 250));
@@ -175,6 +189,295 @@ void main() {
     await tester.tap(target);
     await tester.pumpAndSettle(const Duration(milliseconds: 250));
   }
+
+  Future<Map<String, Rect>> sectionGeometry(WidgetTester tester) async {
+    final outer = find
+        .descendant(
+          of: find.byType(ListView).first,
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final position = tester.state<ScrollableState>(outer).position;
+    position.jumpTo(0);
+    await tester.pump();
+    final result = <String, Rect>{};
+    for (final id in [
+      'usage-calendar-slot',
+      'usage-breakdown-group',
+      'usage-breakdown-slot',
+      'usage-trend-group',
+      'usage-trend-slot',
+    ]) {
+      final target = find.byKey(ValueKey(id));
+      for (
+        var attempts = 0;
+        target.evaluate().isEmpty && attempts < 30;
+        attempts++
+      ) {
+        position.jumpTo(
+          (position.pixels + 150).clamp(0, position.maxScrollExtent),
+        );
+        await tester.pump();
+      }
+      expect(target, findsOneWidget);
+      result[id] = tester.getRect(target).shift(Offset(0, position.pixels));
+    }
+    position.jumpTo(0);
+    await tester.pump();
+    return result;
+  }
+
+  void expectSameGeometry(
+    Map<String, Rect> actual,
+    Map<String, Rect> expected,
+  ) {
+    for (final id in expected.keys) {
+      expect(
+        actual[id]!.top,
+        closeTo(expected[id]!.top, .001),
+        reason: '$id top',
+      );
+      expect(
+        actual[id]!.height,
+        closeTo(expected[id]!.height, .001),
+        reason: '$id height',
+      );
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final yearFirst in [false, true]) {
+        testWidgets(
+          'analytics sections stay in place ${brightness.name} $scale yearFirst=$yearFirst',
+          (tester) async {
+            final year = Completer<Map<String, dynamic>>();
+            final models = Completer<Map<String, dynamic>>();
+            final daily = Completer<Map<String, dynamic>>();
+            fixture.override = (_, path, query, _) => path == 'analytics/models'
+                ? models.future
+                : query['days'] == '365'
+                ? year.future
+                : daily.future;
+            await show(
+              tester,
+              brightness: brightness,
+              scale: scale,
+              settle: false,
+            );
+            final original = await sectionGeometry(tester);
+            expect(find.text('Tokens'), findsWidgets);
+            expect(find.byType(StudioLoading), findsOneWidget);
+            expect(find.textContaining('Loading activity year'), findsNothing);
+            final header = tester.getRect(
+              find.byKey(const ValueKey('studio-loading-slot')),
+            );
+            await snapshot(tester, 'loading-${brightness.name}-$scale');
+            if (yearFirst) {
+              year.complete(dailyData());
+            } else {
+              models.complete({
+                'models': [_paid()],
+              });
+              daily.complete(dailyData());
+            }
+            await tester.pump();
+            await tester.pump();
+            expectSameGeometry(await sectionGeometry(tester), original);
+            expect(find.byType(StudioLoading), findsOneWidget);
+            expect(
+              tester.getRect(find.byKey(const ValueKey('studio-loading-slot'))),
+              header,
+            );
+            await snapshot(
+              tester,
+              'partial-${brightness.name}-$scale-yearFirst-$yearFirst',
+            );
+            if (yearFirst) {
+              models.complete({
+                'models': [
+                  _paid(),
+                  for (var i = 0; i < 8; i++) _paid()..['model'] = 'Model $i',
+                ],
+              });
+              daily.complete(dailyData());
+            } else {
+              year.complete(dailyData());
+            }
+            await tester.pumpAndSettle();
+            expectSameGeometry(await sectionGeometry(tester), original);
+            expect(find.byType(StudioLoading), findsNothing);
+            expect(
+              tester.getRect(find.byKey(const ValueKey('studio-loading-slot'))),
+              header,
+            );
+            await snapshot(
+              tester,
+              'settled-${brightness.name}-$scale-yearFirst-$yearFirst',
+            );
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'analytics Refresh holds stable content through success and failure ${brightness.name} $scale',
+        (tester) async {
+          await show(tester, brightness: brightness, scale: scale);
+          final original = await sectionGeometry(tester);
+          final year = Completer<Map<String, dynamic>>();
+          final period = Completer<Map<String, dynamic>>();
+          fixture.override = (_, path, query, _) =>
+              path == 'analytics/usage' && query['days'] == '365'
+              ? year.future
+              : period.future;
+          await reveal(tester, find.byTooltip('Refresh usage'));
+          await tester.tap(find.byTooltip('Refresh usage'));
+          await tester.pump();
+          await tester.pump();
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expectSameGeometry(await sectionGeometry(tester), original);
+          expect(find.text('USD 5.44'), findsOneWidget);
+          await snapshot(tester, 'refresh-${brightness.name}-$scale');
+          // Only repeated refresh is disabled; chart choices remain operable.
+          final outer = find
+              .descendant(
+                of: find.byType(ListView).first,
+                matching: find.byType(Scrollable),
+              )
+              .first;
+          final position = tester.state<ScrollableState>(outer).position;
+          while (find.byTooltip('Refresh usage').evaluate().isEmpty) {
+            position.jumpTo(
+              (position.pixels + 200).clamp(0, position.maxScrollExtent),
+            );
+            await tester.pump();
+          }
+          expect(
+            tester
+                .widget<IconButton>(
+                  find.byWidgetPredicate(
+                    (widget) =>
+                        widget is IconButton &&
+                        widget.tooltip == 'Refresh usage',
+                  ),
+                )
+                .onPressed,
+            isNull,
+          );
+          period.completeError(StateError('Offline'));
+          await tester.pump();
+          await tester.pump();
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expectSameGeometry(await sectionGeometry(tester), original);
+          year.complete(dailyData());
+          await tester.pumpAndSettle();
+          expect(find.byType(StudioLoading), findsNothing);
+          expectSameGeometry(await sectionGeometry(tester), original);
+          expect(find.text('USD 5.44'), findsOneWidget);
+          await reveal(tester, find.textContaining('Showing retained data'));
+          await snapshot(tester, 'refresh-error-${brightness.name}-$scale');
+          fixture.override = (_, path, _, _) async =>
+              path == 'analytics/models' ? {'models': []} : {'daily': []};
+          await tap(tester, find.byTooltip('Refresh usage'));
+          expectSameGeometry(await sectionGeometry(tester), original);
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.textContaining('Could not load'), findsNothing);
+          await snapshot(tester, 'empty-${brightness.name}-$scale');
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets('analytics loading supports reduced motion and retirement', (
+    tester,
+  ) async {
+    final pending = Completer<Map<String, dynamic>>();
+    fixture.override = (_, _, _, _) => pending.future;
+    await show(tester, reducedMotion: true, settle: false);
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(tester.hasRunningAnimations, isFalse);
+    final original = await sectionGeometry(tester);
+    await tester.tap(find.text('30D'));
+    await tester.pump();
+    await tester.pump();
+    expectSameGeometry(await sectionGeometry(tester), original);
+    expect(find.byType(StudioLoading), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    pending.completeError(StateError('Retired read'));
+    await tester.pumpAndSettle();
+    expect(find.byType(StudioLoading), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'all model rows remain reachable inside the stable breakdown frame',
+    (tester) async {
+      rows = [for (var i = 0; i < 12; i++) _sol()..['model'] = 'Model $i'];
+      await show(tester);
+      await reveal(tester, find.byKey(const ValueKey('usage-breakdown-slot')));
+      final frame = tester.getRect(
+        find.byKey(const ValueKey('usage-breakdown-slot')),
+      );
+      final inner = find.descendant(
+        of: find.byKey(const ValueKey('usage-breakdown-slot')),
+        matching: find.byType(Scrollable),
+      );
+      expect(inner, findsOneWidget);
+      final position = tester.state<ScrollableState>(inner).position;
+      expect(position.maxScrollExtent, greaterThan(0));
+      final rowNames = [for (var i = 0; i < 12; i++) 'Model $i'];
+      final last = rowNames.last;
+      for (final name in rowNames) {
+        await tester.ensureVisible(find.text(name));
+        await tester.pump();
+        expect(find.text(name).hitTestable(), findsOneWidget, reason: name);
+        expect(
+          tester
+              .getRect(find.byKey(const ValueKey('usage-breakdown-slot')))
+              .size,
+          frame.size,
+        );
+      }
+      expect(find.text(last).hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'automatic analytics recovery retains content without a Wing pulse',
+    (tester) async {
+      await show(tester);
+      fixture.override = (_, _, _, _) async =>
+          throw const SocketException('Offline');
+      await tap(tester, find.byTooltip('Refresh usage'));
+      final original = await sectionGeometry(tester);
+      final pending = Completer<Map<String, dynamic>>();
+      fixture.override = (_, path, _, _) => path == 'analytics/models'
+          ? pending.future
+          : Future.value(dailyData());
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(StudioLoading), findsNothing);
+      expectSameGeometry(await sectionGeometry(tester), original);
+      expect(find.text('USD 5.44'), findsOneWidget);
+      pending.complete({
+        'models': [_paid()..['cache_read_tokens'] = 0],
+      });
+      await tester.pumpAndSettle();
+      expectSameGeometry(await sectionGeometry(tester), original);
+      expect(find.text('USD 3.00'), findsOneWidget);
+      expect(find.byType(StudioLoading), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('period totals, title switches and day selection stay local', (
     tester,
@@ -275,7 +578,7 @@ void main() {
     (tester) async {
       await show(tester);
       await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
-      await tap(tester, find.text('Cost').first);
+      await tap(tester, find.byKey(const ValueKey('usage-breakdown-cost')));
       expect(find.text('Breakdown per token type'), findsOneWidget);
       expect(find.text('USD 2.70'), findsOneWidget);
       expect(find.text('USD 1.04'), findsOneWidget);
@@ -300,7 +603,7 @@ void main() {
     expect(find.text('Estimated usage value'), findsOneWidget);
     expect(find.text('USD 8.00'), findsOneWidget);
     await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
-    await tap(tester, find.text('Cost').first);
+    await tap(tester, find.byKey(const ValueKey('usage-breakdown-cost')));
     expect(
       find.textContaining('Cost per token type is available only'),
       findsOneWidget,
@@ -319,7 +622,7 @@ void main() {
     await show(tester);
     expect(find.text('USD 5.00'), findsOneWidget);
     expect(find.text('Partial total'), findsOneWidget);
-    await tap(tester, find.text('Cost').first);
+    await tap(tester, find.byKey(const ValueKey('usage-breakdown-cost')));
     expect(find.textContaining('Partial breakdown'), findsOneWidget);
     expect(find.textContaining('USD 0.00'), findsNothing);
     expect(find.textContaining('Unavailable'), findsWidgets);
@@ -476,7 +779,7 @@ void main() {
         .segments;
     expect(tokenSegments.single.value, 2560000);
     final color = tokenSegments.single.color;
-    await tap(tester, find.text('Cost').first);
+    await tap(tester, find.byKey(const ValueKey('usage-breakdown-cost')));
     final costSegments = tester
         .widget<UsageComposition>(find.byType(UsageComposition))
         .segments;

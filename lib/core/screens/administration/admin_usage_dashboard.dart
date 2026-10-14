@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../widgets/studio_loading.dart';
 import '../../models/usage_analytics.dart';
@@ -23,6 +25,9 @@ class _UsageDashboardState extends State<UsageDashboard> {
   bool _breakdownCost = false;
   bool _trendModels = false;
   bool _trendCost = false;
+  bool _refreshing = false;
+  bool _opening = true;
+  Object? _periodWait;
   int get _days => _session.state.days;
 
   @override
@@ -30,7 +35,15 @@ class _UsageDashboardState extends State<UsageDashboard> {
     super.initState();
     _session = widget.createSession();
     _session.addListener(_changed);
-    _session.load();
+    _loadInitial();
+  }
+
+  Future<void> _loadInitial() async {
+    try {
+      await _session.load();
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
   }
 
   void _changed() {
@@ -44,12 +57,30 @@ class _UsageDashboardState extends State<UsageDashboard> {
     super.dispose();
   }
 
-  void _period(int days) {
+  Future<void> _period(int days) async {
+    final wait = Object();
     setState(() {
+      _periodWait = wait;
       _selected = null;
       Tooltip.dismissAllToolTips();
     });
-    _session.selectPeriod(days);
+    try {
+      await _session.selectPeriod(days);
+    } finally {
+      if (mounted && identical(_periodWait, wait)) {
+        setState(() => _periodWait = null);
+      }
+    }
+  }
+
+  Future<void> _refreshUsage() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      await _session.refresh();
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   String _number(num? value) => value == null
@@ -82,10 +113,9 @@ class _UsageDashboardState extends State<UsageDashboard> {
         : summary?.hasSubscription == true
         ? 'API-equivalent cost'
         : 'Estimated cost';
-    return StudioLoadingRegion(
-      available: data != null,
-      busy: loading,
-      label: data == null ? 'Loading usage' : 'Refreshing usage',
+    return StudioPageLoading(
+      active: _opening || _refreshing || _periodWait != null,
+      label: _opening || data == null ? 'Loading usage' : 'Refreshing usage',
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
@@ -95,6 +125,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
             children: [
               for (final days in usagePeriods)
                 _Choice(
+                  key: ValueKey('usage-period-$days'),
                   label: '${days}D',
                   selected: _days == days,
                   neutral: true,
@@ -103,62 +134,56 @@ class _UsageDashboardState extends State<UsageDashboard> {
             ],
           ),
           const SizedBox(height: 12),
-          if (data == null)
-            ...[]
-          else ...[
-            if (data.modelsError != null || data.dailyError != null)
-              AdminNotice.error(
-                '${[data.modelsError, data.dailyError].whereType<String>().join(' ')}${models != null || daily != null ? ' Showing retained data where available; last successful load ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(data.loadedAt.toLocal()))}.' : ''} Use Refresh to retry.',
-              ),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final stats = [
-                  _Stat(
-                    label: 'Tokens',
-                    value: models == null || models.rows.isEmpty
-                        ? models == null
-                              ? 'Unavailable'
-                              : '0'
-                        : compactUsage(models.tokens.total),
-                    detail:
-                        models?.tokens.total == null &&
-                            models != null &&
-                            models.rows.isNotEmpty
-                        ? 'Some counts unavailable'
-                        : 'Across models',
-                    exact: _number(models?.tokens.total),
-                  ),
-                  _Stat(
-                    label: costTitle,
-                    value: models?.rows.isEmpty == true
-                        ? 'USD 0.00'
-                        : formatUsageUsd(summary?.total),
-                    detail: summary?.isPartial == true
-                        ? 'Partial total'
-                        : summary?.hasSubscription == true
-                        ? 'Not a bill'
-                        : 'Hermes estimate',
-                  ),
-                ];
-                if (MediaQuery.textScalerOf(context).scale(16) > 24 ||
-                    constraints.maxWidth < 300) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [stats[0], const SizedBox(height: 12), stats[1]],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: stats[0]),
-                    const SizedBox(width: 16),
-                    Expanded(child: stats[1]),
-                  ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stats = [
+                _Stat(
+                  label: 'Tokens',
+                  pending: data == null && observation.periodLoading,
+                  value: models == null || models.rows.isEmpty
+                      ? models == null
+                            ? 'Unavailable'
+                            : '0'
+                      : compactUsage(models.tokens.total),
+                  detail:
+                      models?.tokens.total == null &&
+                          models != null &&
+                          models.rows.isNotEmpty
+                      ? 'Some counts unavailable'
+                      : 'Across models',
+                  exact: _number(models?.tokens.total),
+                ),
+                _Stat(
+                  label: costTitle,
+                  pending: data == null && observation.periodLoading,
+                  value: models?.rows.isEmpty == true
+                      ? 'USD 0.00'
+                      : formatUsageUsd(summary?.total),
+                  detail: summary?.isPartial == true
+                      ? 'Partial total'
+                      : summary?.hasSubscription == true
+                      ? 'Not a bill'
+                      : 'Hermes estimate',
+                ),
+              ];
+              if (MediaQuery.textScalerOf(context).scale(16) > 24 ||
+                  constraints.maxWidth < 300) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [stats[0], const SizedBox(height: 12), stats[1]],
                 );
-              },
-            ),
-            const SizedBox(height: 24),
-          ],
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: stats[0]),
+                  const SizedBox(width: 16),
+                  Expanded(child: stats[1]),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -172,78 +197,81 @@ class _UsageDashboardState extends State<UsageDashboard> {
             ],
           ),
           const SizedBox(height: 8),
+          _UsageCalendarSlot(
+            daily: observation.year,
+            pending: observation.yearLoading,
+            error: observation.yearError,
+            periodDates: daily?.reportedDates ?? const {},
+            selected: _selected,
+            onSelected: (day) =>
+                setState(() => _selected = _selected == day.id ? null : day.id),
+          ),
+          const SizedBox(height: 20),
+          _ChartHeader(
+            section: 'Breakdown',
+            models: _breakdownModels,
+            cost: _breakdownCost,
+            onGroup: () => setState(() => _breakdownModels = !_breakdownModels),
+            onCost: (v) => setState(() => _breakdownCost = v),
+          ),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            children: [
+              _quiet(
+                selected == null
+                    ? 'Last $_days ${_days == 1 ? 'day' : 'days'} · all models'
+                    : MaterialLocalizations.of(
+                        context,
+                      ).formatFullDate(selected.date),
+              ),
+              if (selected != null)
+                StudioButtonPress(
+                  child: TextButton(
+                    onPressed: () => setState(() => _selected = null),
+                    child: const Text('Selected period'),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _UsageChartSlot(
+            identity: 'breakdown',
+            height: _breakdownHeight(context),
+            pending: data == null && observation.periodLoading,
+            child: _breakdown(models, selected),
+          ),
+          const SizedBox(height: 24),
+          _ChartHeader(
+            section: 'Trend',
+            models: _trendModels,
+            cost: _trendCost,
+            onGroup: () => setState(() => _trendModels = !_trendModels),
+            onCost: (v) => setState(() => _trendCost = v),
+          ),
+          const SizedBox(height: 8),
+          _UsageChartSlot(
+            identity: 'trend',
+            height: _trendHeight(context),
+            pending: data == null && observation.periodLoading,
+            child: _trend(daily),
+          ),
+          const SizedBox(height: 20),
+          _about(models),
+          if (data?.modelsError != null || data?.dailyError != null)
+            AdminNotice.error(
+              '${[data?.modelsError, data?.dailyError].whereType<String>().join(' ')}${models != null || daily != null ? ' Showing retained data where available; last successful load ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(data!.loadedAt.toLocal()))}.' : ''} Use Refresh to retry.',
+            ),
           if (observation.yearError != null)
             AdminNotice.error(observation.yearError!),
-          if (observation.year?.days.isNotEmpty == true)
-            UsageCalendar(
-              daily: observation.year!,
-              periodDates: daily?.reportedDates ?? const {},
-              selected: _selected,
-              onSelected: (day) => setState(
-                () => _selected = _selected == day.id ? null : day.id,
-              ),
-            )
-          else if (observation.year?.days.isEmpty == true)
-            _quiet('No recorded daily usage in the past year.')
-          else
-            _quiet(
-              observation.yearLoading
-                  ? 'Loading activity year…'
-                  : 'Activity year unavailable. Period totals may still be available.',
-            ),
-          const SizedBox(height: 20),
-          if (data != null) ...[
-            _ChartHeader(
-              section: 'Breakdown',
-              models: _breakdownModels,
-              cost: _breakdownCost,
-              onGroup: () =>
-                  setState(() => _breakdownModels = !_breakdownModels),
-              onCost: (v) => setState(() => _breakdownCost = v),
-            ),
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
-              children: [
-                _quiet(
-                  selected == null
-                      ? 'Last $_days ${_days == 1 ? 'day' : 'days'} · all models'
-                      : MaterialLocalizations.of(
-                          context,
-                        ).formatFullDate(selected.date),
-                ),
-                if (selected != null)
-                  StudioButtonPress(
-                    child: TextButton(
-                      onPressed: () => setState(() => _selected = null),
-                      child: const Text('Selected period'),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _breakdown(models, selected),
-            const SizedBox(height: 24),
-            _ChartHeader(
-              section: 'Trend',
-              models: _trendModels,
-              cost: _trendCost,
-              onGroup: () => setState(() => _trendModels = !_trendModels),
-              onCost: (v) => setState(() => _trendCost = v),
-            ),
-            const SizedBox(height: 8),
-            _trend(daily),
-            const SizedBox(height: 20),
-            _about(models),
-          ],
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
             child: StudioButtonPress(
               child: IconButton(
                 tooltip: 'Refresh usage',
-                onPressed: loading ? null : _session.refresh,
+                onPressed: loading || _refreshing ? null : _refreshUsage,
                 icon: const Icon(Icons.refresh, size: 18),
               ),
             ),
@@ -468,6 +496,7 @@ class _Choice extends StatelessWidget {
   final bool neutral;
   final VoidCallback onPressed;
   const _Choice({
+    required super.key,
     required this.label,
     required this.selected,
     required this.onPressed,
@@ -513,38 +542,41 @@ class _ChartHeader extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    final title = StudioButtonPress(
-      child: TextButton(
-        key: ValueKey('usage-${section.toLowerCase()}-group'),
-        style: TextButton.styleFrom(
-          padding: EdgeInsets.zero,
-          alignment: Alignment.centerLeft,
-          foregroundColor: WingTokens.of(context).onSurface,
+    final title = Row(
+      children: [
+        StudioButtonPress(
+          child: IconButton(
+            key: ValueKey('usage-${section.toLowerCase()}-group'),
+            tooltip:
+                'Group ${section.toLowerCase()} by ${models ? 'token type' : 'model'}',
+            onPressed: onGroup,
+            icon: const Icon(Icons.swap_horiz, size: 18),
+          ),
         ),
-        onPressed: onGroup,
-        child: Row(
-          children: [
-            const Icon(Icons.swap_horiz, size: 18),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                '$section per ${models ? 'model' : 'token type'}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-          ],
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            '$section per ${models ? 'model' : 'token type'}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
         ),
-      ),
+      ],
     );
     final choices = Wrap(
       alignment: WrapAlignment.end,
       children: [
         _Choice(
+          key: ValueKey('usage-${section.toLowerCase()}-tokens'),
           label: 'Tokens',
           selected: !cost,
           onPressed: () => onCost(false),
         ),
-        _Choice(label: 'Cost', selected: cost, onPressed: () => onCost(true)),
+        _Choice(
+          key: ValueKey('usage-${section.toLowerCase()}-cost'),
+          label: 'Cost',
+          selected: cost,
+          onPressed: () => onCost(true),
+        ),
       ],
     );
     return LayoutBuilder(
@@ -576,25 +608,313 @@ class _Stat extends StatelessWidget {
   final String value;
   final String detail;
   final String? exact;
+  final bool pending;
   const _Stat({
     required this.label,
+    required this.pending,
     required this.value,
     required this.detail,
     this.exact,
   });
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: Theme.of(context).textTheme.bodySmall),
-      const SizedBox(height: 4),
-      Tooltip(
-        message: exact ?? value,
-        child: Text(value, style: Theme.of(context).textTheme.headlineSmall),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final theme = Theme.of(context).textTheme;
+      Widget line(
+        String text,
+        TextStyle style,
+        List<String> samples, {
+        bool placeholder = false,
+      }) {
+        final height = samples
+            .map(
+              (sample) => _usageTextHeight(
+                context,
+                sample,
+                style,
+                constraints.maxWidth,
+              ),
+            )
+            .reduce(math.max);
+        return SizedBox(
+          height: height,
+          width: double.infinity,
+          child: pending && placeholder
+              ? _UsageSkeleton(height: height, fraction: .65)
+              : Text(text, style: style),
+        );
+      }
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Cost provenance can arrive later than counts. Reserve the longest
+          // supported label/detail at this width and text scale from frame one.
+          line(label, theme.bodySmall!, const [
+            'Tokens',
+            'Estimated usage value',
+            'API-equivalent cost',
+          ]),
+          const SizedBox(height: 4),
+          SizedBox(
+            height: _usageTextHeight(
+              context,
+              '0',
+              theme.headlineSmall!,
+              double.infinity,
+            ),
+            width: double.infinity,
+            child: pending
+                ? const _UsageSkeleton(height: double.infinity, fraction: .8)
+                : Tooltip(
+                    message: exact ?? value,
+                    child: Text(
+                      value,
+                      style: theme.headlineSmall,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 4),
+          line(detail, theme.bodySmall!, const [
+            'Some counts unavailable',
+            'Across models',
+            'Hermes estimate',
+          ], placeholder: true),
+        ],
+      );
+    },
+  );
+}
+
+// Section frames depend on viewport/text geometry, never network completion.
+// Unknown model counts scroll inside the reserved breakdown frame.
+double _usageTextHeight(
+  BuildContext context,
+  String text,
+  TextStyle style,
+  double width,
+) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout(maxWidth: width);
+  final height = painter.height;
+  painter.dispose();
+  return height;
+}
+
+double _breakdownHeight(BuildContext context) =>
+    24 +
+    3 *
+        math.max(
+          48,
+          16 +
+              (MediaQuery.textScalerOf(context).scale(16) > 24 ? 2 : 1) *
+                  _usageTextHeight(
+                    context,
+                    'Model',
+                    Theme.of(context).textTheme.bodyMedium!,
+                    double.infinity,
+                  ),
+        );
+
+double _trendHeight(BuildContext context) =>
+    160 +
+    26 +
+    5 *
+        _usageTextHeight(
+          context,
+          'Tokens',
+          Theme.of(context).textTheme.bodySmall!,
+          double.infinity,
+        );
+
+class _UsageChartSlot extends StatefulWidget {
+  const _UsageChartSlot({
+    required this.identity,
+    required this.height,
+    required this.pending,
+    required this.child,
+  });
+  final String identity;
+  final double height;
+  final bool pending;
+  final Widget child;
+  @override
+  State<_UsageChartSlot> createState() => _UsageChartSlotState();
+}
+
+class _UsageChartSlotState extends State<_UsageChartSlot> {
+  final _scroll = ScrollController();
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    key: ValueKey('usage-${widget.identity}-slot'),
+    height: widget.height,
+    child: widget.pending
+        ? ExcludeSemantics(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _UsageSkeleton(height: 16, fraction: 1),
+                const SizedBox(height: 12),
+                if (widget.identity == 'breakdown')
+                  for (var i = 0; i < 3; i++)
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _UsageSkeleton(
+                          height: 14,
+                          fraction: .8 - i * .15,
+                        ),
+                      ),
+                    )
+                else
+                  const Expanded(
+                    child: _UsageSkeleton(height: double.infinity, fraction: 1),
+                  ),
+              ],
+            ),
+          )
+        : Scrollbar(
+            controller: _scroll,
+            child: SingleChildScrollView(
+              controller: _scroll,
+              primary: false,
+              child: widget.child,
+            ),
+          ),
+  );
+}
+
+class _UsageSkeleton extends StatelessWidget {
+  const _UsageSkeleton({required this.height, required this.fraction});
+  final double height, fraction;
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: FractionallySizedBox(
+        widthFactor: fraction,
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: WingTokens.of(context).border.withValues(alpha: .45),
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
       ),
-      const SizedBox(height: 4),
-      Text(detail, style: Theme.of(context).textTheme.bodySmall),
-    ],
+    ),
+  );
+}
+
+class _UsageCalendarSlot extends StatelessWidget {
+  const _UsageCalendarSlot({
+    required this.daily,
+    required this.pending,
+    required this.error,
+    required this.periodDates,
+    required this.selected,
+    required this.onSelected,
+  });
+  final UsageDaily? daily;
+  final bool pending;
+  final String? error;
+  final Set<String> periodDates;
+  final String? selected;
+  final ValueChanged<UsageDay> onSelected;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      final columns = usageCalendarColumns(width);
+      final pitch = (width - 3) / columns;
+      final textHeight = usageCalendarDateHeight(context, width);
+      // The calendar footer can wrap at enlarged text; use its real legend
+      // layout to reserve the same space in every state.
+      return Column(
+        key: const ValueKey('usage-calendar-slot'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (daily?.days.isNotEmpty == true)
+            UsageCalendar(
+              daily: daily!,
+              periodDates: periodDates,
+              selected: selected,
+              onSelected: onSelected,
+            )
+          else ...[
+            SizedBox(
+              height: textHeight,
+              child: pending
+                  ? _UsageSkeleton(height: textHeight * .65, fraction: .7)
+                  : const SizedBox.shrink(),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 7 * pitch + 3,
+              child: pending
+                  ? ExcludeSemantics(
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: Column(
+                          children: [
+                            for (var row = 0; row < 7; row++)
+                              SizedBox(
+                                height: row == 6 ? pitch - 3 : pitch,
+                                child: Row(
+                                  children: [
+                                    for (var col = 0; col < columns; col++)
+                                      SizedBox(
+                                        width: col == columns - 1
+                                            ? pitch - 3
+                                            : pitch,
+                                        child: Align(
+                                          alignment: Alignment.topLeft,
+                                          child: Container(
+                                            width: pitch - 3,
+                                            height: pitch - 3,
+                                            decoration: BoxDecoration(
+                                              color: WingTokens.of(
+                                                context,
+                                              ).border.withValues(alpha: .45),
+                                              borderRadius:
+                                                  BorderRadius.circular(2),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      primary: false,
+                      child: Text(
+                        daily == null
+                            ? error ??
+                                  'Activity year unavailable. Period totals may still be available.'
+                            : 'No recorded daily usage in the past year.',
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 8),
+            const UsageCalendarLegend(),
+          ],
+        ],
+      );
+    },
   );
 }
 

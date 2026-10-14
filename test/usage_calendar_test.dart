@@ -352,7 +352,12 @@ void main() {
         expect(visible().last, daily.days.last.id);
         width = 900;
         await show();
-        expect(visible(), daily.days.map((d) => d.id).toList());
+        // Wide layouts keep the same 52-column frame across loading and data.
+        // The handful of older dates beyond it remain reachable by scrolling.
+        expect(visible().last, daily.days.last.id);
+        position().jumpTo(position().maxScrollExtent);
+        await tester.pumpAndSettle(const Duration(milliseconds: 250));
+        expect(visible().first, daily.days.first.id);
         expect(find.byTooltip('Earlier dates'), findsNothing);
         expect(find.byKey(const ValueKey('usage-year-band')), findsOneWidget);
         expect(tester.takeException(), isNull);
