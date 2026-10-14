@@ -80,7 +80,7 @@ class _BotProfileEditorState extends State<BotProfileEditor>
       if (!mounted) return;
       final discard = await showDialog<bool>(
         context: this.context,
-        builder: (context) => AlertDialog(
+        builder: (context) => StudioDialog(
           title: const Text('Discard edits?'),
           actions: [
             StudioFormActions(

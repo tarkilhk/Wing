@@ -345,7 +345,7 @@ void main() {
     expect(find.text('Choose a saved sign-in'), findsOneWidget);
     expect(fixture.consoleRequests.where((r) => r.$3), isEmpty);
     await shot(tester, 'credential-choice');
-    Navigator.of(tester.element(find.byType(SimpleDialog))).pop();
+    Navigator.of(tester.element(find.text('Choose a saved sign-in'))).pop();
     await tester.pumpAndSettle();
   });
   testWidgets('unknown credentials never offer renewal or direct deletion', (

@@ -84,7 +84,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
   Future<bool> _confirm(String message) async =>
       await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => StudioDialog(
           title: const Text('Confirm model change'),
           content: Text(message),
           actions: [
@@ -105,7 +105,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
     if (!mounted || review == null) return;
     final decision = await showDialog<ProfileModelReviewDecision>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StudioDialog(
         title: const Text('Review model change'),
         scrollable: true,
         content: Column(

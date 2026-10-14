@@ -1888,7 +1888,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       context: context,
       builder: (context) => ListenableBuilder(
         listenable: controller,
-        builder: (context, _) => AlertDialog(
+        builder: (context, _) => StudioDialog(
           insetPadding: const EdgeInsets.all(WingSpacing.lg),
           titleTextStyle: Theme.of(context).textTheme.titleMedium,
           title: const Text('Restore to this checkpoint?'),
@@ -1947,140 +1947,98 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 input.trim() != originalText;
             return PopScope(
               canPop: !submitting,
-              child: Dialog(
+              child: StudioDialog(
                 key: const ValueKey('saved-message-edit-dialog'),
-                insetPadding: const EdgeInsets.all(WingSpacing.lg),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
+                title: Semantics(
+                  header: true,
+                  child: Text(
+                    'Edit message',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                content: SizedBox(
+                  width: 480,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          left: WingSpacing.lg,
-                          right: WingSpacing.sm,
-                          top: WingSpacing.sm,
-                          bottom: WingSpacing.xs,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Semantics(
-                                header: true,
-                                child: Text(
-                                  'Edit message',
-                                  style: theme.textTheme.titleMedium,
-                                ),
-                              ),
-                            ),
-                          ],
+                      Text(
+                        'Resending replaces this message and all later history in this chat.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: tokens.muted,
                         ),
                       ),
-                      Flexible(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(
-                            WingSpacing.lg,
-                            0,
-                            WingSpacing.lg,
-                            WingSpacing.md,
+                      const SizedBox(height: WingSpacing.md),
+                      Semantics(
+                        label: 'Message text',
+                        child: TextFormField(
+                          key: const ValueKey('saved-message-edit-input'),
+                          initialValue: input,
+                          enabled: !submitting,
+                          autofocus: true,
+                          minLines: 3,
+                          maxLines: 8,
+                          keyboardType: TextInputType.multiline,
+                          textInputAction: TextInputAction.newline,
+                          style: theme.textTheme.bodyLarge,
+                          decoration: InputDecoration(
+                            fillColor: tokens.surface,
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                'Resending replaces this message and all later history in this chat.',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: tokens.muted,
-                                ),
-                              ),
-                              const SizedBox(height: WingSpacing.md),
-                              Semantics(
-                                label: 'Message text',
-                                child: TextFormField(
-                                  key: const ValueKey(
-                                    'saved-message-edit-input',
-                                  ),
-                                  initialValue: input,
-                                  enabled: !submitting,
-                                  autofocus: true,
-                                  minLines: 3,
-                                  maxLines: 8,
-                                  keyboardType: TextInputType.multiline,
-                                  textInputAction: TextInputAction.newline,
-                                  style: theme.textTheme.bodyLarge,
-                                  decoration: InputDecoration(
-                                    fillColor: tokens.surface,
-                                  ),
-                                  onChanged: (value) => setDialogState(() {
-                                    input = value;
-                                    inlineError = null;
-                                  }),
-                                ),
-                              ),
-                              if (inlineError != null) ...[
-                                const SizedBox(height: WingSpacing.md),
-                                StudioError(
-                                  inlineError!,
-                                  key: const ValueKey('edit-message-error'),
-                                ),
-                              ],
-                            ],
-                          ),
+                          onChanged: (value) => setDialogState(() {
+                            input = value;
+                            inlineError = null;
+                          }),
                         ),
                       ),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border(top: BorderSide(color: tokens.border)),
+                      if (inlineError != null) ...[
+                        const SizedBox(height: WingSpacing.md),
+                        StudioError(
+                          inlineError!,
+                          key: const ValueKey('edit-message-error'),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(WingSpacing.md),
-                          child: StudioFormActions(
-                            onCancel: submitting
-                                ? null
-                                : () => Navigator.pop(dialogContext),
-                            onConfirm: canSubmit
-                                ? () async {
-                                    setDialogState(() {
-                                      submitting = true;
-                                      inlineError = null;
-                                    });
-                                    var accepted = false;
-                                    try {
-                                      accepted = await controller
-                                          .editSavedPrompt(
-                                            chat,
-                                            message,
-                                            input,
-                                          );
-                                    } catch (_) {
-                                      // Retain the correction for a deliberate retry.
-                                    }
-                                    if (!dialogContext.mounted) return;
-                                    if (accepted) {
-                                      Navigator.pop(dialogContext);
-                                      return;
-                                    }
-                                    setDialogState(() {
-                                      submitting = false;
-                                      inlineError =
-                                          chat.runtime.error ??
-                                          'Hermes did not accept the edited message.';
-                                    });
-                                  }
-                                : null,
-                            confirmLabel: 'Replace message and resend',
-                            confirmIcon: Icons.send_outlined,
-                            destructive: true,
-                            busy: submitting,
-                            progressLabel: 'Replacing message',
-                          ),
-                        ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
+                actions: [
+                  StudioFormActions(
+                    onCancel: submitting
+                        ? null
+                        : () => Navigator.pop(dialogContext),
+                    onConfirm: canSubmit
+                        ? () async {
+                            setDialogState(() {
+                              submitting = true;
+                              inlineError = null;
+                            });
+                            var accepted = false;
+                            try {
+                              accepted = await controller.editSavedPrompt(
+                                chat,
+                                message,
+                                input,
+                              );
+                            } catch (_) {}
+                            if (!dialogContext.mounted) return;
+                            if (accepted) {
+                              Navigator.pop(dialogContext);
+                              return;
+                            }
+                            setDialogState(() {
+                              submitting = false;
+                              inlineError =
+                                  chat.runtime.error ??
+                                  'Hermes did not accept the edited message.';
+                            });
+                          }
+                        : null,
+                    confirmLabel: 'Replace message and resend',
+                    confirmIcon: Icons.send_outlined,
+                    destructive: true,
+                    busy: submitting,
+                    progressLabel: 'Replacing message',
+                  ),
+                ],
               ),
             );
           },
@@ -3531,7 +3489,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StudioDialog(
         title: const Text('Delete queued instruction?'),
         scrollable: true,
         content: Text(

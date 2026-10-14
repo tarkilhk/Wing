@@ -147,7 +147,7 @@ class _ProjectDeleteDialogState extends State<_ProjectDeleteDialog> {
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !_pending,
-    child: AlertDialog(
+    child: StudioDialog(
       scrollable: true,
       title: const Text('Delete project?'),
       content: Column(
@@ -348,7 +348,7 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !_pending,
-    child: AlertDialog(
+    child: StudioDialog(
       scrollable: true,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       title: Text(_editing ? 'Edit project' : 'New project'),

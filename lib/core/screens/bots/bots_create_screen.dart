@@ -92,79 +92,37 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
     final generate = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, updateDialog) => Dialog(
-          insetPadding: const EdgeInsets.all(WingSpacing.lg),
-          child: SizedBox(
+        builder: (context, updateDialog) => StudioDialog(
+          title: Text(
+            'Room picture',
+            style: Theme.of(context).dialogTheme.titleTextStyle,
+          ),
+          content: SizedBox(
             width: 392,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    WingSpacing.lg,
-                    WingSpacing.xs,
-                    WingSpacing.sm,
-                    0,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Semantics(
-                          namesRoute: true,
-                          child: Text(
-                            'Room picture',
-                            style: Theme.of(context).dialogTheme.titleTextStyle,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(
-                      WingSpacing.lg,
-                      WingSpacing.sm,
-                      WingSpacing.lg,
-                      WingSpacing.md,
-                    ),
-                    child: TextFormField(
-                      initialValue: draft.picturePrompt,
-                      onChanged: (value) =>
-                          updateDialog(() => draft.setPicturePrompt(value)),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                      minLines: 4,
-                      maxLines: 6,
-                      decoration: const InputDecoration(
-                        labelText: 'Prompt',
-                        alignLabelWithHint: true,
-                      ),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    WingSpacing.lg,
-                    0,
-                    WingSpacing.lg,
-                    WingSpacing.sm,
-                  ),
-                  child: Align(
-                    alignment: AlignmentDirectional.centerEnd,
-                    child: StudioFormActions(
-                      onCancel: () => Navigator.pop(context),
-                      cancelLabel: 'Cancel picture generation',
-                      onConfirm: draft.picturePrompt.trim().isEmpty
-                          ? null
-                          : () => Navigator.pop(context, true),
-                      confirmLabel: 'Generate picture',
-                      confirmIcon: Icons.auto_awesome_outlined,
-                    ),
-                  ),
-                ),
-              ],
+            child: TextFormField(
+              initialValue: draft.picturePrompt,
+              onChanged: (value) =>
+                  updateDialog(() => draft.setPicturePrompt(value)),
+              style: Theme.of(context).textTheme.bodyMedium,
+              minLines: 4,
+              maxLines: 6,
+              decoration: const InputDecoration(
+                labelText: 'Prompt',
+                alignLabelWithHint: true,
+              ),
             ),
           ),
+          actions: [
+            StudioFormActions(
+              onCancel: () => Navigator.pop(context),
+              cancelLabel: 'Cancel picture generation',
+              onConfirm: draft.picturePrompt.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(context, true),
+              confirmLabel: 'Generate picture',
+              confirmIcon: Icons.auto_awesome_outlined,
+            ),
+          ],
         ),
       ),
     );

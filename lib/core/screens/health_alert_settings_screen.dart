@@ -268,6 +268,7 @@ class _RuleEditorState extends State<_RuleEditor> {
                     icon: const Icon(Icons.close),
                   ),
                 ),
+                const SizedBox(width: 12),
               ],
             ),
             const Divider(height: 1),

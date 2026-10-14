@@ -136,7 +136,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
     _confirmingExit = true;
     final discard = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StudioDialog(
         title: const Text('Discard connection setup?'),
         content: const Text('This connection has not been saved.'),
         actions: [

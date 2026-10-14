@@ -503,7 +503,7 @@ class _ManualModelDialogState extends State<_ManualModelDialog> {
   @override
   Widget build(BuildContext context) {
     final valid = ModelChoice.isValidEnteredId(_id.text);
-    return AlertDialog(
+    return StudioDialog(
       scrollable: true,
       title: const Text('Enter model ID'),
       content: Column(

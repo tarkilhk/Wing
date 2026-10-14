@@ -70,7 +70,7 @@ class _ReviewState extends State<NotificationApprovalReview> {
       };
       return PopScope(
         canPop: !sending,
-        child: AlertDialog(
+        child: StudioDialog(
           titleTextStyle: Theme.of(context).textTheme.titleLarge,
           title: Text(
             widget.choice == 'always' ? 'Always allow?' : 'Review command',

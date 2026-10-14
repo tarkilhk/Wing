@@ -176,7 +176,7 @@ class _BotsContentState extends State<BotsContent> {
     if (action == 'delete') {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => StudioDialog(
           title: Text('Disband ${group.name}?'),
           content: const Text(
             'Stops group work and removes this room. The bots and their private chats stay available.',

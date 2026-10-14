@@ -3,6 +3,68 @@ import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
 import 'studio_loading.dart';
 
+/// Compact popup framing. Padding stays consistent when text scales; callers
+/// supply content and decisions rather than inheriting Material dialog gutters.
+class StudioDialog extends StatelessWidget {
+  const StudioDialog({
+    super.key,
+    this.title,
+    this.content,
+    this.actions,
+    this.scrollable = true,
+    this.insetPadding = const EdgeInsets.all(WingSpacing.md),
+    this.titleTextStyle,
+  });
+
+  final Widget? title;
+  final Widget? content;
+  final List<Widget>? actions;
+  final bool scrollable;
+  final EdgeInsets insetPadding;
+  final TextStyle? titleTextStyle;
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    insetPadding: insetPadding,
+    scrollable: false,
+    titleTextStyle: titleTextStyle,
+    titlePadding: EdgeInsets.zero,
+    contentPadding: EdgeInsets.zero,
+    actionsPadding: const EdgeInsets.fromLTRB(
+      WingSpacing.md,
+      0,
+      WingSpacing.md,
+      WingSpacing.md,
+    ),
+    buttonPadding: const EdgeInsets.symmetric(horizontal: WingSpacing.sm),
+    title: title == null
+        ? null
+        : Padding(
+            padding: EdgeInsets.fromLTRB(
+              WingSpacing.md,
+              WingSpacing.md,
+              WingSpacing.md,
+              content == null ? WingSpacing.md : WingSpacing.xs,
+            ),
+            child: title,
+          ),
+    content: content == null
+        ? null
+        : Padding(
+            padding: EdgeInsets.fromLTRB(
+              WingSpacing.md,
+              title == null ? WingSpacing.md : WingSpacing.sm,
+              WingSpacing.md,
+              actions == null || actions!.isEmpty
+                  ? WingSpacing.md
+                  : WingSpacing.sm,
+            ),
+            child: scrollable ? SingleChildScrollView(child: content) : content,
+          ),
+    actions: actions,
+  );
+}
+
 /// Draft forms dismiss through their footer, reserving the header for context
 /// and the existing independently admitted read-progress slot.
 class StudioFormHeader extends StatelessWidget {
@@ -51,7 +113,12 @@ class StudioFormSheet extends StatelessWidget {
             children: [
               Flexible(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(WingSpacing.lg),
+                  padding: const EdgeInsets.fromLTRB(
+                    WingSpacing.md,
+                    WingSpacing.md,
+                    WingSpacing.md,
+                    WingSpacing.sm,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -60,7 +127,12 @@ class StudioFormSheet extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                padding: const EdgeInsets.fromLTRB(
+                  WingSpacing.md,
+                  0,
+                  WingSpacing.md,
+                  WingSpacing.md,
+                ),
                 child: actions,
               ),
             ],

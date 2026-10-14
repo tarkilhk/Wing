@@ -1,3 +1,4 @@
+import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,18 +57,22 @@ class _AdminProviderDetailState extends State<AdminProviderDetail> {
   Future<void> _renew() => _recovery.renewAccess(
     choose: (entries) => showDialog<ProviderCredential>(
       context: context,
-      builder: (context) => SimpleDialog(
+      builder: (context) => StudioDialog(
         title: const Text('Choose a saved sign-in'),
-        children: [
-          for (final entry in entries)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, entry),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text('${entry.label}\n${entry.source} · ${entry.id}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final entry in entries)
+              StudioButtonPress(
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  minTileHeight: 48,
+                  onTap: () => Navigator.pop(context, entry),
+                  title: Text('${entry.label}\n${entry.source} · ${entry.id}'),
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     ),
     confirmShared: (description) => adminConfirm(

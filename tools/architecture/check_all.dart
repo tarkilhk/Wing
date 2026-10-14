@@ -1,4 +1,5 @@
 import 'rules/form_confirmation_actions.dart' as forms;
+import 'rules/compact_dialog_layout.dart' as dialogs;
 import 'cli.dart';
 import 'rules/activity_density.dart' as density;
 import 'rules/loading_family.dart' as loading;
@@ -18,6 +19,7 @@ import 'rules/recent_capture_release_safe.dart' as recent_capture;
 
 final allRules = <String, Rule>{
   forms.id: forms.check,
+  dialogs.id: dialogs.check,
   density.id: density.check,
   loading.id: loading.check,
   domain.id: domain.check,

@@ -290,7 +290,7 @@ Future<bool> adminConfirm(
 }) async =>
     await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StudioDialog(
         scrollable: true,
         title: Text(title),
         content: Text(detail),
