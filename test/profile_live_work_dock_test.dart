@@ -245,6 +245,233 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
+  for (final (first, reduced) in [
+    (0, false),
+    (1, false),
+    (0, true),
+    (1, true),
+  ]) {
+    testWidgets(
+      'nonempty tabs appear and retain selected page from $first reduced=$reduced',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        var agents = first == 0 ? 1 : 0;
+        var tasks = first == 1 ? 1 : 0;
+        late StateSetter update;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(Brightness.dark),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: reduced),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.bottomCenter,
+                child: SizedBox(
+                  width: 360,
+                  child: StatefulBuilder(
+                    builder: (context, setState) {
+                      update = setState;
+                      return ProfileLiveWorkDock(
+                        key: dock,
+                        taskCount: tasks,
+                        completedTasks: 0,
+                        subagentCount: agents,
+                        onAgentsSelected: () async {},
+                        tasks: const SizedBox(
+                          height: 160,
+                          child: Text('Task content'),
+                        ),
+                        subagents: const SizedBox(
+                          height: 80,
+                          child: Text('Agent content'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tab(1 - first, overlay: false), findsNothing);
+        expect(tester.getSize(tab(first, overlay: false)).width, 360);
+        expect(find.byKey(const ValueKey('live-work-divider')), findsNothing);
+        await tester.tap(tab(first, overlay: false));
+        await tester.pumpAndSettle();
+        final panel = find.byKey(const ValueKey('live-work-panel'));
+        expect(tester.getSize(panel).height, first == 0 ? 104 : 184);
+        final bottom = tester.getRect(tab(first)).bottom;
+        update(() {
+          agents = 1;
+          tasks = 1;
+        });
+        await tester.pump();
+        if (reduced) {
+          expect(
+            tester
+                .getSize(
+                  find.byKey(ValueKey(('live-work-tab-slot', 1 - first, true))),
+                )
+                .width,
+            180,
+          );
+        }
+        await tester.pump(const Duration(milliseconds: 70));
+        // Reveal a second control while the existing tab gives it space.
+        final growing = tester
+            .getSize(
+              find.byKey(ValueKey(('live-work-tab-slot', 1 - first, true))),
+            )
+            .width;
+        expect(growing, greaterThan(0));
+        if (reduced) {
+          expect(growing, 180);
+        } else {
+          expect(growing, lessThan(180));
+        }
+        await tester.pumpAndSettle();
+        expect(tester.getSize(tab(first)).width, 180);
+        expect(tester.getRect(tab(first)).bottom, bottom);
+        final pages = tester
+            .widget<PageView>(find.byType(PageView))
+            .controller!;
+        expect(pages.page, first);
+        expect(tester.getSize(panel).height, first == 0 ? 104 : 184);
+        // Removing the selected category selects the remaining populated page.
+        update(() {
+          if (first == 0) {
+            agents = 0;
+          } else {
+            tasks = 0;
+          }
+        });
+        await tester.pumpAndSettle();
+        expect(tab(first), findsNothing);
+        expect(pages.page, 0);
+        expect(tester.getSize(tab(1 - first)).width, 360);
+        expect(tester.getSize(panel).height, first == 0 ? 184 : 104);
+        update(() {
+          agents = 0;
+          tasks = 0;
+        });
+        await tester.pumpAndSettle();
+        expect(find.byType(PageView), findsNothing);
+        expect(find.byType(TextButton), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('drawer fits, interpolates on tap and drag, and caps scrolling', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var taskHeight = 180.0;
+    late StateSetter update;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(
+              width: 360,
+              child: StatefulBuilder(
+                builder: (context, setState) {
+                  update = setState;
+                  return ProfileLiveWorkDock(
+                    key: dock,
+                    taskCount: 1,
+                    completedTasks: 0,
+                    subagentCount: 1,
+                    onAgentsSelected: () async {},
+                    tasks: SizedBox(
+                      height: taskHeight,
+                      child: const Text('Task content'),
+                    ),
+                    subagents: const SizedBox(
+                      height: 80,
+                      child: Text('Agent content'),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(tab(0, overlay: false));
+    await tester.pumpAndSettle();
+    final panel = find.byKey(const ValueKey('live-work-panel'));
+    final bottom = tester.getBottomLeft(panel).dy;
+    expect(tester.getSize(panel).height, 104);
+    await tester.tap(tab(1));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 70));
+    expect(tester.getSize(panel).height, greaterThan(104));
+    expect(tester.getSize(panel).height, lessThan(204));
+    expect(tester.getBottomLeft(panel).dy, bottom);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(panel).height, 204);
+    final gesture = await tester.startGesture(tester.getCenter(panel));
+    await gesture.moveBy(const Offset(100, 0));
+    await tester.pump();
+    expect(tester.getSize(panel).height, greaterThan(104));
+    expect(tester.getSize(panel).height, lessThan(204));
+    expect(tester.getBottomLeft(panel).dy, bottom);
+    await gesture.up();
+    await tester.pumpAndSettle();
+    // Return to Tasks if the partial drag settled on Subagents.
+    final pages = tester.widget<PageView>(find.byType(PageView)).controller!;
+    if (pages.page == 0) {
+      await tester.tap(tab(1));
+      await tester.pumpAndSettle();
+    }
+    update(() => taskHeight = 1000);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 70));
+    expect(tester.getSize(panel).height, greaterThan(204));
+    expect(tester.getSize(panel).height, lessThan(320));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(panel).height, 320);
+    final scroll = find
+        .descendant(
+          of: find.byType(PageView),
+          matching: find.byType(SingleChildScrollView),
+        )
+        .last;
+    final contentBefore = tester.getTopLeft(find.text('Task content')).dy;
+    await tester.drag(scroll, const Offset(0, -100));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('Task content')).dy,
+      lessThan(contentBefore),
+    );
+    expect(pages.page, 1);
+    update(() => taskHeight = 120);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(panel).height, 144);
+    expect(tester.getBottomLeft(panel).dy, bottom);
+    Focus.of(tester.element(tab(1))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(pages.page, 0);
+    expect(tester.getSize(panel).height, 104);
+    expect(tester.getBottomLeft(panel).dy, bottom);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a folded dock retires without creating a late ticker', (
     tester,
   ) async {

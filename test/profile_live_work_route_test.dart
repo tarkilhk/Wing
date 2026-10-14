@@ -1,4 +1,5 @@
 import 'package:wing/core/screens/profile_transcript.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -16,6 +17,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/profile_live_work_dock.dart';
+import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
@@ -25,6 +27,8 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
 
 class _LiveWorkHost extends Host {
+  Completer<Map<String, dynamic>>? pendingRoster;
+  int rosterReads = 0;
   final agents = [
     for (var i = 0; i < 2; i++)
       {
@@ -49,9 +53,13 @@ class _LiveWorkHost extends Host {
       },
       close: base.close,
       get: base.read,
-      rpc: (method, params) => method == 'subagent.list'
-          ? Future.value({'subagents': agents})
-          : base.call(method, params),
+      rpc: (method, params) {
+        if (method == 'subagent.list') {
+          rosterReads++;
+          return pendingRoster?.future ?? Future.value({'subagents': agents});
+        }
+        return base.call(method, params);
+      },
     );
     return gateway;
   }
@@ -144,6 +152,7 @@ void main() {
           'name': 'web_search',
           'args': {'query': 'health metric definitions'},
         });
+        host.event('a', 'todo.updated', {'revision': 5, 'todos': []});
         final frame = GlobalKey();
         final keyboard = ValueNotifier<double>(0);
         addTearDown(keyboard.dispose);
@@ -196,7 +205,7 @@ void main() {
             find.byKey(ValueKey(('live-work-tab', i, overlay)));
         await settle();
         expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
-        expect(find.text('Tasks 3/7'), findsOneWidget);
+        expect(find.text('Tasks 3/7'), findsNothing);
         expect(find.text('2 subagents'), findsOneWidget);
         expect(find.byType(ProfileReasoningDisclosure), findsNothing);
         // The earlier run is folded by the reasoning boundary; its existing
@@ -210,6 +219,28 @@ void main() {
         expect(chat.composer.observation.displayedText, 'Keep my draft');
         final composer = find.byKey(const ValueKey('conversation-composer'));
         final rect = tester.getRect(composer);
+        await picture('agents-only-folded');
+        expect(tab(1, overlay: false), findsNothing);
+        await tester.tap(tab(0, overlay: false));
+        await settle();
+        await picture('agents-only-open');
+        final fittedAgents = tester.getSize(find.byType(PageView)).height;
+        expect(fittedAgents, lessThanOrEqualTo(320));
+        host.event('a', 'todo.updated', {
+          'revision': 6,
+          'todos': host.todoState!['todos'],
+        });
+        await settle();
+        expect(find.text('Tasks 3/7'), findsWidgets);
+        expect(tester.getRect(composer), rect);
+        expect(
+          tester.widget<PageView>(find.byType(PageView)).controller!.page,
+          0,
+        );
+        expect(tester.getSize(find.byType(PageView)).height, fittedAgents);
+        await picture('second-tab-arrived');
+        await tester.tap(tab(0));
+        await settle();
         await picture('folded');
         await tester.tap(tab(1, overlay: false));
         await settle();
@@ -224,6 +255,64 @@ void main() {
         expect(tester.getRect(composer), rect);
         expect(find.text('Inspect source mappings'), findsOneWidget);
         await picture('subagents');
+
+        void expectNoReadButtons() {
+          final panel = find.byType(ProfileSubagentPanel);
+          expect(panel, findsOneWidget);
+          for (final label in ['Refresh', 'Retry']) {
+            expect(
+              find.descendant(of: panel, matching: find.byTooltip(label)),
+              findsNothing,
+            );
+          }
+        }
+
+        expectNoReadButtons();
+        final beforeRetry = host.rosterReads;
+        await tester.tap(tab(0));
+        await settle();
+        host.pendingRoster = Completer<Map<String, dynamic>>();
+        await tester.tap(tab(0, overlay: false));
+        await tester.pump();
+        expect(host.rosterReads, beforeRetry + 1);
+        expect(find.byType(CircularProgressIndicator), findsWidgets);
+        await settle();
+        expect(find.byType(CircularProgressIndicator), findsWidgets);
+        expect(find.text('Inspect source mappings'), findsOneWidget);
+        expect(tester.getRect(composer), rect);
+        expectNoReadButtons();
+        await picture('roster-held');
+        host.pendingRoster!.completeError(StateError('Roster unavailable'));
+        await settle();
+        expect(chat.subagentsError, isNotNull);
+        expect(
+          find.text('${chat.subagentsError!} Reopen to retry.'),
+          findsOneWidget,
+        );
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expectNoReadButtons();
+        await picture('roster-failed');
+        // The same tab closes the drawer. Reopening is the retry control.
+        await tester.tap(tab(0));
+        await settle();
+        expect(find.byType(PageView), findsNothing);
+        host.pendingRoster = Completer<Map<String, dynamic>>();
+        await tester.tap(tab(0, overlay: false));
+        await tester.pump();
+        expect(host.rosterReads, beforeRetry + 2);
+        expect(chat.subagentsError, isNull);
+        expect(find.byType(CircularProgressIndicator), findsWidgets);
+        expectNoReadButtons();
+        host.pendingRoster!.complete({'subagents': host.agents});
+        await settle();
+        host.pendingRoster = null;
+        expect(chat.subagentsError, isNull);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.text('Inspect source mappings'), findsOneWidget);
+        expect(chat.composer.observation.displayedText, 'Keep my draft');
+        expect(tester.getRect(composer), rect);
+        expectNoReadButtons();
+        await picture('roster-recovered');
         keyboard.value = 260;
         await settle();
         expect(tester.getRect(composer).bottom, lessThanOrEqualTo(844 - 260));

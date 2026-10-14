@@ -3099,7 +3099,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         before,
         loadGeneration,
       )) {
-        chat._subagentsError = 'Subagents could not be refreshed. Retry.';
+        chat._subagentsError = 'Subagents could not be refreshed.';
       }
     } finally {
       if (!_closed &&

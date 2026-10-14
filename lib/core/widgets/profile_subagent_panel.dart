@@ -92,12 +92,17 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
         if (chat.subagentsError case final error?)
           Row(
             children: [
-              Expanded(child: StudioError(error)),
-              ActivityDetailAction(
-                label: 'Retry',
-                icon: Icons.refresh,
-                onPressed: _refresh,
+              Expanded(
+                child: StudioError(
+                  widget.embedded ? '$error Reopen to retry.' : error,
+                ),
               ),
+              if (!widget.embedded)
+                ActivityDetailAction(
+                  label: 'Retry',
+                  icon: Icons.refresh,
+                  onPressed: _refresh,
+                ),
             ],
           ),
         if (!chat.subagentsLoading &&
@@ -114,14 +119,15 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
             unconfirmed: chat.unconfirmedSubagentIds.contains(activity.id),
             onTap: () => _openSubagent(activity.id),
           ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: ActivityDetailAction(
-            onPressed: chat.subagentsLoading ? null : _refresh,
-            icon: Icons.refresh,
-            label: 'Refresh',
+        if (!widget.embedded)
+          Align(
+            alignment: Alignment.centerRight,
+            child: ActivityDetailAction(
+              onPressed: chat.subagentsLoading ? null : _refresh,
+              icon: Icons.refresh,
+              label: 'Refresh',
+            ),
           ),
-        ),
       ];
       if (widget.embedded) {
         return StudioLoadingRegion(
