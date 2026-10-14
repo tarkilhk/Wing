@@ -1655,6 +1655,88 @@ void main() {
   );
 
   test(
+    'prepared group cards refresh when a bot passes without another reply',
+    () async {
+      var now = DateTime.now();
+      final roomFixture = BotsFixture();
+      roomFixture.events.add({
+        'room_id': 'room-1',
+        'seq': 1,
+        'kind': 'message.member',
+        'created_at': now.millisecondsSinceEpoch / 1000,
+        'actor': {'kind': 'member', 'id': 'atlas'},
+        'payload': {'text': 'Saved group reply'},
+      });
+      final bots = BotsSession(
+        (_) async => [roomFixture.repository],
+        now: () => now,
+      );
+      addTearDown(bots.dispose);
+      await bots.refresh();
+      final recents = recentsFor(bots);
+      final activity = ValueNotifier<ChatNoticeActivity?>(null);
+      addTearDown(activity.dispose);
+      final visit = controller.recentConversationSession(
+        recents: recents,
+        entries: recents.catalog.entries,
+        onOpenGroup: (_) async {},
+        activity: activity,
+      );
+      addTearDown(visit.dispose);
+      final room = visit.entries.singleWhere((entry) => entry.group != null);
+      final index = visit.entries.indexOf(room);
+      visit.prepare([room.key]);
+      for (var i = 0; i < 8; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(
+        visit
+            .cardAt(index)
+            .preview!
+            .group!
+            .messages
+            .map((message) => message.text),
+        ['Saved group reply'],
+      );
+      final revision = visit.previewRevision(room.key);
+      roomFixture.events.add({
+        'room_id': 'room-1',
+        'seq': 2,
+        'kind': 'turn.settled',
+        'created_at': now.millisecondsSinceEpoch / 1000 + 60,
+        'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+        'payload': {
+          'member_id': 'mira',
+          'passed': true,
+          'message_event_id': null,
+        },
+      });
+      now = now.add(const Duration(minutes: 5));
+      await bots.refresh();
+      for (var i = 0; i < 8; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(visit.previewRevision(room.key), isNot(revision));
+      visit.prepare([room.key]);
+      for (var i = 0; i < 8; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final preview = visit
+          .cardAt(visit.entries.indexWhere((entry) => entry.key == room.key))
+          .preview!
+          .group!
+          .messages;
+      expect(preview.map((message) => message.text), [
+        'Saved group reply',
+        'Passed',
+      ]);
+      expect(preview.last.sender, 'Mira');
+      expect(preview.last.senderHandle, 'bot_mira');
+      expect(roomFixture.commands, isEmpty);
+    },
+  );
+
+  test(
     'group avatar changes replace pixels without rereading group messages',
     () async {
       final roomFixture = BotsFixture();

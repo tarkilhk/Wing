@@ -390,7 +390,7 @@ class BotGroupSession extends ChangeNotifier {
     final cached = groupMessages?.borrow(group, limit: limit);
     if (cached != null) return cached;
     final messages = <BotGroupEvent>[];
-    var end = group.lastMessageSequence;
+    var end = group.latestSequence ?? 0;
     while (end > 0 && messages.length < limit) {
       if (_closed || !canRead()) throw StateError('Group preview retired');
       final start = (end - 100).clamp(0, end);
@@ -401,7 +401,7 @@ class BotGroupSession extends ChangeNotifier {
         canRead: () => !_closed && canRead(),
       );
       if (_closed || !canRead()) throw StateError('Group preview retired');
-      messages.insertAll(0, events.where((event) => event.isMessage));
+      messages.insertAll(0, events.where((event) => event.isTranscriptEntry));
       end = start;
     }
     return List.unmodifiable(

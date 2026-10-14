@@ -148,6 +148,11 @@ sender's saved avatar and name, formatted text, links, code and timestamps.
 Bot and user Copy actions sit in their colored bottom rows. Long bot answers use
 the available reading width; your bubbles remain right-aligned and clear of the
 framed avatar. Discussions, Bot Chats and working histories use this same design.
+
+When a bot passes its turn, the discussion shows a **Passed** bubble with that
+bot's name, avatar and timestamp. Recents cards include these bubbles. A pass
+does not create a New answer cue or a reply notification.
+
 Tap a bot's avatar in the discussion to open a compact card over it, with the
 bot's saved avatar and name above three icon-and-text actions: **View working
 history**, **Chat directly** and **Bot settings**.

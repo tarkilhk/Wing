@@ -876,7 +876,7 @@ class BotsRepository {
           canRead: canPublish,
           observation: observation,
         );
-        recentMessages.insertAll(0, events.where((e) => e.isMessage));
+        recentMessages.insertAll(0, events.where((e) => e.isTranscriptEntry));
         for (final event
             in events.where((e) => e.isMessage).toList().reversed) {
           message ??= event;
@@ -1083,6 +1083,13 @@ class BotsRepository {
             payload['text'] is! String) {
           throw const FormatException('Invalid group message text');
         }
+        if (kind == 'turn.settled' && payload['passed'] is! bool) {
+          throw const FormatException('Invalid group turn pass status');
+        }
+        final passedMemberId =
+            kind == 'turn.settled' && payload['passed'] == true
+            ? _requiredText(payload['member_id'])
+            : null;
         final created = row['created_at'];
         if (created is! num ||
             !created.isFinite ||
@@ -1102,6 +1109,7 @@ class BotsRepository {
             (created * 1000).round(),
           ),
           text: _text(payload['text']),
+          passedMemberId: passedMemberId,
         );
       }),
       cursor,

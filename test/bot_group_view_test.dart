@@ -114,6 +114,133 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
+        'group pass bubbles identify the member and retain chronology ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          Map<String, dynamic> settled(int seq, String member, bool passed) => {
+            ..._event(seq, 'turn.settled', 'gateway-1', ''),
+            'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+            'payload': {
+              'member_id': member,
+              'passed': passed,
+              'message_event_id': passed ? null : 'fixture-3',
+            },
+          };
+          fixture.events.addAll([
+            _event(1, 'message.user', 'you', 'Review the plan.'),
+            settled(2, 'atlas', true),
+            _event(3, 'message.member', 'mira', 'The plan is ready.'),
+            settled(4, 'mira', false),
+          ]);
+          final cache = RecentGroupMessages();
+          addTearDown(cache.dispose);
+          final group = (await readFixtureGroups(
+            fixture.repository,
+            groupMessages: cache,
+          )).single;
+          final appearances = await fixture.repository.bots();
+          final frame = GlobalKey();
+          late BotGroupSession session;
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: frame,
+                child: BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () => null,
+                  createSession: () => session = BotGroupSession(
+                    fixture.repository,
+                    group,
+                    reads: BotGroupReadState(),
+                    preferences: groupPreferences,
+                    groupMessages: cache,
+                    appearances: FixedGroupAppearances(appearances),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await _settleGroupMarkdown(tester);
+          final pass = find.byKey(const ValueKey(('group-message', 2)));
+          expect(pass, findsOneWidget);
+          expect(
+            find.descendant(of: pass, matching: find.text('Atlas')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: pass, matching: find.text('Passed')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: pass, matching: find.byType(BotAvatar)),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: pass, matching: find.byType(Tooltip)),
+            findsWidgets,
+          );
+          expect(
+            find.descendant(of: pass, matching: find.byTooltip('Copy message')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const ValueKey(('group-message', 4))),
+            findsNothing,
+          );
+          final messages = tester
+              .widgetList<ProfileMessage>(find.byType(ProfileMessage))
+              .map((widget) => widget.message)
+              .toList();
+          expect(messages.map((message) => message.id), [
+            'room-1:3',
+            'room-1:2',
+            'room-1:1',
+          ]);
+          expect(messages[1].timestamp, session.events[1].timestamp);
+          expect(messages[1].copyText, isEmpty);
+          expect(
+            tester.getTopLeft(pass).dy,
+            lessThan(
+              tester
+                  .getTopLeft(find.byKey(const ValueKey(('group-message', 3))))
+                  .dy,
+            ),
+          );
+          expect(tester.takeException(), isNull);
+          await _render(tester, frame, 'pass-${brightness.name}-$scale');
+
+          fixture.events.add(settled(5, 'mira', true));
+          await session.refresh();
+          await tester.pumpAndSettle();
+          final latestPass = find.byKey(const ValueKey(('group-message', 5)));
+          expect(
+            find.descendant(of: latestPass, matching: find.text('Mira')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: latestPass, matching: find.text('Passed')),
+            findsOneWidget,
+          );
+          await session.refresh();
+          await tester.pumpAndSettle();
+          expect(latestPass, findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+      testWidgets(
         'consecutive bot avatars clear the previous footer ${brightness.name} $scale',
         (tester) async {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);

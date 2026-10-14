@@ -421,10 +421,17 @@ void main() {
                 messages: [
                   for (var i = 0; i < 100; i++)
                     TranscriptMessage.discussion(
-                      timestamp: DateTime(2026, 10, 12),
-                      id: 'room:$i',
-                      text: 'Message $i\n' * 20,
-                      sender: 'Atlas',
+                      group: group,
+                      event: BotGroupEvent(
+                        sequence: i,
+                        eventId: 'event-$i',
+                        kind: 'message.member',
+                        actor: 'atlas',
+                        actorId: 'atlas',
+                        actorName: 'Atlas',
+                        timestamp: DateTime(2026, 10, 12),
+                        text: 'Message $i\n' * 20,
+                      ),
                     ),
                 ],
               ),
@@ -436,7 +443,10 @@ void main() {
     final messages = tester
         .widgetList<BotGroupMessage>(find.byType(BotGroupMessage))
         .toList();
-    expect(messages.any((message) => message.message.id == 'room:99'), isTrue);
+    expect(
+      messages.any((message) => message.message.id == 'room-1:99'),
+      isTrue,
+    );
     expect(
       messages.every(
         (message) =>
@@ -657,12 +667,18 @@ void main() {
                     group: GroupConversationPreview(
                       messages: [
                         TranscriptMessage.discussion(
-                          id: 'room-1:1',
-                          text:
-                              '@bot_atlas The research is ready. We can continue here.',
-                          sender: 'Atlas',
-                          senderHandle: 'bot_atlas',
-                          timestamp: DateTime(2026, 10, 12),
+                          group: group,
+                          event: BotGroupEvent(
+                            sequence: 1,
+                            eventId: 'event-1',
+                            kind: 'message.member',
+                            actor: 'atlas',
+                            actorId: 'atlas',
+                            actorName: 'Atlas',
+                            timestamp: DateTime(2026, 10, 12),
+                            text:
+                                '@bot_atlas The research is ready. We can continue here.',
+                          ),
                         ),
                       ],
                     ),

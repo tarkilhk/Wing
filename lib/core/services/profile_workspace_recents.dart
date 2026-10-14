@@ -145,6 +145,7 @@ final class _WorkspaceRecentConversationSource
         group?.blocked,
         group?.lastMessageSequence,
         group?.lastAnswerSequence,
+        group?.latestSequence,
         group?.lastMessageAt,
         group?.iconColor,
         group?.iconRevision,
@@ -391,24 +392,7 @@ final class _WorkspaceRecentConversationSource
         group: GroupConversationPreview(
           messages: [
             for (final event in messages)
-              TranscriptMessage.discussion(
-                id: '${group.id}:${event.sequence}',
-                text: event.text,
-                timestamp: event.timestamp,
-                sender: event.kind == 'message.user'
-                    ? null
-                    : group.members
-                              .where((member) => member.id == event.actorId)
-                              .firstOrNull
-                              ?.name ??
-                          (event.actorName.isNotEmpty
-                              ? event.actorName
-                              : event.actor),
-                senderHandle: group.members
-                    .where((member) => member.id == event.actorId)
-                    .firstOrNull
-                    ?.handle,
-              ),
+              TranscriptMessage.discussion(group: group, event: event),
           ],
         ),
       );

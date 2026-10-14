@@ -240,20 +240,14 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   Widget _message(BotGroupEvent event) {
     final user = event.kind == 'message.user';
     final member = _session.group.members
-        .where((member) => member.id == event.actorId)
+        .where((member) => member.id == event.memberId)
         .firstOrNull;
-    final name =
-        member?.name ??
-        (event.actorName.isNotEmpty ? event.actorName : event.actor);
     return BotGroupMessage(
       key: ValueKey(('group-message', event.sequence)),
       group: _session.group,
       message: TranscriptMessage.discussion(
-        id: '${_session.group.id}:${event.sequence}',
-        text: event.text,
-        timestamp: event.timestamp,
-        sender: user ? null : name,
-        senderHandle: member?.handle,
+        group: _session.group,
+        event: event,
       ),
       appearance: user || member == null
           ? null
@@ -671,7 +665,8 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     // Reaching the bottom or choosing Latest admits the new rows together.
     final messages = _session.events
         .where(
-          (event) => event.isMessage && event.sequence <= _displayedSequence,
+          (event) =>
+              event.isTranscriptEntry && event.sequence <= _displayedSequence,
         )
         .toList();
     final canStop =

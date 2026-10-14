@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'bot_exchange.dart';
+import 'bots.dart';
 
 import 'answer_versions.dart';
 import 'gateway_activity.dart';
@@ -17,6 +18,7 @@ enum TranscriptMessageKind {
   dialogue,
   botMessage,
   discussion,
+  discussionPass,
 }
 
 /// Passive reading facts. This projection cannot hydrate or execute a runtime,
@@ -66,21 +68,36 @@ final class TranscriptMessage {
   /// Hosted discussion events already carry validated sender/time facts.
   /// They are reading content, without private bot-runtime authority.
   factory TranscriptMessage.discussion({
-    required Object id,
-    required String text,
-    required DateTime timestamp,
-    String? sender,
-    String? senderHandle,
-  }) => TranscriptMessage._(
-    kind: TranscriptMessageKind.discussion,
-    role: sender == null ? 'user' : 'assistant',
-    id: id,
-    text: text,
-    copyText: text,
-    timestamp: timestamp,
-    sender: sender,
-    senderHandle: senderHandle,
-  );
+    required BotGroup group,
+    required BotGroupEvent event,
+  }) {
+    if (!event.isTranscriptEntry) {
+      throw ArgumentError('The group event has no transcript entry');
+    }
+    final user = event.kind == 'message.user';
+    final member = group.members
+        .where((member) => member.id == event.memberId)
+        .firstOrNull;
+    return TranscriptMessage._(
+      kind: event.isPass
+          ? TranscriptMessageKind.discussionPass
+          : TranscriptMessageKind.discussion,
+      role: user ? 'user' : 'assistant',
+      id: '${group.id}:${event.sequence}',
+      text: event.isPass ? 'Passed' : event.text,
+      copyText: event.isPass ? '' : event.text,
+      timestamp: event.timestamp,
+      sender: user
+          ? null
+          : member?.name ??
+                (event.isPass
+                    ? event.memberId
+                    : event.actorName.isNotEmpty
+                    ? event.actorName
+                    : event.actor),
+      senderHandle: user ? null : member?.handle,
+    );
+  }
 
   factory TranscriptMessage.fromRow(Map<String, dynamic> row) {
     final role = row['role']?.toString() ?? '';

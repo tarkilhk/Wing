@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/bot_group_session.dart';
@@ -44,6 +45,129 @@ class _DraftStorage extends InMemorySharedPreferencesStore {
 }
 
 void main() {
+  test(
+    'stock group passes use payload member identity and reject malformed status',
+    () {
+      Map<String, dynamic> settled(Object? passed, Object? member) => {
+        'room_id': 'room-1',
+        'seq': 1,
+        'event_id': 'terminal-1',
+        'kind': 'turn.settled',
+        'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+        'created_at': 1700000001,
+        'payload': {'passed': passed, 'member_id': member},
+      };
+      BotGroupEvent decode(Map<String, dynamic> event) =>
+          BotsRepository.decodeGroupLog('room-1', {
+            'events': [event],
+            'cursor': 1,
+            'latest_seq': 1,
+            'has_more': false,
+            'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+          }, since: 0).events.single;
+      final pass = decode(settled(true, 'atlas'));
+      expect(pass.isPass, isTrue);
+      expect(pass.isMessage, isFalse);
+      expect(pass.isTranscriptEntry, isTrue);
+      expect(pass.actorId, 'gateway-1');
+      expect(pass.memberId, 'atlas');
+      expect(pass.text, isEmpty);
+      expect(decode(settled(false, 'atlas')).isTranscriptEntry, isFalse);
+      for (final event in [
+        settled('true', 'atlas'),
+        settled(null, 'atlas'),
+        settled(true, ''),
+        settled(true, null),
+      ]) {
+        expect(() => decode(event), throwsFormatException);
+      }
+    },
+  );
+
+  for (final cached in [false, true]) {
+    for (final passOnly in [false, true]) {
+      test(
+        'group pass tails remain passive cached=$cached passOnly=$passOnly',
+        () async {
+          SharedPreferences.setMockInitialValues({});
+          final preferences = await BotsPreferences.load();
+          final fixture = BotsFixture();
+          if (!passOnly) {
+            fixture.events.add({
+              'room_id': 'room-1',
+              'seq': 1,
+              'kind': 'message.member',
+              'created_at': 1700000001,
+              'actor': {'kind': 'member', 'id': 'atlas'},
+              'payload': {'text': 'A real answer'},
+            });
+          }
+          final passSeq = passOnly ? 1 : 2;
+          fixture.events.add({
+            'room_id': 'room-1',
+            'seq': passSeq,
+            'kind': 'turn.settled',
+            'created_at': 1700000000 + passSeq,
+            'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+            'payload': {
+              'member_id': 'mira',
+              'passed': true,
+              'message_event_id': null,
+            },
+          });
+          final cache = cached ? RecentGroupMessages() : null;
+          addTearDown(() => cache?.dispose());
+          final group = (await readFixtureGroups(
+            fixture.repository,
+            groupMessages: cache,
+          )).single;
+          expect(group.latestSequence, passSeq);
+          expect(group.lastMessageSequence, passOnly ? 0 : 1);
+          expect(group.lastAnswerSequence, passOnly ? 0 : 1);
+          expect(group.preview, passOnly ? '' : 'A real answer');
+          final reads = BotGroupReadState();
+          addTearDown(reads.dispose);
+          await reads.load();
+          if (!passOnly) await reads.acknowledge(group, 1);
+          expect(reads.unread(group), isFalse);
+          final session = BotGroupSession(
+            fixture.repository,
+            group,
+            reads: reads,
+            preferences: preferences,
+            appearances: FixedGroupAppearances(const []),
+            groupMessages: cache,
+          );
+          addTearDown(session.dispose);
+          final events = await session.readRecentMessages(
+            limit: 10,
+            canRead: () => true,
+          );
+          expect(
+            events.map((event) => event.sequence),
+            passOnly ? [1] : [1, 2],
+          );
+          final message = TranscriptMessage.discussion(
+            group: group,
+            event: events.last,
+          );
+          expect(message.kind, TranscriptMessageKind.discussionPass);
+          expect(message.sender, 'Mira');
+          expect(message.senderHandle, 'bot_mira');
+          expect(message.text, 'Passed');
+          expect(message.copyText, isEmpty);
+          expect(message.timestamp, events.last.timestamp);
+          expect(fixture.commands, isEmpty);
+          expect(reads.unread(group), isFalse);
+          session.setVisible(true);
+          await session.refresh();
+          await session.acknowledgeVisibleMessages(passSeq);
+          expect(reads.sequence(group), passOnly ? 0 : 1);
+        },
+      );
+    }
+  }
+
   late BotsPreferences groupPreferences;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});

@@ -106,6 +106,7 @@ class ProfileMessage extends StatelessWidget {
   /// Shared presentation admission, also used to clear a preceding activity row.
   static bool usesBotFrame(BuildContext context, TranscriptMessage message) =>
       message.kind == TranscriptMessageKind.botMessage ||
+      message.kind == TranscriptMessageKind.discussionPass ||
       (message.kind == TranscriptMessageKind.discussion &&
           message.role != 'user') ||
       (message.role == 'assistant' &&
@@ -293,18 +294,28 @@ class ProfileMessage extends StatelessWidget {
                         ),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-                          child: Theme(
-                            data: palette.markdownTheme(theme),
-                            child: MarkdownMessageContent(
-                              data: message.text,
-                              loadImages: loadImages,
-                              streaming: streaming,
-                              loadImage: loadAttachmentImage,
-                              onOpenRemoteFile: onOpenRemoteFile,
-                              onDownloadRemoteFile: onDownloadRemoteFile,
-                              deliverables: !incoming,
-                            ),
-                          ),
+                          child:
+                              message.kind ==
+                                  TranscriptMessageKind.discussionPass
+                              ? Text(
+                                  message.text,
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    color: palette.text,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                )
+                              : Theme(
+                                  data: palette.markdownTheme(theme),
+                                  child: MarkdownMessageContent(
+                                    data: message.text,
+                                    loadImages: loadImages,
+                                    streaming: streaming,
+                                    loadImage: loadAttachmentImage,
+                                    onOpenRemoteFile: onOpenRemoteFile,
+                                    onDownloadRemoteFile: onDownloadRemoteFile,
+                                    deliverables: !incoming,
+                                  ),
+                                ),
                         ),
                         for (final attachment in message.attachments)
                           Padding(
@@ -462,7 +473,8 @@ class ProfileMessage extends StatelessWidget {
             ),
           ),
         ),
-      if (user || botBubble)
+      if ((user || botBubble) &&
+          message.kind != TranscriptMessageKind.discussionPass)
         _MessageCopyButton(
           message: message,
           compact: true,
