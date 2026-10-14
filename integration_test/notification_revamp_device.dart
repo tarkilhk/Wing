@@ -124,6 +124,7 @@ Future<void> main() async {
   }
 
   var sequence = prefs.getInt('notification_qa_sequence') ?? 0;
+  Completer<void>? notificationHistory;
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 18766);
   await for (final request in server) {
     try {
@@ -131,6 +132,13 @@ Future<void> main() async {
           ? jsonDecode(await utf8.decoder.bind(request).join()) as Map
           : const {};
       switch (request.uri.path) {
+        case '/hold-history':
+          notificationHistory = Completer<void>();
+          host.heldHistoryDelay = notificationHistory;
+          host.heldHistoryStarted = Completer<void>();
+        case '/release-history':
+          notificationHistory?.complete();
+          notificationHistory = null;
         case '/work':
           other.composer.editText('Prepare the weekly report');
           await controller.send(other);
@@ -239,6 +247,10 @@ Future<void> main() async {
       request.response.write(
         jsonEncode({
           'ready': true,
+          'history_held':
+              notificationHistory != null &&
+              !notificationHistory.isCompleted &&
+              host.heldHistoryStarted?.isCompleted == true,
           'runtime': chat.runtime.runtimeId,
           'pending': host.pendingApprovals,
           'decisions': host.calls

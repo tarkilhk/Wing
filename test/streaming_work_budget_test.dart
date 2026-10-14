@@ -1,3 +1,5 @@
+import 'package:wing/core/widgets/wing_app_bar.dart';
+import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -8,6 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/widgets/composer_action_button.dart';
+import 'package:wing/core/widgets/chat_intelligence_picker.dart';
+import 'package:wing/core/widgets/context_ring.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'helpers/pump_markdown_widget.dart';
@@ -44,10 +49,18 @@ void main() {
     );
     await tester.pump();
     await tester.settleMarkdown();
+    final field = find.byKey(const Key('profile-message-composer'));
+    await tester.showKeyboard(field);
+    await tester.pump();
     var liveBuilds = 0;
     var savedBuilds = 0;
+    var composerFieldBuilds = 0;
     final previous = debugOnRebuildDirtyWidget;
     debugOnRebuildDirtyWidget = (element, builtOnce) {
+      if (element.widget is TextField &&
+          element.widget.key == const Key('profile-message-composer')) {
+        composerFieldBuilds++;
+      }
       if (element.widget case MarkdownBody(data: final data)) {
         if (data.startsWith('Word')) liveBuilds++;
         if (data.startsWith('Saved')) savedBuilds++;
@@ -59,7 +72,6 @@ void main() {
       for (var chunk = 0; chunk < 120; chunk++)
         '${List.generate(10, (word) => 'Word${chunk * 10 + word}').join(' ')} ',
     ];
-    final field = find.byKey(const Key('profile-message-composer'));
     for (var i = 0; i < chunks.length; i++) {
       host.event('a', 'message.delta', {'text': chunks[i]});
       if (i % 4 == 0) await tester.enterText(field, 'New draft $i');
@@ -69,6 +81,12 @@ void main() {
     expect(chat.composer.observation.text, 'New draft 116');
     await tester.settleMarkdown();
     expect(savedBuilds, 0);
+    expect(
+      composerFieldBuilds,
+      0,
+      reason:
+          'Answer chunks and draft edits must retain unchanged field chrome.',
+    );
     expect(
       liveBuilds,
       lessThanOrEqualTo(14),
@@ -138,8 +156,18 @@ void main() {
       findsWidgets,
     );
     var savedBuilds = 0;
+    var unchangedControlBuilds = 0;
+    var headerBuilds = 0, drawerBuilds = 0, frameBuilds = 0;
     final previous = debugOnRebuildDirtyWidget;
     debugOnRebuildDirtyWidget = (element, builtOnce) {
+      if (element.widget is WingAppBar) headerBuilds++;
+      if (element.widget is Scaffold) frameBuilds++;
+      if (element.widget is AppDrawer) drawerBuilds++;
+      if (element.widget is ComposerActionButton ||
+          element.widget is ChatIntelligenceButton ||
+          element.widget is ContextRing) {
+        unchangedControlBuilds++;
+      }
       if (element.widget case MarkdownBody(
         data: final text,
       ) when text.startsWith('Saved message')) {
@@ -158,6 +186,26 @@ void main() {
       savedBuilds,
       0,
       reason: 'New answer text must not re-render unchanged saved Markdown.',
+    );
+    expect(
+      unchangedControlBuilds,
+      0,
+      reason: 'Streaming must retain unchanged composer controls.',
+    );
+    expect(
+      headerBuilds,
+      0,
+      reason: 'Answer growth does not change the header.',
+    );
+    expect(
+      drawerBuilds,
+      0,
+      reason: 'Answer growth does not change navigation.',
+    );
+    expect(
+      frameBuilds,
+      0,
+      reason: 'Answer growth does not rebuild the page frame.',
     );
     await tester.pump(const Duration(milliseconds: 200));
   });

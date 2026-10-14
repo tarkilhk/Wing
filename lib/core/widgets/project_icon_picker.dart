@@ -113,7 +113,7 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 8, 4),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
                 child: StudioFormHeader(
                   title: Row(
                     children: [
@@ -137,7 +137,7 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
                 child: TextField(
                   key: const ValueKey('project-icon-search-field'),
                   controller: _search,
@@ -162,7 +162,7 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
                   children: [
                     for (
@@ -185,11 +185,11 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
                 ),
               ),
               const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20),
+                padding: EdgeInsets.symmetric(horizontal: 12),
                 child: Divider(),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
                 child: Row(
                   children: [
                     Expanded(
@@ -213,7 +213,7 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
               Expanded(
                 child: choices.isEmpty
                     ? SingleChildScrollView(
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(12),
                         child: Text(
                           'No icons found. Try another word.',
                           key: const ValueKey('project-icon-empty'),
@@ -225,7 +225,7 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
                         child: GridView.builder(
                           key: const ValueKey('project-icon-grid'),
                           controller: _scroll,
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                           gridDelegate:
                               const SliverGridDelegateWithMaxCrossAxisExtent(
                                 maxCrossAxisExtent: 64,
@@ -249,7 +249,7 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
               const Divider(height: 1),
               Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
+                  horizontal: 12,
                   vertical: 12,
                 ),
                 child: Row(

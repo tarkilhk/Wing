@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'bots.dart';
+import 'notification_input.dart';
 import 'hermes_profile.dart';
 
 /// A shared room on one authenticated connection, independent of bot sessions.
@@ -45,4 +48,20 @@ final class GroupAnswerNotification {
   final GroupNotificationTarget target;
   final String title, instance, text;
   final int sequence;
+}
+
+/// Full fenced room approval identity; identical commands never share authority.
+String groupApprovalFocusId(BotGroupAction action) =>
+    jsonEncode([action.task, action.member, action.request, action.generation]);
+
+final class GroupInputNotification {
+  GroupInputNotification({
+    required this.target,
+    required this.title,
+    required this.instance,
+    required Iterable<NotificationInput> inputs,
+  }) : inputs = List.unmodifiable(inputs);
+  final GroupNotificationTarget target;
+  final String title, instance;
+  final List<NotificationInput> inputs;
 }

@@ -35,7 +35,7 @@ final class RecentGroupMessages {
     required bool complete,
   }) {
     if (_closed || !group.observationComplete) return;
-    final all = messages.where((event) => event.isMessage).toList();
+    final all = messages.where((event) => event.isTranscriptEntry).toList();
     final retained = all.skip((all.length - messageLimit).clamp(0, all.length));
     final tail = List<BotGroupEvent>.unmodifiable(retained);
     if (tail.isEmpty && !complete) return;

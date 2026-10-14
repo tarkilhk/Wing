@@ -241,7 +241,7 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
               width: 440,
               height: MediaQuery.sizeOf(context).height * .9,
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(WingSpacing.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -253,7 +253,7 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
                       ),
                     ),
                     Expanded(child: _body()),
-                    const Divider(height: 16),
+                    const Divider(height: WingSpacing.sm),
                     StudioFormActions(
                       cancelLabel: 'Cancel folder selection',
                       onCancel: _browser.creating

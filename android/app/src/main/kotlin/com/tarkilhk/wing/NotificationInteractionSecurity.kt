@@ -55,15 +55,26 @@ internal object NotificationInteractionSchema {
         if (!listOf("connection", "connection_identity").all { string(target, it, 4096, true) }) return false
         if (target.has("room")) {
             if (!string(target, "room", 4096, true) || target.has("session") || target.has("profile") ||
-                value.getString("choice").isNotEmpty() || value.getBoolean("review")) return false
+                value.getString("choice") !in setOf("", "once", "deny")) return false
         } else if (!listOf("profile", "session").all { string(target, it, 4096, true) }) return false
         val focus = target.optJSONObject("focus")
         if (focus != null) {
-            if (target.has("room") && focus.opt("kind") != "answer") return false
+            if (target.has("room")) {
+                when (focus.opt("kind")) {
+                    "answer" -> if (value.getString("choice").isNotEmpty() || value.getBoolean("review")) return false
+                    "approval" -> {
+                        val identity = try { JSONArray(focus.optString("id")) } catch (_: Exception) { return false }
+                        if (identity.length() != 4 || !(0..2).all { identity.opt(it) is String && identity.getString(it).isNotEmpty() } ||
+                            identity.opt(3) !is Int || identity.getInt(3) < 1) return false
+                    }
+                    else -> return false
+                }
+            }
             if (focus.opt("kind") !in setOf("answer", "side", "background", "approval", "question", "secure", "status") ||
                 !string(focus, "id", 4096, true)) return false
             if (focus.has("message_id") && focus.opt("message_id") !is Int && focus.opt("message_id") !is Long) return false
-        } else if (target.has("focus")) return false
+        } else if (target.has("focus") || (target.has("room") &&
+            (value.getString("choice").isNotEmpty() || value.getBoolean("review")))) return false
         return value.getString("choice").isEmpty() || focus?.opt("kind") == "approval"
     }
 }
@@ -126,12 +137,20 @@ internal class NotificationHandleStore(
         return if (write(JSONArray(entries).toString())) entry.getJSONObject("value") else null
     }
 
+    // Once the user has tapped, opening the captured conversation is independent
+    // of the notification's later read/replacement state. This grants no decision.
+    private fun acceptedNavigation(entry: JSONObject): Boolean =
+        entry.optString("purpose") == mainPurpose &&
+            entry.getJSONObject("value").optString("choice").isEmpty()
+
     @Synchronized fun invalidate(notification: Int): Boolean =
-        write(JSONArray(entries().filter { it.optInt("notification") != notification }).toString())
+        write(JSONArray(entries().filter {
+            it.optInt("notification") != notification || acceptedNavigation(it)
+        }).toString())
 
     @Synchronized fun replace(notification: Int, payload: String?, revision: String?): Boolean =
         write(JSONArray(entries().filter { entry ->
-            entry.optInt("notification") != notification ||
+            entry.optInt("notification") != notification || acceptedNavigation(entry) ||
                 // Startup/configuration can re-render the same alert while Main waits for unlock.
                 // Keep only its already-minted review handoff, with exactly the same target.
                 (entry.optString("purpose") == mainPurpose &&

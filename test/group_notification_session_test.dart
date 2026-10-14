@@ -1,3 +1,4 @@
+import 'package:wing/core/models/group_notification.dart';
 import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/services/bots_preferences.dart';
 import 'dart:async';
@@ -131,6 +132,9 @@ void main() {
   Completer<void>? delivery;
   bool failDelivery = false;
   var postsStarted = 0;
+  final decisions = <Map<String, dynamic>>[];
+  Completer<void>? heldDecision;
+  bool failDecision = false;
   GroupNotificationSession create({WorkspaceScope? key}) =>
       GroupNotificationSession(
         observations: GroupObservations(key ?? scope),
@@ -138,6 +142,16 @@ void main() {
         instance: 'Host',
         preferences: prefs,
         read: host.read,
+        command: (method, params) async {
+          expect(method, 'groups.approve');
+          decisions.add(params);
+          await heldDecision?.future;
+          if (failDecision) throw StateError('Decision failed');
+          host.states[params['room_id']]!['driver_status']['pending_actions'] =
+              <Map<String, dynamic>>[];
+          return {'approved': true};
+        },
+        publishInputs: notices.receiveGroupInputs,
         pollInterval: const Duration(days: 1),
         publish: (answer) async {
           postsStarted++;
@@ -167,11 +181,187 @@ void main() {
     delivery = null;
     failDelivery = false;
     postsStarted = 0;
+    decisions.clear();
+    heldDecision = null;
+    failDecision = false;
   });
   tearDown(() {
     watch.dispose();
     app.dispose();
   });
+
+  void approval({int generation = 1}) {
+    host.states['one']!['driver_status'] = {
+      'working': true,
+      'blocked': true,
+      'pending_actions': [
+        {
+          'kind': 'approval',
+          'task_id': 'task',
+          'member_id': 'atlas',
+          'request_id': 'request',
+          'execution_generation': generation,
+          'approval': {
+            'command': '<write to AGENTS.md>',
+            'description': 'Protected agent instructions',
+            'choices': ['once', 'deny'],
+          },
+        },
+      ],
+    };
+  }
+
+  test(
+    'group approvals alert on discovery, survive replies and read receipts, and settle independently',
+    () async {
+      approval();
+      await watch.activate();
+      final notice = sink.shown.last;
+      expect(notice.focus!.kind, 'approval');
+      expect(notice.choices, ['once', 'deny']);
+      expect(notice.expandedBody, '<write to AGENTS.md>');
+      expect(
+        BotsPreferences(prefs)
+            .approvalReceipts(scope.connectionIdentity, 'one')
+            .single
+            .action
+            .command,
+        notice.expandedBody,
+      );
+      expect(watch.hasActiveGroups, true);
+      final count = sink.shown.length;
+      await watch.refresh();
+      expect(sink.shown.length, lessThanOrEqualTo(count + 1));
+      expect(sink.shown.last.alert, false);
+      host.event('one', 1, 'message.member', 'Another bot has replied');
+      await watch.refresh();
+      expect(sink.shown.last.focus!.kind, 'approval');
+      await notices.readGroupAnswer(GroupNotificationTarget(scope, 'one'), 1);
+      expect(sink.shown.last.focus!.kind, 'approval');
+      host.room('one', latest: 1);
+      await watch.refresh();
+      expect(notices.inputFor(notice.chatIdentity!), isNull);
+      expect(
+        BotsPreferences(
+          prefs,
+        ).approvalReceipts(scope.connectionIdentity, 'one'),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'native group decisions show retained progress, exclude repeats and submit exact authority',
+    () async {
+      approval();
+      await watch.activate();
+      final notice = sink.shown.last;
+      heldDecision = Completer<void>();
+      final decision = watch.resolveApproval(
+        'one',
+        notice.focus!.id,
+        'once',
+        notice.expandedBody,
+      );
+      for (var i = 0; i < 20 && decisions.isEmpty; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(sink.shown.last.submitting, true);
+      expect(
+        await watch.resolveApproval(
+          'one',
+          notice.focus!.id,
+          'once',
+          notice.expandedBody,
+        ),
+        false,
+      );
+      expect(decisions.single, {
+        'room_id': 'one',
+        'task_id': 'task',
+        'member_id': 'atlas',
+        'request_id': 'request',
+        'execution_generation': 1,
+        'choice': 'once',
+      });
+      heldDecision!.complete();
+      expect(await decision, true);
+      await watch.refresh();
+      expect(notices.inputFor(notice.chatIdentity!), isNull);
+      expect(
+        BotsPreferences(
+          prefs,
+        ).approvalReceipts(scope.connectionIdentity, 'one').single.decision,
+        'once',
+      );
+    },
+  );
+
+  test(
+    'native group decisions reject stale generations, changed commands and broad scopes',
+    () async {
+      approval();
+      await watch.activate();
+      final notice = sink.shown.last;
+      approval(generation: 2);
+      expect(
+        await watch.resolveApproval(
+          'one',
+          notice.focus!.id,
+          'once',
+          notice.expandedBody,
+        ),
+        false,
+      );
+      expect(decisions, isEmpty);
+      await watch.refresh();
+      final latest = sink.shown.last;
+      expect(
+        await watch.resolveApproval(
+          'one',
+          latest.focus!.id,
+          'session',
+          latest.expandedBody,
+        ),
+        false,
+      );
+      await expectLater(
+        watch.resolveApproval(
+          'one',
+          latest.focus!.id,
+          'once',
+          'different command',
+        ),
+        throwsStateError,
+      );
+      expect(decisions, isEmpty);
+      failDecision = true;
+      await expectLater(
+        watch.resolveApproval('one', latest.focus!.id, 'deny', null),
+        throwsStateError,
+      );
+      expect(sink.shown.last.submitting, false);
+      expect(sink.shown.last.actionError, contains('Decision not confirmed'));
+      failDecision = false;
+      expect(
+        await watch.resolveApproval('one', latest.focus!.id, 'deny', null),
+        true,
+      );
+    },
+  );
+
+  test(
+    'unavailable group reads retain pending approval notification',
+    () async {
+      approval();
+      await watch.activate();
+      final notice = sink.shown.last;
+      host.fail = true;
+      await watch.refresh();
+      expect(notices.inputFor(notice.chatIdentity!)!.focus, notice.focus);
+      expect(watch.hasActiveGroups, true);
+    },
+  );
 
   test(
     'already-read replies publish timestamp and text without notifications or cues',

@@ -23,6 +23,7 @@ class ProfileActivitySection extends StatefulWidget {
     this.subtitle,
     this.trailing,
     this.initiallyExpanded = false,
+    this.retainDetails = false,
   });
 
   final WidgetBuilder detailsBuilder;
@@ -30,13 +31,14 @@ class ProfileActivitySection extends StatefulWidget {
   final Widget? trailing;
   final Widget? subtitle;
   final bool initiallyExpanded;
+  final bool retainDetails;
 
   @override
   State<ProfileActivitySection> createState() => _ProfileActivitySectionState();
 }
 
 class _ProfileActivitySectionState extends State<ProfileActivitySection> {
-  late bool _visited = widget.initiallyExpanded;
+  late bool _visited = widget.initiallyExpanded || widget.retainDetails;
 
   @override
   Widget build(BuildContext context) => ConversationGestureBoundary(
@@ -47,8 +49,8 @@ class _ProfileActivitySectionState extends State<ProfileActivitySection> {
       trailing: widget.trailing,
       summary: widget.subtitle,
       initiallyExpanded: widget.initiallyExpanded,
-      // Initially absent. First expansion admits the body; later collapse
-      // retains its selected tab and nested disclosure state.
+      // Saved bodies are lazy until first expansion. Live transfers mount
+      // immediately; later collapse retains tabs and nested disclosure state.
       maintainState: _visited,
       onExpansionChanged: (expanded) {
         if (expanded && !_visited) setState(() => _visited = true);
@@ -127,17 +129,53 @@ class ProfileToolActivitySection extends StatelessWidget {
                     '${reviews > 0 ? ', $reviews reviews' : ''}',
               ),
             ),
-      detailsBuilder: _details,
+      detailsBuilder: (_) => ProfileActivityContents(
+        section: section,
+        expandedMessageId: expandedMessageId,
+        focusedMessageKey: focusedMessageKey,
+        currentActivity: currentActivity,
+        tabs: tabs,
+        loadImage: loadImage,
+        onOpenResource: onOpenResource,
+        onShareResource: onShareResource,
+        noticeBuilder: noticeBuilder,
+      ),
     );
   }
+}
 
-  Widget _details(BuildContext context) {
-    final saved = SavedActivity(
-      section.groups.expand((group) => group.toolResults),
-    );
+/// Shared saved and live Activity body, independent of its disclosure lifetime.
+class ProfileActivityContents extends StatelessWidget {
+  const ProfileActivityContents({
+    super.key,
+    this.section,
+    this.expandedMessageId,
+    this.focusedMessageKey,
+    this.currentActivity = const [],
+    this.tabs = const [],
+    this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
+    this.noticeBuilder,
+  });
+
+  final TranscriptTimelineSection? section;
+  final int? expandedMessageId;
+  final GlobalKey? focusedMessageKey;
+  final List<Widget> currentActivity;
+  final List<ProfileActivityTab> tabs;
+  final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
+  final Widget Function(TranscriptTimelineEntry)? noticeBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = section?.groups ?? const <TranscriptTimelineGroup>[];
+    final saved = SavedActivity(groups.expand((group) => group.toolResults));
     final supplied = tabs.map((tab) => tab.id).toSet();
     final noticeEntries = [
-      for (final group in section.groups)
+      for (final group in groups)
         if (group.isAgentNotice) ...group.messages,
     ];
     assert(noticeEntries.isEmpty || noticeBuilder != null);
@@ -156,7 +194,7 @@ class ProfileToolActivitySection extends StatelessWidget {
           ? 'agents'
           : null,
       tabs: [
-        if (section.groups.any((group) => !group.isAgentNotice) ||
+        if (groups.any((group) => !group.isAgentNotice) ||
             currentActivity.isNotEmpty)
           ProfileActivityTab(
             id: 'timeline',
@@ -164,7 +202,7 @@ class ProfileToolActivitySection extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final group in section.groups)
+                for (final group in groups)
                   if (group.isReasoning)
                     ProfileReasoningDisclosure(
                       key:

@@ -279,7 +279,7 @@ class _ProfileNameDialogState extends State<_ProfileNameDialog> {
       final busy = _pending || state.busy;
       return PopScope(
         canPop: !busy,
-        child: AlertDialog(
+        child: StudioDialog(
           scrollable: true,
           insetPadding: const EdgeInsets.symmetric(
             horizontal: 16,

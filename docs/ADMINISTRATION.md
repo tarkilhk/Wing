@@ -76,7 +76,12 @@ The toolbar warning triangle appears only while issues need attention. Tap it to
 
 ## Analytics
 
-Analytics offers **1D, 7D, 30D, 90D and 365D** periods, a daily token grid and model/token breakdowns. Chart titles and Tokens/Cost controls change the displayed grouping. Refresh reloads observations; missing costs and partial coverage remain identified.
+**All** is selected by default and sums usage across every profile on the current connection. Choose a named profile in the header to focus on its usage. This filter does not switch your chat workspace. Profile reads run concurrently, with up to ten requests in flight. If a profile cannot be read, the affected total stays unavailable or retains the previous complete observation, with a notice and Refresh to retry.
+
+Analytics offers **1D, 7D, 30D, 90D and 365D** periods, a daily token grid and model/token breakdowns. Chart titles and Tokens/Cost controls change the displayed grouping. Recently viewed data is cached for five minutes across profile changes and screen visits. Older data stays visible while it refreshes in the background; the Updated time shows its age. Refresh requests fresh observations. Missing costs and partial coverage remain identified.
+
+Token totals and model breakdowns can appear before the activity year finishes. Sections stay in place while loading. Scroll within the model breakdown for
+additional models; the selected daily range includes days with no recorded usage.
 
 OpenAI Codex subscription usage shows an **API-equivalent cost** using current direct OpenAI API base rates from models.dev. Other providers retain Hermes's estimate. Mixed history shows **Estimated usage value**. These values are estimates, not invoices or historical price reconstruction; cache-write charges, long-context premiums and service-tier adjustments are excluded. Missing prices leave the affected amount unavailable.
 

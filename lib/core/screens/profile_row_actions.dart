@@ -27,7 +27,7 @@ Future<void> showSavedDraftActions(
   }
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => StudioDialog(
       scrollable: true,
       title: const Text('Discard draft?'),
       content: Column(
@@ -105,7 +105,7 @@ Future<void> showChatActions(
   } else if (action == 'delete') {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StudioDialog(
         scrollable: true,
         title: const Text('Delete chat?'),
         content: Text(
@@ -202,7 +202,7 @@ class _ChatRenameDialogState extends State<_ChatRenameDialog> {
     final pending = state.submitting || state.generatingTitle;
     return PopScope(
       canPop: !state.submitting,
-      child: AlertDialog(
+      child: StudioDialog(
         scrollable: true,
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         title: const Text('Rename chat'),

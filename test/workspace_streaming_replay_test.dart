@@ -1,11 +1,19 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
-import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
 import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/profile_live_work_dock.dart';
+import 'package:wing/core/widgets/profile_subagent_panel.dart';
+import 'package:wing/core/widgets/profile_live_execution.dart';
+import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
+import 'package:wing/core/utils/expansion_scroll_controller.dart';
 
 import '../tools/performance/streaming_replay_fixture.dart';
 import '../tools/performance/workspace_streaming_replay.dart';
@@ -14,23 +22,35 @@ import 'helpers/pump_markdown_widget.dart';
 Future<WorkspaceStreamingReplayState> _preparedWorkspace(
   WidgetTester tester, {
   int? historyCount,
+  bool work = false,
+  Brightness brightness = Brightness.light,
+  double scale = 1,
 }) async {
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-  tester.view.physicalSize = const Size(390, 800);
+  tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final key = GlobalKey<WorkspaceStreamingReplayState>();
   await tester.pumpWidget(
-    MaterialApp(
-      theme: wingTheme(Brightness.light),
-      home: WorkspaceStreamingReplay(key: key),
+    RepaintBoundary(
+      key: const ValueKey('workspace-replay-capture'),
+      child: MaterialApp(
+        theme: wingTheme(brightness),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
+        home: WorkspaceStreamingReplay(key: key),
+      ),
     ),
   );
   Map<String, Object?>? result;
   Object? failure;
   final preparation = historyCount == null
-      ? key.currentState!.prepare(requireKeyboard: false)
+      ? key.currentState!.prepare(requireKeyboard: false, work: work)
       : key.currentState!.prepareIdle(historyCount, requireKeyboard: false);
   final pending = preparation.then<void>(
     (value) => result = value,
@@ -63,7 +83,190 @@ bool _canAddListener(ChangeNotifier notifier) {
   }
 }
 
+Future<void> captureCompletion(WidgetTester tester, String name) async {
+  if (!const bool.fromEnvironment('CAPTURE_COMPLETION_LAYOUT')) return;
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(const ValueKey('workspace-replay-capture')),
+  );
+  await tester.runAsync(() async {
+    final image = await boundary.toImage(pixelRatio: 2);
+    try {
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      final target = File('build/design-previews/completion-layout/$name.png');
+      await target.parent.create(recursive: true);
+      await target.writeAsBytes(bytes!.buffer.asUint8List());
+    } finally {
+      image.dispose();
+    }
+  });
+}
+
 void main() {
+  setUpAll(() async {
+    if (!const bool.fromEnvironment('CAPTURE_COMPLETION_LAYOUT')) return;
+    const directory = String.fromEnvironment('CAPTURE_FONT_DIR');
+    const monoFont = String.fromEnvironment('CAPTURE_MONO_FONT');
+    for (final entry in {
+      'Roboto': '$directory/Roboto-Regular.ttf',
+      'MaterialIcons': '$directory/MaterialIcons-Regular.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
+      'monospace': monoFont,
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            Future.value(
+              ByteData.sublistView(await File(entry.value).readAsBytes()),
+            ),
+          ))
+          .load();
+    }
+  });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('completion retains the already rendered work-run answer '
+          '${brightness.name} $scale', (tester) async {
+        final state = await _preparedWorkspace(
+          tester,
+          work: true,
+          brightness: brightness,
+          scale: scale,
+        );
+        final body = find.byWidgetPredicate(
+          (widget) =>
+              widget is MarkdownMessageContent &&
+              widget.data == streamingReplayInitial(),
+        );
+        final original = tester.element(body);
+        final answerSlot = find
+            .ancestor(of: body, matching: find.byType(TranscriptScrollAnchor))
+            .first;
+        final originalSlot = tester.element(answerSlot);
+        final prose = find.descendant(
+          of: body,
+          matching: find.byType(BlockReusingMarkdownBody),
+        );
+        final originalProse = tester
+            .widgetList<BlockReusingMarkdownBody>(prose)
+            .toList();
+        final paragraph = find.descendant(
+          of: prose.first,
+          matching: find.byType(SelectableText),
+        );
+        final originalParagraph = tester.widget<SelectableText>(
+          paragraph.first,
+        );
+        await captureCompletion(tester, 'streaming-${brightness.name}-$scale');
+        state.complete();
+        await tester.pump();
+        await tester.settleMarkdown();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(
+          state.controller!.current!.chat!.runtime.executionActive,
+          isFalse,
+        );
+        expect(state.controller!.current!.chat!.markReadFailed, isFalse);
+        expect(state.ready()['readReceiptWrites'], greaterThan(0));
+        expect(tester.element(body), same(original));
+        expect(
+          tester.element(answerSlot),
+          same(originalSlot),
+          reason:
+              'Completion updates the same transcript slot without reparenting.',
+        );
+        expect(
+          tester.widgetList<BlockReusingMarkdownBody>(prose).first,
+          same(originalProse.first),
+        );
+        expect(
+          tester.widget<SelectableText>(paragraph.first),
+          same(originalParagraph),
+        );
+        expect(tester.widget<MarkdownMessageContent>(body).streaming, isFalse);
+        await captureCompletion(tester, 'complete-${brightness.name}-$scale');
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
+  testWidgets('answer chunks leave an open work drawer unchanged', (
+    tester,
+  ) async {
+    final state = await _preparedWorkspace(tester, work: true);
+    final chat = state.controller!.current!.chat!;
+    await tester.tap(find.byKey(const ValueKey(('live-work-tab', 0, false))));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.settleMarkdown();
+    // Finish the drawer's post-layout content measurement before observing
+    // rebuilds caused by answer chunks.
+    await tester.pump();
+    final panel = tester.widget<ProfileSubagentPanel>(
+      find.byType(ProfileSubagentPanel),
+    );
+    var notifications = 0, dockBuilds = 0, panelBuilds = 0, activityBuilds = 0;
+    panel.session.addListener(() => notifications++);
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, builtOnce) {
+      if (element.widget is ProfileLiveWorkDock) dockBuilds++;
+      if (element.widget is ProfileSubagentPanel) panelBuilds++;
+      if (element.widget is ProfileLiveExecution) activityBuilds++;
+      previous?.call(element, builtOnce);
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = previous);
+    for (var index = 0; index < 30; index++) {
+      state.controller!.current!.gateway.onEvent!(
+        StreamEvent(
+          type: 'message.delta',
+          sessionId: chat.runtime.runtimeId,
+          data: {'text': '.'},
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(chat.reading.streaming, '${streamingReplayInitial()}${'.' * 30}');
+    expect(notifications, 0, reason: 'Unchanged supervision stays quiet.');
+    expect(
+      dockBuilds,
+      0,
+      reason: 'Answer text does not rebuild work controls.',
+    );
+    expect(panelBuilds, 0, reason: 'Unchanged agent cards remain mounted.');
+    expect(
+      activityBuilds,
+      0,
+      reason: 'Answer text does not rebuild tool runs.',
+    );
+    state.controller!.current!.gateway.onEvent!(
+      StreamEvent(
+        type: 'subagent.progress',
+        sessionId: chat.runtime.runtimeId,
+        data: {'subagent_id': 'offline-agent-0', 'text': 'New progress'},
+      ),
+    );
+    await tester.pump();
+    expect(notifications, greaterThan(0));
+    expect(
+      panel.session.state.subagents.first.recentActivity,
+      contains('New progress'),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('work replay retains synthetic tasks, agents and live source', (
+    tester,
+  ) async {
+    final state = await _preparedWorkspace(tester, work: true);
+    final chat = state.controller!.current!.chat!;
+    expect(chat.todos, hasLength(7));
+    expect(chat.subagents, hasLength(2));
+    expect(chat.runtime.toolActivities, hasLength(1));
+    expect(state.controls().keys, containsAll(['tasks', 'subagents']));
+    await state.controller!.reconnect(chat.key.workspace);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.settleMarkdown();
+    expect(chat.runtime.executionActive, isTrue);
+    expect(chat.reading.streaming, streamingReplayInitial());
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   test('render verification rejects missing and stale mounted segments', () {
     const source = 'Visible prose.\n\n```dart\nfinal value = 1;\n```\n';
     final split = splitMarkdownCodeBlocks(source, streaming: true);

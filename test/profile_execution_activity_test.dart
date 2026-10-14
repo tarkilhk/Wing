@@ -1490,6 +1490,7 @@ void main() {
     await tester.tap(find.text('Activity · 1 tool').first);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
+    await tester.pump(const Duration(milliseconds: 300));
     final first = find.byWidgetPredicate(
       (widget) => widget is ProfileToolCall && widget.call.callId == 'first',
     );

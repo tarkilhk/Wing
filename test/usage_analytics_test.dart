@@ -7,6 +7,25 @@ import 'package:wing/core/services/usage_analytics.dart';
 import 'support/administration_fixture.dart';
 
 void main() {
+  test('profile capture rejects invalid sets before any read', () {
+    final fixture = AdministrationFixture();
+    addTearDown(fixture.server.close);
+    for (final names in <List<String>>[
+      [],
+      ['default', 'default'],
+      ['../other'],
+      ['default\u0000work'],
+      ['Default'],
+    ]) {
+      expect(
+        () => UsageAnalyticsReader(fixture.server.usageAnalytics, names),
+        throwsArgumentError,
+      );
+    }
+    expect(fixture.requests, isEmpty);
+    expect(fixture.pricingRefreshes, isEmpty);
+  });
+
   final now = DateTime.utc(2026, 9, 18, 12);
   final row = <String, dynamic>{
     'model': 'gpt-6-astra',
@@ -17,6 +36,161 @@ void main() {
     'reasoning_tokens': 20000,
     'estimated_cost': 0,
   };
+
+  test(
+    'All sums profile valuations, models and server dates without losing unknowns',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      fixture.override = withSubscriptionModelOptions((
+        _,
+        path,
+        query,
+        _,
+      ) async {
+        final name = query['profile'];
+        if (path == 'analytics/models') {
+          return {
+            'models': [
+              if (name == 'work') row,
+              if (name == 'default')
+                {...row, 'provider': 'openai', 'estimated_cost': 2},
+            ],
+          };
+        }
+        return {
+          'daily': [
+            if (name == 'default')
+              {
+                'day': '2026-09-16',
+                'input_tokens': 10,
+                'cache_read_tokens': 2,
+                'output_tokens': 3,
+              },
+            if (name != 'empty')
+              {
+                'day': '2026-09-18',
+                'input_tokens': 20,
+                'cache_read_tokens': 0,
+                'output_tokens': name == 'work' ? null : 5,
+              },
+          ],
+        };
+      });
+      final reader = UsageAnalyticsReader(fixture.server.usageAnalytics, [
+        for (final name in ['default', 'work', 'empty']) name,
+      ]);
+      final data = await reader.load(7);
+      expect(data.models!.tokens.total, 2560000);
+      expect(data.models!.costs.total, 7);
+      expect(data.models!.costs.reported, 2);
+      expect(data.models!.costs.apiEquivalent, 5);
+      expect(data.models!.groups, hasLength(1));
+      expect(data.models!.groups.single.rows, hasLength(2));
+      expect(data.daily!.reportedDates, {'2026-09-16', '2026-09-18'});
+      expect(data.daily!.days.map((day) => day.tokens.values), [
+        [10, 2, 3],
+        [0, 0, 0],
+        [40, 0, null],
+      ]);
+      expect(data.daily!.calendarDays.first.isPlaceholder, isTrue);
+      expect(data.modelsError, isNull);
+      expect(data.dailyError, isNull);
+    },
+  );
+
+  test(
+    'All never reports a smaller total when a profile fails and retries only failed sections',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      var failed = true;
+      fixture.override = (_, path, query, _) async {
+        if (failed &&
+            query['profile'] == 'work' &&
+            path == 'analytics/models') {
+          throw TimeoutException('Offline');
+        }
+        if (path == 'analytics/models') {
+          return {
+            'models': [
+              {...row, 'provider': 'openai', 'estimated_cost': 2},
+            ],
+          };
+        }
+        return {
+          'daily': [
+            {
+              'day': '2026-09-18',
+              'input_tokens': 20,
+              'cache_read_tokens': 0,
+              'output_tokens': 5,
+            },
+          ],
+        };
+      };
+      final reader = UsageAnalyticsReader(fixture.server.usageAnalytics, [
+        'default',
+        'work',
+      ]);
+      final partial = await reader.load(7);
+      expect(partial.models, isNull);
+      expect(partial.modelsError, contains('work:'));
+      expect(partial.modelsRetryable, isTrue);
+      expect(partial.daily!.days.single.tokens.total, 50);
+      final before = fixture.requests.length;
+      failed = false;
+      final recovered = await reader.load(7, retry: partial);
+      expect(recovered.models!.costs.total, 4);
+      expect(recovered.models!.tokens.total, 2560000);
+      expect(recovered.modelsError, isNull);
+      expect(recovered.needsRecovery, isFalse);
+      expect(fixture.requests.skip(before), hasLength(1));
+      expect(fixture.requests.last.$2, 'analytics/models');
+      expect(fixture.requests.last.$3['profile'], 'work');
+    },
+  );
+
+  test(
+    'All shares year reads per profile and retries only unavailable years',
+    () async {
+      final fixture = AdministrationFixture();
+      addTearDown(fixture.server.close);
+      var failed = true;
+      fixture.override = (_, path, query, _) async {
+        if (path == 'analytics/models') return {'models': []};
+        if (failed && query['profile'] == 'work') {
+          throw TimeoutException('Offline');
+        }
+        return {
+          'daily': [
+            {
+              'day': '2026-09-18',
+              'input_tokens': 20,
+              'cache_read_tokens': 0,
+              'output_tokens': 5,
+            },
+          ],
+        };
+      };
+      final reader = UsageAnalyticsReader(fixture.server.usageAnalytics, [
+        'default',
+        'work',
+      ]);
+      final year = reader.loadYear();
+      final full = reader.load(365);
+      await expectLater(year, throwsA(isA<TimeoutException>()));
+      expect((await full).daily, isNull);
+      // The shared year future includes the repository's three transport tries.
+      expect(fixture.requests, hasLength(6));
+      final before = fixture.requests.length;
+      failed = false;
+      expect((await reader.loadYear()).days.single.tokens.total, 50);
+      expect(fixture.requests.skip(before), hasLength(1));
+      expect(fixture.requests.last.$3['profile'], 'work');
+    },
+  );
+
   final prices = ModelCatalog.fromOptions(
     subscriptionModelOptions(),
     apiPrices: subscriptionApiPrices(),
@@ -43,7 +217,9 @@ void main() {
             .inputUsdPerMillion,
         20,
       );
-      final result = await UsageAnalyticsReader(profile).load(7);
+      final result = await UsageAnalyticsReader(profile.server.usageAnalytics, [
+        profile.name,
+      ]).load(7);
       expect(result.models!.costs.total, 7.5);
     },
   );
@@ -70,9 +246,9 @@ void main() {
         ],
       };
     };
-    final result = await UsageAnalyticsReader(
-      fixture.server.profile('personal'),
-    ).load(7);
+    final result = await UsageAnalyticsReader(fixture.server.usageAnalytics, [
+      'personal',
+    ]).load(7);
     expect(result.models!.tokens.total, 2560000);
     expect(result.models!.costs.apiEquivalent, isNull);
     expect(result.models!.costs.reported, 7);
@@ -96,7 +272,9 @@ void main() {
                 'models': [row],
               },
       );
-      final reader = UsageAnalyticsReader(fixture.server.profile('personal'));
+      final reader = UsageAnalyticsReader(fixture.server.usageAnalytics, [
+        'personal',
+      ]);
       final stale = await reader.load(7);
       expect(stale.models!.costs.total, 5);
       expect(stale.models!.tokens.total, 1280000);
@@ -122,9 +300,9 @@ void main() {
               'models': [row],
             },
     );
-    final data = await UsageAnalyticsReader(
-      fixture.server.profile('personal'),
-    ).load(7);
+    final data = await UsageAnalyticsReader(fixture.server.usageAnalytics, [
+      'personal',
+    ]).load(7);
     expect(data.models!.tokens.total, 1280000);
     expect(data.models!.costs.total, isNull);
     expect(data.modelsError, contains('unavailable'));
@@ -132,96 +310,67 @@ void main() {
   });
 
   test(
-    'pricing failure retains usage and retries the captured catalog',
+    'pricing failure retries only the shared rates, retaining usage',
     () async {
-      final fixture = AdministrationFixture();
+      final fixture = AdministrationFixture()..failPricing = true;
       addTearDown(fixture.server.close);
-      var offline = true;
-      final priced = withSubscriptionModelOptions(
-        (_, path, _, _) async => path == 'analytics/usage'
-            ? {'daily': []}
-            : {
-                'models': [row],
-              },
-      );
-      fixture.override = (method, path, query, body) async {
-        if (path == 'model/options' && offline) {
-          throw TimeoutException('Offline');
-        }
-        return priced(method, path, query, body);
-      };
-      final reader = UsageAnalyticsReader(
-        fixture.server.profile('client-work'),
-      );
+      fixture.override = (_, path, _, _) async => path == 'analytics/usage'
+          ? {'daily': []}
+          : {
+              'models': [row],
+            };
+      final reader = UsageAnalyticsReader(fixture.server.usageAnalytics, [
+        'client-work',
+      ]);
       final partial = await reader.load(7);
       expect(partial.models!.tokens.total, 1280000);
       expect(partial.models!.costs.total, isNull);
-      expect(partial.modelsError, contains('prices'));
       expect(partial.modelsRetryable, isTrue);
-      offline = false;
+      fixture.failPricing = false;
       fixture.requests.clear();
       final complete = await reader.load(7, retry: partial);
       expect(complete.models!.costs.total, 5);
       expect(complete.modelsError, isNull);
       expect(complete.daily, same(partial.daily));
-      expect(fixture.requests.map((r) => r.$2), [
-        'analytics/models',
-        'model/options',
-      ]);
-      expect(
-        fixture.requests.every((r) => r.$3['profile'] == 'client-work'),
-        isTrue,
-      );
+      expect(fixture.requests, isEmpty);
+      expect(fixture.pricingRefreshes, [false, false]);
     },
   );
 
-  test(
-    'analytics and picker share an in-flight catalog and refresh API prices',
-    () async {
-      final fixture = AdministrationFixture();
-      addTearDown(fixture.server.close);
-      final held = Completer<Map<String, dynamic>>();
-      fixture.override = (method, path, query, body) => path == 'model/options'
-          ? held.future
-          : Future.value(
-              path == 'analytics/usage'
-                  ? {'daily': []}
-                  : {
-                      'models': [row],
-                    },
-            );
-      final profile = fixture.server.profile('personal');
-      final picker = profile.modelCatalog.load();
-      final reader = UsageAnalyticsReader(profile);
-      final pending = reader.load(7);
-      await Future<void>.delayed(Duration.zero);
-      expect(
-        fixture.requests.where((r) => r.$2 == 'model/options'),
-        hasLength(1),
-      );
-      held.complete(subscriptionModelOptions());
-      await picker;
-      expect((await pending).models!.costs.total, 5);
-      final updated = subscriptionModelOptions();
-      fixture.apiPrices = subscriptionApiPrices(input: 20);
-      fixture.override = (_, path, _, _) async => path == 'model/options'
-          ? updated
-          : path == 'analytics/usage'
-          ? {'daily': []}
-          : {
-              'models': [row],
-            };
-      final refreshed = await reader.load(7, refresh: true);
-      expect(refreshed.models!.costs.total, 7.5);
-      expect(
-        fixture.requests
-            .where((r) => r.$2 == 'model/options')
-            .last
-            .$3['refresh'],
-        '1',
-      );
-    },
-  );
+  test('analytics prices directly while the picker catalog is held', () async {
+    final fixture = AdministrationFixture();
+    addTearDown(fixture.server.close);
+    final held = Completer<Map<String, dynamic>>();
+    fixture.override = (_, path, _, _) async => path == 'model/options'
+        ? held.future
+        : path == 'analytics/usage'
+        ? {'daily': []}
+        : {
+            'models': [row],
+          };
+    final profile = fixture.server.profile('personal');
+    final picker = profile.modelCatalog.load();
+    final reader = UsageAnalyticsReader(profile.server.usageAnalytics, [
+      profile.name,
+    ]);
+    final data = await reader.load(7);
+    expect(data.models!.costs.total, 5);
+    expect(
+      fixture.requests.where((request) => request.$2 == 'model/options'),
+      hasLength(1),
+    );
+    held.complete(subscriptionModelOptions());
+    await picker;
+    final before = fixture.requests.length;
+    fixture.apiPrices = subscriptionApiPrices(input: 20);
+    final refreshed = await reader.load(7, refresh: true);
+    expect(refreshed.models!.costs.total, 7.5);
+    expect(fixture.requests.skip(before).map((request) => request.$2).toSet(), {
+      'analytics/models',
+      'analytics/usage',
+    });
+    expect(fixture.pricingRefreshes.last, isTrue);
+  });
 
   test(
     'failed yearly cache is evicted and only failed aggregate is retried',
@@ -234,7 +383,9 @@ void main() {
         if (fail) throw TimeoutException('Offline');
         return {'daily': []};
       };
-      final reader = UsageAnalyticsReader(fixture.server.profile('personal'));
+      final reader = UsageAnalyticsReader(fixture.server.usageAnalytics, [
+        'personal',
+      ]);
       final partial = await reader.load(365);
       expect(partial.models, isNotNull);
       expect(partial.dailyRetryable, isTrue);
@@ -341,7 +492,7 @@ void main() {
           row,
           {...row, 'provider': 'openai', 'estimated_cost': 7},
         ],
-      }, prices);
+      }, prices.apiPrices);
       expect(data.groups.length, 1);
       expect(data.costs.total, 17);
       expect(data.tokens.total, 3840000);
@@ -353,7 +504,7 @@ void main() {
       expect(
         UsageModels.fromJson({
           'models': [row],
-        }, prices).tokenCosts,
+        }, prices.apiPrices).tokenCosts,
         [2.5, 1, 1.5],
       );
     },
@@ -364,7 +515,7 @@ void main() {
         row,
         {...row, 'model': 'unknown', 'cache_read_tokens': null},
       ],
-    }, prices);
+    }, prices.apiPrices);
     expect(data.tokens.total, isNull);
     expect(data.tokens.values[0], 500000);
     expect(data.costs.total, 5);
@@ -390,10 +541,9 @@ void main() {
         (_, path, _, _) =>
             path == 'analytics/models' ? models.future : daily.future,
       );
-      final reader = UsageAnalyticsReader(
-        fixture.server.profile('client-work'),
-        now: () => now,
-      );
+      final reader = UsageAnalyticsReader(fixture.server.usageAnalytics, [
+        'client-work',
+      ], now: () => now);
       final result = reader.load(365);
       expect(fixture.requests.map((r) => r.$2).toSet(), {
         'analytics/models',
@@ -439,10 +589,9 @@ void main() {
           ],
         };
       };
-      final reader = UsageAnalyticsReader(
-        fixture.server.profile('client-work'),
-        now: () => now,
-      );
+      final reader = UsageAnalyticsReader(fixture.server.usageAnalytics, [
+        'client-work',
+      ], now: () => now);
       final year = reader.loadYear();
       final week = await reader.load(7);
       expect((await year).days.last.tokens.total, 365);

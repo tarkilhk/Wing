@@ -1,3 +1,4 @@
+import '../models/bots.dart';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +15,7 @@ class BotsPreferences {
   BotsPreferences(this._preferences);
   final SharedPreferences _preferences;
   static final _draftWrites = Expando<_MessageDraftWrites>();
+  static final _approvalWrites = Expando<Map<String, Future<void>>>();
   _MessageDraftWrites get _writes =>
       _draftWrites[_preferences] ??= _MessageDraftWrites();
   static const _pinsKey = 'bots_group_pins_v1';
@@ -44,6 +46,98 @@ class BotsPreferences {
     )) {
       throw StateError('Room picture prompt could not be saved');
     }
+  }
+
+  String _approvalReceiptsKey(String identity, String roomId) =>
+      'bots_group_approval_receipts:${jsonEncode([identity, roomId])}';
+
+  List<({BotGroupAction action, String? decision})> approvalReceipts(
+    String identity,
+    String roomId,
+  ) {
+    final saved = _preferences.getString(
+      _approvalReceiptsKey(identity, roomId),
+    );
+    if (saved == null) return const [];
+    final rows = jsonDecode(saved);
+    if (rows is! List) throw const FormatException('Invalid approval receipts');
+    return [for (final row in rows) _decodeApprovalReceipt(row)];
+  }
+
+  ({BotGroupAction action, String? decision}) _decodeApprovalReceipt(
+    dynamic row,
+  ) {
+    if (row is! Map ||
+        !['task', 'member', 'request'].every(
+          (key) => row[key] is String && (row[key] as String).isNotEmpty,
+        ) ||
+        row['generation'] is! int ||
+        row['generation'] < 1 ||
+        row['command'] is! String ||
+        row['description'] is! String ||
+        row['choices'] is! List ||
+        (row['choices'] as List).any((c) => !['once', 'deny'].contains(c)) ||
+        ![null, 'once', 'deny'].contains(row['decision'])) {
+      throw const FormatException('Invalid approval receipt');
+    }
+    return (
+      action: BotGroupAction(
+        kind: 'approval',
+        task: row['task'],
+        member: row['member'],
+        request: row['request'],
+        generation: row['generation'],
+        command: row['command'],
+        description: row['description'],
+        choices: List<String>.from(row['choices']),
+      ),
+      decision: row['decision'] as String?,
+    );
+  }
+
+  Future<void> writeApprovalReceipts(
+    String identity,
+    String roomId,
+    Iterable<({BotGroupAction action, String? decision})> receipts,
+  ) {
+    final captured = List.of(receipts);
+    final key = _approvalReceiptsKey(identity, roomId);
+    final tails = _approvalWrites[_preferences] ??= {};
+    final operation = (tails[key] ?? Future<void>.value()).then((_) async {
+      final merged = {
+        for (final receipt in approvalReceipts(identity, roomId))
+          receipt.action.key: receipt,
+      };
+      for (final receipt in captured) {
+        final existing = merged[receipt.action.key];
+        // A passive replay cannot erase an accepted decision from another owner.
+        if (existing?.decision == null || receipt.decision != null) {
+          merged[receipt.action.key] = receipt;
+        }
+      }
+      final encoded = jsonEncode([
+        for (final receipt in merged.values)
+          {
+            'task': receipt.action.task,
+            'member': receipt.action.member,
+            'request': receipt.action.request,
+            'generation': receipt.action.generation,
+            'command': receipt.action.command,
+            'description': receipt.action.description,
+            'choices': receipt.action.choices,
+            'decision': receipt.decision,
+          },
+      ]);
+      if (_preferences.getString(key) == encoded) return;
+      if (!await _preferences.setString(key, encoded)) {
+        throw StateError('Approval details could not be saved on this device');
+      }
+    });
+    tails[key] = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return operation;
   }
 
   String _messageDraftKey(String identity, String roomId) =>

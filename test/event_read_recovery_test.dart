@@ -260,7 +260,7 @@ void main() {
         home: Scaffold(
           body: UsageDashboard(
             createSession: () => UsageAnalyticsSession(
-              UsageAnalyticsReader(fixture.server.profile('personal')),
+              UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
             ),
           ),
         ),

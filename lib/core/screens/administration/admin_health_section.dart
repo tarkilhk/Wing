@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 
@@ -63,7 +64,7 @@ Future<void> showHealthCheckExplanation(
   BuildContext context,
 ) => showDialog<void>(
   context: context,
-  builder: (context) => AlertDialog(
+  builder: (context) => StudioDialog(
     title: const Text('What’s checked?'),
     scrollable: true,
     content: Column(

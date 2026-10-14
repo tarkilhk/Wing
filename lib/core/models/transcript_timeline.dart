@@ -146,6 +146,24 @@ final class TranscriptTimeline {
       sections.last.isActivity &&
       !sections.last.hasLatestReview;
 
+  /// Only the adjacent unfinished activity can join a live reply. A saved
+  /// answer, prompt, ordinary notice or completed review remains a boundary.
+  TranscriptTimelineSection? get adjacentLiveActivity {
+    var index = sections.length - 1;
+    if (index >= 0 &&
+        !sections[index].isActivity &&
+        sections[index].messages.last.streaming) {
+      index--;
+    }
+    if (index < 0 ||
+        !sections[index].isActivity ||
+        sections[index].hasLatestReview ||
+        sections[index].messages.any((entry) => entry.streaming)) {
+      return null;
+    }
+    return sections[index];
+  }
+
   /// Post-frame visibility targets consult the current owner's rows, not a
   /// preceding frame's timeline. This returns identity only, never raw content.
   static Object? notificationAnswerPresentation(

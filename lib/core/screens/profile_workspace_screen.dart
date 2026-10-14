@@ -369,6 +369,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   final _fileReads = <OwnedRemoteFiles>{};
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _settingsRevision = 0;
+  String? _analyticsProfileName;
   ProfileSessionKey? _composerKey;
   Future<BotRecord?>? _conversationBot;
   ProfileSessionKey? _loadingIntelligence;
@@ -643,60 +644,65 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Future<void> _openRecentGroup(
     BotGroup group, {
     AppDestination origin = AppDestination.activity,
+    bool notification = false,
   }) {
     final fromRecents =
         origin == AppDestination.activity || _recentVisit?.modeEnabled == true;
-    return Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (groupContext) {
-          final status = _groupConnectionStatus(group);
-          final connection = _groupConnection(group);
-          final discussion = BotAvatarScope(
-            session: _bots,
-            child: GroupConversationSwitcher(
-              groupKey: RecentConversationKey.group(group.key),
-              onLeave: () => _leaveConversation(origin),
-              onLeaveRecents: () => _leaveConversation(AppDestination.activity),
-              createSession: () => controller.groupRecentConversationSession(
-                group: group,
-                fromRecents: fromRecents,
-                recents: _recents,
-                onOpenGroup: _openRecentGroup,
-                activity: () => ChatNoticeActivityScope.of(groupContext),
-                onOpenChat: (_) => _openGroupChatWindow(
-                  groupContext,
-                  origin: AppDestination.activity,
-                ),
-              ),
-              previewBuilder: _recentPreview,
-              child: BotGroupScreen(
-                voiceInputSettings: () =>
-                    controller.appPreferences.current.voiceInputSettings,
-                voiceDevice: widget.voiceDevice,
-                stopVoicePlayback: _voiceOutput.stop,
-                createSession: () => _bots.openGroup(group),
-                onEdit: (group) => openGroupEditor(groupContext, _bots, group),
-                onOpenBotChat: (bot) => _openGroupBotChat(groupContext, bot),
-                onOpenBotSettings: (bot) =>
-                    _openBotSettings(bot, routeContext: groupContext),
+    final route = MaterialPageRoute<void>(
+      builder: (groupContext) {
+        final status = _groupConnectionStatus(group);
+        final connection = _groupConnection(group);
+        final discussion = BotAvatarScope(
+          session: _bots,
+          child: GroupConversationSwitcher(
+            groupKey: RecentConversationKey.group(group.key),
+            onLeave: () => _leaveConversation(origin),
+            onLeaveRecents: () => _leaveConversation(AppDestination.activity),
+            createSession: () => controller.groupRecentConversationSession(
+              group: group,
+              fromRecents: fromRecents,
+              recents: _recents,
+              onOpenGroup: _openRecentGroup,
+              activity: () => ChatNoticeActivityScope.of(groupContext),
+              onOpenChat: (_) => _openGroupChatWindow(
+                groupContext,
+                origin: AppDestination.activity,
               ),
             ),
-          );
-          return status == null
-              ? discussion
-              : ServerConnectionScope(
-                  status: status,
-                  icon: connection?.icon,
-                  onPickWorkspace: (anchor, {required mode}) =>
-                      unawaited(_pickWorkspace(anchor, mode: mode)),
-                  child: discussion,
-                );
-        },
-      ),
+            previewBuilder: _recentPreview,
+            child: BotGroupScreen(
+              voiceInputSettings: () =>
+                  controller.appPreferences.current.voiceInputSettings,
+              voiceDevice: widget.voiceDevice,
+              stopVoicePlayback: _voiceOutput.stop,
+              createSession: () => _bots.openGroup(group),
+              onEdit: (group) => openGroupEditor(groupContext, _bots, group),
+              onOpenBotChat: (bot) => _openGroupBotChat(groupContext, bot),
+              onOpenBotSettings: (bot) =>
+                  _openBotSettings(bot, routeContext: groupContext),
+            ),
+          ),
+        );
+        return status == null
+            ? discussion
+            : ServerConnectionScope(
+                status: status,
+                icon: connection?.icon,
+                onPickWorkspace: (anchor, {required mode}) =>
+                    unawaited(_pickWorkspace(anchor, mode: mode)),
+                child: discussion,
+              );
+      },
     );
+    if (notification) _notificationGroup = (key: group.key, route: route);
+    return Navigator.of(context).push<void>(route).whenComplete(() {
+      if (identical(_notificationGroup?.route, route)) {
+        _notificationGroup = null;
+      }
+    });
   }
 
-  String? _notificationGroup;
+  ({String key, Route<void> route})? _notificationGroup;
   Future<void> showNotificationGroup(
     GroupNotificationTarget target,
     bool Function() canUse,
@@ -706,53 +712,51 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         target.scope.connectionId != controller.connection.id) {
       throw StateError('Group belongs to another connection');
     }
-    if (_notificationGroup == target.key) return;
+    if (_notificationGroup?.key == target.key &&
+        _notificationGroup!.route.isCurrent) {
+      return;
+    }
     await _bots.refresh();
     if (!mounted || !canUse()) return;
     final group = _bots.groupForKey(target.key);
     if (group == null) throw StateError('The shared group is unavailable');
-    _notificationGroup = target.key;
-    unawaited(
-      _openRecentGroup(group).whenComplete(() {
-        if (_notificationGroup == target.key) _notificationGroup = null;
-      }),
-    );
+    unawaited(_openRecentGroup(group, notification: true));
   }
 
   Future<void> _openRecentConversation(
     ProfileRecentChat item,
     List<WorkspaceRecentItem> displayed,
-  ) async {
-    _pendingRecentVisit?.dispose();
-    final visit = controller.recentConversationSession(
-      recents: _recents,
-      entries: displayed.map((item) => item.conversation),
-      onOpenGroup: _openRecentGroup,
-      activity: ChatNoticeActivityScope.of(context),
-    );
-    _pendingRecentVisit = visit;
-    final opened = await visit.select(RecentConversationKey.chat(item.key));
-    if (!mounted || _pendingRecentVisit != visit) {
-      visit.dispose();
-      return;
-    }
-    _pendingRecentVisit = null;
-    if (!opened || _destination != AppDestination.activity) {
-      if (visit.error case final error?) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: StudioError(error)));
+  ) => _openConversationDestination(
+    (current) async {
+      final visit = controller.recentConversationSession(
+        recents: _recents,
+        entries: displayed.map((item) => item.conversation),
+        onOpenGroup: _openRecentGroup,
+        activity: ChatNoticeActivityScope.of(context),
+      );
+      _pendingRecentVisit = visit;
+      final opened = await visit.select(RecentConversationKey.chat(item.key));
+      if (!current() || _pendingRecentVisit != visit) {
+        visit.dispose();
+        return null;
       }
-      visit.dispose();
-      return;
-    }
-    _selectDestination(AppDestination.chats);
-    setState(() {
-      _chatOrigin = AppDestination.activity;
+      _pendingRecentVisit = null;
+      if (!opened) {
+        final error =
+            visit.error ?? 'Could not open this conversation. Try again.';
+        visit.dispose();
+        throw StateError(error);
+      }
       _recentVisit = visit;
       _recentRenderedChat = controller.current?.chat;
-    });
-  }
+      return item.key;
+    },
+    title: item.title,
+    label: 'Opening chat',
+    owner: item.key.workspace,
+    resumeStoredChat: false,
+    origin: AppDestination.activity,
+  );
 
   Widget _withRecentSwitcher(ProfileChat chat, Widget child) {
     if (_recentVisit?.active != true) {
@@ -956,6 +960,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _botsOwner?.dispose();
     _composerFocus.removeListener(_composerFocusChanged);
     _composerEditing.dispose();
+    _conversationBody.dispose();
     if (_renderedReadingFocus case final rendered?) {
       rendered.$1.releaseReadingFocus(rendered.$2);
     }
@@ -1013,19 +1018,31 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       connections: widget.savedConnections?.call() ?? [controller.connection],
       connectionId: controller.connection.id,
       profiles: controller.discovery?.profiles ?? const [],
-      profileName: controller.current?.scope.profileName,
+      profileName: mode == WorkspacePickerMode.analytics
+          ? _analyticsProfileName
+          : controller.current?.scope.profileName,
       busy: controller.switching,
       mode: mode,
     );
     if (!mounted || !anchor.mounted || choice == null || controller.switching) {
       return;
     }
-    if (choice.isConnection && choice.id == controller.connection.id) return;
-    if (!choice.isConnection &&
+    if (mode == WorkspacePickerMode.analytics) {
+      if (_analyticsProfileName != choice.id) {
+        setState(() => _analyticsProfileName = choice.id);
+      }
+      return;
+    }
+    if (choice.kind == WorkspaceChoiceKind.connection &&
+        choice.id == controller.connection.id) {
+      return;
+    }
+    if (choice.kind == WorkspaceChoiceKind.profile &&
         choice.id == controller.current?.scope.profileName) {
       return;
     }
-    if (!choice.isConnection) {
+    if (choice.kind == WorkspaceChoiceKind.profile) {
+      final name = choice.id!;
       if (!_profileNavigation.canRequestSwitch) {
         ScaffoldMessenger.of(anchor).showSnackBar(
           const SnackBar(
@@ -1038,13 +1055,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       }
       await _run(() async {
         var attempted = false;
-        final changed = await _profileNavigation.switchTo(choice.id, () {
+        final changed = await _profileNavigation.switchTo(name, () {
           attempted = true;
           _cancelVoice();
           FocusManager.instance.primaryFocus?.unfocus();
           controller.cancelNotificationOpen();
           return controller.switchProfile(
-            choice.id,
+            name,
             resetNavigation: _destination == AppDestination.chats,
           );
         });
@@ -1093,6 +1110,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         _composer.text != (chat?.composer.observation.displayedText ?? '')) {
       final changedChat = _composerKey != chat?.key;
       if (changedChat) {
+        _clearConversationRendering();
         _liveWorkDock = GlobalKey();
         _conversationBot = null;
         _senderAppearances.clear();
@@ -1280,12 +1298,46 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     setState(() => _conversationBot = null);
   }
 
-  Widget _conversationPage(
+  final _conversationBody = ValueNotifier<Widget>(const SizedBox.shrink());
+  Object? _conversationFrameInputs;
+  Widget? _conversationFrame;
+
+  Widget _retainedConversationFrame(
+    ProfileChat chat,
+    WingAppBar header,
+    Widget body,
+  ) {
+    // Publish the changing reading/composer below the stable Scaffold. The
+    // frame retains its own keyboard, navigation and inherited-state listeners.
+    _conversationBody.value = body;
+    final inputs = (
+      controller,
+      chat,
+      header,
+      _destination,
+      controller.access,
+      controller.connectionStatus,
+    );
+    if (_conversationFrameInputs == inputs) return _conversationFrame!;
+    _conversationFrameInputs = inputs;
+    return _conversationFrame = Scaffold(
+      key: _scaffoldKey,
+      drawer: _drawer(),
+      appBar: header,
+      body: ValueListenableBuilder<Widget>(
+        valueListenable: _conversationBody,
+        builder: (_, content, _) => content,
+      ),
+    );
+  }
+
+  Object? _conversationHeaderInputs;
+  WingAppBar? _conversationHeader;
+  WingAppBar _retainedConversationHeader(
     BuildContext context,
     ProfileChat chat,
     BotRecord? bot,
   ) {
-    _bots.setSelectedAvatar(bot?.scope);
     final title = BotConversationTitle(
       title: chat.title,
       bot: bot,
@@ -1335,6 +1387,221 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         }
       }),
     );
+    final inputs = (
+      context,
+      chat,
+      bot,
+      chat.title,
+      canOpenBotSettings,
+      parentSessionId,
+      stackChatScope,
+      canMoveProject,
+      chat.runtime.opening,
+      chat.runtime.offline,
+      controller.chatProjectLabel(chat),
+      controller.chatProject(chat),
+      controller.connection.label,
+      controller.connection.icon,
+      controller.connectionStatus,
+      controller.refreshingWorkspace,
+      Theme.of(context),
+      MediaQuery.sizeOf(context),
+      MediaQuery.textScalerOf(context),
+      Directionality.of(context),
+    );
+    if (_conversationHeaderInputs == inputs) return _conversationHeader!;
+    _conversationHeaderInputs = inputs;
+    return _conversationHeader = WingAppBar(
+      context: context,
+
+      leading: StudioButtonPress(
+        child: IconButton(
+          icon: const Icon(Icons.menu),
+          tooltip: 'Open navigation menu',
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
+      ),
+      title: canOpenBotSettings
+          ? Tooltip(
+              message: 'Bot settings',
+              child: Semantics(
+                button: true,
+                child: StudioButtonPress(
+                  child: InkWell(
+                    onTap: () => _openBotSettings(bot),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: title,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : Tooltip(
+              message: 'Rename chat',
+              child: Semantics(
+                button: true,
+                child: StudioButtonPress(
+                  child: InkWell(
+                    onTap: openRename,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: title,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+      contextHeight: stackChatScope ? 96 : 48,
+      contextRow: LayoutBuilder(
+        builder: (context, constraints) {
+          final scopeStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w400,
+          );
+          final projectLabel = chat.runtime.opening || chat.runtime.offline
+              ? chat.key.workspace.profileName
+              : controller.chatProjectLabel(chat);
+          final projectAppearance = chat.runtime.opening || chat.runtime.offline
+              ? null
+              : controller.chatProject(chat);
+          final server = ServerConnectionLabel(
+            alignment: Alignment.centerLeft,
+            label: controller.connection.label,
+            icon: controller.connection.icon,
+            status: controller.connectionStatus,
+            style: scopeStyle,
+          );
+          final project = Tooltip(
+            message: 'Move to project: $projectLabel',
+            child: Semantics(
+              button: true,
+              enabled: canMoveProject,
+              focusable: canMoveProject,
+              onTap: canMoveProject ? openProjectPicker : null,
+              label: '$projectLabel. Move to project',
+              excludeSemantics: true,
+              child: StudioButtonPress(
+                child: InkWell(
+                  key: const ValueKey('chat-project-picker'),
+                  borderRadius: WingRadius.control,
+                  onTap: canMoveProject ? openProjectPicker : null,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minHeight: 48,
+                      minWidth: 48,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: 1,
+                      heightFactor: 1,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (projectAppearance != null) ...[
+                            projectAvatar(context, projectAppearance, size: 20),
+                            const SizedBox(width: 6),
+                          ],
+                          Flexible(
+                            child: Text(
+                              projectLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: scopeStyle,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          if (stackChatScope) {
+            return Column(
+              key: const ValueKey('chat-scope-stacked'),
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [server, project],
+            );
+          }
+          return Row(
+            key: const ValueKey('chat-scope-inline'),
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: constraints.maxWidth * .5,
+                ),
+                child: server,
+              ),
+              ExcludeSemantics(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text('·', style: scopeStyle),
+                ),
+              ),
+              Expanded(child: project),
+            ],
+          );
+        },
+      ),
+      actions: [
+        StudioButtonPress(
+          child: PopupMenuButton<String>(
+            tooltip: 'Chat actions',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (action) {
+              if (action == 'refresh') {
+                unawaited(_run(controller.refresh));
+              } else if (action == 'find') {
+                unawaited(_openFind(chat));
+              } else if (action == 'outputs') {
+                unawaited(_run(() => _openOutputs(chat)));
+              } else if (action == 'screen') {
+                unawaited(_run(() => _openScreen(chat)));
+              } else if (action == 'parent') {
+                unawaited(_run(() => controller.openParentChat(chat)));
+              }
+            },
+            itemBuilder: (_) => [
+              const StudioPopupMenuItem(
+                value: 'screen',
+                child: Text('View screen'),
+              ),
+              const StudioPopupMenuItem(
+                value: 'outputs',
+                child: Text('Outputs'),
+              ),
+              const StudioPopupMenuItem(
+                value: 'find',
+                child: Text('Find in chat'),
+              ),
+              if (parentSessionId != null)
+                const StudioPopupMenuItem(
+                  value: 'parent',
+                  child: Text('Parent chat'),
+                ),
+              const PopupMenuDivider(),
+              StudioPopupMenuItem(
+                value: 'refresh',
+                enabled: !controller.refreshingWorkspace,
+                child: const Text('Refresh workspace'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _conversationPage(
+    BuildContext context,
+    ProfileChat chat,
+    BotRecord? bot,
+  ) {
+    _bots.setSelectedAvatar(bot?.scope);
     final conversation = PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -1352,201 +1619,17 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           }
         }
       },
-      child: Scaffold(
-        key: _scaffoldKey,
-        drawer: _drawer(),
-        appBar: WingAppBar(
-          context: context,
-
-          leading: StudioButtonPress(
-            child: IconButton(
-              icon: const Icon(Icons.menu),
-              tooltip: 'Open navigation menu',
-              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-            ),
-          ),
-          title: canOpenBotSettings
-              ? Tooltip(
-                  message: 'Bot settings',
-                  child: Semantics(
-                    button: true,
-                    child: StudioButtonPress(
-                      child: InkWell(
-                        onTap: () => _openBotSettings(bot),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 48),
-                          child: title,
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-              : Tooltip(
-                  message: 'Rename chat',
-                  child: Semantics(
-                    button: true,
-                    child: StudioButtonPress(
-                      child: InkWell(
-                        onTap: openRename,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 48),
-                          child: title,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-          contextHeight: stackChatScope ? 96 : 48,
-          contextRow: LayoutBuilder(
-            builder: (context, constraints) {
-              final scopeStyle = Theme.of(context).textTheme.labelMedium
-                  ?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w400,
-                  );
-              final projectLabel = chat.runtime.opening || chat.runtime.offline
-                  ? chat.key.workspace.profileName
-                  : controller.chatProjectLabel(chat);
-              final projectAppearance =
-                  chat.runtime.opening || chat.runtime.offline
-                  ? null
-                  : controller.chatProject(chat);
-              final server = ServerConnectionLabel(
-                alignment: Alignment.centerLeft,
-                label: controller.connection.label,
-                icon: controller.connection.icon,
-                status: controller.connectionStatus,
-                style: scopeStyle,
-              );
-              final project = Tooltip(
-                message: 'Move to project: $projectLabel',
-                child: Semantics(
-                  button: true,
-                  enabled: canMoveProject,
-                  focusable: canMoveProject,
-                  onTap: canMoveProject ? openProjectPicker : null,
-                  label: '$projectLabel. Move to project',
-                  excludeSemantics: true,
-                  child: StudioButtonPress(
-                    child: InkWell(
-                      key: const ValueKey('chat-project-picker'),
-                      borderRadius: WingRadius.control,
-                      onTap: canMoveProject ? openProjectPicker : null,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          minHeight: 48,
-                          minWidth: 48,
-                        ),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: 1,
-                          heightFactor: 1,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (projectAppearance != null) ...[
-                                projectAvatar(
-                                  context,
-                                  projectAppearance,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              Flexible(
-                                child: Text(
-                                  projectLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: scopeStyle,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-              if (stackChatScope) {
-                return Column(
-                  key: const ValueKey('chat-scope-stacked'),
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [server, project],
-                );
-              }
-              return Row(
-                key: const ValueKey('chat-scope-inline'),
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: constraints.maxWidth * .5,
-                    ),
-                    child: server,
-                  ),
-                  ExcludeSemantics(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text('·', style: scopeStyle),
-                    ),
-                  ),
-                  Expanded(child: project),
-                ],
-              );
-            },
-          ),
-          actions: [
-            StudioButtonPress(
-              child: PopupMenuButton<String>(
-                tooltip: 'Chat actions',
-                icon: const Icon(Icons.more_vert),
-                onSelected: (action) {
-                  if (action == 'refresh') {
-                    unawaited(_run(controller.refresh));
-                  } else if (action == 'find') {
-                    unawaited(_openFind(chat));
-                  } else if (action == 'outputs') {
-                    unawaited(_run(() => _openOutputs(chat)));
-                  } else if (action == 'screen') {
-                    unawaited(_run(() => _openScreen(chat)));
-                  } else if (action == 'parent') {
-                    unawaited(_run(() => controller.openParentChat(chat)));
-                  }
-                },
-                itemBuilder: (_) => [
-                  const StudioPopupMenuItem(
-                    value: 'screen',
-                    child: Text('View screen'),
-                  ),
-                  const StudioPopupMenuItem(
-                    value: 'outputs',
-                    child: Text('Outputs'),
-                  ),
-                  const StudioPopupMenuItem(
-                    value: 'find',
-                    child: Text('Find in chat'),
-                  ),
-                  if (parentSessionId != null)
-                    const StudioPopupMenuItem(
-                      value: 'parent',
-                      child: Text('Parent chat'),
-                    ),
-                  const PopupMenuDivider(),
-                  StudioPopupMenuItem(
-                    value: 'refresh',
-                    enabled: !controller.refreshingWorkspace,
-                    child: const Text('Refresh workspace'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        body: StudioPageLoading(
-          active: controller.refreshingWorkspace,
-          label: 'Refreshing workspace',
+      child: _retainedConversationFrame(
+        chat,
+        _retainedConversationHeader(context, chat, bot),
+        StudioPageLoading(
+          active:
+              controller.refreshingWorkspace ||
+              chat.changingIntelligence ||
+              _loadingIntelligence == chat.key,
+          label: controller.refreshingWorkspace
+              ? 'Refreshing workspace'
+              : 'Updating model settings',
           child: StudioLoadingRegion(
             busy: controller.switching || chat.refreshingConversation,
             available:
@@ -1883,7 +1966,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       context: context,
       builder: (context) => ListenableBuilder(
         listenable: controller,
-        builder: (context, _) => AlertDialog(
+        builder: (context, _) => StudioDialog(
           insetPadding: const EdgeInsets.all(WingSpacing.lg),
           titleTextStyle: Theme.of(context).textTheme.titleMedium,
           title: const Text('Restore to this checkpoint?'),
@@ -1942,140 +2025,98 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 input.trim() != originalText;
             return PopScope(
               canPop: !submitting,
-              child: Dialog(
+              child: StudioDialog(
                 key: const ValueKey('saved-message-edit-dialog'),
-                insetPadding: const EdgeInsets.all(WingSpacing.lg),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
+                title: Semantics(
+                  header: true,
+                  child: Text(
+                    'Edit message',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                content: SizedBox(
+                  width: 480,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          left: WingSpacing.lg,
-                          right: WingSpacing.sm,
-                          top: WingSpacing.sm,
-                          bottom: WingSpacing.xs,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Semantics(
-                                header: true,
-                                child: Text(
-                                  'Edit message',
-                                  style: theme.textTheme.titleMedium,
-                                ),
-                              ),
-                            ),
-                          ],
+                      Text(
+                        'Resending replaces this message and all later history in this chat.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: tokens.muted,
                         ),
                       ),
-                      Flexible(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(
-                            WingSpacing.lg,
-                            0,
-                            WingSpacing.lg,
-                            WingSpacing.md,
+                      const SizedBox(height: WingSpacing.md),
+                      Semantics(
+                        label: 'Message text',
+                        child: TextFormField(
+                          key: const ValueKey('saved-message-edit-input'),
+                          initialValue: input,
+                          enabled: !submitting,
+                          autofocus: true,
+                          minLines: 3,
+                          maxLines: 8,
+                          keyboardType: TextInputType.multiline,
+                          textInputAction: TextInputAction.newline,
+                          style: theme.textTheme.bodyLarge,
+                          decoration: InputDecoration(
+                            fillColor: tokens.surface,
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                'Resending replaces this message and all later history in this chat.',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: tokens.muted,
-                                ),
-                              ),
-                              const SizedBox(height: WingSpacing.md),
-                              Semantics(
-                                label: 'Message text',
-                                child: TextFormField(
-                                  key: const ValueKey(
-                                    'saved-message-edit-input',
-                                  ),
-                                  initialValue: input,
-                                  enabled: !submitting,
-                                  autofocus: true,
-                                  minLines: 3,
-                                  maxLines: 8,
-                                  keyboardType: TextInputType.multiline,
-                                  textInputAction: TextInputAction.newline,
-                                  style: theme.textTheme.bodyLarge,
-                                  decoration: InputDecoration(
-                                    fillColor: tokens.surface,
-                                  ),
-                                  onChanged: (value) => setDialogState(() {
-                                    input = value;
-                                    inlineError = null;
-                                  }),
-                                ),
-                              ),
-                              if (inlineError != null) ...[
-                                const SizedBox(height: WingSpacing.md),
-                                StudioError(
-                                  inlineError!,
-                                  key: const ValueKey('edit-message-error'),
-                                ),
-                              ],
-                            ],
-                          ),
+                          onChanged: (value) => setDialogState(() {
+                            input = value;
+                            inlineError = null;
+                          }),
                         ),
                       ),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border(top: BorderSide(color: tokens.border)),
+                      if (inlineError != null) ...[
+                        const SizedBox(height: WingSpacing.md),
+                        StudioError(
+                          inlineError!,
+                          key: const ValueKey('edit-message-error'),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(WingSpacing.md),
-                          child: StudioFormActions(
-                            onCancel: submitting
-                                ? null
-                                : () => Navigator.pop(dialogContext),
-                            onConfirm: canSubmit
-                                ? () async {
-                                    setDialogState(() {
-                                      submitting = true;
-                                      inlineError = null;
-                                    });
-                                    var accepted = false;
-                                    try {
-                                      accepted = await controller
-                                          .editSavedPrompt(
-                                            chat,
-                                            message,
-                                            input,
-                                          );
-                                    } catch (_) {
-                                      // Retain the correction for a deliberate retry.
-                                    }
-                                    if (!dialogContext.mounted) return;
-                                    if (accepted) {
-                                      Navigator.pop(dialogContext);
-                                      return;
-                                    }
-                                    setDialogState(() {
-                                      submitting = false;
-                                      inlineError =
-                                          chat.runtime.error ??
-                                          'Hermes did not accept the edited message.';
-                                    });
-                                  }
-                                : null,
-                            confirmLabel: 'Replace message and resend',
-                            confirmIcon: Icons.send_outlined,
-                            destructive: true,
-                            busy: submitting,
-                            progressLabel: 'Replacing message',
-                          ),
-                        ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
+                actions: [
+                  StudioFormActions(
+                    onCancel: submitting
+                        ? null
+                        : () => Navigator.pop(dialogContext),
+                    onConfirm: canSubmit
+                        ? () async {
+                            setDialogState(() {
+                              submitting = true;
+                              inlineError = null;
+                            });
+                            var accepted = false;
+                            try {
+                              accepted = await controller.editSavedPrompt(
+                                chat,
+                                message,
+                                input,
+                              );
+                            } catch (_) {}
+                            if (!dialogContext.mounted) return;
+                            if (accepted) {
+                              Navigator.pop(dialogContext);
+                              return;
+                            }
+                            setDialogState(() {
+                              submitting = false;
+                              inlineError =
+                                  chat.runtime.error ??
+                                  'Hermes did not accept the edited message.';
+                            });
+                          }
+                        : null,
+                    confirmLabel: 'Replace message and resend',
+                    confirmIcon: Icons.send_outlined,
+                    destructive: true,
+                    busy: submitting,
+                    progressLabel: 'Replacing message',
+                  ),
+                ],
               ),
             );
           },
@@ -2394,6 +2435,190 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   bool _showLiveWorkDock(ProfileChat chat) =>
       _conversationActivity(chat).hasDock;
 
+  void _clearConversationRendering() {
+    _conversationFrameInputs = _conversationFrame = null;
+    _conversationBody.value = const SizedBox.shrink();
+    _conversationHeaderInputs = _conversationHeader = null;
+    _workDockInputs = _workDock = null;
+    _contextRingInputs = _contextRing = null;
+    _intelligenceButtonInputs = _intelligenceButton = null;
+    _composerFieldInputs = _composerField = null;
+    _actionButtonInputs = _actionButton = null;
+  }
+
+  Object? _workDockInputs;
+  Widget? _workDock;
+  Widget _composerWorkDock(ProfileChat chat) {
+    final session = _supervisionFor(chat);
+    final inputs = (chat, chat.workRevision, session, _liveWorkDock);
+    if (_workDockInputs == inputs) return _workDock!;
+    _workDockInputs = inputs;
+    return _workDock = _conversationActivity(chat).dock(key: _liveWorkDock);
+  }
+
+  Object? _contextRingInputs;
+  Widget? _contextRing;
+  Widget _composerContextRing(ProfileChat chat) {
+    final inputs = (
+      chat,
+      chat.context,
+      chat.contextCompressions,
+      chat.contextLoading,
+      chat.contextError,
+    );
+    if (_contextRingInputs == inputs) return _contextRing!;
+    _contextRingInputs = inputs;
+    return _contextRing = ContextRing(
+      key: ValueKey(('context-ring', chat.key)),
+      occupancy: chat.context,
+      compressions: chat.contextCompressions,
+      loading: chat.contextLoading,
+      error: chat.contextError,
+      onRefresh: () => unawaited(controller.refreshContext(chat)),
+    );
+  }
+
+  Object? _intelligenceButtonInputs;
+  Widget? _intelligenceButton;
+  Widget _composerIntelligenceButton(BuildContext context, ProfileChat chat) {
+    final runtime = chat.runtime;
+    final enabled =
+        !runtime.opening &&
+        !runtime.offline &&
+        !controller.recovering &&
+        !runtime.blocksTurnAdmission &&
+        !runtime.changingAnswer &&
+        !runtime.commandRunning &&
+        !controller.switching &&
+        !chat.changingIntelligence &&
+        _loadingIntelligence == null;
+    final observation = controller.modelObservation(chat);
+    final inputs = (
+      context,
+      chat,
+      chat.model,
+      observation,
+      chat.fastMode,
+      chat.reasoningEffort,
+      enabled,
+    );
+    if (_intelligenceButtonInputs == inputs) return _intelligenceButton!;
+    _intelligenceButtonInputs = inputs;
+    return _intelligenceButton = ChatIntelligenceButton(
+      key: ValueKey(('chat-intelligence', chat.key)),
+      model: chat.model ?? 'Model',
+      observation: observation,
+      fastMode: chat.fastMode,
+      onReasoningChanged: (effort) =>
+          _run(() => _changeModelControls(chat, reasoning: effort)),
+      onFastChanged: (mode) =>
+          _run(() => _changeModelControls(chat, fast: mode)),
+      reasoningEffort: chat.reasoningEffort ?? 'default',
+      onPressed: enabled
+          ? () => _run(() => _chooseIntelligence(chat, context))
+          : null,
+    );
+  }
+
+  Object? _composerFieldInputs;
+  Widget? _composerField;
+
+  Widget _composerTextField(BuildContext context, ProfileChat chat) {
+    final inputs = (
+      context,
+      chat,
+      !_voiceInput.active && chat.composer.actions().canEditText,
+      chat.composer.observation.editingEntry != null,
+      chat.runtime.blocksTurnAdmission,
+      _canPasteImage(chat),
+      _voiceInput.canDictate(controller.canDictate(chat)),
+    );
+    if (_composerFieldInputs == inputs) return _composerField!;
+    _composerFieldInputs = inputs;
+    // Native editing listens to its controller. Answer growth does not change
+    // field chrome; keep its subtree until an actual field capability changes.
+    return _composerField = TextField(
+      key: const Key('profile-message-composer'),
+      controller: _composer,
+      focusNode: _composerFocus,
+      enabled: !_voiceInput.active && chat.composer.actions().canEditText,
+      minLines: 1,
+      maxLines: 5,
+      keyboardType: TextInputType.multiline,
+      textInputAction: TextInputAction.newline,
+      contentInsertionConfiguration: _canPasteImage(chat)
+          ? ContentInsertionConfiguration(
+              allowedMimeTypes: ImageClipboard.mimeTypes,
+              onContentInserted: (content) => _run(() async {
+                if (!_canPasteImage(chat)) {
+                  throw StateError('Wait before adding another image.');
+                }
+                await controller.addPastedImage(
+                  chat,
+                  () => ImageClipboard.keyboardImage(content),
+                );
+              }),
+            )
+          : null,
+      contextMenuBuilder: (context, editableText) {
+        if (!_canPasteImage(chat)) {
+          return AdaptiveTextSelectionToolbar.editableText(
+            editableTextState: editableText,
+          );
+        }
+        return ImagePasteMenu(
+          editableText: editableText,
+          onPasteImage: () => _run(() async {
+            if (!_canPasteImage(chat)) {
+              throw StateError('Wait before adding another image.');
+            }
+            await controller.addPastedImage(chat, ImageClipboard.readImage);
+          }),
+        );
+      },
+      onChanged: (value) {
+        if (chat.composer.observation.editingEntry != null) {
+          _queuedEditErrors.remove(chat.key);
+          controller.updateQueuedPromptEdit(chat, value);
+          return;
+        }
+        unawaited(
+          controller.updateDraft(chat, value).catchError((_) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: StudioError(
+                    'This draft could not be saved on the device.',
+                  ),
+                ),
+              );
+            }
+          }),
+        );
+      },
+      decoration: InputDecoration(
+        suffixIcon: chat.composer.observation.editingEntry == null
+            ? _dictationButton(chat)
+            : null,
+        isDense: true,
+        hintMaxLines: 1,
+        hintText: chat.composer.observation.editingEntry != null
+            ? 'Edit queued message'
+            : chat.runtime.blocksTurnAdmission
+            ? 'Draft your next message'
+            : 'Message Hermes or type /',
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        filled: false,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
+      ),
+    );
+  }
+
   Widget _composerPanel(
     ProfileChat chat,
     BoxConstraints constraints,
@@ -2523,9 +2748,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              _conversationActivity(
-                                chat,
-                              ).dock(key: _liveWorkDock),
+                              if (_showLiveWorkDock(chat))
+                                _composerWorkDock(chat),
                               DecoratedBox(
                                 key: const ValueKey('conversation-composer'),
                                 decoration: BoxDecoration(
@@ -2567,22 +2791,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                     ).textTheme.labelMedium,
                                                   ),
                                                 ),
-                                                ContextRing(
-                                                  key: ValueKey((
-                                                    'context-ring',
-                                                    chat.key,
-                                                  )),
-                                                  occupancy: chat.context,
-                                                  compressions:
-                                                      chat.contextCompressions,
-                                                  loading: chat.contextLoading,
-                                                  error: chat.contextError,
-                                                  onRefresh: () => unawaited(
-                                                    controller.refreshContext(
-                                                      chat,
-                                                    ),
-                                                  ),
-                                                ),
+                                                _composerContextRing(chat),
                                                 StudioButtonPress(
                                                   child: IconButton(
                                                     tooltip:
@@ -2709,148 +2918,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                               ],
                                             ),
                                           _voiceActivity(),
-                                          TextField(
-                                            key: const Key(
-                                              'profile-message-composer',
-                                            ),
-                                            controller: _composer,
-                                            focusNode: _composerFocus,
-                                            enabled:
-                                                !_voiceInput.active &&
-                                                chat.composer
-                                                    .actions()
-                                                    .canEditText,
-                                            minLines: 1,
-                                            maxLines: 5,
-                                            keyboardType:
-                                                TextInputType.multiline,
-                                            textInputAction:
-                                                TextInputAction.newline,
-                                            contentInsertionConfiguration:
-                                                _canPasteImage(chat)
-                                                ? ContentInsertionConfiguration(
-                                                    allowedMimeTypes:
-                                                        ImageClipboard
-                                                            .mimeTypes,
-                                                    onContentInserted:
-                                                        (
-                                                          content,
-                                                        ) => _run(() async {
-                                                          if (!_canPasteImage(
-                                                            chat,
-                                                          )) {
-                                                            throw StateError(
-                                                              'Wait before adding another image.',
-                                                            );
-                                                          }
-                                                          await controller
-                                                              .addPastedImage(
-                                                                chat,
-                                                                () =>
-                                                                    ImageClipboard.keyboardImage(
-                                                                      content,
-                                                                    ),
-                                                              );
-                                                        }),
-                                                  )
-                                                : null,
-                                            contextMenuBuilder:
-                                                (context, editableText) {
-                                                  if (!_canPasteImage(chat)) {
-                                                    return AdaptiveTextSelectionToolbar.editableText(
-                                                      editableTextState:
-                                                          editableText,
-                                                    );
-                                                  }
-                                                  return ImagePasteMenu(
-                                                    editableText: editableText,
-                                                    onPasteImage: () => _run(
-                                                      () async {
-                                                        if (!_canPasteImage(
-                                                          chat,
-                                                        )) {
-                                                          throw StateError(
-                                                            'Wait before adding another image.',
-                                                          );
-                                                        }
-                                                        await controller
-                                                            .addPastedImage(
-                                                              chat,
-                                                              ImageClipboard
-                                                                  .readImage,
-                                                            );
-                                                      },
-                                                    ),
-                                                  );
-                                                },
-                                            onChanged: (value) {
-                                              if (chat
-                                                      .composer
-                                                      .observation
-                                                      .editingEntry !=
-                                                  null) {
-                                                _queuedEditErrors.remove(
-                                                  chat.key,
-                                                );
-                                                controller
-                                                    .updateQueuedPromptEdit(
-                                                      chat,
-                                                      value,
-                                                    );
-                                                return;
-                                              }
-                                              unawaited(
-                                                controller
-                                                    .updateDraft(chat, value)
-                                                    .catchError((_) {
-                                                      if (context.mounted) {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          const SnackBar(
-                                                            content: StudioError(
-                                                              'This draft could not be saved on the device.',
-                                                            ),
-                                                          ),
-                                                        );
-                                                      }
-                                                    }),
-                                              );
-                                            },
-                                            decoration: InputDecoration(
-                                              suffixIcon:
-                                                  chat
-                                                          .composer
-                                                          .observation
-                                                          .editingEntry ==
-                                                      null
-                                                  ? _dictationButton(chat)
-                                                  : null,
-                                              isDense: true,
-                                              hintMaxLines: 1,
-                                              hintText:
-                                                  chat
-                                                          .composer
-                                                          .observation
-                                                          .editingEntry !=
-                                                      null
-                                                  ? 'Edit queued message'
-                                                  : chat
-                                                        .runtime
-                                                        .blocksTurnAdmission
-                                                  ? 'Draft your next message'
-                                                  : 'Message Hermes or type /',
-                                              border: InputBorder.none,
-                                              enabledBorder: InputBorder.none,
-                                              focusedBorder: InputBorder.none,
-                                              filled: false,
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 12,
-                                                  ),
-                                            ),
-                                          ),
+                                          _composerTextField(context, chat),
                                           if (chat
                                                   .composer
                                                   .observation
@@ -3016,89 +3084,16 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                           }),
                                                   ),
                                                 ),
-                                                ContextRing(
-                                                  key: ValueKey((
-                                                    'context-ring',
-                                                    chat.key,
-                                                  )),
-                                                  occupancy: chat.context,
-                                                  compressions:
-                                                      chat.contextCompressions,
-                                                  loading: chat.contextLoading,
-                                                  error: chat.contextError,
-                                                  onRefresh: () => unawaited(
-                                                    controller.refreshContext(
-                                                      chat,
-                                                    ),
-                                                  ),
-                                                ),
+                                                _composerContextRing(chat),
                                                 Expanded(
                                                   child: Align(
                                                     alignment:
                                                         Alignment.centerRight,
-                                                    child: ChatIntelligenceButton(
-                                                      key: ValueKey((
-                                                        'chat-intelligence',
-                                                        chat.key,
-                                                      )),
-                                                      model:
-                                                          chat.model ?? 'Model',
-                                                      observation: controller
-                                                          .modelObservation(
-                                                            chat,
-                                                          ),
-                                                      fastMode: chat.fastMode,
-                                                      onReasoningChanged:
-                                                          (effort) => _run(
-                                                            () =>
-                                                                _changeModelControls(
-                                                                  chat,
-                                                                  reasoning:
-                                                                      effort,
-                                                                ),
-                                                          ),
-                                                      onFastChanged: (mode) => _run(
-                                                        () =>
-                                                            _changeModelControls(
-                                                              chat,
-                                                              fast: mode,
-                                                            ),
-                                                      ),
-                                                      reasoningEffort:
-                                                          chat.reasoningEffort ??
-                                                          'default',
-                                                      onPressed:
-                                                          chat
-                                                                  .runtime
-                                                                  .opening ||
-                                                              chat
-                                                                  .runtime
-                                                                  .offline ||
-                                                              controller
-                                                                  .recovering ||
-                                                              chat
-                                                                  .runtime
-                                                                  .blocksTurnAdmission ||
-                                                              chat
-                                                                  .runtime
-                                                                  .changingAnswer ||
-                                                              chat
-                                                                  .runtime
-                                                                  .commandRunning ||
-                                                              controller
-                                                                  .switching ||
-                                                              chat.changingIntelligence ||
-                                                              _loadingIntelligence !=
-                                                                  null
-                                                          ? null
-                                                          : () => _run(
-                                                              () =>
-                                                                  _chooseIntelligence(
-                                                                    chat,
-                                                                    context,
-                                                                  ),
-                                                            ),
-                                                    ),
+                                                    child:
+                                                        _composerIntelligenceButton(
+                                                          context,
+                                                          chat,
+                                                        ),
                                                   ),
                                                 ),
                                                 const SizedBox(width: 8),
@@ -3249,6 +3244,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     onPressed: () => _run(() => _requestDictation(chat)),
   );
 
+  Object? _actionButtonInputs;
+  Widget? _actionButton;
   Widget _composerActionButton(ProfileChat chat) {
     final actions = chat.composer.actions();
     final primary = actions.prefersStopAction
@@ -3256,15 +3253,28 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         : actions.prefersRunningAction
         ? controller.appPreferences.current.preferredRunningAction
         : ComposerAction.send;
-    return ComposerActionButton(
+    final resting = actions.prefersStopAction
+        ? ComposerAction.stop
+        : primary == null
+        ? null
+        : ComposerAction.send;
+    final unavailable = _composerActionLabels(chat);
+    final inputs = (
+      chat,
+      primary,
+      resting,
+      unavailable[ComposerAction.send],
+      unavailable[ComposerAction.steer],
+      unavailable[ComposerAction.stop],
+      unavailable[ComposerAction.queue],
+    );
+    if (_actionButtonInputs == inputs) return _actionButton!;
+    _actionButtonInputs = inputs;
+    return _actionButton = ComposerActionButton(
       key: ValueKey(chat.key),
       primary: primary,
-      resting: actions.prefersStopAction
-          ? ComposerAction.stop
-          : primary == null
-          ? null
-          : ComposerAction.send,
-      unavailable: _composerActionLabels(chat),
+      resting: resting,
+      unavailable: unavailable,
       onSelected: (action) => _performComposerAction(chat, action),
     );
   }
@@ -3417,7 +3427,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StudioDialog(
         title: const Text('Delete queued instruction?'),
         scrollable: true,
         content: Text(
@@ -3694,10 +3704,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       label: controller.connection.label,
                       icon: controller.connection.icon,
                       pickerMode: _destination == AppDestination.analytics
-                          ? WorkspacePickerMode.profiles
+                          ? WorkspacePickerMode.analytics
                           : null,
                       suffix: _destination == AppDestination.activity
                           ? null
+                          : _destination == AppDestination.analytics
+                          ? _analyticsProfileName ?? 'All'
                           : controller.current?.scope.profileName,
                       status: controller.connectionStatus,
                     )
@@ -3752,6 +3764,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 AppDestination.analytics => HermesAnalyticsContent(
                   key: ValueKey(controller.connectionIdentity),
                   controller: controller,
+                  profileName: _analyticsProfileName,
                 ),
                 AppDestination.settings => AppSettingsContent(
                   key: ValueKey(_settingsRevision),

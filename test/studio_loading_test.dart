@@ -107,16 +107,12 @@ void main() {
                   child: const Row(
                     children: [
                       StudioWorkingIndicator(
-                        active: true,
                         label: 'Nested tool work',
-                        icon: Icons.pending_outlined,
                         color: Colors.teal,
                       ),
                       StudioWorkingIndicator(
                         conversation: true,
-                        active: true,
                         label: 'Bots are working',
-                        icon: Icons.pending_outlined,
                         color: Colors.teal,
                       ),
                       Text('Bots are working'),
@@ -141,7 +137,7 @@ void main() {
       );
       expect(find.byTooltip('Refreshing group'), findsOneWidget);
       expect(find.byIcon(Icons.refresh), findsOneWidget);
-      expect(find.byIcon(Icons.pending_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.pending_outlined), findsNothing);
       expect(tester.getRect(find.text('Bots are working')), before);
       change(() => refreshing = false);
       await tester.pump();
@@ -163,23 +159,14 @@ void main() {
           body: Column(
             children: [
               StudioWorkingIndicator.independent(
-                active: true,
                 label: 'Atlas running',
-                icon: Icons.autorenew,
                 color: Colors.teal,
               ),
               StudioWorkingIndicator.independent(
-                active: true,
                 label: 'Mira running',
-                icon: Icons.autorenew,
                 color: Colors.teal,
               ),
-              StudioWorkingIndicator.independent(
-                active: false,
-                label: 'Idle',
-                icon: Icons.chat_bubble_outline,
-                color: Colors.teal,
-              ),
+              Icon(Icons.chat_bubble_outline, size: 18, color: Colors.teal),
             ],
           ),
         ),
@@ -206,16 +193,12 @@ void main() {
                     TickerMode(
                       enabled: !hidden,
                       child: const StudioWorkingIndicator(
-                        active: true,
                         label: 'First',
-                        icon: Icons.pending_outlined,
                         color: Colors.teal,
                       ),
                     ),
                     const StudioWorkingIndicator(
-                      active: true,
                       label: 'Visible work',
-                      icon: Icons.pending_outlined,
                       color: Colors.teal,
                     ),
                   ],
@@ -255,9 +238,8 @@ void main() {
               return const Row(
                 children: [
                   StudioWorkingIndicator(
-                    active: true,
+                    conversation: true,
                     label: 'Hermes is working',
-                    icon: Icons.pending_outlined,
                     color: Colors.teal,
                   ),
                   Text('Hermes is working'),
@@ -294,9 +276,17 @@ void main() {
       'Modal read',
     );
     expect(find.text('Hermes is working'), findsOneWidget);
-    expect(find.byIcon(Icons.pending_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.pending_outlined), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(StudioWorkingIndicator),
+        matching: find.byType(CustomPaint),
+      ),
+      findsOneWidget,
+    );
     Navigator.of(page).pop();
     await tester.pump();
+    expect(find.byIcon(Icons.pending_outlined), findsNothing);
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
     expect(find.byType(StudioLoading), findsOneWidget);
@@ -469,12 +459,17 @@ void main() {
                       appBar: AppBar(actions: const [StudioLoadingSlot()]),
                       body: Row(
                         children: [
-                          StudioWorkingIndicator(
-                            active: active,
-                            label: 'Hermes is working',
-                            icon: Icons.help_outline,
-                            color: Colors.teal,
-                          ),
+                          if (active)
+                            StudioWorkingIndicator(
+                              label: 'Hermes is working',
+                              color: Colors.teal,
+                            )
+                          else
+                            const Icon(
+                              Icons.help_outline,
+                              size: 18,
+                              color: Colors.teal,
+                            ),
                           const SizedBox(width: 8),
                           const Text('Work status'),
                           IconButton(

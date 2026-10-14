@@ -1,4 +1,5 @@
 import 'model_catalog.dart';
+import 'models_dev_prices.dart';
 
 double? usageAmount(Object? value) =>
     value is num && value.isFinite && value >= 0 ? value.toDouble() : null;
@@ -48,7 +49,7 @@ class ModelUsageCost {
 
   factory ModelUsageCost.fromUsage(
     Map<String, dynamic> usage,
-    ModelCatalog? catalog,
+    ModelsDevPrices? prices,
   ) {
     if (!isSubscriptionUsage(usage)) {
       final amount = usageAmount(usage['estimated_cost']);
@@ -61,7 +62,7 @@ class ModelUsageCost {
         amount == null ? UsageCostUnavailable.reportedCost : null,
       );
     }
-    final price = catalog?.subscriptionPrices('${usage['model']}');
+    final price = prices?.models['${usage['model']}'];
     final inputRate = price?.inputUsdPerMillion;
     final cachedRate = price?.cacheUsdPerMillion;
     final outputRate = price?.outputUsdPerMillion;
@@ -101,6 +102,17 @@ class ModelUsageCost {
       amount == null ? UsageCostUnavailable.tokens : null,
     );
   }
+
+  /// Revalue cached token facts using the shared exact-ID rate observation.
+  ModelUsageCost withPrices(ModelsDevPrices? prices) => !isApiEquivalent
+      ? this
+      : ModelUsageCost.fromUsage({
+          'model': model,
+          'provider': 'openai-codex',
+          for (var i = 0; i < 3; i++)
+            ['input_tokens', 'cache_read_tokens', 'output_tokens'][i]:
+                tokenCounts[i],
+        }, prices);
 }
 
 class UsageCostSummary {

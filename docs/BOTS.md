@@ -141,7 +141,7 @@ mentions. Leaving the group or restarting Wing restores its draft. Each server
 and room keeps its own draft. Sending clears the accepted text; a newer draft
 typed while sending stays available.
 
-An unconfirmed send stays available for review/retry. Paused work offers Continue group work to stop the paused attempt and send a continuation request. Approvals apply to the request shown in that discussion.
+An unconfirmed send stays available for review/retry. Paused work offers Continue group work to stop the paused attempt and send a continuation request. Pending approvals stay above the composer while you scroll. Use the checkmark to allow once or the cross to deny. Wing retains the details after Hermes withdraws a request, with a No longer pending status and no decision buttons. Saved details remain available after reopening the group. You can also answer group approvals from Wing notifications.
 
 Your bubbles show your message without a User label. Bot replies show the
 sender's saved avatar and name, formatted text, links, code and timestamps.
@@ -153,6 +153,11 @@ message viewers. Bot Chats and Working history use the same streamed reasoning,
 tool timeline, Tasks/Agents viewers and working Wing. Group discussions show the
 public room messages and room status supplied by Hermes; select a member’s
 Working history to inspect that bot’s private activity.
+
+When a bot passes its turn, the discussion shows a **Passed** bubble with that
+bot's name, avatar and timestamp. Recents cards include these bubbles. A pass
+does not create a New answer cue or a reply notification.
+
 Tap a bot's avatar in the discussion to open a compact card over it, with the
 bot's saved avatar and name above three icon-and-text actions: **View working
 history**, **Chat directly** and **Bot settings**.
@@ -218,7 +223,8 @@ Send. A compact status above the composer shows sending, group updates, work or
 approval needs. The conversation working status uses Wing's feather pulse beside steady text. During a manual refresh, ongoing work keeps pulsing and the header shows a refresh symbol until the read settles.
 Automatic background refresh does not show a loading animation. Hermes
 currently exposes group activity rather than individual bots typing, so Wing
-displays “Bots are working…”.
+displays “Bots are working…”. The Wing keeps its shape while the menu is open;
+its pulse pauses until you return.
 
 Internal group workers stay out of the default Chats list and chat notifications,
 so they do not produce `Group: <UUID>` alerts, including after opening a worker
@@ -227,7 +233,7 @@ silent; replies to your own messages still notify you. Monitoring follows the
 shared discussion across pauses between bot turns. New shared replies update one
 notification per group; the latest reply replaces the previous one. Tap it to
 open the discussion. Reaching the reply clears it. Answer group approvals in the
-discussion. Unresolved requests in ordinary chats stay pending when newer replies
+discussion or its notification. Unresolved requests in ordinary chats stay pending when newer replies
 arrive.
 On Android 12 and later, the group transcript supports system scroll capture;
 the composer and keyboard are outside the capture area, and capture restores
@@ -289,19 +295,20 @@ Output to inspect the runner's command and result.
 
 ## Bot working histories
 
-Open **Group menu → Bot working histories**, then choose a bot. This read-only
-viewer follows the bot's current work without starting a turn. It shares normal
-chat reasoning segments, tool timelines, Tasks/Subagents panels and the pulsating
-Wing with the same Thinking, Writing and working status. Live updates arrive
-about twice a second while the bot works; saved messages, older-page loading and
-the latest-message arrow remain available.
-It opens with the newest 20 messages and loads older pages as you scroll.
-Switching back to a bot keeps its loaded history and reading position for this
-visit. Refresh checks saved history and live updates with progress in the header.
-Back closes an open Tasks/Subagents drawer before returning to the group with
-your draft intact. Missing activity from Hermes's bounded replay buffer is
-labelled explicitly. Subagent details show received work and results; worker
-inspection does not offer steering or interruption.
+Internal group-worker sessions stay out of Recents and ordinary chat notifications.
+To inspect one, open the group, choose **⋯ → Bot working histories**, then select
+a bot. The viewer is read only: it loads saved messages without starting a bot
+turn. It uses the normal chat transcript, including reasoning and tool sections,
+automatic older-page loading and the latest-message arrow. It opens with the
+latest 20 visible conversation messages, or all available when there are fewer,
+fetching past recent tool-only pages automatically. Older pages load as you scroll.
+Switching back to a bot
+keeps its loaded history and reading position for this visit. Refresh rereads the
+saved history with progress in the header. While the bot works, the same chat
+renderer shows live reasoning segments, tool activity, Tasks/Agents and the
+pulsating working Wing with the normal chat wording. Worker observation stays
+read only and does not take over that bot’s session. Back returns to the shared group
+and preserves your draft. Send group messages from the group composer.
 
 Unavailable history is labelled separately from a failed read. Send messages
 from the shared group or the bot's continuing chat.

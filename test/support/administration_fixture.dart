@@ -8,6 +8,9 @@ import 'package:wing/core/services/profile_gateway.dart';
 class AdministrationFixture {
   final String id;
   ModelsDevPrices apiPrices = subscriptionApiPrices();
+  final pricingRefreshes = <bool>[];
+  Completer<ModelsDevPrices>? pricingGate;
+  bool failPricing = false;
   final rpcRequests = <(String, String)>[];
   final requests =
       <(String, String, Map<String, String>, Map<String, dynamic>?)>[];
@@ -59,7 +62,11 @@ class AdministrationFixture {
   consoleOverride;
   final consoleRequests = <(String, String, bool)>[];
   late final AdministrationRepository server = AdministrationRepository(
-    apiPricing: ({refresh = false}) async => apiPrices,
+    apiPricing: ({refresh = false}) async {
+      pricingRefreshes.add(refresh);
+      if (failPricing) throw TimeoutException('API pricing unavailable');
+      return pricingGate == null ? apiPrices : await pricingGate!.future;
+    },
     ownedMutation:
         (method, path, query, body, canDispatch, onDispatched) async {
           if (mutationOverride case final mutation?) {

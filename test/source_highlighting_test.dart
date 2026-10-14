@@ -393,9 +393,22 @@ void main() {
       expect(find.byTooltip('Scroll horizontally'), findsOneWidget);
     }
     final before = tester.state(find.byType(SourceCodeText));
+    final sourceController = tester
+        .widget<CodeEditor>(find.byType(CodeEditor))
+        .controller!;
+    sourceController.selectAll();
+    final originalEditorValue = sourceController.value;
+    final originalSelection = sourceController.selectedText;
     await tester.pumpMarkdownWidget(app('$python# latest', streaming: false));
+    expect(
+      sourceController.value,
+      same(originalEditorValue),
+      reason: 'Enabling final highlighting must not replace unchanged text.',
+    );
     await settleSource(tester);
     expect(tester.state(find.byType(SourceCodeText)), same(before));
+    expect(sourceController.selectedText, originalSelection);
+    expect(sourceController.value, same(originalEditorValue));
     expect(renderedSpan(tester).children, isNotEmpty);
     await tester.pumpMarkdownWidget(
       app(python, streaming: false, closed: false),

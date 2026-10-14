@@ -34,15 +34,10 @@ class ProfileChatIndicator extends StatelessWidget {
             ChatExecution.submitting => (
               'Sending',
               tokens.muted,
-              Icons.pending_outlined,
+              Icons.arrow_upward,
               false,
             ),
-            ChatExecution.running => (
-              'Working',
-              tokens.running,
-              Icons.pending_outlined,
-              true,
-            ),
+            ChatExecution.running => ('Working', tokens.running, null, true),
             ChatExecution.failed => (
               'Failed',
               tokens.danger,
@@ -68,13 +63,15 @@ class ProfileChatIndicator extends StatelessWidget {
       message: label,
       child: Semantics(
         label: label,
-        child: StudioWorkingIndicator(
-          conversation: true,
-          label: 'Working',
-          active: spinning && !runtime.opening && !runtime.offline,
-          icon: icon,
-          color: color,
-        ),
+        child: spinning
+            ? runtime.opening || runtime.offline
+                  ? const SizedBox.square(dimension: 18)
+                  : StudioWorkingIndicator(
+                      conversation: true,
+                      label: 'Working',
+                      color: color,
+                    )
+            : Icon(icon, size: 18, color: color),
       ),
     );
   }

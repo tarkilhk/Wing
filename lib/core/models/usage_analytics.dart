@@ -1,5 +1,5 @@
 import 'usage_cost.dart';
-import 'model_catalog.dart';
+import 'models_dev_prices.dart';
 
 const usagePeriods = [1, 7, 30, 90, 365];
 const usageTokenKeys = ['input_tokens', 'cache_read_tokens', 'output_tokens'];
@@ -47,6 +47,29 @@ class UsageDaily {
   UsageDaily._(Iterable<UsageDay> days, Iterable<String> reportedDates)
     : days = List.unmodifiable(days),
       reportedDates = Set.unmodifiable(reportedDates);
+
+  /// Profiles share the server's date ordinals. An absent date contributes
+  /// zero usage; a returned unknown counter keeps that counter unknown.
+  factory UsageDaily.sum(Iterable<UsageDaily> profiles) {
+    final byDate = <DateTime, List<UsageTokens>>{};
+    final reported = <String>{};
+    for (final profile in profiles) {
+      reported.addAll(profile.reportedDates);
+      for (final day in profile.days) {
+        (byDate[day.date] ??= []).add(day.tokens);
+      }
+    }
+    final dates = byDate.keys.toList()..sort();
+    if (dates.isEmpty) return UsageDaily._(const [], const {});
+    return UsageDaily._([
+      for (
+        var date = dates.first;
+        !date.isAfter(dates.last);
+        date = date.add(const Duration(days: 1))
+      )
+        UsageDay(date, UsageTokens.sum(byDate[date] ?? const [])),
+    ], reported);
+  }
 
   /// A browsing year ending at the latest returned server date. Earlier
   /// padding is unknown, rather than pretending to know the server's cutoff.
@@ -126,21 +149,32 @@ class UsageModels {
   UsageModels._(Iterable<ModelUsageCost> rows, Iterable<UsageModelGroup> groups)
     : rows = List.unmodifiable(rows),
       groups = List.unmodifiable(groups);
+
+  /// Keep each profile/provider's valuation before grouping by model name.
+  factory UsageModels.sum(Iterable<UsageModels> profiles) =>
+      UsageModels._fromRows(profiles.expand((profile) => profile.rows));
   factory UsageModels.fromJson(
     Map<String, dynamic> data,
-    ModelCatalog? prices,
+    ModelsDevPrices? prices,
   ) {
     if (data['models'] is! List) {
       throw const FormatException('Model usage is unavailable.');
     }
     final rows = <ModelUsageCost>[];
-    final grouped = <String, List<ModelUsageCost>>{};
     for (final raw in data['models'] as List) {
       if (raw is! Map<String, dynamic>) {
         throw const FormatException('Invalid model usage.');
       }
       final row = ModelUsageCost.fromUsage(raw, prices);
       rows.add(row);
+    }
+    return UsageModels._fromRows(rows);
+  }
+
+  factory UsageModels._fromRows(Iterable<ModelUsageCost> source) {
+    final rows = source.toList();
+    final grouped = <String, List<ModelUsageCost>>{};
+    for (final row in rows) {
       (grouped[row.model] ??= []).add(row);
     }
     final groups = [
@@ -149,6 +183,10 @@ class UsageModels {
     ]..sort((a, b) => a.id.compareTo(b.id));
     return UsageModels._(rows, groups);
   }
+
+  UsageModels withPrices(ModelsDevPrices? prices) => costs.hasSubscription
+      ? UsageModels._fromRows(rows.map((row) => row.withPrices(prices)))
+      : this;
   UsageCostSummary get costs => UsageCostSummary(rows);
   UsageTokens get tokens =>
       UsageTokens.sum(rows.map((r) => UsageTokens.fromCost(r)));

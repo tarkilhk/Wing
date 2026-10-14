@@ -114,6 +114,415 @@ void main() {
   });
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('group approval remains visible ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = BotsFixture();
+        fixture.events.addAll([
+          for (var i = 1; i <= 10; i++)
+            _event(
+              i,
+              'message.user',
+              'you',
+              'Review the changes and continue.',
+            ),
+        ]);
+        fixture.pending.add({
+          'kind': 'approval',
+          'task_id': 'task-1',
+          'member_id': 'atlas',
+          'request_id': 'approval-1',
+          'execution_generation': 1,
+          'approval': {
+            'command': '<write to AGENTS.md>',
+            'description':
+                'Write to protected agent-instruction file(s): AGENTS.md. These files steer future agent behavior; approval is always required (not bypassed by auto-approve).',
+            'choices': ['once', 'deny'],
+          },
+        });
+        final group = (await readFixtureGroups(
+          fixture.repository,
+          groupMessages: null,
+        )).first;
+        late BotGroupSession session;
+        final frame = GlobalKey();
+        Widget route() => RepaintBoundary(
+          key: frame,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: BotGroupScreen(
+              stopVoicePlayback: () async {},
+              voiceInputSettings: () =>
+                  const LocalVoiceInputSettings(language: ''),
+              createSession: () => session = BotGroupSession(
+                fixture.repository,
+                group,
+                reads: BotGroupReadState(),
+                preferences: groupPreferences,
+                groupMessages: null,
+                appearances: FixedGroupAppearances(const []),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpWidget(route());
+        await _settleGroupMarkdown(tester);
+        expect(find.text('<write to AGENTS.md>'), findsOneWidget);
+        final allow = find.byWidgetPredicate(
+          (w) => w is IconButton && w.tooltip == 'Allow once',
+        );
+        final deny = find.byWidgetPredicate(
+          (w) => w is IconButton && w.tooltip == 'Deny',
+        );
+        expect(tester.getSize(allow), const Size(48, 48));
+        final transcript = tester
+            .widget<ListView>(find.byKey(const ValueKey('profile-transcript')))
+            .controller!;
+        transcript.jumpTo(transcript.position.maxScrollExtent);
+        await tester.pump();
+        final allowRect = tester.getRect(allow);
+        expect(
+          allowRect.bottom,
+          lessThan(
+            tester
+                .getRect(find.byKey(const ValueKey('group-message-composer')))
+                .top,
+          ),
+        );
+        await _render(
+          tester,
+          frame,
+          'approval-pinned-${brightness.name}-$scale',
+        );
+        tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+        await tester.pump();
+        expect(tester.getRect(allow).bottom, lessThan(844 - 260));
+        expect(tester.takeException(), isNull);
+        await _render(
+          tester,
+          frame,
+          'approval-keyboard-${brightness.name}-$scale',
+        );
+        tester.view.viewInsets = FakeViewPadding.zero;
+        await tester.pump();
+        final command = Completer<void>();
+        fixture.beforeCommand = () => command.future;
+        var fail = true;
+        fixture.commandHook = (_, method, params) async {
+          if (method == 'groups.approve' && fail) throw StateError('Offline');
+          return null;
+        };
+        await tester.tap(allow);
+        await tester.pump();
+        expect(tester.widget<IconButton>(allow).onPressed, isNull);
+        await tester.pump();
+        expect(find.byType(StudioLoading), findsOneWidget);
+        await _render(tester, frame, 'approval-held-${brightness.name}-$scale');
+        command.complete();
+        await _settleGroupMarkdown(tester);
+        expect(
+          session.approvalError(session.pendingApprovals.single),
+          isNotNull,
+        );
+        expect(tester.widget<IconButton>(deny).onPressed, isNotNull);
+        await _render(
+          tester,
+          frame,
+          'approval-failed-${brightness.name}-$scale',
+        );
+        fail = false;
+        fixture.pending.clear();
+        await session.refresh();
+        transcript.jumpTo(0);
+        await _settleGroupMarkdown(tester);
+        expect(find.text('<write to AGENTS.md>'), findsOneWidget);
+        expect(session.error, isNull);
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('No longer pending'), findsOneWidget);
+        expect(find.text('Group needs attention'), findsNothing);
+        expect(find.byTooltip('Allow once'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await _render(
+          tester,
+          frame,
+          'approval-withdrawn-${brightness.name}-$scale',
+        );
+        await tester.pumpWidget(const SizedBox());
+        // Reopening borrows saved explanation only; the server grants authority.
+        groupPreferences = await BotsPreferences.load();
+        await tester.pumpWidget(route());
+        await _settleGroupMarkdown(tester);
+        expect(find.text('<write to AGENTS.md>'), findsOneWidget);
+        expect(find.text('No longer pending'), findsOneWidget);
+        expect(find.byTooltip('Allow once'), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+  }
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group mention picker preserves multiline composer ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          final group = (await readFixtureGroups(
+            fixture.repository,
+            groupMessages: null,
+          )).single;
+          final appearances = await fixture.repository.bots();
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: frame,
+                child: BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () => null,
+                  createSession: () => BotGroupSession(
+                    fixture.repository,
+                    group,
+                    reads: BotGroupReadState(),
+                    preferences: groupPreferences,
+                    groupMessages: null,
+                    appearances: FixedGroupAppearances(appearances),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final input = find.byKey(const ValueKey('group-message-composer'));
+          final composer = find.byKey(const ValueKey('group-composer'));
+          const draft =
+              'Keep working until done.\nAfter these steps we work on:\n'
+              '1. Daily ingestion\n@Atlas + ';
+          await tester.enterText(input, draft);
+          await tester.pumpAndSettle();
+          final before = tester.getRect(composer);
+          final inputBefore = tester.getRect(input);
+          final controller = tester.widget<TextField>(input).controller!;
+          final focus = tester.widget<TextField>(input).focusNode!;
+          expect(before.height, greaterThan(90));
+          await _render(
+            tester,
+            frame,
+            'mention-draft-${brightness.name}-$scale',
+          );
+
+          void expectStableComposer() {
+            expect(tester.getRect(composer), before);
+            expect(tester.getRect(input), inputBefore);
+            expect(focus.hasFocus, isTrue);
+            expect(tester.takeException(), isNull);
+          }
+
+          final value = TextEditingValue(
+            text: '$draft@',
+            selection: TextSelection.collapsed(offset: draft.length + 1),
+            composing: TextRange(start: draft.length, end: draft.length + 1),
+          );
+          tester.testTextInput.updateEditingValue(value);
+          await tester.pump();
+          expect(find.byType(MentionSuggestions), findsOneWidget);
+          expect(controller.value, value);
+          expectStableComposer();
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.pumpAndSettle();
+          expectStableComposer();
+          await _render(
+            tester,
+            frame,
+            'mention-open-${brightness.name}-$scale',
+          );
+          await tester.tap(find.byTooltip('Close references'));
+          await tester.pumpAndSettle();
+          expectStableComposer();
+          expect(controller.value, value);
+
+          tester.testTextInput.updateEditingValue(
+            TextEditingValue(
+              text: '$draft@Mi',
+              selection: TextSelection.collapsed(offset: draft.length + 3),
+              composing: TextRange(start: draft.length, end: draft.length + 3),
+            ),
+          );
+          await tester.pump();
+          expectStableComposer();
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.pumpAndSettle();
+          expectStableComposer();
+          await tester.tap(
+            find
+                .descendant(
+                  of: find.byType(MentionSuggestions),
+                  matching: find.text('Mira'),
+                )
+                .hitTestable(),
+          );
+          await tester.pumpAndSettle();
+          expect(controller.text, '$draft@Mira ');
+          expect(controller.value.composing, TextRange.empty);
+          expectStableComposer();
+          await _render(
+            tester,
+            frame,
+            'mention-selected-${brightness.name}-$scale',
+          );
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group pass bubbles identify the member and retain chronology ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          Map<String, dynamic> settled(int seq, String member, bool passed) => {
+            ..._event(seq, 'turn.settled', 'gateway-1', ''),
+            'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+            'payload': {
+              'member_id': member,
+              'passed': passed,
+              'message_event_id': passed ? null : 'fixture-3',
+            },
+          };
+          fixture.events.addAll([
+            _event(1, 'message.user', 'you', 'Review the plan.'),
+            settled(2, 'atlas', true),
+            _event(3, 'message.member', 'mira', 'The plan is ready.'),
+            settled(4, 'mira', false),
+          ]);
+          final cache = RecentGroupMessages();
+          addTearDown(cache.dispose);
+          final group = (await readFixtureGroups(
+            fixture.repository,
+            groupMessages: cache,
+          )).single;
+          final appearances = await fixture.repository.bots();
+          final frame = GlobalKey();
+          late BotGroupSession session;
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: RepaintBoundary(
+                key: frame,
+                child: BotGroupScreen(
+                  stopVoicePlayback: () async {},
+                  voiceInputSettings: () => null,
+                  createSession: () => session = BotGroupSession(
+                    fixture.repository,
+                    group,
+                    reads: BotGroupReadState(),
+                    preferences: groupPreferences,
+                    groupMessages: cache,
+                    appearances: FixedGroupAppearances(appearances),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await _settleGroupMarkdown(tester);
+          final pass = find.byKey(const ValueKey(('group-message', 2)));
+          expect(pass, findsOneWidget);
+          expect(
+            find.descendant(of: pass, matching: find.text('Atlas')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: pass, matching: find.text('Passed')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: pass, matching: find.byType(BotAvatar)),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: pass, matching: find.byType(Tooltip)),
+            findsWidgets,
+          );
+          expect(
+            find.descendant(of: pass, matching: find.byTooltip('Copy message')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const ValueKey(('group-message', 4))),
+            findsNothing,
+          );
+          final messages = tester
+              .widgetList<ProfileMessage>(find.byType(ProfileMessage))
+              .map((widget) => widget.message)
+              .toList();
+          expect(messages.map((message) => message.id), [
+            'room-1:3',
+            'room-1:2',
+            'room-1:1',
+          ]);
+          expect(messages[1].timestamp, session.events[1].timestamp);
+          expect(messages[1].copyText, isEmpty);
+          expect(
+            tester.getTopLeft(pass).dy,
+            lessThan(
+              tester
+                  .getTopLeft(find.byKey(const ValueKey(('group-message', 3))))
+                  .dy,
+            ),
+          );
+          expect(tester.takeException(), isNull);
+          await _render(tester, frame, 'pass-${brightness.name}-$scale');
+
+          fixture.events.add(settled(5, 'mira', true));
+          await session.refresh();
+          await tester.pumpAndSettle();
+          final latestPass = find.byKey(const ValueKey(('group-message', 5)));
+          expect(
+            find.descendant(of: latestPass, matching: find.text('Mira')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: latestPass, matching: find.text('Passed')),
+            findsOneWidget,
+          );
+          await session.refresh();
+          await tester.pumpAndSettle();
+          expect(latestPass, findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
       testWidgets(
         'consecutive bot avatars clear the previous footer ${brightness.name} $scale',
         (tester) async {
@@ -2227,7 +2636,7 @@ void main() {
             1,
             'message.member',
             'atlas',
-            '@bot_mira, I’m checking the evidence before the build. ${List.filled(8, 'The approved sources and calculation definitions are in our shared mission.').join(' ')}',
+            '@bot_mira, I’m checking the evidence before the build. ${List.filled(20, 'The approved sources and calculation definitions are in our shared mission.').join(' ')}',
           ),
           _event(
             2,
@@ -2373,6 +2782,27 @@ void main() {
           'Show group members · 2 bots',
         );
         await _render(tester, frame, 'working-${brightness.name}-$scale');
+        await tester.tap(find.byTooltip('Group options'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+        expect(find.text('Bot working histories'), findsOneWidget);
+        expect(find.byIcon(Icons.pending_outlined), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(ConversationActivityStatus),
+            matching: find.byType(CustomPaint),
+          ),
+          findsOneWidget,
+        );
+        await _render(tester, frame, 'working-menu-${brightness.name}-$scale');
+        await tester.tapAt(const Offset(4, 220));
+        await tester.pump();
+        expect(find.byIcon(Icons.pending_outlined), findsNothing);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+        expect(find.byType(StudioLoading), findsOneWidget);
+
         final transcript = tester
             .widget<ListView>(find.byKey(const ValueKey('profile-transcript')))
             .controller!;
@@ -2393,7 +2823,8 @@ void main() {
         await session.refresh();
         await tester.pump(const Duration(milliseconds: 300));
         expect(tester.getRect(readingAnchor).top, closeTo(readingTop, 1));
-        expect(find.text('Waiting for your approval'), findsOneWidget);
+        expect(find.text('Atlas needs approval'), findsOneWidget);
+        expect(find.text('Waiting for your approval'), findsNothing);
         expect(find.byType(ShaderMask), findsNothing);
         expect(find.byType(StudioLoading), findsNothing);
         await _render(tester, frame, 'approval-${brightness.name}-$scale');

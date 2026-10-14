@@ -1,3 +1,7 @@
+import 'bots_preferences.dart';
+import '../models/notification_input.dart';
+import '../models/notification_focus.dart';
+import '../models/chat_notification_content.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -23,7 +27,17 @@ final class _WatchedGroup {
   final awaiting = <String>{};
   final discarding = <String>{};
   bool working = false, blocked = false, uncertain = false, pending = false;
-  bool get active => working || sending > 0 || pending || awaiting.isNotEmpty;
+  List<BotGroupAction> approvals = const [];
+  int revision = 0;
+  String? submitting;
+  final accepted = <String, String>{};
+  final errors = <String, String>{};
+  bool get active =>
+      working ||
+      sending > 0 ||
+      pending ||
+      awaiting.isNotEmpty ||
+      approvals.isNotEmpty;
 }
 
 /// Owns room work, replay cursors and delivery ordering for one connection.
@@ -36,6 +50,8 @@ class GroupNotificationSession extends ChangeNotifier {
     required this.read,
     required this.observations,
     required this.publish,
+    required this.publishInputs,
+    required this.command,
     required this.clearRead,
     this.pollInterval = const Duration(seconds: 5),
   }) {
@@ -73,9 +89,10 @@ class GroupNotificationSession extends ChangeNotifier {
   final WorkspaceScope scope;
   final String instance;
   final SharedPreferences preferences;
-  final GroupNotificationRead read;
+  final GroupNotificationRead read, command;
   final GroupObservations observations;
   final Future<void> Function(GroupAnswerNotification) publish;
+  final Future<void> Function(GroupInputNotification) publishInputs;
   final Future<void> Function(GroupNotificationTarget, int) clearRead;
   final Duration pollInterval;
   final _groups = <String, _WatchedGroup>{};
@@ -321,7 +338,123 @@ class GroupNotificationSession extends ChangeNotifier {
     }
   }
 
+  Future<void> _publishInputs(String id, _WatchedGroup group) async {
+    await publishInputs(
+      GroupInputNotification(
+        target: GroupNotificationTarget(scope, id),
+        title: group.title,
+        instance: instance,
+        inputs: [
+          for (final action in group.approvals)
+            if (!group.accepted.containsKey(groupApprovalFocusId(action)))
+              NotificationInput(
+                focus: NotificationFocus(
+                  'approval',
+                  groupApprovalFocusId(action),
+                ),
+                content: ChatNotificationContent.approval(
+                  action.command,
+                  action.description,
+                ),
+                choices: action.choices,
+                submitting: group.submitting == groupApprovalFocusId(action),
+                error: group.errors[groupApprovalFocusId(action)],
+              ),
+        ],
+      ),
+    );
+    if (group.approvals.isNotEmpty) {
+      await BotsPreferences(
+        preferences,
+      ).writeApprovalReceipts(scope.connectionIdentity, id, [
+        for (final action in group.approvals)
+          (
+            action: action,
+            decision: group.accepted[groupApprovalFocusId(action)],
+          ),
+      ]);
+    }
+  }
+
+  /// Re-read the exact stock runtime before a native decision. A notification
+  /// snapshot can identify a request, but cannot grant permission by itself.
+  Future<bool> resolveApproval(
+    String roomId,
+    String focus,
+    String choice,
+    String? previewCommand,
+  ) async {
+    if (_closed || !{'once', 'deny'}.contains(choice)) return false;
+    final group = _groups.putIfAbsent(roomId, () => _WatchedGroup('Group', -1));
+    if (group.submitting != null) return false;
+    group.revision++;
+    group.submitting = focus;
+    group.errors.remove(focus);
+    var observed = false;
+    try {
+      if (group.approvals.isNotEmpty) await _publishInputs(roomId, group);
+      final state = await read('groups.state', {'room_id': roomId});
+      if (_closed) return false;
+      final decoded = BotsRepository.decodeGroupState(
+        scope,
+        instance,
+        roomId,
+        state,
+      );
+      if (decoded.room == null) {
+        observed = true;
+        group.approvals = const [];
+        return false;
+      }
+      final runtime = decoded.runtime;
+      if (runtime == null) {
+        throw StateError('Group approval could not be checked');
+      }
+      observed = true;
+      group.title = decoded.room!.name;
+      group.approvals = runtime.actions
+          .where((a) => a.kind == 'approval')
+          .toList();
+      final action = group.approvals
+          .where((a) => groupApprovalFocusId(a) == focus)
+          .firstOrNull;
+      if (action == null || group.accepted.containsKey(focus)) return false;
+      if (!action.choices.contains(choice) ||
+          (choice != 'deny' && action.command.trim() != previewCommand)) {
+        throw StateError('Review the current approval in the group');
+      }
+      final result = await command('groups.approve', {
+        'room_id': roomId,
+        'task_id': action.task,
+        'member_id': action.member,
+        'request_id': action.request,
+        'execution_generation': action.generation,
+        'choice': choice,
+      });
+      if (result['approved'] != true) {
+        throw StateError('Decision not confirmed');
+      }
+      group.accepted[focus] = choice;
+      return true;
+    } catch (_) {
+      group.errors[focus] = 'Decision not confirmed. Open the group to review.';
+      rethrow;
+    } finally {
+      group.revision++;
+      group.submitting = null;
+      if (!_closed) {
+        if (observed || group.approvals.isNotEmpty) {
+          await _publishInputs(roomId, group);
+        }
+        _changed();
+        unawaited(refresh());
+      }
+    }
+  }
+
   Future<void> _refreshRoom(String id, _WatchedGroup group) async {
+    if (group.submitting != null) return;
+    final revision = group.revision;
     if (group.discarding.isNotEmpty) {
       await _removePending(id, Set.of(group.discarding));
       group.discarding.clear();
@@ -331,10 +464,13 @@ class GroupNotificationSession extends ChangeNotifier {
       'include_disbanded': true,
     });
     if (_closed) return;
+    if (revision != group.revision) return;
     final decoded = BotsRepository.decodeGroupState(scope, instance, id, state);
     final room = decoded.room;
     if (room == null) {
       observations.forget(id);
+      group.approvals = const [];
+      await _publishInputs(id, group);
       group.working = false;
       group.pending = false;
       await _removePending(id, Set.of(group.awaiting));
@@ -345,6 +481,19 @@ class GroupNotificationSession extends ChangeNotifier {
     if (runtime == null) {
       throw const FormatException('Invalid shared group state');
     }
+    group.approvals = runtime.actions
+        .where((a) => a.kind == 'approval')
+        .toList();
+    final identities = group.approvals.map(groupApprovalFocusId).toSet();
+    group.accepted.removeWhere((key, _) => !identities.contains(key));
+    group.errors.removeWhere((key, _) => !identities.contains(key));
+    if (runtime.working || runtime.blocked) {
+      group.working = true;
+      group.blocked = runtime.blocked;
+      _changed();
+    }
+    await _publishInputs(id, group);
+    if (_closed || revision != group.revision) return;
     final latest = decoded.latestSequence;
     if (latest < group.cursor) {
       throw const FormatException('Group sequence moved backwards');

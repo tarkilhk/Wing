@@ -244,6 +244,23 @@ class ChatNotificationCoordinator {
     focus: NotificationFocus('answer', '${value.sequence}'),
     content: ChatNotificationContent.reply(value.text),
   );
+  Future<void> receiveGroupInputs(GroupInputNotification value) {
+    final chat = jsonEncode(value.target.toJson());
+    return _serialize(() async {
+      // An empty room-input poll cannot redraw or acknowledge a reply delivery.
+      if (value.inputs.isEmpty && (_chats[chat]?.inputs.isEmpty ?? true)) {
+        return;
+      }
+      await _replaceInputs(
+        chat: chat,
+        title: value.title,
+        scope: '${value.instance} / Group',
+        captured: value.inputs,
+        alert: true,
+      );
+    });
+  }
+
   Future<void> readGroupAnswer(GroupNotificationTarget target, int sequence) =>
       _serialize(() async {
         final chat = jsonEncode(target.toJson());
@@ -332,37 +349,53 @@ class ChatNotificationCoordinator {
     bool alert = true,
   }) {
     final captured = List<NotificationInput>.unmodifiable(inputs);
-    return _serialize(() async {
-      final state = _chats.putIfAbsent(chat, () => _ChatNotice(title, scope));
-      state.title = title;
-      state.scope = scope;
-      // Preserve first-seen order across request kinds, refreshes and restarts.
-      final previousIdentities = state.inputs
-          .map((input) => input.focus.identity)
-          .toSet();
-      final remaining = {
-        for (final input in captured) input.focus.identity: input,
-      };
-      final ordered = <NotificationInput>[];
-      for (final previous in state.inputs) {
-        final fresh = remaining.remove(previous.focus.identity);
-        if (fresh != null) ordered.add(fresh);
-      }
-      ordered.addAll(remaining.values);
-      state.inputs = ordered;
-      final newlyObserved = ordered
-          .where((input) => !previousIdentities.contains(input.focus.identity))
-          .firstOrNull;
-      if (alert && newlyObserved != null) {
-        _publishActivity(
-          chat,
-          newlyObserved.focus,
-          ConversationActivityKind.inputNeeded,
-        );
-      }
-      await _render(chat, state, alert: alert);
-      await _write();
-    });
+    return _serialize(
+      () => _replaceInputs(
+        chat: chat,
+        title: title,
+        scope: scope,
+        captured: captured,
+        alert: alert,
+      ),
+    );
+  }
+
+  Future<void> _replaceInputs({
+    required String chat,
+    required String title,
+    required String scope,
+    required List<NotificationInput> captured,
+    required bool alert,
+  }) async {
+    final state = _chats.putIfAbsent(chat, () => _ChatNotice(title, scope));
+    state.title = title;
+    state.scope = scope;
+    // Preserve first-seen order across request kinds, refreshes and restarts.
+    final previousIdentities = state.inputs
+        .map((input) => input.focus.identity)
+        .toSet();
+    final remaining = {
+      for (final input in captured) input.focus.identity: input,
+    };
+    final ordered = <NotificationInput>[];
+    for (final previous in state.inputs) {
+      final fresh = remaining.remove(previous.focus.identity);
+      if (fresh != null) ordered.add(fresh);
+    }
+    ordered.addAll(remaining.values);
+    state.inputs = ordered;
+    final newlyObserved = ordered
+        .where((input) => !previousIdentities.contains(input.focus.identity))
+        .firstOrNull;
+    if (alert && newlyObserved != null) {
+      _publishActivity(
+        chat,
+        newlyObserved.focus,
+        ConversationActivityKind.inputNeeded,
+      );
+    }
+    await _render(chat, state, alert: alert);
+    await _write();
   }
 
   Future<void> read(String chat, String identity) => _serialize(() async {

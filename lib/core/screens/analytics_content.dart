@@ -8,15 +8,18 @@ import '../widgets/workspace_picker.dart';
 import 'administration/admin_usage_dashboard.dart';
 import 'administration/admin_widgets.dart';
 
-/// Analytics follows the selected profile without starting health checks.
+/// Analytics defaults to all discovered profiles; selection stays local to
+/// analytics without changing the conversation workspace or starting checks.
 class HermesAnalyticsContent extends StatefulWidget {
   const HermesAnalyticsContent({
     super.key,
     required this.controller,
+    this.profileName,
     this.repository,
   });
 
   final ProfileWorkspaceController controller;
+  final String? profileName;
   final AdministrationRepository? repository;
 
   @override
@@ -30,20 +33,25 @@ class _HermesAnalyticsContentState extends State<HermesAnalyticsContent> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.controller,
     builder: (context, _) {
-      final name = widget.controller.current?.scope.profileName;
-      if (name == null || widget.controller.discovery?.named(name) == null) {
+      final name = widget.profileName;
+      final profiles = widget.controller.discovery?.profiles ?? const [];
+      if (profiles.isEmpty ||
+          name != null && widget.controller.discovery?.named(name) == null) {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: const [
-            AdminNotice('Select an available profile to view its analytics.'),
+            AdminNotice('Choose an available profile to view analytics.'),
           ],
         );
       }
-      final profile = _server.profile(name);
+      final names = name == null
+          ? (profiles.map((profile) => profile.name).toList()..sort())
+          : [name];
       return UsageDashboard(
-        key: ValueKey(profile.scope),
-        createSession: () =>
-            UsageAnalyticsSession(UsageAnalyticsReader(profile)),
+        key: ValueKey((_server.connectionIdentity, names.join('\u0000'))),
+        createSession: () => UsageAnalyticsSession(
+          UsageAnalyticsReader(_server.usageAnalytics, names),
+        ),
       );
     },
   );
@@ -61,7 +69,9 @@ class AnalyticsPage extends StatelessWidget {
     pickerMode: WorkspacePickerMode.profiles,
     child: UsageDashboard(
       key: ValueKey(profile.scope),
-      createSession: () => UsageAnalyticsSession(UsageAnalyticsReader(profile)),
+      createSession: () => UsageAnalyticsSession(
+        UsageAnalyticsReader(profile.server.usageAnalytics, [profile.name]),
+      ),
     ),
   );
 }

@@ -93,29 +93,33 @@ class ProfileActivityStatus extends StatelessWidget {
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
     final Widget leading;
     if (runtime.compacting && !runtime.needsInput && !runtime.reconnecting) {
-      leading = StudioWorkingIndicator(
-        conversation: true,
-        active:
-            !runtime.opening &&
-            !runtime.offline &&
-            runtime.execution != ChatExecution.failed,
-        label: 'Summarizing conversation',
-        icon: Icons.compress_rounded,
-        color: WingTokens.of(context).running,
-      );
+      leading =
+          !runtime.opening &&
+              !runtime.offline &&
+              runtime.execution != ChatExecution.failed
+          ? StudioWorkingIndicator(
+              conversation: true,
+              label: 'Summarizing conversation',
+              color: WingTokens.of(context).running,
+            )
+          : Icon(
+              Icons.compress_rounded,
+              size: 18,
+              color: WingTokens.of(context).running,
+            );
     } else if (runtime.commandRunning &&
         !runtime.needsInput &&
         !runtime.reconnecting) {
-      leading = StudioWorkingIndicator(
-        conversation: true,
-        active:
-            !runtime.opening &&
-            !runtime.offline &&
-            runtime.execution != ChatExecution.failed,
-        label: 'Running command',
-        icon: Icons.pending_outlined,
-        color: color,
-      );
+      leading =
+          !runtime.opening &&
+              !runtime.offline &&
+              runtime.execution != ChatExecution.failed
+          ? StudioWorkingIndicator(
+              conversation: true,
+              label: 'Running command',
+              color: color,
+            )
+          : Icon(Icons.error_outline, size: 18, color: color);
     } else if (runtime.execution == ChatExecution.idle &&
         runtime.activity(
               backgroundWorking: subagents.any(

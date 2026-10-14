@@ -49,10 +49,11 @@ void main() {
               busy: false,
               mode: mode,
             );
-            if (choice != null &&
-                choice.id != (navigation.profileName ?? 'personal')) {
-              await navigation.switchTo(choice.id, () async {
-                selected.add(choice.id);
+            final profile = choice?.id;
+            if (profile != null &&
+                profile != (navigation.profileName ?? 'personal')) {
+              await navigation.switchTo(profile, () async {
+                selected.add(profile);
                 return true;
               });
             }

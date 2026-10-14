@@ -205,6 +205,7 @@ void main() {
         id: base.id,
         name: base.name,
         members: base.members,
+        latestSequence: 201,
         lastMessageSequence: 201,
         lastAnswerSequence: 201,
       );

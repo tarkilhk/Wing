@@ -124,7 +124,7 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
     final review = session.reviewCriteria(index: index);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StudioDialog(
         scrollable: true,
         title: Text('Remove criterion ${index + 1}?'),
         content: Text(text),
@@ -160,7 +160,7 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
     final review = session.reviewCriteria();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StudioDialog(
         scrollable: true,
         title: const Text('Clear all criteria?'),
         content: const Text('This removes every criterion from this goal.'),
@@ -193,7 +193,7 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
 
   Future<void> _showCriteriaChanged() => showDialog<void>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => StudioDialog(
       title: const Text('Criteria changed'),
       content: const Text(
         'Hermes updated these criteria. Review the refreshed list before trying again.',
@@ -214,7 +214,7 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
     final session = widget.session;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StudioDialog(
         title: const Text('Clear goal?'),
         content: const Text('This clears the goal on the Hermes server.'),
         actions: [
@@ -394,7 +394,7 @@ class _AddCriterionDialogState extends State<_AddCriterionDialog> {
           widget.session.state.sessionControlWorking;
       return PopScope(
         canPop: !working,
-        child: AlertDialog(
+        child: StudioDialog(
           scrollable: true,
           title: const Text('Add criterion'),
           content: TextField(

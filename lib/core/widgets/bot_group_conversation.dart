@@ -104,12 +104,23 @@ class BotGroupConversation extends StatelessWidget {
         child: _GroupBubblePalette(
           colors: palette,
           child: SafeArea(
-            child: Column(
-              children: [
-                Expanded(child: transcript),
-                ...beforeComposer,
-                composer,
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) => Column(
+                children: [
+                  Expanded(child: transcript),
+                  // Loose picker space belongs inside the content-fitting footer
+                  // so opening or closing suggestions cannot lift the composer.
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: constraints.maxHeight,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [...beforeComposer, composer],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

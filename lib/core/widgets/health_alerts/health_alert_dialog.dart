@@ -88,7 +88,7 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
                   label: 'Saving health alert choice',
                 ),
               Padding(
-                padding: const EdgeInsets.only(left: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: WingModalHeader(
                   title: const Text('Health alerts'),
                   closeLabel: 'Close alerts',
@@ -230,39 +230,42 @@ class _HealthAlertDialogState extends State<_HealthAlertDialog> {
                       ),
                     ),
                   ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    StudioButtonPress(
-                      child: IconButton(
-                        tooltip: 'Acknowledge issue',
-                        onPressed: saving || alert.acknowledged
-                            ? null
-                            : () => widget.scope.alerts.acknowledge(alert),
-                        icon: const Icon(Icons.done),
-                      ),
-                    ),
-                    StudioButtonPress(
-                      child: IconButton(
-                        tooltip: 'Snooze for 30 minutes',
-                        onPressed: saving || alert.acknowledged
-                            ? null
-                            : () => widget.scope.alerts.snooze(alert),
-                        icon: const Icon(Icons.snooze_outlined),
-                      ),
-                    ),
-                    StudioButtonPress(
-                      child: IconButton(
-                        tooltip: healthAlertActionLabel(alert),
-                        onPressed: () => _open(alert),
-                        icon: Icon(
-                          alert.scope == HealthAlertScope.host
-                              ? Icons.health_and_safety_outlined
-                              : Icons.tune,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      StudioButtonPress(
+                        child: IconButton(
+                          tooltip: 'Acknowledge issue',
+                          onPressed: saving || alert.acknowledged
+                              ? null
+                              : () => widget.scope.alerts.acknowledge(alert),
+                          icon: const Icon(Icons.done),
                         ),
                       ),
-                    ),
-                  ],
+                      StudioButtonPress(
+                        child: IconButton(
+                          tooltip: 'Snooze for 30 minutes',
+                          onPressed: saving || alert.acknowledged
+                              ? null
+                              : () => widget.scope.alerts.snooze(alert),
+                          icon: const Icon(Icons.snooze_outlined),
+                        ),
+                      ),
+                      StudioButtonPress(
+                        child: IconButton(
+                          tooltip: healthAlertActionLabel(alert),
+                          onPressed: () => _open(alert),
+                          icon: Icon(
+                            alert.scope == HealthAlertScope.host
+                                ? Icons.health_and_safety_outlined
+                                : Icons.tune,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ],

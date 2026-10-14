@@ -182,6 +182,37 @@ class ProfileChat {
       List.unmodifiable(_reviewNotices.map((receipt) => receipt.notice));
   List<GatewayTodo> get todos => List.unmodifiable(_todos);
   int? get todoRevision => _todoRevision;
+  Object? _workInputs;
+  Object _workRevision = Object();
+
+  /// Opaque invalidation for supervision, independent of growing answer text.
+  /// Compare canonical facts here rather than cloning detached work snapshots
+  /// merely to decide whether a borrower needs to render them again.
+  Object get workRevision {
+    final inputs = (
+      runtime.runtimeId,
+      _todos,
+      _todoRevision,
+      _subagentsRevision,
+      _subagentsLoadGeneration,
+      _subagentsLoading,
+      _subagentsError,
+      _sessionControl,
+      _sessionControlLoading,
+      _sessionControlWorking,
+      _sessionControlError,
+      _sessionControlNotice,
+      _processesReadGeneration,
+      _processesLoading,
+      _processesError,
+    );
+    if (_workInputs != inputs) {
+      _workInputs = inputs;
+      _workRevision = Object();
+    }
+    return _workRevision;
+  }
+
   List<GatewaySubagentActivity> get subagents =>
       List.unmodifiable(_subagents.map(copySupervisedSubagent));
   Set<String> get unconfirmedSubagentIds =>
@@ -768,6 +799,25 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> refreshGroupNotifications() => _groupNotificationsEnabled
       ? _groupNotifications.refresh()
       : Future.value();
+  Future<bool> approveGroupNotification(
+    GroupNotificationTarget target,
+    String focus,
+    String choice,
+    String? command,
+  ) {
+    if (_closed ||
+        target.scope.connectionId != connection.id ||
+        target.scope.connectionIdentity != connectionIdentity) {
+      throw StateError('The original connection is unavailable');
+    }
+    return _groupNotifications.resolveApproval(
+      target.roomId,
+      focus,
+      choice,
+      command,
+    );
+  }
+
   void setGroupNotificationsForeground(bool foreground) =>
       _groupNotifications.setForeground(foreground);
   void _requireGroupOwner(BotGroup group) {
@@ -847,6 +897,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     this.onNotificationRead,
     this.notificationResultFor,
     Future<void> Function(GroupAnswerNotification)? onGroupAnswer,
+    Future<void> Function(GroupInputNotification)? onGroupInputs,
     Future<void> Function(GroupNotificationTarget, int)? onGroupAnswerRead,
     List<NotificationInput> Function(ProfileSessionKey)? notificationInputsFor,
     // Keep the injected journal reader private behind the workspace boundary.
@@ -864,7 +915,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
         draftStore ??
         ComposerDraftStore(preferences, connectionIdentity: connectionIdentity);
     connectionStatus = ServerConnectionStatus(connection.label);
-    _groupNotificationsEnabled = onAttention != null || onGroupAnswer != null;
+    _groupNotificationsEnabled =
+        onAttention != null || onGroupAnswer != null || onGroupInputs != null;
     _groupNotifications = GroupNotificationSession(
       observations: groupObservations,
       scope: WorkspaceScope(
@@ -878,6 +930,21 @@ class ProfileWorkspaceController extends ChangeNotifier {
         final gateway = _resource('default').gateway;
         await gateway.connect();
         return gateway.call(method, params);
+      },
+      command: (method, params) async {
+        final gateway = _resource('default').gateway;
+        await gateway.connect();
+        if (_closed) throw StateError('Connection retired');
+        return gateway.call(method, params);
+      },
+      publishInputs: (inputs) async {
+        if (onGroupInputs == null) {
+          if (inputs.inputs.isNotEmpty) {
+            throw StateError('Group approval delivery unavailable');
+          }
+          return;
+        }
+        await onGroupInputs(inputs);
       },
       publish: (answer) async {
         if (onGroupAnswer == null) {
@@ -6267,6 +6334,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     chat._intelligenceRevision++;
     chat._changingIntelligence = true;
+    final previousModel = chat.model;
+    final previousProvider = chat.provider;
     _changed();
     try {
       final applied = await _writeIntelligence(
@@ -6275,9 +6344,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         confirmModelChange: confirmModelChange,
       );
       if (!applied) return false;
-      chat._context = null;
-      _invalidateContextDetails(chat);
-      unawaited(refreshContext(chat));
+      if (chat.model != previousModel || chat.provider != previousProvider) {
+        chat._context = null;
+        _invalidateContextDetails(chat);
+        unawaited(refreshContext(chat));
+      }
       return true;
     } finally {
       chat._changingIntelligence = false;

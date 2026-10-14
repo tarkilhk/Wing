@@ -1,5 +1,6 @@
 import 'profile_model_catalog.dart';
 import 'models_dev_pricing.dart';
+import 'usage_analytics.dart';
 import 'skill_reader_session.dart';
 import '../models/skill_reader.dart';
 import 'connection_access.dart';
@@ -61,6 +62,15 @@ class AdministrationRepository {
         release: release,
       );
   final _modelCatalogs = <String, ProfileModelCatalog>{};
+  UsageAnalyticsRepository? _usageAnalytics;
+  UsageAnalyticsRepository get usageAnalytics {
+    if (_closed) throw StateError('Administration connection is closed');
+    return _usageAnalytics ??= UsageAnalyticsRepository(
+      read: (name, endpoint, query) => profile(name).read(endpoint, query),
+      apiPricing: _apiPricing ?? ModelsDevPricing.shared.load,
+    );
+  }
+
   ProfileModelCatalog _modelCatalog(String name) {
     if (_closed) {
       throw StateError('Administration connection is closed');
@@ -259,6 +269,7 @@ class AdministrationRepository {
     _closing = true;
     if (_leases == 0 && !_closed) {
       _closed = true;
+      _usageAnalytics?.close();
       _closeModelCatalogs();
       _close();
     }

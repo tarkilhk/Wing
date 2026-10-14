@@ -32,6 +32,11 @@ App settings shows the installed Android version/build separately from the backe
 
 Versions & updates can check for a server update and request it explicitly. **Changes in this update** shows available commit summaries, with a partial-history notice when needed; the server returns at most 20 summaries.
 
+The screen checks automatically when opened. The header Wing pulses while the
+check runs, without a duplicate loading caption. The installed version appears
+as soon as it is available. Unknown availability is shown only
+after a completed check provides no answer; a failed check offers another check.
+
 The server card shows its update channel. Use the tuning icon to choose **Stable
 releases** or **Main branch**, then the checkmark to save. This changes which
 updates the whole server follows; it does not install an update. Wing checks the

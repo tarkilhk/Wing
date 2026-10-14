@@ -63,7 +63,7 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
   Future<bool> _confirmEnable(ProfileCapability row) async =>
       await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => StudioDialog(
           title: Text('Enable ${row.title}?'),
           content: const Text(
             'This toolset still needs setup. Hermes may start its existing setup process on the server. Enabling it does not guarantee it is ready.',

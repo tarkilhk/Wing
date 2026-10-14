@@ -507,11 +507,18 @@ class BotGroupEvent {
     required this.actorName,
     required this.timestamp,
     required this.text,
+    this.passedMemberId,
   });
   final int sequence;
   final String eventId, kind, actor, actorId, actorName, text;
   final DateTime timestamp;
+
+  /// Passed turns are gateway-authored; their speaker lives in the payload.
+  final String? passedMemberId;
   bool get isMessage => kind == 'message.user' || kind == 'message.member';
+  bool get isPass => kind == 'turn.settled' && passedMemberId != null;
+  bool get isTranscriptEntry => isMessage || isPass;
+  String get memberId => isPass ? passedMemberId! : actorId;
 }
 
 @immutable

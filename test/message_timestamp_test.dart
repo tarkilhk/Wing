@@ -481,14 +481,38 @@ void main() {
               revision: 1,
               metadata: const {},
             );
+            final group = BotGroup(
+              scope: bot.scope,
+              instance: bot.instance,
+              id: 'room-1',
+              name: 'Test group',
+              observationComplete: true,
+              members: const [
+                BotGroupMember(
+                  id: 'pace',
+                  profile: 'pace',
+                  handle: 'pace',
+                  name: 'Pace',
+                ),
+              ],
+            );
+            Object messageId(int id) => surface == 'group' ? 'room-1:$id' : id;
             TranscriptMessage row(int id, String role, String text) =>
                 surface == 'group'
                 ? TranscriptMessage.discussion(
-                    id: id,
-                    text: text,
-                    timestamp: _date,
-                    sender: role == 'assistant' ? 'Pace' : null,
-                    senderHandle: role == 'assistant' ? 'pace' : null,
+                    group: group,
+                    event: BotGroupEvent(
+                      sequence: id,
+                      eventId: 'event-$id',
+                      kind: role == 'assistant'
+                          ? 'message.member'
+                          : 'message.user',
+                      actor: role == 'assistant' ? 'pace' : 'user',
+                      actorId: role == 'assistant' ? 'pace' : 'user',
+                      actorName: role == 'assistant' ? 'Pace' : '',
+                      timestamp: _date,
+                      text: text,
+                    ),
                   )
                 : TranscriptMessage.fromRow({
                     'id': id,
@@ -559,29 +583,41 @@ void main() {
             );
             final user = tester.getRect(
               find.byKey(
-                const ValueKey<(String, Object?)>(('user-message-bubble', 101)),
+                ValueKey<(String, Object?)>((
+                  'user-message-bubble',
+                  messageId(101),
+                )),
               ),
             );
             final answer = tester.getRect(
               find.byKey(
-                const ValueKey<(String, Object?)>(('bot-message-bubble', 102)),
+                ValueKey<(String, Object?)>((
+                  'bot-message-bubble',
+                  messageId(102),
+                )),
               ),
             );
             final thanks = tester.getRect(
               find.byKey(
-                const ValueKey<(String, Object?)>(('user-message-bubble', 103)),
+                ValueKey<(String, Object?)>((
+                  'user-message-bubble',
+                  messageId(103),
+                )),
               ),
             );
             final short = tester.getRect(
               find.byKey(
-                const ValueKey<(String, Object?)>(('bot-message-bubble', 104)),
+                ValueKey<(String, Object?)>((
+                  'bot-message-bubble',
+                  messageId(104),
+                )),
               ),
             );
             final avatar = tester.getRect(
               find.byKey(
-                const ValueKey<(String, Object?)>((
+                ValueKey<(String, Object?)>((
                   'bot-message-avatar-frame',
-                  102,
+                  messageId(102),
                 )),
               ),
             );
@@ -596,14 +632,17 @@ void main() {
             );
             final consecutive = tester.getRect(
               find.byKey(
-                const ValueKey<(String, Object?)>(('bot-message-bubble', 105)),
+                ValueKey<(String, Object?)>((
+                  'bot-message-bubble',
+                  messageId(105),
+                )),
               ),
             );
             final consecutiveAvatar = tester.getRect(
               find.byKey(
-                const ValueKey<(String, Object?)>((
+                ValueKey<(String, Object?)>((
                   'bot-message-avatar-frame',
-                  105,
+                  messageId(105),
                 )),
               ),
             );
@@ -614,9 +653,9 @@ void main() {
                 tester
                         .widget<Container>(
                           find.byKey(
-                            const ValueKey<(String, Object?)>((
+                            ValueKey<(String, Object?)>((
                               'bot-message-avatar-frame',
-                              102,
+                              messageId(102),
                             )),
                           ),
                         )
@@ -629,7 +668,7 @@ void main() {
                   id == 101 || id == 103
                       ? 'user-message-footer'
                       : 'bot-message-footer',
-                  id,
+                  messageId(id),
                 )),
               );
               expect(

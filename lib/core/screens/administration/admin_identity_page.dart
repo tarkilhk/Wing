@@ -114,7 +114,7 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
     if (decision.needsDiscardConfirmation) {
       final discard = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => StudioDialog(
           title: const Text('Discard unsaved changes?'),
           content: const Text('Edits that were not saved will be lost.'),
           actions: [

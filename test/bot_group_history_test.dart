@@ -41,6 +41,186 @@ void main() {
   });
   tearDown(() => session.dispose());
 
+  test('fresh working history includes the latest 20 conversation messages '
+      'behind a tool-only tail', () async {
+    fixture.workerMessages['atlas'] = [
+      for (var id = 1; id <= 25; id++) _message(id, 'Saved answer $id'),
+      for (var id = 26; id <= 65; id++)
+        id.isEven
+            ? {'id': id, 'role': 'assistant', 'content': ''}
+            : {
+                'id': id,
+                'role': 'tool',
+                'content': 'Tool output $id',
+                'tool_name': 'terminal',
+              },
+    ];
+    await session.select(group.members.first);
+    final answers = session.reader.messages.where(
+      (row) => row['role'] == 'assistant' && row['content'] != '',
+    );
+    expect(answers, hasLength(20));
+    expect(answers.first['content'], 'Saved answer 6');
+    expect(answers.last['content'], 'Saved answer 25');
+    expect(session.reader.messages.last['id'], 65);
+    expect(fixture.historyReads.map((read) => read.$3), [0, 20, 40]);
+    expect(session.reader.nextHistoryOffset, 60);
+    expect(fixture.commands, isEmpty);
+  });
+
+  test(
+    'short history exhausts tool and hidden pages to find its messages',
+    () async {
+      fixture.workerMessages['atlas'] = [
+        _message(1, 'Only saved answer'),
+        for (var id = 2; id <= 42; id++)
+          {..._message(id, 'Hidden carrier'), 'display_kind': 'hidden'},
+      ];
+      await session.select(group.members.first);
+      expect(session.reader.historyError, isNull);
+      expect(session.reader.messages.first['content'], 'Only saved answer');
+      expect(session.reader.nextHistoryOffset, isNull);
+      expect(fixture.historyReads.map((read) => read.$3), [0, 20, 40]);
+    },
+  );
+
+  test(
+    'refresh retains its snapshot and loading until message backfill settles',
+    () async {
+      fixture.workerMessages['atlas'] = [_message(1, 'Retained answer')];
+      await session.select(group.members.first);
+      final held = Completer<ProfileHistoryPage>();
+      addTearDown(() {
+        if (!held.isCompleted) held.completeError(StateError('Retired read'));
+      });
+      fixture.historyHook = (_, id, offset) async {
+        if (offset == 20) return held.future;
+        return ProfileHistoryPage(
+          id,
+          [
+            for (var id = 101; id <= 120; id++)
+              {'id': id, 'role': 'tool', 'content': 'New tool output'},
+          ],
+          offset,
+          20,
+        );
+      };
+      final refresh = session.refresh();
+      await Future<void>.delayed(Duration.zero);
+      expect(session.reader.historyLoading, isTrue);
+      expect(session.reader.messages.single['content'], 'Retained answer');
+      await session.refresh();
+      expect(fixture.historyReads.map((read) => read.$3), [0, 0, 20]);
+      held.completeError(StateError('Offline backfill'));
+      await refresh;
+      expect(session.reader.historyLoading, isFalse);
+      expect(session.reader.historyError, isNotNull);
+      expect(session.reader.messages.single['content'], 'Retained answer');
+      fixture.historyHook = null;
+      fixture.workerMessages['atlas'] = [_message(2, 'Recovered answer')];
+      await session.refresh();
+      expect(session.reader.historyError, isNull);
+      expect(session.reader.messages.single['content'], 'Recovered answer');
+    },
+  );
+
+  test('member switch retires a held continuation page', () async {
+    final held = Completer<ProfileHistoryPage>();
+    fixture.historyHook = (profile, id, offset) async {
+      if (profile == 'mira') {
+        return ProfileHistoryPage(id, [_message(1, 'Mira only')], offset, 20);
+      }
+      if (offset == 20) return held.future;
+      return ProfileHistoryPage(
+        id,
+        [
+          for (var id = 21; id <= 40; id++)
+            {'id': id, 'role': 'tool', 'content': 'Atlas tool output'},
+        ],
+        offset,
+        20,
+      );
+    };
+    final atlas = session.select(group.members.first);
+    await Future<void>.delayed(Duration.zero);
+    expect(fixture.historyReads.last.$3, 20);
+    await session.select(group.members.last);
+    held.complete(
+      ProfileHistoryPage(
+        'atlas-tip',
+        [for (var id = 1; id <= 20; id++) _message(id, 'Retired Atlas answer')],
+        20,
+        20,
+      ),
+    );
+    await atlas;
+    expect(session.reader.historyLoading, isFalse);
+    expect(session.reader.messages.single['content'], 'Mira only');
+    expect(session.member?.profile, 'mira');
+  });
+
+  test(
+    'opening a long worker history reads only a small newest page',
+    () async {
+      final server = AdministrationFixture();
+      server.rpcOverride = (method, params) async => {
+        'sessions': [_worker('atlas')],
+      };
+      int? requestedLimit;
+      server.override = (method, path, query, body) async {
+        if (path == 'profiles') return {'profiles': fixture.profiles};
+        if (path == 'profiles/active') {
+          return {'current': 'atlas', 'active': 'atlas'};
+        }
+        expect(path, 'sessions/atlas-tip/messages');
+        requestedLimit = int.parse(query['limit']!);
+        return {
+          'session_id': 'atlas-tip',
+          'messages': [
+            for (var id = 1001 - requestedLimit!; id <= 1000; id++)
+              _message(id, 'Saved tool result $id ${'output ' * 1000}'),
+          ],
+          'pagination': {
+            'limit': requestedLimit,
+            'offset': 0,
+            'order': 'latest',
+            'returned': requestedLimit,
+          },
+        };
+      };
+      final repository = BotsRepository.forServer(
+        server.server,
+        groupObservations: GroupObservations(
+          WorkspaceScope(
+            connectionId: server.server.connectionId,
+            connectionIdentity: server.server.connectionIdentity,
+            profileName: 'default',
+          ),
+        ),
+      );
+      final ownedGroup = BotGroup(
+        observationComplete: true,
+        scope: repository.scope,
+        instance: repository.instance,
+        id: group.id,
+        name: group.name,
+        members: group.members,
+      );
+      final viewer = BotGroupHistorySession(repository, ownedGroup);
+      addTearDown(viewer.dispose);
+      await viewer.select(ownedGroup.members.first);
+      expect(viewer.reader.historyError, isNull);
+      expect(
+        requestedLimit,
+        20,
+        reason: 'Opening should not transfer 100 potentially large tool rows',
+      );
+      expect(viewer.reader.messages, hasLength(20));
+      expect(viewer.reader.messages.last['id'], 1000);
+      expect(viewer.reader.nextHistoryOffset, 20);
+    },
+  );
+
   test(
     'worker replay splits reasoning, tracks work and deduplicates deltas',
     () async {

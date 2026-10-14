@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/chat_runtime.dart';
+import '../models/transcript_timeline.dart';
 import '../models/chat_output.dart';
 import '../models/gateway_todo.dart';
 import '../services/profile_supervision_session.dart';
@@ -49,6 +50,8 @@ final class ConversationActivity {
   );
 
   Widget? liveExecution({
+    TranscriptTimelineSection? savedActivity,
+    Widget Function(TranscriptTimelineEntry)? noticeBuilder,
     Future<Uint8List> Function(String)? loadImage,
     Future<void> Function(ChatOutput)? onOpenResource,
     Future<void> Function(ChatOutput)? onShareResource,
@@ -56,6 +59,8 @@ final class ConversationActivity {
       ? null
       : ProfileLiveExecution(
           entries: entries,
+          savedActivity: savedActivity,
+          noticeBuilder: noticeBuilder,
           loadImage: loadImage,
           onOpenResource: onOpenResource,
           onShareResource: onShareResource,

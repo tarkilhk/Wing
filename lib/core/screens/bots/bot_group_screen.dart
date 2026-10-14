@@ -298,6 +298,147 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     if (mounted) _acknowledgeLatest();
   }
 
+  Widget _approvalCard(
+    BotGroupAction action, {
+    String? status,
+    int pendingCount = 1,
+    double maxBodyHeight = 160,
+  }) {
+    final theme = Theme.of(context);
+    final tokens = WingTokens.of(context);
+    final pending = status == null;
+    final member =
+        _session.group.members
+            .where((m) => m.id == action.member)
+            .firstOrNull
+            ?.name ??
+        'A bot';
+    return Container(
+      key: ValueKey(('group-approval', action.key)),
+      decoration: BoxDecoration(
+        color: tokens.raised,
+        border: Border.all(color: tokens.border),
+        borderRadius: WingRadius.card,
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2, right: 8),
+                child: Icon(
+                  pending ? Icons.shield_outlined : Icons.info_outline,
+                  size: 18,
+                  color: pending ? tokens.warning : tokens.muted,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  pending ? '$member needs approval' : status,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+              if (pendingCount > 1)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Text(
+                    '1/$pendingCount',
+                    style: theme.textTheme.labelSmall,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Flexible(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: maxBodyHeight.clamp(24, 160),
+              ),
+              child: _GroupApprovalDetails(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if ((pending ? _session.approvalError(action) : null)
+                        case final error?)
+                      StudioError(error),
+                    if (action.command.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: tokens.surface,
+                          borderRadius: WingRadius.control,
+                        ),
+                        child: SelectableText(
+                          action.command,
+                          style: tokens.typography.mono.copyWith(
+                            color: tokens.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (action.description.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        action.description,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (pending) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                for (final choice in action.choices.reversed) ...[
+                  StudioButtonPress(
+                    child: choice == 'once'
+                        ? IconButton.filled(
+                            tooltip: 'Allow once',
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            onPressed: _session.acting || _session.sending
+                                ? null
+                                : () =>
+                                      _session.resolve(action, choice: choice),
+                            icon: const Icon(Icons.check),
+                          )
+                        : IconButton.outlined(
+                            tooltip: 'Deny',
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            onPressed: _session.acting || _session.sending
+                                ? null
+                                : () =>
+                                      _session.resolve(action, choice: choice),
+                            icon: const Icon(Icons.close),
+                          ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _activityStatus(BuildContext context) {
     final runtime = _session.runtime;
     final needsApproval =
@@ -306,7 +447,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
         runtime?.blocked == true || runtime?.actions.isNotEmpty == true;
     final String? label;
     final bool active;
-    final IconData icon;
+    final IconData? icon;
     final pendingAction = _session.sending || _session.acting;
     if (_session.pendingText != null && !pendingAction) {
       label = 'Message not confirmed · Retry the same message';
@@ -317,7 +458,8 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       active = false;
       icon = Icons.error_outline;
     } else if (needsApproval) {
-      label = 'Waiting for your approval';
+      // The fixed approval panel already explains the required decision.
+      label = null;
       active = false;
       icon = Icons.help_rounded;
     } else if (interrupted) {
@@ -327,7 +469,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     } else if (runtime?.working == true) {
       label = 'Bots are working…';
       active = true;
-      icon = Icons.pending_outlined;
+      icon = null;
     } else {
       label = null;
       active = false;
@@ -340,17 +482,19 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       child: ConversationActivityStatus(
         label: label,
         wrap: true,
-        leading: StudioWorkingIndicator(
-          conversation: true,
-          active: active,
-          label: label ?? 'Group status',
-          icon: icon,
-          color: active
-              ? tokens.running
-              : needsApproval || interrupted
-              ? tokens.blocked
-              : tokens.muted,
-        ),
+        leading: active
+            ? StudioWorkingIndicator(
+                conversation: true,
+                label: label ?? 'Group status',
+                color: tokens.running,
+              )
+            : Icon(
+                icon,
+                size: 18,
+                color: needsApproval || interrupted
+                    ? tokens.blocked
+                    : tokens.muted,
+              ),
       ),
     );
   }
@@ -659,11 +803,8 @@ class _BotGroupScreenState extends State<BotGroupScreen>
             controller: _transcript,
             reader: reading,
             identity: null,
-            needsInput:
-                _session.runtime?.actions.any(
-                  (action) => action.kind == 'approval',
-                ) ==
-                true,
+            // Pending decisions stay in the fixed footer, outside this viewport.
+            needsInput: false,
             turnAdmissionBlocked: _session.runtime?.working == true,
             openingContent: null,
             notificationReading: null,
@@ -686,61 +827,48 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: StudioError(_session.error!),
                 ),
+              for (final receipt in _session.settledApprovals)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _approvalCard(
+                    receipt.action,
+                    status: switch (receipt.decision) {
+                      'once' => 'Allowed once',
+                      'deny' => 'Denied',
+                      _ =>
+                        _session.approvalAvailabilityKnown
+                            ? 'No longer pending'
+                            : 'Reconnect to check approval',
+                    },
+                  ),
+                ),
               if (_session.runtime case final runtime?) ...[
                 if (runtime.blocked && runtime.actions.isEmpty)
                   const Text(
                     'Group work is interrupted. Refresh to check its recovery options.',
                   ),
-                for (final action in runtime.actions)
+                for (final action in runtime.actions.where(
+                  (action) => action.kind == 'retry',
+                ))
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          action.kind == 'retry'
-                              ? _session.awaitingContinuation
-                                    ? 'Work was stopped; Continue resends the same continuation message.'
-                                    : 'Work paused; Continue stops this attempt and asks the bots to resume.'
-                              : '${_session.group.members.where((m) => m.id == action.member).firstOrNull?.name ?? 'A bot'} needs approval',
+                          _session.awaitingContinuation
+                              ? 'Work was stopped; Continue resends the same continuation message.'
+                              : 'Work paused; Continue stops this attempt and asks the bots to resume.',
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
-                        if (action.description.isNotEmpty)
-                          Text(action.description),
-                        if (action.command.isNotEmpty)
-                          SelectableText(action.command),
-                        Wrap(
-                          children: [
-                            if (action.kind == 'retry')
-                              StudioButtonPress(
-                                child: IconButton(
-                                  tooltip: 'Continue group work',
-                                  onPressed: _session.acting || _session.sending
-                                      ? null
-                                      : () => _session.resolve(action),
-                                  icon: const Icon(Icons.play_arrow),
-                                ),
-                              ),
-                            for (final choice in action.choices)
-                              StudioButtonPress(
-                                child: IconButton(
-                                  tooltip: choice == 'once'
-                                      ? 'Allow once'
-                                      : 'Deny',
-                                  onPressed: _session.acting || _session.sending
-                                      ? null
-                                      : () => _session.resolve(
-                                          action,
-                                          choice: choice,
-                                        ),
-                                  icon: Icon(
-                                    choice == 'once'
-                                        ? Icons.check
-                                        : Icons.close,
-                                  ),
-                                ),
-                              ),
-                          ],
+                        StudioButtonPress(
+                          child: IconButton(
+                            tooltip: 'Continue group work',
+                            onPressed: _session.acting || _session.sending
+                                ? null
+                                : () => _session.resolve(action),
+                            icon: const Icon(Icons.play_arrow),
+                          ),
                         ),
                       ],
                     ),
@@ -753,7 +881,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       beforeComposer: [
         if (_showReferences)
           Flexible(
-            flex: 3,
             child: MentionSuggestions(
               composer: _composer,
               composerFocus: _focus,
@@ -766,6 +893,20 @@ class _BotGroupScreenState extends State<BotGroupScreen>
               },
             ),
           ),
+        if (_session.pendingApprovals.firstOrNull case final action?)
+          Flexible(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: _approvalCard(
+                action,
+                pendingCount: _session.pendingApprovals.length,
+                maxBodyHeight:
+                    (MediaQuery.sizeOf(context).height -
+                        MediaQuery.viewInsetsOf(context).bottom) *
+                    .20,
+              ),
+            ),
+          ),
         _activityStatus(context),
         VoiceInputActivity(context: context, controller: _voiceInput),
       ],
@@ -775,9 +916,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           controller: _composer,
           focusNode: _focus,
           readOnly: locked,
-          maxLines: _showReferences
-              ? 1
-              : (_voiceInput.active || keyboardOpen) && enlargedText
+          maxLines: (_voiceInput.active || keyboardOpen) && enlargedText
               ? 2
               : 5,
           microphone: VoiceInputButton(
@@ -824,6 +963,35 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       ),
     );
   }
+}
+
+// The body scrolls independently; the decision pair never leaves its panel.
+class _GroupApprovalDetails extends StatefulWidget {
+  const _GroupApprovalDetails({required this.child});
+  final Widget child;
+  @override
+  State<_GroupApprovalDetails> createState() => _GroupApprovalDetailsState();
+}
+
+class _GroupApprovalDetailsState extends State<_GroupApprovalDetails> {
+  final _scroll = ScrollController();
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scrollbar(
+    controller: _scroll,
+    thumbVisibility: true,
+    thickness: 3,
+    child: SingleChildScrollView(
+      controller: _scroll,
+      primary: false,
+      padding: const EdgeInsets.only(right: 8),
+      child: widget.child,
+    ),
+  );
 }
 
 // Roster text and bot identity retain text semantics inside the native popup.

@@ -648,7 +648,7 @@ class AdminReloadConnectorsButton extends StatelessWidget {
   Future<bool> _confirmReconnect(BuildContext context) async =>
       await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => StudioDialog(
           insetPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 24,

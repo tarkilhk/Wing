@@ -66,7 +66,7 @@ class _ProfileBackgroundWorkPanelState
     final session = widget.session;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StudioDialog(
         title: const Text('Clear heartbeat?'),
         content: const Text(
           'This removes the heartbeat schedule from the Hermes server.',

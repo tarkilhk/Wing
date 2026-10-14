@@ -104,7 +104,7 @@ class _BotScreenViewState extends State<BotScreenView>
     }
     final force = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StudioDialog(
         title: const Text('Hand control back?'),
         content: const Text(
           'This releases the current human controller, including another device, and lets the bot use its screen.',
@@ -127,7 +127,7 @@ class _BotScreenViewState extends State<BotScreenView>
     if (_session.humanHasControl) {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => StudioDialog(
           title: const Text('Take control from another device?'),
           content: const Text(
             'The current controller will return to watching the screen.',
@@ -438,7 +438,7 @@ class _BotScreenViewState extends State<BotScreenView>
             Icons.help_outline,
             () => showDialog<void>(
               context: context,
-              builder: (context) => AlertDialog(
+              builder: (context) => StudioDialog(
                 content: const SingleChildScrollView(
                   child: Text(
                     'Trackpad: move one finger to move the pointer, tap to click, hold and move to drag. Pinch to zoom; move two fingers to scroll.\n\n'

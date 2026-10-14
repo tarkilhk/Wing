@@ -26,6 +26,10 @@ Saved messages show their user-facing attachment references without repeating ex
 
 The model selector offers the connected server's models and supported reasoning options. Session controls apply to the current chat; model defaults in Administration apply to new chats.
 
+While settings are being saved, the header shows progress and Send waits for
+confirmation. You can keep editing your draft. Fast and reasoning changes keep
+the reported context percentage visible.
+
 The context ring uses reported server usage or a labelled estimate. Unknown usage is not shown as zero. Its warning thresholds are 65% and 85%.
 
 Messages show a local date/time in the footer when available. Long-press it for the full value. Copy at the upper right copies only the message. Newly sent messages may use their local submission time until saved history arrives.

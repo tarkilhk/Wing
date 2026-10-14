@@ -6,6 +6,40 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NotificationInteractionSecurityTest {
+    @Test fun acceptedBodyTapSurvivesReadCancellationButPermissionChoicesDoNot() {
+        var persisted: String? = null
+        fun store() = NotificationHandleStore({ persisted }, { persisted = it; true })
+        val navigation = store().issue(42, NotificationHandleStore.mainPurpose, action("", true))!!
+        val decision = store().issue(42, NotificationHandleStore.mainPurpose, action("once", true))!!
+        val privateAction = store().issue(42, NotificationHandleStore.actionPurpose, action("", true))!!
+        assertTrue(store().invalidate(42))
+        assertNotNull(store().consume(navigation, NotificationHandleStore.mainPurpose))
+        assertNull(store().consume(navigation, NotificationHandleStore.mainPurpose))
+        assertNull(store().consume(decision, NotificationHandleStore.mainPurpose))
+        assertNull(store().consume(privateAction, NotificationHandleStore.actionPurpose))
+    }
+
+    @Test fun tappedConversationSurvivesANewerReplyBeforeMainResumes() {
+        for (group in listOf(false, true)) {
+            var persisted: String? = null
+            fun store() = NotificationHandleStore({ persisted }, { persisted = it; true })
+            val target = JSONObject().put("connection", "host").put("connection_identity", "owner")
+                .put("focus", JSONObject().put("kind", "answer").put("id", "17"))
+            if (group) target.put("room", "room-one")
+            else target.put("profile", "default").put("session", "chat-one")
+            val data = mapOf("payload" to target.toString(), "expanded" to "First reply",
+                "chat" to "scoped-chat", "revision" to "answer:17", "id" to 42)
+            val tap = NotificationInteractionSchema.contentTap(data)
+            val action = store().issue(42, NotificationHandleStore.actionPurpose, tap)!!
+            val delivered = store().consume(action, NotificationHandleStore.actionPurpose)!!
+            val handoff = store().issue(42, NotificationHandleStore.mainPurpose, delivered)!!
+            target.getJSONObject("focus").put("id", "18")
+            assertTrue(store().replace(42, target.toString(), "answer:18"))
+            assertNotNull("A newer reply must not swallow an already accepted conversation tap (group=$group)",
+                store().consume(handoff, NotificationHandleStore.mainPurpose))
+        }
+    }
+
     @Test fun renderedGroupReplyCanIssueItsContentTapHandle() {
         val target = JSONObject().put("connection", "host").put("connection_identity", "owner")
             .put("room", "room-one").put("focus", JSONObject().put("kind", "answer").put("id", "17"))
@@ -70,6 +104,22 @@ class NotificationInteractionSecurityTest {
         target.getJSONObject("focus").put("kind", "approval")
         assertNull(NotificationInteractionSchema.parse(value.put("payload", target.toString()).toString()))
     }
+    @Test fun groupApprovalsAdmitOnlyFencedOneTimeOrDenyActions() {
+        val target = JSONObject().put("connection", "host").put("connection_identity", "owner")
+            .put("room", "room-one").put("focus", JSONObject().put("kind", "approval")
+                .put("id", JSONArray().put("task").put("member").put("request").put(2).toString()))
+        for (choice in listOf("", "once", "deny")) {
+            val value = action(choice, false).put("payload", target.toString())
+            assertNotNull(NotificationInteractionSchema.parse(value.toString()))
+            assertNotNull(NotificationInteractionSchema.parse(value.put("review", true).toString()))
+        }
+        for (choice in listOf("session", "always")) {
+            assertNull(NotificationInteractionSchema.parse(action(choice).put("payload", target.toString()).toString()))
+        }
+        target.getJSONObject("focus").put("id", JSONArray().put("task").put("member").put("request").put(0).toString())
+        assertNull(NotificationInteractionSchema.parse(action().put("payload", target.toString()).toString()))
+    }
+
     private fun action(choice: String = "once", review: Boolean = false): JSONObject {
         val target = JSONObject().put("connection", "host").put("connection_identity", "credential-owner")
             .put("profile", "default").put("session", "chat-one")

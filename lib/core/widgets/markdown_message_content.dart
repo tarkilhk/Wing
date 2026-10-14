@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'dart:typed_data';
 
 import 'studio_task_marker.dart';
@@ -62,6 +63,8 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   Widget? _content;
   List<({Object source, Widget child})> _segments = const [];
   bool _refreshSegments = true;
+  Object? _renderingInputs;
+  Map<String, String>? _mentionNames;
   bool _segmentsStreaming = false;
   MarkdownStyleSheet? _styleSheet;
   ThemeData? _markdownTheme;
@@ -162,6 +165,18 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final inputs = (
+      Theme.of(context),
+      MediaQuery.sizeOf(context),
+      MediaQuery.textScalerOf(context),
+      Directionality.of(context),
+    );
+    final names = BotMentionScope.of(context)?.names;
+    // Reparenting a completed answer rechecks dependencies. Keep its rendered
+    // blocks when the actual environment is unchanged.
+    if (_renderingInputs == inputs && mapEquals(_mentionNames, names)) return;
+    _renderingInputs = inputs;
+    _mentionNames = names;
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.event('markdown.message.dependencies');
     }
@@ -458,7 +473,9 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     _refreshSegments = false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [for (final segment in next) segment.child],
+      children: [
+        for (final segment in next) RepaintBoundary(child: segment.child),
+      ],
     );
   }
 

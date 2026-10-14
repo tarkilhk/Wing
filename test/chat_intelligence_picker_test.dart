@@ -142,6 +142,50 @@ void main() {
     },
   );
 
+  testWidgets('reasoning tap opens levels and selects without a hold', (
+    tester,
+  ) async {
+    final writes = <String>[];
+    Future<void> render({bool enabled = true}) => tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: ChatReasoningScrubControl(
+              effort: 'high',
+              canDisable: false,
+              onChanged: enabled ? writes.add : null,
+            ),
+          ),
+        ),
+      ),
+    );
+    await render();
+    final control = find.byKey(const Key('composer-reasoning-control'));
+    await tester.tap(control);
+    await tester.pumpAndSettle();
+    expect(find.text('Medium').hitTestable(), findsOneWidget);
+    expect(find.text('Off'), findsNothing);
+    expect(writes, isEmpty);
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
+    expect(find.text('Medium'), findsNothing);
+    expect(writes, isEmpty);
+    await tester.tap(control);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Medium'));
+    await tester.pumpAndSettle();
+    expect(writes, ['medium']);
+    expect(find.text('Medium'), findsNothing);
+    await render(enabled: false);
+    await tester.tap(control);
+    await tester.pumpAndSettle();
+    expect(find.text('Medium'), findsNothing);
+    expect(writes, ['medium']);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('held reasoning has a keyboard selection path', (tester) async {
     final writes = <String>[];
     await tester.pumpWidget(

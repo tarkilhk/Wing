@@ -176,7 +176,7 @@ class _BotsContentState extends State<BotsContent> {
     if (action == 'delete') {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => StudioDialog(
           title: Text('Disband ${group.name}?'),
           content: const Text(
             'Stops group work and removes this room. The bots and their private chats stay available.',
@@ -410,13 +410,10 @@ class _BotsContentState extends State<BotsContent> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (active) ...[
-          StudioWorkingIndicator.independent(
-            active: running,
-            label: label,
-            icon: Icons.chat_bubble_outline,
-            size: 14,
-            color: c,
-          ),
+          if (running)
+            StudioWorkingIndicator.independent(label: label, size: 14, color: c)
+          else
+            Icon(Icons.chat_bubble_outline, size: 14, color: c),
           const SizedBox(width: 6),
         ],
         Flexible(

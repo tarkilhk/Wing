@@ -36,7 +36,8 @@ class _ModelConfirmationDialogState extends State<_ModelConfirmationDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => StudioDialog(
+    scrollable: false,
     insetPadding: const EdgeInsets.all(WingSpacing.md),
     title: Text(
       'Confirm model change',

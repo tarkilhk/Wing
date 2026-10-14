@@ -1226,8 +1226,8 @@ void main() {
               .first,
         );
         final promptField = tester.getRect(find.byType(TextFormField));
-        expect(promptField.left - panel.left, WingSpacing.lg);
-        expect(panel.right - promptField.right, WingSpacing.lg);
+        expect(promptField.left - panel.left, WingSpacing.md);
+        expect(panel.right - promptField.right, WingSpacing.md);
         expect(
           tester.widget<TextFormField>(find.byType(TextFormField)).initialValue,
           contains('Atlas, Mira'),

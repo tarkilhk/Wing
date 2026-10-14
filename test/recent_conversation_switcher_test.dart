@@ -394,6 +394,179 @@ void main() {
     }
   });
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final outcome in ['success', 'failure', 'back', 'back-history']) {
+        testWidgets(
+          'Recents tap enters chat before held resume and history ${brightness.name} $scale $outcome',
+          (tester) async {
+            SharedPreferences.setMockInitialValues({});
+            final preferences = await SharedPreferences.getInstance();
+            final appPreferences = AppPreferences(preferences);
+            addTearDown(appPreferences.dispose);
+            final fixture = _ScreenFixture();
+            final resume = Completer<void>();
+            final history = Completer<void>();
+            var opening = false;
+            var resumeStarted = false;
+            var historyStarted = false;
+            final controller = ProfileWorkspaceController(
+              access: ConnectionAccess(
+                connection: SavedConnection(
+                  id: 'host',
+                  label: 'Home server',
+                  host: 'localhost',
+                  port: 1,
+                  apiKey: '',
+                ),
+                dashboardOAuth: null,
+              ),
+              connectionIdentity: 'recents-entry',
+              preferences: preferences,
+              appPreferences: appPreferences,
+              gatewayFactory: (scope) {
+                final base = fixture.gateway(scope);
+                return ProfileGateway(
+                  scope: scope,
+                  discover: base.discover,
+                  get: (path, query) async {
+                    if (opening && path.endsWith('/messages')) {
+                      historyStarted = true;
+                      await history.future;
+                    }
+                    return base.read(path, query);
+                  },
+                  rpc: (method, params) async {
+                    if (opening && method == 'session.resume') {
+                      resumeStarted = true;
+                      await resume.future;
+                    }
+                    return base.call(method, params);
+                  },
+                );
+              },
+            );
+            addTearDown(controller.dispose);
+            await controller.initialize();
+            await controller.refreshRecents();
+            await controller.openSession(
+              ProfileSessionKey(controller.current!.scope, 'chat-2'),
+            );
+            final activity = ValueNotifier<ChatNoticeActivity?>(null);
+            addTearDown(activity.dispose);
+            tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            final frame = GlobalKey();
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(scale),
+                    disableAnimations: scale == 2,
+                  ),
+                  child: ChatNoticeActivityScope(
+                    activity: activity,
+                    child: RepaintBoundary(key: frame, child: child!),
+                  ),
+                ),
+                home: ProfileWorkspaceScreen(
+                  controller: controller,
+                  initialDestination: AppDestination.activity,
+                  createBotsSession: () {
+                    final bots = BotsFixture();
+                    return BotsSession((_) async => [bots.repository]);
+                  },
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            final title = find.text('Review the Android gestures').first;
+            await tester.ensureVisible(title);
+            await tester.pumpAndSettle();
+            opening = true;
+            await tester.tap(title);
+            await tester.pump();
+            await tester.pump();
+            expect(find.text('Recents'), findsNothing);
+            expect(find.byTooltip('Back'), findsOneWidget);
+            expect(find.text('Review the Android gestures'), findsOneWidget);
+            expect(find.byType(StudioLoading), findsOneWidget);
+            expect(find.byType(ProfileTranscript), findsNothing);
+            final backRect = tester.getRect(find.byTooltip('Back'));
+            for (var i = 0; i < 30; i++) {
+              await tester.pump();
+            }
+            expect(resumeStarted, isTrue);
+            await _captureCurrent(
+              tester,
+              frame,
+              'recents-entry-resume-${brightness.name}-$scale-$outcome',
+            );
+            if (outcome == 'back') {
+              await tester.tap(find.byTooltip('Back'));
+              await tester.pump();
+              resume.complete();
+              history.complete();
+              await tester.pumpAndSettle();
+              expect(find.text('Recents'), findsOneWidget);
+              expect(controller.current!.chat, isNull);
+            } else {
+              resume.complete();
+              for (var i = 0; i < 30; i++) {
+                await tester.pump();
+              }
+              expect(historyStarted, isTrue);
+              expect(find.text('Recents'), findsNothing);
+              expect(find.byType(StudioLoading), findsOneWidget);
+              expect(tester.getRect(find.byTooltip('Back')), backRect);
+              await tester.pump(const Duration(seconds: 3));
+              expect(find.byType(StudioLoading), findsOneWidget);
+              if (outcome == 'back-history') {
+                await tester.binding.handlePopRoute();
+                await tester.pump();
+                history.complete();
+                await tester.pumpAndSettle();
+                expect(find.text('Recents'), findsOneWidget);
+                expect(controller.current!.chat, isNull);
+                expect(tester.takeException(), isNull);
+                await tester.pumpWidget(const SizedBox());
+                return;
+              } else if (outcome == 'failure') {
+                history.completeError(StateError('History unavailable'));
+                await tester.pumpAndSettle();
+                expect(find.text('Recents'), findsNothing);
+                expect(find.byTooltip('Retry'), findsOneWidget);
+                expect(find.byType(StudioLoading), findsNothing);
+                expect(tester.getRect(find.byTooltip('Back')), backRect);
+                await _captureCurrent(
+                  tester,
+                  frame,
+                  'recents-entry-error-${brightness.name}-$scale',
+                );
+                opening = false;
+                await tester.tap(find.byTooltip('Retry'));
+              } else {
+                history.complete();
+              }
+              await _finishFrames(tester);
+              expect(controller.current!.chat!.key.sessionId, 'chat-0');
+              expect(find.byType(ProfileTranscript), findsOneWidget);
+              expect(find.byType(StudioLoading), findsNothing);
+              expect(find.byType(RecentConversationSwitcher), findsOneWidget);
+              await tester.binding.handlePopRoute();
+              await _finishFrames(tester);
+              expect(find.text('Recents'), findsOneWidget);
+            }
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox());
+          },
+        );
+      }
+    }
+  }
+
   testWidgets('passive group prepares only the bottom on its first frame', (
     tester,
   ) async {
@@ -421,10 +594,17 @@ void main() {
                 messages: [
                   for (var i = 0; i < 100; i++)
                     TranscriptMessage.discussion(
-                      timestamp: DateTime(2026, 10, 12),
-                      id: 'room:$i',
-                      text: 'Message $i\n' * 20,
-                      sender: 'Atlas',
+                      group: group,
+                      event: BotGroupEvent(
+                        sequence: i,
+                        eventId: 'event-$i',
+                        kind: 'message.member',
+                        actor: 'atlas',
+                        actorId: 'atlas',
+                        actorName: 'Atlas',
+                        timestamp: DateTime(2026, 10, 12),
+                        text: 'Message $i\n' * 20,
+                      ),
                     ),
                 ],
               ),
@@ -436,7 +616,10 @@ void main() {
     final messages = tester
         .widgetList<BotGroupMessage>(find.byType(BotGroupMessage))
         .toList();
-    expect(messages.any((message) => message.message.id == 'room:99'), isTrue);
+    expect(
+      messages.any((message) => message.message.id == 'room-1:99'),
+      isTrue,
+    );
     expect(
       messages.every(
         (message) =>
@@ -657,12 +840,18 @@ void main() {
                     group: GroupConversationPreview(
                       messages: [
                         TranscriptMessage.discussion(
-                          id: 'room-1:1',
-                          text:
-                              '@bot_atlas The research is ready. We can continue here.',
-                          sender: 'Atlas',
-                          senderHandle: 'bot_atlas',
-                          timestamp: DateTime(2026, 10, 12),
+                          group: group,
+                          event: BotGroupEvent(
+                            sequence: 1,
+                            eventId: 'event-1',
+                            kind: 'message.member',
+                            actor: 'atlas',
+                            actorId: 'atlas',
+                            actorName: 'Atlas',
+                            timestamp: DateTime(2026, 10, 12),
+                            text:
+                                '@bot_atlas The research is ready. We can continue here.',
+                          ),
                         ),
                       ],
                     ),

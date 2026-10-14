@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../models/settings_edit.dart';
@@ -142,7 +143,7 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
                   child: TextButton(
                     onPressed: () => showDialog<void>(
                       context: context,
-                      builder: (context) => AlertDialog(
+                      builder: (context) => StudioDialog(
                         title: const Text('Why read only?'),
                         content: const Text(
                           'You can read and copy these memories. Editing and deleting are unavailable in this Wing view. Retention and character budgets are available in Memory settings.',
