@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/bots.dart';
 import '../models/transcript_reader.dart';
+import '../models/transcript_timeline.dart';
 import 'bots_repository.dart';
 
 /// One passive inspection route. No runtime admission, polling or commands.
@@ -67,26 +68,40 @@ class BotGroupHistorySession extends ChangeNotifier {
         reading._available = true;
         return;
       }
-      final page = await repository.groupMemberHistory(
-        group,
-        member,
-        session,
-        refresh ? 0 : reading._older!,
-      );
-      if (_closed || generation != _generation) return;
-      // Validate the complete page before replacing a previously readable one.
+      // Raw pages can contain only invisible assistant calls and folded tools.
+      // Stage the full read before replacing a previously readable snapshot.
       final rows = <int, Map<String, dynamic>>{};
-      for (final row in page.rows) {
-        final id = row['id'];
-        if (id is! int || rows.containsKey(id)) {
-          throw const FormatException('Invalid worker history row');
+      var offset = refresh ? 0 : reading._older!;
+      int? older;
+      do {
+        final page = await repository.groupMemberHistory(
+          group,
+          member,
+          session,
+          offset,
+        );
+        if (_closed || generation != _generation) return;
+        final pageIds = <int>{};
+        for (final row in page.rows) {
+          final id = row['id'];
+          if (id is! int || !pageIds.add(id)) {
+            throw const FormatException('Invalid worker history row');
+          }
+          rows[id] = Map.unmodifiable(row);
         }
-        rows[id] = Map.unmodifiable(row);
-      }
+        older = page.nextOffset;
+        if (older == null || !refresh || _conversationCount(rows) >= 20) {
+          break;
+        }
+        if (older <= offset) {
+          throw const FormatException('Invalid worker history cursor');
+        }
+        offset = older;
+      } while (true);
       if (refresh) reading._rows.clear();
       reading._rows.addAll(rows);
       reading._session = session;
-      reading._older = page.nextOffset;
+      reading._older = older;
       reading._available = true;
     } catch (_) {
       if (!_closed && generation == _generation) {
@@ -104,6 +119,17 @@ class BotGroupHistorySession extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  static int _conversationCount(Map<int, Map<String, dynamic>> rows) {
+    final timeline = TranscriptTimeline.project([
+      for (final id in rows.keys.toList()..sort()) rows[id]!,
+    ], presentationId: (row) => row['id'] as int);
+    return timeline.sections
+        .where((section) => !section.isActivity)
+        .expand((section) => section.messages)
+        .where((entry) => entry.role == 'user' || entry.role == 'assistant')
+        .length;
   }
 
   @override

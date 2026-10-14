@@ -80,6 +80,131 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('fresh tool-only tail still shows recent messages '
+          '${brightness.name} $scale', (tester) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = BotsFixture();
+        final group = (await readFixtureGroups(
+          fixture.repository,
+          groupMessages: null,
+        )).single;
+        fixture.workerRows['atlas'] = [
+          {
+            'id': 'atlas-root',
+            'resolved_id': 'atlas-tip',
+            'title': 'Group: room-1',
+            'source': 'bot_room',
+          },
+        ];
+        fixture.workerMessages['atlas'] = [
+          for (var id = 1; id <= 25; id++)
+            {
+              'id': id,
+              'role': 'assistant',
+              'content': 'Atlas saved answer $id',
+              'timestamp': 1791756000.0 + id,
+            },
+          for (var id = 26; id <= 45; id++)
+            id.isEven
+                ? {'id': id, 'role': 'assistant', 'content': ''}
+                : {
+                    'id': id,
+                    'role': 'tool',
+                    'content': 'Tool output $id',
+                    'tool_name': 'terminal',
+                  },
+        ];
+        final frame = GlobalKey();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
+                disableAnimations: scale == 2,
+              ),
+              child: RepaintBoundary(key: frame, child: child!),
+            ),
+            home: BotGroupHistoryScreen(
+              appearanceForMember: (_) => null,
+              createSession: () =>
+                  BotGroupHistorySession(fixture.repository, group),
+            ),
+          ),
+        );
+        await _settle(tester);
+        final latest = find.textContaining(
+          'Atlas saved answer 25',
+          findRichText: true,
+        );
+        expect(latest, findsWidgets);
+        final viewport = tester.getRect(find.byType(ProfileTranscript));
+        expect(tester.getRect(latest.first).overlaps(viewport), isTrue);
+        expect(find.text('Activity · 10 tools'), findsOneWidget);
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(fixture.historyReads.map((read) => read.$3), [0, 20]);
+        expect(fixture.commands, isEmpty);
+        expect(tester.takeException(), isNull);
+        await _render(
+          tester,
+          frame,
+          'history-tool-tail-${brightness.name}-$scale',
+        );
+        final backfill = Completer<ProfileHistoryPage>();
+        addTearDown(() {
+          if (!backfill.isCompleted) {
+            backfill.completeError(StateError('Retired backfill'));
+          }
+        });
+        fixture.historyHook = (_, id, offset) async {
+          if (offset == 20) return backfill.future;
+          return ProfileHistoryPage(
+            id,
+            fixture.workerMessages['atlas']!.sublist(25),
+            offset,
+            20,
+          );
+        };
+        await tester.tap(find.byTooltip('Refresh working history'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(fixture.historyReads.last.$3, 20);
+        expect(
+          find.bySemanticsLabel('Refreshing working history'),
+          findsOneWidget,
+        );
+        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(latest, findsWidgets);
+        expect(
+          tester
+              .widget<IconButton>(
+                find.widgetWithIcon(IconButton, Icons.refresh),
+              )
+              .onPressed,
+          isNull,
+        );
+        backfill.completeError(StateError('Offline backfill'));
+        await _settle(tester);
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(latest, findsWidgets);
+        expect(
+          find.text('Working history could not load. Refresh to try again.'),
+          findsOneWidget,
+        );
+        fixture.historyHook = null;
+        await tester.tap(find.byTooltip('Refresh working history'));
+        await _settle(tester);
+        expect(latest, findsWidgets);
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(
+          find.text('Working history could not load. Refresh to try again.'),
+          findsNothing,
+        );
+        await tester.pumpWidget(const SizedBox());
+      });
+
       testWidgets('long working history opens at the tail and refresh settles '
           '${brightness.name} $scale', (tester) async {
         tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
