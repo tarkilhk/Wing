@@ -384,32 +384,24 @@ Future<void> showChatListMenu(
                                       children: [
                                         if (onClear != null)
                                           StudioButtonPress(
-                                            child: TextButton(
-                                              style: TextButton.styleFrom(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                    ),
-                                              ),
+                                            child: IconButton(
+                                              tooltip: 'Clear filters',
                                               onPressed: () {
                                                 onClear();
                                                 update(() {});
                                               },
-                                              child: const Text('Clear'),
+                                              icon: const Icon(
+                                                Icons.filter_alt_off_outlined,
+                                              ),
                                             ),
                                           ),
                                         const Spacer(),
                                         StudioButtonPress(
-                                          child: TextButton(
-                                            style: TextButton.styleFrom(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                  ),
-                                            ),
+                                          child: IconButton(
+                                            tooltip: 'Close filters',
                                             onPressed: () =>
                                                 Navigator.pop(context),
-                                            child: const Text('Done'),
+                                            icon: const Icon(Icons.close),
                                           ),
                                         ),
                                       ],

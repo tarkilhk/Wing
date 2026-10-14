@@ -1,3 +1,4 @@
+import '../widgets/studio_form_actions.dart';
 import '../widgets/studio_error.dart';
 import '../theme/wing_theme.dart';
 import 'profile_project_actions.dart';
@@ -47,21 +48,12 @@ Future<void> showSavedDraftActions(
         ],
       ),
       actions: [
-        StudioButtonPress(
-          child: TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-        ),
-        StudioButtonPress(
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Discard'),
-          ),
+        StudioFormActions(
+          onCancel: () => Navigator.pop(context, false),
+          onConfirm: () => Navigator.pop(context, true),
+          confirmLabel: 'Discard draft',
+          confirmIcon: Icons.delete_outline,
+          destructive: true,
         ),
       ],
     ),
@@ -120,20 +112,12 @@ Future<void> showChatActions(
           'Permanently delete "$title" from ${session.scope.profileName}? Its stored history cannot be recovered. Archive it instead to keep the conversation.',
         ),
         actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-              ),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete'),
-            ),
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context, false),
+            onConfirm: () => Navigator.pop(context, true),
+            confirmLabel: 'Delete chat',
+            confirmIcon: Icons.delete_outline,
+            destructive: true,
           ),
         ],
       ),
@@ -220,6 +204,7 @@ class _ChatRenameDialogState extends State<_ChatRenameDialog> {
       canPop: !state.submitting,
       child: AlertDialog(
         scrollable: true,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         title: const Text('Rename chat'),
         content: SizedBox(
           width: 360,
@@ -266,27 +251,18 @@ class _ChatRenameDialogState extends State<_ChatRenameDialog> {
           ),
         ),
         actions: [
-          StudioButtonPress(
-            child: IconButton(
-              tooltip: 'Cancel',
-              onPressed: state.submitting ? null : () => Navigator.pop(context),
-              icon: const Icon(Icons.close),
-            ),
-          ),
-          StudioButtonPress(
-            child: IconButton.filled(
-              key: const ValueKey('chat-rename-save'),
-              tooltip: 'Save chat title',
-              onPressed:
-                  pending ||
-                      !widget.session.available ||
-                      _title.text.trim().isEmpty
-                  ? null
-                  : _save,
-              icon: state.submitting
-                  ? _progress('Saving chat title')
-                  : const Icon(Icons.check),
-            ),
+          StudioFormActions(
+            onCancel: state.submitting ? null : () => Navigator.pop(context),
+            onConfirm:
+                pending ||
+                    !widget.session.available ||
+                    _title.text.trim().isEmpty
+                ? null
+                : _save,
+            confirmKey: const ValueKey('chat-rename-save'),
+            confirmLabel: 'Save chat title',
+            busy: state.submitting,
+            progressLabel: 'Saving chat title',
           ),
         ],
       ),
@@ -559,11 +535,12 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: StudioButtonPress(
-                      child: TextButton(
+                      child: IconButton(
+                        tooltip: 'Cancel project selection',
                         onPressed: _moving == null
                             ? () => Navigator.pop(context)
                             : null,
-                        child: const Text('Cancel'),
+                        icon: const Icon(Icons.close),
                       ),
                     ),
                   ),

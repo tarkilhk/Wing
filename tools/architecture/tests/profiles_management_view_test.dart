@@ -40,6 +40,20 @@ class AdminGroup { const AdminGroup(); }
     await put('lib/core/widgets/studio_loading.dart', '''
 class StudioLoadingRegion { const StudioLoadingRegion(); }
 ''');
+    await put('lib/core/widgets/studio_form_actions.dart', '''
+class StudioFormActions { const StudioFormActions(); }
+''');
+    await put('lib/core/widgets/studio_error.dart', '''
+class StudioError { const StudioError(this.message); final String message; }
+''');
+    await put('lib/core/widgets/form_presentation.dart', '''
+export 'studio_form_actions.dart';
+export 'studio_error.dart';
+''');
+    await put('lib/core/widgets/leaky_forms.dart', '''
+export 'form_presentation.dart';
+export '../services/administration_repository.dart';
+''');
     await put('lib/core/theme/wing_theme.dart', '''
 class StudioButtonPress { const StudioButtonPress({required this.child}); final Object child; }
 class StudioPopupMenuItem { const StudioPopupMenuItem(); }
@@ -90,6 +104,10 @@ class AdminProfilesPage {
       String declaration = factory,
     }) => '$imports$declaration$source';
     final invalid = <String>[
+      view(
+        'void f() { const StudioFormActions(); }',
+        imports: '${sessionImport}import "../../widgets/leaky_forms.dart";\n',
+      ),
       view(
         'void f(AdministrationRepository value) { value.request(); }',
         imports:
@@ -246,6 +264,11 @@ class AdminProfilesPage {
       view(
         'void f() { const AdminGroup(); }',
         imports: '${sessionImport}import "admin_widgets.dart";\n',
+      ),
+      view(
+        "Object f() => [const ui.StudioFormActions(), const ui.StudioError('Failed')];",
+        imports:
+            '${sessionImport}import "../../widgets/form_presentation.dart" as ui;\n',
       ),
       view(
         "// profile.name == 'default'; repository.request();\nString f() => 'ProfileGateway.post';",

@@ -28,7 +28,12 @@ profile, including ordinary chats. Chats in the same profile share that screen.
 Opening it does not start the desktop or create a canonical Bot Chat. Back returns
 to the same conversation.
 
-**Your agent, with you.** Wing keeps Hermes close when you step away from your desk. Start a conversation, check progress, send the next idea and look after your setup from Android. [Get started](GETTING_STARTED.md).
+**Your agent, with you.** Wing keeps Hermes close when you step away from your desk. Start a conversation, check progress, send the next idea and look after your setup from Android. Forms use a cross to cancel and a filled checkmark to save or apply. Tooltips
+and accessibility labels name the operation. Saving keeps the form open through
+completion or failure; a failed save keeps its draft for retry. Destructive
+decisions use their operation icon and error color.
+
+[Get started](GETTING_STARTED.md).
 
 ## Pick up where you left off
 

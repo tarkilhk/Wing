@@ -1,6 +1,6 @@
+import 'studio_form_actions.dart';
 import 'studio_task_marker.dart';
 import 'studio_selection_tile.dart';
-import 'studio_action_label.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
@@ -199,26 +199,19 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
       ),
     );
     final actions = [
-      StudioButtonPress(
-        child: TextButton(
-          key: const Key('clarify-skip'),
-          onPressed: _submitting ? null : () => _respond(''),
-          child: const Text('Skip'),
-        ),
-      ),
-      StudioButtonPress(
-        child: FilledButton(
-          key: const Key('clarify-continue'),
-          onPressed: _submitting || answer.isEmpty
-              ? null
-              : () => _respond(answer),
-          child: StudioActionLabel(
-            widget.number < widget.total
-                ? 'Confirm & next'
-                : 'Confirm & continue',
-            busy: _submitting,
-          ),
-        ),
+      StudioFormActions(
+        onCancel: _submitting ? null : () => _respond(''),
+        cancelLabel: 'Skip clarification',
+        cancelKey: const Key('clarify-skip'),
+        confirmKey: const Key('clarify-continue'),
+        onConfirm: _submitting || answer.isEmpty
+            ? null
+            : () => _respond(answer),
+        confirmLabel: widget.number < widget.total
+            ? 'Confirm answer and next'
+            : 'Confirm answer and continue',
+        busy: _submitting,
+        progressLabel: 'Sending answer',
       ),
     ];
     return Container(

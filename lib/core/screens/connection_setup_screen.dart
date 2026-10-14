@@ -1,3 +1,4 @@
+import '../widgets/studio_form_actions.dart';
 import '../widgets/wing_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -139,17 +140,13 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         title: const Text('Discard connection setup?'),
         content: const Text('This connection has not been saved.'),
         actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Keep editing'),
-            ),
-          ),
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Discard'),
-            ),
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context, false),
+            cancelLabel: 'Keep editing',
+            onConfirm: () => Navigator.pop(context, true),
+            confirmLabel: 'Discard connection setup',
+            confirmIcon: Icons.delete_outline,
+            destructive: true,
           ),
         ],
       ),
@@ -208,6 +205,20 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
               ),
           ],
         ),
+        bottomNavigationBar: _step == ConnectionSetupStep.review
+            ? SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    8,
+                    16,
+                    16 + MediaQuery.viewInsetsOf(context).bottom,
+                  ),
+                  child: _footer(),
+                ),
+              )
+            : null,
         body: SafeArea(
           top: false,
           child: Center(
@@ -267,10 +278,11 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
                               },
                             ],
                           ),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 24),
-                            child: _footer(),
-                          ),
+                          if (_step != ConnectionSetupStep.review)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 24),
+                              child: _footer(),
+                            ),
                         ],
                       ),
                     ),
@@ -954,6 +966,17 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         _save,
       ),
     };
+    if (_step == ConnectionSetupStep.review) {
+      return StudioFormActions(
+        onCancel: _saving ? null : _back,
+        cancelLabel: 'Back to connection settings',
+        onConfirm: _state.canAdvance ? action : null,
+        confirmKey: const Key('connection-primary'),
+        confirmLabel: label,
+        busy: _saving,
+        progressLabel: 'Saving connection',
+      );
+    }
     return StudioButtonPress(
       child: FilledButton(
         key: const Key('connection-primary'),
@@ -1057,6 +1080,22 @@ class _CustomSetupScreenState extends State<_CustomSetupScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: WingAppBar(context: context, title: const Text('Custom setup')),
+    bottomNavigationBar: SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          8,
+          16,
+          16 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: StudioFormActions(
+          onCancel: () => Navigator.pop(context),
+          onConfirm: _done,
+          confirmLabel: 'Use connection settings',
+        ),
+      ),
+    ),
     body: SafeArea(
       child: Center(
         child: ConstrainedBox(
@@ -1150,15 +1189,6 @@ class _CustomSetupScreenState extends State<_CustomSetupScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                StudioButtonPress(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(48, 52),
-                    ),
-                    onPressed: _done,
-                    child: const Text('Use these settings'),
-                  ),
-                ),
               ],
             ),
           ),

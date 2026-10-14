@@ -194,9 +194,9 @@ void main() {
       );
       expect(tester.getSize(rocket).width, greaterThanOrEqualTo(48));
       expect(tester.getSize(rocket).height, greaterThanOrEqualTo(48));
-      await tester.ensureVisible(find.text('Save icon'));
+      await tester.ensureVisible(find.byTooltip('Save connection icon'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Save icon'));
+      await tester.tap(find.byTooltip('Save connection icon'));
       await tester.pumpAndSettle();
       expect(saved, ConnectionIcon.rocket);
       expect(tester.takeException(), isNull);
@@ -219,7 +219,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
     expect(tester.widget<IconButton>(rocket).isSelected, isTrue);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();
     expect(saved, isNull);
     await tester.tap(find.text('Appearance'));
@@ -246,7 +246,7 @@ void main() {
         return attempts == 1 ? pending.future : Future.value();
       },
     );
-    await tester.tap(find.text('Save icon'));
+    await tester.tap(find.byTooltip('Save connection icon'));
     await tester.pump();
     expect(
       tester
@@ -259,8 +259,8 @@ void main() {
     pending.completeError(StateError('disk unavailable'));
     await tester.pumpAndSettle();
     expect(find.text('Couldn’t save this icon. Try again.'), findsOneWidget);
-    await tester.ensureVisible(find.text('Save icon'));
-    await tester.tap(find.text('Save icon'));
+    await tester.ensureVisible(find.byTooltip('Save connection icon'));
+    await tester.tap(find.byTooltip('Save connection icon'));
     await tester.pumpAndSettle();
     expect(attempts, 2);
     expect(find.text('Instance icon'), findsNothing);

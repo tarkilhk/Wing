@@ -155,13 +155,13 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
           Align(
             alignment: Alignment.centerLeft,
             child: StudioButtonPress(
-              child: TextButton.icon(
+              child: IconButton.filled(
+                tooltip: 'Add service key',
                 onPressed: () => _open(
                   (context, profile) =>
                       AdminServiceKeyCatalog(profile: profile),
                 ),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add service key'),
               ),
             ),
           ),

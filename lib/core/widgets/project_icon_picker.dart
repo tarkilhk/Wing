@@ -1,3 +1,4 @@
+import 'studio_form_actions.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -113,10 +114,16 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 8, 4),
-                child: WingModalHeader(
+                child: StudioFormHeader(
                   title: Row(
                     children: [
-                      const Expanded(child: Text('Choose icon')),
+                      const Expanded(
+                        child: Text(
+                          'Choose icon',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                       StudioButtonPress(
                         child: IconButton(
                           key: const ValueKey('project-icon-reset'),
@@ -127,8 +134,6 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
                       ),
                     ],
                   ),
-                  onClose: () => Navigator.pop(context),
-                  closeLabel: 'Cancel icon selection',
                 ),
               ),
               Padding(
@@ -191,6 +196,8 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
                       child: Text(
                         searching ? 'Search results' : category.label,
                         key: const ValueKey('project-icon-category-label'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                     ),
@@ -263,22 +270,25 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        projectIconLabel(_selected),
-                        key: const ValueKey('project-icon-preview-label'),
+                      child: Tooltip(
+                        message: projectIconLabel(_selected),
+                        excludeFromSemantics: true,
+                        child: Text(
+                          projectIconLabel(_selected),
+                          key: const ValueKey('project-icon-preview-label'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    StudioButtonPress(
-                      child: IconButton(
-                        key: const ValueKey('project-icon-confirm'),
-                        tooltip: 'Use selected icon',
-                        style: IconButton.styleFrom(
-                          foregroundColor: scheme.primary,
-                        ),
-                        onPressed: () => Navigator.pop(context, _selected),
-                        icon: const Icon(Icons.check),
-                      ),
+                    StudioFormActions(
+                      onCancel: () => Navigator.pop(context),
+                      cancelLabel: 'Cancel icon selection',
+                      onConfirm: () => Navigator.pop(context, _selected),
+                      confirmKey: const ValueKey('project-icon-confirm'),
+                      confirmLabel: 'Use selected icon',
                     ),
                   ],
                 ),

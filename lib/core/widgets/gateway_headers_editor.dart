@@ -155,10 +155,10 @@ class _GatewayHeadersEditorState extends State<GatewayHeadersEditor> {
       Align(
         alignment: AlignmentDirectional.centerStart,
         child: StudioButtonPress(
-          child: OutlinedButton.icon(
+          child: IconButton.filled(
+            tooltip: 'Add header',
             onPressed: widget.enabled ? _add : null,
             icon: const Icon(Icons.add),
-            label: const Text('Add header'),
           ),
         ),
       ),

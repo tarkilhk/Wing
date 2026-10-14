@@ -135,15 +135,19 @@ void main() {
       ['recent newest needle', 'recent earlier needle'],
     );
 
-    await tester.tap(find.text('Search older messages'));
+    await tester.tap(find.byTooltip('Search older messages'));
     await tester.pump();
     expect(find.text('Searching older messages…'), findsNothing);
-    expect(find.text('Search older messages'), findsOneWidget);
+    expect(find.byTooltip('Search older messages'), findsOneWidget);
     expect(find.bySemanticsLabel('Searching messages'), findsNothing);
     expect(
       tester
-          .widget<TextButton>(
-            find.widgetWithText(TextButton, 'Search older messages'),
+          .widget<IconButton>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is IconButton &&
+                  widget.tooltip == 'Search older messages',
+            ),
           )
           .onPressed,
       isNull,
@@ -182,8 +186,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
     expect(find.textContaining("Couldn't search this chat"), findsOneWidget);
     expect(find.textContaining('Bad state'), findsNothing);
-    expect(find.text('Try again'), findsOneWidget);
-    expect(find.text('Close'), findsOneWidget);
+    expect(find.byTooltip('Retry search'), findsOneWidget);
+    expect(find.byTooltip('Close'), findsOneWidget);
   });
 
   testWidgets('shows every loaded match and expands full selectable text', (
@@ -289,7 +293,7 @@ void main() {
         find.text('1 matching message in loaded messages'),
         findsOneWidget,
       );
-      await tester.tap(find.text('Search older messages'));
+      await tester.tap(find.byTooltip('Search older messages'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('recent needle'), findsOneWidget);
@@ -298,7 +302,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('Bad state'), findsNothing);
-      await tester.tap(find.text('Try again'));
+      await tester.tap(find.byTooltip('Retry search'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 1));
       expect(olderAttempts, 2);
@@ -306,7 +310,7 @@ void main() {
       expect(find.text('recent needle'), findsOneWidget);
       expect(find.text('overlapping duplicate needle'), findsNothing);
       expect(find.text('2 matching messages'), findsOneWidget);
-      expect(find.text('Search older messages'), findsNothing);
+      expect(find.byTooltip('Search older messages'), findsNothing);
     },
   );
 
@@ -336,11 +340,11 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('No matching messages.'), findsNothing);
-    await tester.tap(find.text('Search older messages'));
+    await tester.tap(find.byTooltip('Search older messages'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1));
     expect(find.text('No matching messages.'), findsOneWidget);
-    expect(find.text('Search older messages'), findsNothing);
+    expect(find.byTooltip('Search older messages'), findsNothing);
   });
 
   testWidgets(
@@ -362,8 +366,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 1));
       expect(tester.takeException(), isNull);
-      expect(find.text('Try again'), findsOneWidget);
-      expect(find.text('Close'), findsOneWidget);
+      expect(find.byTooltip('Retry search'), findsOneWidget);
+      expect(find.byTooltip('Close'), findsOneWidget);
     },
   );
 
@@ -397,9 +401,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
       await tester.enterText(find.byType(TextField), 'needle');
       await tester.pump();
-      await tester.ensureVisible(find.text('Search older messages'));
+      await tester.ensureVisible(find.byTooltip('Search older messages'));
       await tester.pump();
-      await tester.tap(find.text('Search older messages'));
+      await tester.tap(find.byTooltip('Search older messages'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 1));
       expect(tester.takeException(), isNull);
@@ -412,8 +416,8 @@ void main() {
         find.textContaining('current results are still here'),
         findsOneWidget,
       );
-      expect(find.text('Try again'), findsOneWidget);
-      expect(find.text('Close'), findsOneWidget);
+      expect(find.byTooltip('Retry search'), findsOneWidget);
+      expect(find.byTooltip('Close'), findsOneWidget);
     },
   );
 }

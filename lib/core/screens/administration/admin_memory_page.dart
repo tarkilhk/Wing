@@ -149,9 +149,10 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
                         ),
                         actions: [
                           StudioButtonPress(
-                            child: TextButton(
+                            child: IconButton(
+                              tooltip: 'Close',
                               onPressed: () => Navigator.pop(context),
-                              child: const Text('Close'),
+                              icon: const Icon(Icons.close),
                             ),
                           ),
                         ],

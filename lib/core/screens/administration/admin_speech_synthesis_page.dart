@@ -84,6 +84,9 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
       'Install setup requirements?',
       'Hermes may download and install dependencies on the server. Other profiles can share those dependencies.',
       action: 'Run setup',
+
+      actionIcon: Icons.build_outlined,
+      destructive: false,
     ),
     openResult: (operation) => widget.onResult(context, operation),
   );

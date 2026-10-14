@@ -47,18 +47,27 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
         'Reset all helper models?',
         'All helper tasks will choose automatically. Their saved endpoint credentials will be cleared.',
         action: 'Reset all',
+
+        actionIcon: Icons.restart_alt,
+        destructive: true,
       ),
       HelperConfirmationKind.expensive => adminConfirm(
         context,
         'Confirm model change',
         confirmation.message,
         action: 'Use model',
+
+        actionIcon: Icons.check,
+        destructive: false,
       ),
       HelperConfirmationKind.retry => adminConfirm(
         context,
         'Retry the pending helper change?',
         'Hermes still reports the original settings. The previous result was not confirmed. Apply the pending choice again?',
         action: 'Retry',
+
+        actionIcon: Icons.refresh,
+        destructive: false,
       ),
     };
   }

@@ -237,7 +237,7 @@ void main() {
       expect(find.text('Review model change'), findsOneWidget);
       expect(find.text('nous / hermes-4'), findsOneWidget);
       expect(find.text('openai-codex / gpt-6-astra'), findsOneWidget);
-      await tester.tap(find.text('Keep mine'));
+      await tester.tap(find.byTooltip('Keep my model selection'));
       await tester.pumpAndSettle();
       expect(fixture.posts, isEmpty);
       expect(find.text('Review model change'), findsNothing);
@@ -275,7 +275,7 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byType(AlertDialog),
-          matching: find.text('Cancel'),
+          matching: find.byTooltip('Cancel'),
         ),
       );
       await tester.pumpAndSettle();
@@ -310,7 +310,7 @@ void main() {
         find.text('Automatic provider / automatic-choice'),
         findsOneWidget,
       );
-      await tester.tap(find.text('Use server'));
+      await tester.tap(find.byTooltip('Use server model'));
       await tester.pumpAndSettle();
       expect(fixture.posts, isEmpty);
       expect(
@@ -319,7 +319,7 @@ void main() {
       );
       expect(
         tester
-            .widget<FilledButton>(find.byKey(const Key('profile-model-save')))
+            .widget<IconButton>(find.byKey(const Key('profile-model-save')))
             .onPressed,
         isNull,
       );
@@ -349,16 +349,20 @@ void main() {
           expect(tester.takeException(), isNull);
           await tester.tap(find.text('Review changes'));
           await tester.pumpAndSettle();
-          for (final label in ['Cancel', 'Use server', 'Keep mine']) {
+          for (final label in [
+            'Cancel',
+            'Use server model',
+            'Keep my model selection',
+          ]) {
             final action = find.descendant(
               of: find.byType(AlertDialog),
-              matching: find.text(label),
+              matching: find.byTooltip(label),
             );
             expect(action.hitTestable(), findsOneWidget);
             final button = find.ancestor(
               of: action,
               matching: find.byWidgetPredicate(
-                (widget) => widget is ButtonStyleButton,
+                (widget) => widget is IconButton,
               ),
             );
             expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
@@ -386,7 +390,7 @@ void main() {
               }
             });
           }
-          await tester.tap(find.text('Keep mine'));
+          await tester.tap(find.byTooltip('Keep my model selection'));
           await tester.pumpAndSettle();
           expect(fixture.posts, isEmpty);
           expect(
@@ -411,7 +415,7 @@ void main() {
         await selectAstra(tester);
         expect(
           tester
-              .widget<FilledButton>(find.byKey(const Key('profile-model-save')))
+              .widget<IconButton>(find.byKey(const Key('profile-model-save')))
               .onPressed,
           isNotNull,
         );
@@ -424,7 +428,7 @@ void main() {
           expect(tester.widget<PopScope>(guard).canPop, true);
           await tester.binding.handlePopRoute();
         } else {
-          await tester.tap(find.byTooltip('Close'));
+          await tester.tap(find.byTooltip('Cancel'));
         }
         await tester.pumpAndSettle();
         expect(result, isFalse);
@@ -580,7 +584,7 @@ void main() {
     await selectAstra(tester);
     expect(
       tester
-          .widget<FilledButton>(find.byKey(const Key('profile-model-save')))
+          .widget<IconButton>(find.byKey(const Key('profile-model-save')))
           .onPressed,
       isNotNull,
     );

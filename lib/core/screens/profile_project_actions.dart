@@ -1,3 +1,4 @@
+import '../widgets/studio_form_actions.dart';
 import '../models/project_icon.dart';
 import '../theme/project_icon_glyphs.dart';
 import '../widgets/project_icon_picker.dart';
@@ -163,35 +164,15 @@ class _ProjectDeleteDialogState extends State<_ProjectDeleteDialog> {
         ],
       ),
       actions: [
-        StudioButtonPress(
-          child: IconButton(
-            tooltip: 'Cancel',
-            onPressed: _pending ? null : () => Navigator.pop(context),
-            icon: const Icon(Icons.close),
-          ),
-        ),
-        StudioButtonPress(
-          child: IconButton.filled(
-            key: const ValueKey('project-delete-confirm'),
-            tooltip: 'Delete project',
-            style: IconButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
-            onPressed: _pending ? null : _delete,
-            icon: _pending
-                ? SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(
-                      value: MediaQuery.disableAnimationsOf(context)
-                          ? .75
-                          : null,
-                      strokeWidth: 2,
-                      semanticsLabel: 'Deleting project',
-                    ),
-                  )
-                : const Icon(Icons.delete_outline),
-          ),
+        StudioFormActions(
+          onCancel: _pending ? null : () => Navigator.pop(context),
+          onConfirm: _pending ? null : _delete,
+          confirmKey: const ValueKey('project-delete-confirm'),
+          confirmLabel: 'Delete project',
+          confirmIcon: Icons.delete_outline,
+          destructive: true,
+          busy: _pending,
+          progressLabel: 'Deleting project',
         ),
       ],
     ),
@@ -472,48 +453,18 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
                 ),
                 const SizedBox(height: 8),
               ],
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  StudioButtonPress(
-                    child: IconButton(
-                      tooltip: 'Cancel',
-                      onPressed: _pending ? null : () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ),
-                  StudioButtonPress(
-                    child: IconButton(
-                      key: ValueKey(
-                        _editing
-                            ? 'project-edit-confirm'
-                            : 'project-create-confirm',
-                      ),
-                      tooltip: _editing ? 'Save changes' : 'Create project',
-                      style: IconButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.primary,
-                      ),
-                      onPressed:
-                          _pending || _name.text.trim().isEmpty || _path.isEmpty
-                          ? null
-                          : _save,
-                      icon: _pending
-                          ? SizedBox.square(
-                              dimension: 20,
-                              child: CircularProgressIndicator(
-                                value: MediaQuery.disableAnimationsOf(context)
-                                    ? 0.75
-                                    : null,
-                                strokeWidth: 2,
-                                semanticsLabel: _editing
-                                    ? 'Saving project'
-                                    : 'Creating project',
-                              ),
-                            )
-                          : const Icon(Icons.check),
-                    ),
-                  ),
-                ],
+              StudioFormActions(
+                onCancel: _pending ? null : () => Navigator.pop(context),
+                onConfirm:
+                    _pending || _name.text.trim().isEmpty || _path.isEmpty
+                    ? null
+                    : _save,
+                confirmLabel: _editing ? 'Save changes' : 'Create project',
+                busy: _pending,
+                progressLabel: _editing ? 'Saving project' : 'Creating project',
+                confirmKey: ValueKey(
+                  _editing ? 'project-edit-confirm' : 'project-create-confirm',
+                ),
               ),
             ],
           ),

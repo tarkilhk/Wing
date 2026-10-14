@@ -1,4 +1,4 @@
-import 'package:wing/core/theme/wing_theme.dart';
+import 'studio_form_actions.dart';
 import 'package:flutter/material.dart';
 import '../models/model_choice.dart';
 import 'model_chooser.dart';
@@ -29,16 +29,7 @@ Future<ModelSelection?> chooseAdminModel(
             height: height,
             child: Column(
               children: [
-                ListTile(
-                  title: const Text('Choose model'),
-                  trailing: StudioButtonPress(
-                    child: IconButton(
-                      tooltip: 'Close',
-                      onPressed: () => Navigator.pop(sheetContext),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                  ),
-                ),
+                ListTile(title: const Text('Choose model')),
                 Expanded(
                   child: ModelChooser(
                     choices: choices,
@@ -61,26 +52,12 @@ Future<ModelSelection?> chooseAdminModel(
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: OverflowBar(
-                    alignment: MainAxisAlignment.end,
-                    spacing: 8,
-                    children: [
-                      StudioButtonPress(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(sheetContext),
-                          child: const Text('Cancel'),
-                        ),
-                      ),
-                      StudioButtonPress(
-                        child: FilledButton(
-                          onPressed:
-                              selected == null || selected == initialSelection
-                              ? null
-                              : () => Navigator.pop(sheetContext, selected),
-                          child: Text(actionLabel),
-                        ),
-                      ),
-                    ],
+                  child: StudioFormActions(
+                    onCancel: () => Navigator.pop(sheetContext),
+                    onConfirm: selected == null || selected == initialSelection
+                        ? null
+                        : () => Navigator.pop(sheetContext, selected),
+                    confirmLabel: actionLabel,
                   ),
                 ),
               ],

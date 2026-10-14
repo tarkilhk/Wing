@@ -1,3 +1,4 @@
+import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
@@ -117,17 +118,12 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
           title: const Text('Discard unsaved changes?'),
           content: const Text('Edits that were not saved will be lost.'),
           actions: [
-            StudioButtonPress(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Keep editing'),
-              ),
-            ),
-            StudioButtonPress(
-              child: FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Discard'),
-              ),
+            StudioFormActions(
+              onCancel: () => Navigator.pop(context, false),
+              onConfirm: () => Navigator.pop(context, true),
+              confirmLabel: 'Discard edits',
+              confirmIcon: Icons.delete_outline,
+              destructive: true,
             ),
           ],
         ),

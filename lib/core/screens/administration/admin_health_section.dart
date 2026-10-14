@@ -100,9 +100,10 @@ Future<void> showHealthCheckExplanation(
     ),
     actions: [
       StudioButtonPress(
-        child: TextButton(
+        child: IconButton(
+          tooltip: 'Close',
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          icon: const Icon(Icons.close),
         ),
       ),
     ],

@@ -1,3 +1,4 @@
+import 'studio_form_actions.dart';
 import '../theme/wing_theme.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
@@ -70,17 +71,11 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
           'This updates the whole Hermes host. All profiles on $host may disconnect while the backend restarts.',
         ),
         actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Update backend'),
-            ),
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context, false),
+            onConfirm: () => Navigator.pop(context, true),
+            confirmLabel: 'Update backend',
+            confirmIcon: Icons.system_update_alt,
           ),
         ],
       ),

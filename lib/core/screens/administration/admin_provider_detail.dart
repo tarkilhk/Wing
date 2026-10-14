@@ -75,6 +75,9 @@ class _AdminProviderDetailState extends State<AdminProviderDetail> {
       'Renew shared sign-in?',
       description,
       action: 'Renew access',
+
+      actionIcon: Icons.refresh,
+      destructive: false,
     ),
   );
   Future<void> _remove() => _recovery.removeAccess(
@@ -83,6 +86,9 @@ class _AdminProviderDetailState extends State<AdminProviderDetail> {
       'Remove saved sign-in?',
       description,
       action: 'Remove sign-in',
+
+      actionIcon: Icons.delete_outline,
+      destructive: true,
     ),
   );
   Future<void> _signIn() => _recovery.openSignIn(
@@ -380,6 +386,9 @@ class _AdminProviderFileRemovalState extends State<AdminProviderFileRemoval> {
       'Delete saved Claude Code credentials?',
       description,
       action: 'Delete credentials',
+
+      actionIcon: Icons.delete_outline,
+      destructive: true,
     ),
   );
 

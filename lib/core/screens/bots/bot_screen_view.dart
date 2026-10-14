@@ -1,3 +1,4 @@
+import '../../widgets/studio_form_actions.dart';
 import 'dart:async';
 import '../../widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
@@ -109,17 +110,12 @@ class _BotScreenViewState extends State<BotScreenView>
           'This releases the current human controller, including another device, and lets the bot use its screen.',
         ),
         actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Hand back'),
-            ),
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context, false),
+            onConfirm: () => Navigator.pop(context, true),
+            confirmLabel: 'Hand control back',
+            confirmIcon: Icons.screen_share_outlined,
+            destructive: false,
           ),
         ],
       ),
@@ -137,17 +133,12 @@ class _BotScreenViewState extends State<BotScreenView>
             'The current controller will return to watching the screen.',
           ),
           actions: [
-            StudioButtonPress(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-            ),
-            StudioButtonPress(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Take control'),
-              ),
+            StudioFormActions(
+              onCancel: () => Navigator.pop(context, false),
+              onConfirm: () => Navigator.pop(context, true),
+              confirmLabel: 'Take control',
+              confirmIcon: Icons.touch_app_outlined,
+              destructive: false,
             ),
           ],
         ),

@@ -1,8 +1,8 @@
+import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/mcp_setup.dart';
-import '../../widgets/studio_action_label.dart';
 import '../../widgets/studio_select.dart';
 import '../../widgets/dirty_editor_guard.dart';
 import 'admin_widgets.dart';
@@ -196,10 +196,31 @@ class _AdminMcpSetupPageState extends State<AdminMcpSetupPage> {
         'Discard edits?',
         'Your unsaved connector settings for ${_session.scopeLabel} will be discarded.',
         action: 'Discard',
+
+        actionIcon: Icons.delete_outline,
+        destructive: true,
       ),
       child: AdminPage(
         title: 'Add MCP connector',
         scope: _session.scopeLabel,
+        bottomNavigationBar: _uncertain
+            ? null
+            : SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: StudioFormActions(
+                    onCancel: _busy ? null : () => Navigator.maybePop(context),
+                    onConfirm: _busy ? null : _save,
+                    confirmLabel:
+                        !_subprocess && _auth == McpAuthentication.browser
+                        ? 'Add connector and sign in'
+                        : 'Add connector',
+                    busy: _busy,
+                    progressLabel: 'Adding connector',
+                  ),
+                ),
+              ),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -333,16 +354,17 @@ class _AdminMcpSetupPageState extends State<AdminMcpSetupPage> {
                 ),
               ],
               StudioButtonPress(
-                child: OutlinedButton(
+                child: IconButton.outlined(
+                  tooltip: _subprocess
+                      ? 'Add environment variable'
+                      : 'Add header',
                   onPressed: _busy || _uncertain
                       ? null
                       : () => setState(() {
                           _credentials.add(_CredentialFields());
                           _sync();
                         }),
-                  child: Text(
-                    _subprocess ? 'Add environment variable' : 'Add header',
-                  ),
+                  icon: const Icon(Icons.add),
                 ),
               ),
             ],
@@ -449,18 +471,7 @@ class _AdminMcpSetupPageState extends State<AdminMcpSetupPage> {
                   child: const Text('Return to connectors'),
                 ),
               ),
-            ] else
-              StudioButtonPress(
-                child: FilledButton(
-                  onPressed: _busy ? null : _save,
-                  child: StudioActionLabel(
-                    !_subprocess && _auth == McpAuthentication.browser
-                        ? 'Add and sign in'
-                        : 'Add connector',
-                    busy: _busy,
-                  ),
-                ),
-              ),
+            ],
           ],
         ),
       ),

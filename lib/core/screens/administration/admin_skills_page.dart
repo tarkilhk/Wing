@@ -1,3 +1,4 @@
+import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/activity/activity_detail_actions.dart';
 import '../../widgets/activity/skill_document_viewer.dart';
@@ -7,7 +8,6 @@ import '../../presentation/skill_document.dart';
 import '../../theme/wing_theme.dart';
 import '../../services/profile_skills_session.dart';
 import '../../services/administration_operation_session.dart';
-import '../../widgets/studio_action_label.dart';
 import '../../widgets/compact_switch.dart';
 import '../../widgets/read_recovery.dart';
 import 'admin_widgets.dart';
@@ -174,6 +174,8 @@ class _AdminSkillDetailState extends State<AdminSkillDetail> {
         'Archive ${_route.skill.name}?',
         'Move this local or learned skill out of the active skill library for ${_session.profileName}.',
         action: 'Archive',
+        actionIcon: Icons.archive_outlined,
+        destructive: true,
       ),
     );
     if (!mounted) return;
@@ -191,6 +193,8 @@ class _AdminSkillDetailState extends State<AdminSkillDetail> {
       'Uninstall ${_route.skill.name}?',
       'Remove this Hub skill from ${_session.profileName}.',
       action: 'Uninstall',
+      actionIcon: Icons.delete_outline,
+      destructive: true,
     ),
     showResult: (operation) async {
       if (mounted) {
@@ -301,6 +305,9 @@ class _AdminSkillEditorState extends State<AdminSkillEditor> {
             'Discard instruction edits?',
             'The unsaved instructions will be discarded.',
             action: 'Discard',
+
+            actionIcon: Icons.delete_outline,
+            destructive: true,
           ),
         ) &&
         mounted) {
@@ -334,25 +341,12 @@ class _AdminSkillEditorState extends State<AdminSkillEditor> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: OverflowBar(
-                alignment: MainAxisAlignment.spaceBetween,
-                overflowAlignment: OverflowBarAlignment.end,
-                spacing: 8,
-                overflowSpacing: 8,
-                children: [
-                  StudioButtonPress(
-                    child: TextButton(
-                      onPressed: state.busy ? null : _close,
-                      child: const Text('Close'),
-                    ),
-                  ),
-                  StudioButtonPress(
-                    child: FilledButton(
-                      onPressed: state.canSave ? _save : null,
-                      child: StudioActionLabel('Save', busy: state.saving),
-                    ),
-                  ),
-                ],
+              child: StudioFormActions(
+                onCancel: state.busy ? null : _close,
+                onConfirm: state.canSave ? _save : null,
+                confirmLabel: 'Save skill',
+                busy: state.saving,
+                progressLabel: 'Saving skill',
               ),
             ),
           ),
@@ -435,6 +429,8 @@ class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
       'Update installed Hub skills?',
       'Hermes will update installed Hub skills in ${_session.profileName} as a group.',
       action: 'Update skills',
+      actionIcon: Icons.system_update_alt,
+      destructive: false,
     ),
     showResult: (operation) async {
       if (mounted) {
@@ -530,6 +526,8 @@ class _AdminSkillPreviewState extends State<AdminSkillPreview> {
       'Install this skill?',
       'Install ${_route.skill.identifier} into ${_session.profileName}. Review its source and instructions first.',
       action: 'Install',
+      actionIcon: Icons.download_outlined,
+      destructive: false,
     ),
     showResult: (operation) async {
       if (mounted) {

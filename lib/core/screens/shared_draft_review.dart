@@ -1,3 +1,4 @@
+import '../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
@@ -215,12 +216,15 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   child: SizedBox(
                     width: double.infinity,
-                    child: StudioButtonPress(
-                      child: FilledButton(
-                        key: const Key('share-add-to-draft'),
-                        onPressed: state.working ? null : _commit,
-                        child: Text(state.addLabel),
-                      ),
+                    child: StudioFormActions(
+                      onCancel: state.working
+                          ? null
+                          : () => Navigator.maybePop(context),
+                      onConfirm: state.working ? null : _commit,
+                      confirmKey: const Key('share-add-to-draft'),
+                      confirmLabel: state.addLabel,
+                      busy: state.working,
+                      progressLabel: 'Saving shared draft',
                     ),
                   ),
                 ),

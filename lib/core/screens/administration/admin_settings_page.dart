@@ -134,6 +134,9 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
           'Discard edits?',
           'Your unsaved changes to ${_profile.name} will be discarded.',
           action: 'Discard',
+
+          actionIcon: Icons.delete_outline,
+          destructive: true,
         )) {
       return;
     }

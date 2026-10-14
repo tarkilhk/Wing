@@ -1,3 +1,4 @@
+import 'studio_form_actions.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/model_choice.dart';
 import 'studio_action_label.dart';
@@ -87,19 +88,12 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
           title: const Text('Confirm model change'),
           content: Text(message),
           actions: [
-            StudioButtonPress(
-              child: TextButton(
-                key: const Key('profile-model-confirm-cancel'),
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-            ),
-            StudioButtonPress(
-              child: FilledButton(
-                key: const Key('profile-model-confirm-accept'),
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Confirm'),
-              ),
+            StudioFormActions(
+              onCancel: () => Navigator.pop(context, false),
+              onConfirm: () => Navigator.pop(context, true),
+              confirmLabel: 'Confirm model change',
+              cancelKey: const Key('profile-model-confirm-cancel'),
+              confirmKey: const Key('profile-model-confirm-accept'),
             ),
           ],
         ),
@@ -130,25 +124,23 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
           ],
         ),
         actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () =>
-                  Navigator.pop(context, ProfileModelReviewDecision.useServer),
-              child: const Text('Use server'),
-            ),
-          ),
-          StudioButtonPress(
-            child: FilledButton(
-              onPressed: () =>
-                  Navigator.pop(context, ProfileModelReviewDecision.keepMine),
-              child: const Text('Keep mine'),
-            ),
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context),
+            onConfirm: () =>
+                Navigator.pop(context, ProfileModelReviewDecision.keepMine),
+            confirmLabel: 'Keep my model selection',
+            leadingActions: [
+              StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Use server model',
+                  onPressed: () => Navigator.pop(
+                    context,
+                    ProfileModelReviewDecision.useServer,
+                  ),
+                  icon: const Icon(Icons.dns_outlined),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -202,18 +194,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const StudioLoadingSlot(),
-                      StudioButtonPress(
-                        child: IconButton(
-                          tooltip: 'Close',
-                          onPressed: _saving
-                              ? null
-                              : () => Navigator.pop(context, false),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ),
-                    ],
+                    children: [const StudioLoadingSlot()],
                   ),
                 ),
                 Padding(
@@ -301,33 +282,17 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                     WingSpacing.lg,
                     WingSpacing.md,
                   ),
-                  child: OverflowBar(
-                    alignment: MainAxisAlignment.end,
-                    overflowAlignment: OverflowBarAlignment.end,
-                    spacing: 8,
-                    overflowSpacing: 8,
-                    children: [
-                      StudioButtonPress(
-                        child: TextButton(
-                          onPressed: _saving
-                              ? null
-                              : () => Navigator.pop(context, false),
-                          child: const Text('Cancel'),
-                        ),
-                      ),
-                      StudioButtonPress(
-                        child: FilledButton(
-                          key: const Key('profile-model-save'),
-                          onPressed: _dirty && !_saving && !_edit.reviewing
-                              ? _save
-                              : null,
-                          child: StudioActionLabel(
-                            'Save default',
-                            busy: _saving,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: StudioFormActions(
+                    onCancel: _saving
+                        ? null
+                        : () => Navigator.pop(context, false),
+                    onConfirm: _dirty && !_saving && !_edit.reviewing
+                        ? _save
+                        : null,
+                    confirmLabel: 'Save default',
+                    confirmKey: const Key('profile-model-save'),
+                    busy: _saving,
+                    progressLabel: 'Saving default model',
                   ),
                 ),
               ],

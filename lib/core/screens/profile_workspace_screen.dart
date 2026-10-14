@@ -1,3 +1,4 @@
+import '../widgets/studio_form_actions.dart';
 import '../widgets/profile_live_execution.dart';
 import '../widgets/profile_live_work_dock.dart';
 import '../models/scheduled_task.dart';
@@ -44,7 +45,6 @@ import '../widgets/server_connection_label.dart';
 import '../widgets/workspace_picker.dart';
 import '../widgets/workspace_profile_navigation.dart';
 import '../models/connection.dart';
-import '../widgets/studio_action_label.dart';
 import '../widgets/studio_error.dart';
 import '../widgets/workspace_connection_status.dart';
 import 'dart:async';
@@ -1983,15 +1983,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                 ),
                               ),
                             ),
-                            StudioButtonPress(
-                              child: IconButton(
-                                tooltip: 'Cancel editing',
-                                onPressed: submitting
-                                    ? null
-                                    : () => Navigator.pop(dialogContext),
-                                icon: const Icon(Icons.close, size: 20),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -2054,43 +2045,45 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(WingSpacing.md),
-                          child: StudioButtonPress(
-                            child: FilledButton(
-                              onPressed: canSubmit
-                                  ? () async {
-                                      setDialogState(() {
-                                        submitting = true;
-                                        inlineError = null;
-                                      });
-                                      var accepted = false;
-                                      try {
-                                        accepted = await controller
-                                            .editSavedPrompt(
-                                              chat,
-                                              message,
-                                              input,
-                                            );
-                                      } catch (_) {
-                                        // Retain the correction for a deliberate retry.
-                                      }
-                                      if (!dialogContext.mounted) return;
-                                      if (accepted) {
-                                        Navigator.pop(dialogContext);
-                                        return;
-                                      }
-                                      setDialogState(() {
-                                        submitting = false;
-                                        inlineError =
-                                            chat.runtime.error ??
-                                            'Hermes did not accept the edited message.';
-                                      });
+                          child: StudioFormActions(
+                            onCancel: submitting
+                                ? null
+                                : () => Navigator.pop(dialogContext),
+                            onConfirm: canSubmit
+                                ? () async {
+                                    setDialogState(() {
+                                      submitting = true;
+                                      inlineError = null;
+                                    });
+                                    var accepted = false;
+                                    try {
+                                      accepted = await controller
+                                          .editSavedPrompt(
+                                            chat,
+                                            message,
+                                            input,
+                                          );
+                                    } catch (_) {
+                                      // Retain the correction for a deliberate retry.
                                     }
-                                  : null,
-                              child: StudioActionLabel(
-                                'Replace and resend',
-                                busy: submitting,
-                              ),
-                            ),
+                                    if (!dialogContext.mounted) return;
+                                    if (accepted) {
+                                      Navigator.pop(dialogContext);
+                                      return;
+                                    }
+                                    setDialogState(() {
+                                      submitting = false;
+                                      inlineError =
+                                          chat.runtime.error ??
+                                          'Hermes did not accept the edited message.';
+                                    });
+                                  }
+                                : null,
+                            confirmLabel: 'Replace message and resend',
+                            confirmIcon: Icons.send_outlined,
+                            destructive: true,
+                            busy: submitting,
+                            progressLabel: 'Replacing message',
                           ),
                         ),
                       ),
@@ -2632,7 +2625,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                   ),
                                                 ),
                                                 StudioButtonPress(
-                                                  child: TextButton(
+                                                  child: IconButton(
+                                                    tooltip:
+                                                        'Cancel queued message editing',
                                                     onPressed:
                                                         chat
                                                                 .composer
@@ -2649,7 +2644,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                                   chat,
                                                                 ),
                                                           ),
-                                                    child: const Text('Cancel'),
+                                                    icon: const Icon(
+                                                      Icons.close,
+                                                    ),
                                                   ),
                                                 ),
                                               ],
@@ -3472,20 +3469,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           ].where((part) => part.isNotEmpty).join('\n\n'),
         ),
         actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error,
-              ),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete'),
-            ),
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context, false),
+            onConfirm: () => Navigator.pop(context, true),
+            confirmLabel: 'Delete queued message',
+            confirmIcon: Icons.delete_outline,
+            destructive: true,
           ),
         ],
       ),

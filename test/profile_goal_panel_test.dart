@@ -212,14 +212,14 @@ void main() {
     await showPanel(tester);
     await tester.ensureVisible(find.byTooltip('Add criterion'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Add criterion'));
+    await tester.tap(find.byTooltip('Add criterion').last);
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('goal-criterion-draft')),
       '  Release is verified  ',
     );
     await tester.pump();
-    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.tap(find.byTooltip('Add criterion').last);
     await tester.pumpAndSettle();
 
     final request = fixture.requests.lastWhere(
@@ -238,12 +238,12 @@ void main() {
     await showPanel(tester);
     await tester.ensureVisible(find.byTooltip('Add criterion'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Add criterion'));
+    await tester.tap(find.byTooltip('Add criterion').last);
     await tester.pumpAndSettle();
     final draft = find.byKey(const ValueKey('goal-criterion-draft'));
     await tester.enterText(draft, 'Keep this criterion');
     await tester.pump();
-    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.tap(find.byTooltip('Add criterion').last);
     await tester.pumpAndSettle();
 
     expect(
@@ -273,7 +273,7 @@ void main() {
     await tester.tap(find.byTooltip('Remove criterion 2'));
     await tester.pumpAndSettle();
     expect(find.text('Remove criterion 2?'), findsOneWidget);
-    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('Verify'), findsOneWidget);
 
@@ -281,7 +281,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Remove criterion 2'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.tap(find.byTooltip('Remove criterion'));
     await tester.pumpAndSettle();
     final remove = fixture.requests.lastWhere(
       (request) =>
@@ -293,10 +293,10 @@ void main() {
 
     await tester.ensureVisible(find.byTooltip('Clear criteria'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Clear criteria'));
+    await tester.tap(find.byTooltip('Clear criteria').last);
     await tester.pumpAndSettle();
     expect(find.text('Clear all criteria?'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Clear criteria'));
+    await tester.tap(find.byTooltip('Clear criteria').last);
     await tester.pumpAndSettle();
     expect(fixture.subgoals, isEmpty);
     expect(find.text('Criteria (0)'), findsOneWidget);
@@ -320,7 +320,7 @@ void main() {
     fixture.subgoals[0] = 'Changed by server';
     await controller.refreshSessionControl(chat);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.tap(find.byTooltip('Remove criterion'));
     await tester.pumpAndSettle();
 
     expect(find.text('Criteria changed'), findsOneWidget);
@@ -333,17 +333,17 @@ void main() {
       ),
       isEmpty,
     );
-    await tester.tap(find.widgetWithText(TextButton, 'OK'));
+    await tester.tap(find.byTooltip('Close criteria notice'));
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.byTooltip('Clear criteria'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Clear criteria'));
+    await tester.tap(find.byTooltip('Clear criteria').last);
     await tester.pumpAndSettle();
     fixture.subgoals.add('Added by server');
     await controller.refreshSessionControl(chat);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Clear criteria'));
+    await tester.tap(find.byTooltip('Clear criteria').last);
     await tester.pumpAndSettle();
 
     expect(find.text('Criteria changed'), findsOneWidget);
@@ -387,7 +387,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     await tester.ensureVisible(find.byTooltip('Add criterion'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Add criterion'));
+    await tester.tap(find.byTooltip('Add criterion').last);
     await tester.pumpAndSettle();
     final draft = find.byKey(const ValueKey('goal-criterion-draft'));
     await tester.enterText(draft, 'Keep this local draft');
@@ -400,7 +400,7 @@ void main() {
       'Keep this local draft',
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.tap(find.byTooltip('Add criterion').last);
     await tester.pump();
     expect(
       fixture.requests.where(
@@ -410,7 +410,7 @@ void main() {
       ),
       isEmpty,
     );
-    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
@@ -480,11 +480,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byTooltip('Add criterion'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Add criterion'));
+    await tester.tap(find.byTooltip('Add criterion').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('goal-criterion-draft')), findsOneWidget);
     expect(tester.takeException(), isNull);
-    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });

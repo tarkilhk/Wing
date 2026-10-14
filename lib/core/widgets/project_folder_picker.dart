@@ -1,3 +1,4 @@
+import 'studio_form_actions.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -244,34 +245,26 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    WingModalHeader(
+                    StudioFormHeader(
                       title: const Text(
                         'Choose folder',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      closeLabel: 'Cancel',
-                      onClose: _browser.creating
-                          ? null
-                          : () => Navigator.pop(context),
                     ),
                     Expanded(child: _body()),
                     const Divider(height: 16),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: StudioButtonPress(
-                        child: IconButton.filled(
-                          key: const ValueKey('project-folder-continue'),
-                          tooltip: 'Use this folder',
-                          onPressed: _browser.canSelect && !_naming
-                              ? () => Navigator.pop(
-                                  context,
-                                  _browser.directory!.path,
-                                )
-                              : null,
-                          icon: const Icon(Icons.check),
-                        ),
-                      ),
+                    StudioFormActions(
+                      cancelLabel: 'Cancel folder selection',
+                      onCancel: _browser.creating
+                          ? null
+                          : () => Navigator.pop(context),
+                      onConfirm: _browser.canSelect && !_naming
+                          ? () =>
+                                Navigator.pop(context, _browser.directory!.path)
+                          : null,
+                      confirmKey: const ValueKey('project-folder-continue'),
+                      confirmLabel: 'Use this folder',
                     ),
                   ],
                 ),

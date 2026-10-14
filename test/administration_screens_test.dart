@@ -263,9 +263,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField), '2500');
       await tester.pump();
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
-      final footer = tester.getRect(find.widgetWithText(TextButton, 'Close'));
+      final footer = tester.getRect(find.byTooltip('Cancel'));
       expect(footer.bottom, lessThanOrEqualTo(564));
       expect(
         tester.getRect(find.byType(SnackBar)).bottom,
@@ -291,7 +291,7 @@ void main() {
       await tester.enterText(find.byType(TextFormField), '2500');
       (f.configs['personal']!['memory'] as Map)['memory_char_limit'] = 4000;
       await tester.pump();
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       expect(find.textContaining('changed elsewhere'), findsOneWidget);
       expect(find.text('2500'), findsOneWidget);
@@ -330,7 +330,7 @@ void main() {
       await tester.tap(find.byType(Switch));
       await tester.enterText(find.byType(TextFormField), '2500');
       await tester.pump();
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Save not confirmed'), findsOneWidget);
       expect(find.textContaining('Defaults saved'), findsNothing);
@@ -358,7 +358,7 @@ void main() {
       await show('work');
       await tester.pumpAndSettle();
       expect(find.text('Server A / personal'), findsOneWidget);
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       final write = f.requests.firstWhere((r) => r.$1 == 'PUT');
       expect(write.$3['profile'], 'personal');
@@ -389,7 +389,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField), '2500');
       await tester.pump();
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       expect(find.text('2500'), findsOneWidget);
       expect(find.textContaining('Save not confirmed'), findsOneWidget);
@@ -413,10 +413,17 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField), '2500');
       await tester.pump();
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pump();
       expect(
-        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton && widget.tooltip == 'Save changes',
+              ),
+            )
+            .onPressed,
         isNull,
       );
       expect(find.text('Server A / personal'), findsOneWidget);
@@ -509,7 +516,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        final save = tester.getRect(find.widgetWithText(FilledButton, 'Save'));
+        final save = tester.getRect(find.byTooltip('Save changes'));
         expect(save.bottom, lessThanOrEqualTo(520));
         expect(save.left, greaterThanOrEqualTo(0));
       },

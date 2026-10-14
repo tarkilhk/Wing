@@ -76,6 +76,9 @@ class _AdminRuntimeHealthState extends State<AdminRuntimeHealth> {
       kind.title,
       'Run this diagnostic on ${controller.server.connectionLabel}?',
       action: 'Run',
+
+      actionIcon: Icons.play_arrow_outlined,
+      destructive: false,
     )) {
       return;
     }

@@ -22,6 +22,7 @@ import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/widgets/context_ring.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/project_icon_glyphs.dart';
 import 'support/profile_browser_fixture.dart';
 import 'support/browser_mutations_fixture.dart';
 
@@ -332,7 +333,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('action-delete')));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Discard'));
+    await tester.tap(find.byTooltip('Discard draft'));
     await tester.pumpAndSettle();
     expect(
       await drafts.read(profileName: 'work', sessionId: 'missing-work-draft'),
@@ -1198,7 +1199,7 @@ void main() {
     expect(find.text('work'), findsNothing);
     expect(find.text('Move to project'), findsOneWidget);
     expect(find.byKey(const ValueKey('move-project-p2')), findsNothing);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byTooltip('Cancel project selection'));
     await tester.pumpAndSettle();
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -1245,7 +1246,7 @@ void main() {
         final picker = find.byKey(const ValueKey('chat-project-picker'));
         final icon = find.descendant(
           of: picker,
-          matching: find.byIcon(Icons.rocket_launch_outlined),
+          matching: find.byIcon(ProjectIconGlyphs.of('rocket')),
         );
         expect(icon, findsOneWidget);
         expect(tester.widget<Icon>(icon).color, const Color(0xff22c55e));
@@ -1329,7 +1330,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('chat-menu-personal')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Done'));
+    await tester.tap(find.byTooltip('Close filters'));
     await tester.pumpAndSettle();
     expect(find.text('Projects'), findsNothing);
     expect(find.text('Recents'), findsNothing);

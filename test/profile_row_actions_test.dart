@@ -1,3 +1,4 @@
+import 'support/form_family_capture.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/browser_actions.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
@@ -26,6 +27,7 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
 
 void main() {
+  setUpAll(loadFormFamilyFonts);
   const capture = bool.fromEnvironment('CAPTURE_CHAT_RENAME');
   const captureKey = ValueKey('chat-rename-capture');
   setUpAll(() async {
@@ -135,6 +137,92 @@ void main() {
     host.updates.clear();
   }
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'rename form retains held/failing draft ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: formFamilyCapture,
+              child: MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: ProfileWorkspaceScreen(controller: controller),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await filterChatsToProfile(tester, 'personal');
+          await menu(tester, 'newest');
+          await tester.tap(find.text('Rename'));
+          await tester.pumpAndSettle();
+          final field = find.byKey(const ValueKey('chat-rename-title'));
+          await tester.enterText(field, 'Keep this name');
+          await captureFormFamily(
+            tester,
+            'rename-${brightness.name}-$scale-normal',
+          );
+          tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+          await tester.pumpAndSettle();
+          await captureFormFamily(
+            tester,
+            'rename-${brightness.name}-$scale-keyboard',
+          );
+          final confirm = find.byKey(const ValueKey('chat-rename-save'));
+          expect(confirm.hitTestable(), findsOneWidget);
+          expect(tester.getRect(confirm).bottom, lessThanOrEqualTo(584));
+          expect(tester.getSize(confirm), const Size(48, 48));
+          host.mutationDelay = Completer<void>();
+          host.failMutation = true;
+          await tester.tap(confirm);
+          await tester.pump();
+          expect(find.text('Rename chat'), findsOneWidget);
+          expect(find.bySemanticsLabel('Saving chat title'), findsOneWidget);
+          await tester.pump(const Duration(milliseconds: 200));
+          await captureFormFamily(
+            tester,
+            'rename-${brightness.name}-$scale-saving',
+          );
+          expect(host.updates, hasLength(1));
+          expect(tester.widget<IconButton>(confirm).onPressed, isNull);
+          await tester.tap(confirm);
+          expect(host.updates, hasLength(1));
+          await tester.binding.handlePopRoute();
+          await tester.pump();
+          expect(find.text('Rename chat'), findsOneWidget);
+          host.mutationDelay!.complete();
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<TextField>(field).controller!.text,
+            'Keep this name',
+          );
+          expect(find.bySemanticsLabel('Saving chat title'), findsNothing);
+          expect(tester.widget<IconButton>(confirm).onPressed, isNotNull);
+          await captureFormFamily(
+            tester,
+            'rename-${brightness.name}-$scale-failure',
+          );
+          host.failMutation = false;
+          host.mutationDelay = null;
+          await tester.tap(confirm);
+          await tester.pumpAndSettle();
+          expect(find.text('Rename chat'), findsNothing);
+          expect(host.updates, hasLength(2));
+          expect(host.updates.last.$3['title'], 'Keep this name');
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
   test(
     'AI title reads bounded dialogue and uses captured profile without saving',
     () async {
@@ -1214,7 +1302,14 @@ void main() {
     expect(find.textContaining('Projects in personal'), findsOneWidget);
     expect(find.text('/Mobile app'), findsOneWidget);
     expect(find.text('Work project'), findsNothing);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is IconButton &&
+            (widget.tooltip == 'Cancel' ||
+                widget.tooltip == 'Cancel project selection'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(host.moves, isEmpty);
     await menu(tester, 'newest');
@@ -1256,7 +1351,14 @@ void main() {
     expect(find.text('Move to project'), findsOneWidget);
     expect(find.byKey(const ValueKey('move-project-p2')), findsOneWidget);
     expect(find.text('Connection details'), findsNothing);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is IconButton &&
+            (widget.tooltip == 'Cancel' ||
+                widget.tooltip == 'Cancel project selection'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(host.moves, isEmpty);
   });
@@ -1281,7 +1383,14 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('move-project-p2')), findsNothing);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is IconButton &&
+            (widget.tooltip == 'Cancel' ||
+                widget.tooltip == 'Cancel project selection'),
+      ),
+    );
     await tester.pumpAndSettle();
     controller.showList();
     await tester.runAsync(() async {
@@ -1371,7 +1480,14 @@ void main() {
       expect(find.textContaining('Profile changed'), findsOneWidget);
       expect(host.moves, isEmpty);
       expect(controller.current!.sessions.single['cwd'], isNull);
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is IconButton &&
+              (widget.tooltip == 'Cancel' ||
+                  widget.tooltip == 'Cancel project selection'),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1471,7 +1587,14 @@ void main() {
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     expect(find.text('Delete chat?'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is IconButton &&
+            (widget.tooltip == 'Cancel' ||
+                widget.tooltip == 'Cancel project selection'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(host.deletes, isEmpty);
     expect(host.closes, isEmpty);
@@ -1489,7 +1612,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(AlertDialog),
-        matching: find.text('Delete'),
+        matching: find.byTooltip('Delete chat'),
       ),
     );
     await tester.pump();

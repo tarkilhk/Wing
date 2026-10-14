@@ -1,3 +1,4 @@
+import '../../widgets/studio_form_actions.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/studio_loading.dart';
 import '../../models/bots.dart';
@@ -181,17 +182,12 @@ class _BotsContentState extends State<BotsContent> {
             'Stops group work and removes this room. The bots and their private chats stay available.',
           ),
           actions: [
-            StudioButtonPress(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-            ),
-            StudioButtonPress(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Disband'),
-              ),
+            StudioFormActions(
+              onCancel: () => Navigator.pop(context, false),
+              onConfirm: () => Navigator.pop(context, true),
+              confirmLabel: 'Disband group',
+              confirmIcon: Icons.group_remove_outlined,
+              destructive: true,
             ),
           ],
         ),

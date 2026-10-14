@@ -1,3 +1,4 @@
+import 'studio_form_actions.dart';
 import 'activity/activity_detail_actions.dart';
 import '../theme/wing_theme.dart';
 import 'studio_error.dart';
@@ -71,17 +72,12 @@ class _ProfileBackgroundWorkPanelState
           'This removes the heartbeat schedule from the Hermes server.',
         ),
         actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Clear'),
-            ),
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context, false),
+            onConfirm: () => Navigator.pop(context, true),
+            confirmLabel: 'Clear heartbeat',
+            confirmIcon: Icons.delete_outline,
+            destructive: true,
           ),
         ],
       ),

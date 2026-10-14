@@ -1,3 +1,4 @@
+import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/model_choice.dart';
@@ -91,6 +92,9 @@ class _AdminScheduledTaskEditorPageState
               'Discard your changes?',
               'Your task has not been saved.',
               action: 'Discard changes',
+
+              actionIcon: Icons.delete_outline,
+              destructive: true,
             ) &&
             mounted) {
           setState(() => allowPop = true);
@@ -102,14 +106,12 @@ class _AdminScheduledTaskEditorPageState
       child: TaskPage(
         title: editing ? 'Edit task' : 'New task',
         scope: session.scopeLabel,
-        bottom: StudioButtonPress(
-          child: FilledButton(
-            onPressed: !state.canSubmit ? null : save,
-            child: StudioActionLabel(
-              editing ? 'Save changes' : 'Create task',
-              busy: saving,
-            ),
-          ),
+        bottom: StudioFormActions(
+          onCancel: saving ? null : () => Navigator.maybePop(context),
+          onConfirm: !state.canSubmit ? null : save,
+          confirmLabel: editing ? 'Save changes' : 'Create task',
+          busy: saving,
+          progressLabel: editing ? 'Saving task' : 'Creating task',
         ),
         child: ListView(
           controller: scroll,
@@ -597,26 +599,12 @@ class _AdminScheduledTaskEditorPageState
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    child: OverflowBar(
-                      alignment: MainAxisAlignment.end,
-                      overflowAlignment: OverflowBarAlignment.end,
-                      spacing: 8,
-                      children: [
-                        StudioButtonPress(
-                          child: TextButton(
-                            onPressed: () => Navigator.pop(sheetContext),
-                            child: const Text('Cancel'),
-                          ),
-                        ),
-                        StudioButtonPress(
-                          child: FilledButton(
-                            onPressed: pending.length == review.fields.length
-                                ? () => Navigator.pop(sheetContext, pending)
-                                : null,
-                            child: const Text('Apply decisions'),
-                          ),
-                        ),
-                      ],
+                    child: StudioFormActions(
+                      onCancel: () => Navigator.pop(sheetContext),
+                      onConfirm: pending.length == review.fields.length
+                          ? () => Navigator.pop(sheetContext, pending)
+                          : null,
+                      confirmLabel: 'Apply decisions',
                     ),
                   ),
                 ],
@@ -721,25 +709,12 @@ class _AdminScheduledTaskEditorPageState
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    child: OverflowBar(
-                      alignment: MainAxisAlignment.end,
-                      spacing: 8,
-                      children: [
-                        StudioButtonPress(
-                          child: TextButton(
-                            onPressed: () => Navigator.pop(sheetContext),
-                            child: const Text('Cancel'),
-                          ),
-                        ),
-                        StudioButtonPress(
-                          child: FilledButton(
-                            onPressed: pending == initial
-                                ? null
-                                : () => Navigator.pop(sheetContext, pending),
-                            child: const Text('Use in task'),
-                          ),
-                        ),
-                      ],
+                    child: StudioFormActions(
+                      onCancel: () => Navigator.pop(sheetContext),
+                      onConfirm: pending == initial
+                          ? null
+                          : () => Navigator.pop(sheetContext, pending),
+                      confirmLabel: 'Use in task',
                     ),
                   ),
                 ],

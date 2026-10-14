@@ -199,7 +199,7 @@ void main() {
     await tester.pump();
     expect(result, isNull);
     expect(find.text('On'), findsOneWidget);
-    await tester.tap(find.text('Apply'));
+    await tester.tap(find.byTooltip('Apply model settings'));
     await tester.pumpAndSettle();
     expect(result?.choice.model, 'gpt-5.6-sol');
     expect(result?.reasoningEffort, 'ultra');
@@ -241,9 +241,9 @@ void main() {
       },
     );
     await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
-    await tester.tap(find.text('Apply'));
+    await tester.tap(find.byTooltip('Apply model settings'));
     await tester.pump();
-    expect(find.text('Applying…'), findsOneWidget);
+    expect(find.byTooltip('Apply model settings'), findsOneWidget);
     expect(
       tester
           .widget<IconButton>(
@@ -263,7 +263,7 @@ void main() {
           .onPressed,
       isNull,
     );
-    await tester.tap(find.text('Applying…'));
+    await tester.tap(find.byTooltip('Apply model settings'));
     expect(calls, 1);
     pending.completeError(StateError('Fast setting rejected'));
     await tester.pumpAndSettle();
@@ -272,7 +272,7 @@ void main() {
       find.byKey(const Key('model-openai-codex-gpt-5.6-sol')),
       findsOneWidget,
     );
-    expect(find.text('Apply'), findsOneWidget);
+    expect(find.byTooltip('Apply model settings'), findsOneWidget);
   });
 
   testWidgets('cancel never commits a changed draft', (tester) async {
@@ -330,8 +330,11 @@ void main() {
       await tester.pump();
       expect(
         tester
-            .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Use model'),
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton && widget.tooltip == 'Use model',
+              ),
             )
             .onPressed,
         isNull,
@@ -341,11 +344,11 @@ void main() {
         'my/model',
       );
       await tester.pump();
-      await tester.tap(find.text('Use model'));
+      await tester.tap(find.byTooltip('Use model'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(selected, isNull);
-      await tester.tap(find.text('Apply'));
+      await tester.tap(find.byTooltip('Apply model settings'));
       await tester.pumpAndSettle();
       expect(selected!.choice.model, 'my/model');
       expect(selected!.choice.provider, 'openai-codex');

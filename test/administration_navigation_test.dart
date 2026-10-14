@@ -675,7 +675,7 @@ void main() {
     await tester.pumpAndSettle();
     await screenshot(tester, 'light-editor-keyboard');
     expect(
-      tester.getRect(find.widgetWithText(FilledButton, 'Save')).bottom,
+      tester.getRect(find.byTooltip('Save changes')).bottom,
       lessThanOrEqualTo(564),
     );
     expect(tester.takeException(), isNull);
@@ -723,11 +723,11 @@ void main() {
           await screenshot(tester, '${brightness.name}-$scale-profile-row-end');
           await tester.tap(manage);
           await tester.pumpAndSettle();
-          expect(find.text('Create profile'), findsOneWidget);
+          expect(find.byTooltip('Create profile'), findsOneWidget);
           await tester.tap(find.text('personal').first);
           await tester.pumpAndSettle();
           expect(find.text('Models and reasoning'), findsOneWidget);
-          expect(find.text('Create profile'), findsNothing);
+          expect(find.byTooltip('Create profile'), findsNothing);
         },
       );
     }

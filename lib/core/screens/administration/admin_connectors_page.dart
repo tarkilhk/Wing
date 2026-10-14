@@ -1,3 +1,4 @@
+import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -127,10 +128,10 @@ class _AdminConnectorsPageState extends State<AdminConnectorsPage> {
                           'Manage the external tools available to this profile.',
                         ),
                         StudioButtonPress(
-                          child: FilledButton.icon(
+                          child: IconButton.filled(
+                            tooltip: 'Add connector',
                             onPressed: state.canMutate ? _add : null,
                             icon: const Icon(Icons.add),
-                            label: const Text('Add connector'),
                           ),
                         ),
                         StudioButtonPress(
@@ -285,6 +286,9 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
       'Test $_name?',
       'This connects to the configured service or starts its server process to inspect capabilities.',
       action: 'Test',
+
+      actionIcon: Icons.network_check,
+      destructive: false,
     ),
   );
   Future<void> _remove() async {
@@ -295,6 +299,9 @@ class _AdminConnectorDetailState extends State<AdminConnectorDetail> {
         'Remove $_name?',
         'Remove this connector configuration from ${_session.profileName}. Existing sessions may retain their loaded tools.',
         action: 'Remove',
+
+        actionIcon: Icons.delete_outline,
+        destructive: true,
       ),
     );
     if (mounted && removed) Navigator.pop(context);
@@ -623,9 +630,10 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
               ],
             ),
           StudioButtonPress(
-            child: TextButton(
+            child: IconButton(
+              tooltip: _flow.pending ? 'Cancel sign-in' : 'Close',
               onPressed: _flow.busy ? null : _close,
-              child: Text(_flow.pending ? 'Cancel sign-in' : 'Close'),
+              icon: const Icon(Icons.close),
             ),
           ),
         ],
@@ -654,17 +662,11 @@ class AdminReloadConnectorsButton extends StatelessWidget {
             'Reconnect tools for all profiles on this server using the latest settings and sign-ins.\n\nExisting chats may use more tokens on their next message as their history is resent.',
           ),
           actions: [
-            StudioButtonPress(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-            ),
-            StudioButtonPress(
-              child: FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Reconnect'),
-              ),
+            StudioFormActions(
+              onCancel: () => Navigator.pop(context, false),
+              onConfirm: () => Navigator.pop(context, true),
+              confirmLabel: 'Reconnect tools',
+              confirmIcon: Icons.sync,
             ),
           ],
         ),

@@ -238,7 +238,7 @@ void main() {
       find.widgetWithText(TextFormField, 'Instructions'),
       'Summarize my calendar.',
     );
-    await tester.tap(find.text('Create task'));
+    await tester.tap(find.byTooltip('Create task'));
     await tester.pumpAndSettle();
     final request = fixture.admin.requests.firstWhere(
       (r) => r.$1 == 'POST' && r.$2 == 'cron/jobs',
@@ -268,9 +268,9 @@ void main() {
       find.byKey(const Key('model-anthropic-claude-sonnet-4-5')),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Use in task'), findsOneWidget);
+    expect(find.byTooltip('Use in task'), findsOneWidget);
     expect(fixture.mutations, 0);
-    await tester.tap(find.text('Use in task'));
+    await tester.tap(find.byTooltip('Use in task'));
     await tester.pumpAndSettle();
     expect(fixture.mutations, 0);
 
@@ -283,7 +283,7 @@ void main() {
       find.widgetWithText(TextFormField, 'Instructions'),
       'Summarize my calendar.',
     );
-    await tester.tap(find.text('Create task'));
+    await tester.tap(find.byTooltip('Create task'));
     await tester.pumpAndSettle();
     final request = fixture.admin.requests.firstWhere(
       (r) => r.$1 == 'POST' && r.$2 == 'cron/jobs',
@@ -348,7 +348,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Name (optional)'),
         'Only edited name',
       );
-      await tester.tap(find.text('Save changes'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
 
       final writes = fixture.admin.requests
@@ -415,7 +415,7 @@ void main() {
       });
       await retained.refresh();
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Save changes'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
 
       // Real refusal/draft/route prerequisites precede the missing recovery.
@@ -435,14 +435,14 @@ void main() {
       expect(find.text('Name from another client'), findsOneWidget);
       await tester.tap(find.text('Keep mine'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Apply decisions'));
+      await tester.tap(find.byTooltip('Apply decisions'));
       await tester.pumpAndSettle();
       expect(fixture.mutations, 0);
       expect(
         tester.widget<TextFormField>(name).controller!.text,
         'My retained name',
       );
-      await tester.tap(find.text('Save changes'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
 
       final writes = fixture.admin.requests
@@ -463,7 +463,7 @@ void main() {
       final name = find.widgetWithText(TextFormField, 'Name (optional)');
       await tester.enterText(name, 'My draft');
       fixture.jobs['morning']!['name'] = 'Remote name';
-      await tester.tap(find.text('Save changes'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       expect(fixture.mutations, 0);
       await tester.tap(find.text('Review changes'));
@@ -471,12 +471,12 @@ void main() {
       expect(find.text('Remote name'), findsOneWidget);
       await tester.tap(find.text('Keep mine'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.byTooltip('Cancel').last);
       await tester.pumpAndSettle();
       expect(find.text('Review task changes'), findsNothing);
       expect(tester.widget<TextFormField>(name).controller!.text, 'My draft');
       expect(fixture.mutations, 0);
-      await tester.tap(find.text('Save changes'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       expect(fixture.mutations, 0);
       expect(find.textContaining('changed on Hermes'), findsOneWidget);
@@ -495,14 +495,14 @@ void main() {
       await tester.ensureVisible(prompt);
       await tester.enterText(prompt, 'My retained instructions');
       fixture.jobs['morning']!['name'] = 'Remote name';
-      await tester.tap(find.text('Save changes'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       expect(fixture.mutations, 0);
       await tester.tap(find.text('Review changes'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Use server'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Apply decisions'));
+      await tester.tap(find.byTooltip('Apply decisions'));
       await tester.pumpAndSettle();
       expect(fixture.mutations, 0);
       expect(
@@ -513,7 +513,7 @@ void main() {
         tester.widget<TextFormField>(prompt).controller!.text,
         'My retained instructions',
       );
-      await tester.tap(find.text('Save changes'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       final write = fixture.admin.requests.singleWhere((r) => r.$1 == 'PUT');
       expect(write.$4!['updates'], {'prompt': 'My retained instructions'});
@@ -537,7 +537,7 @@ void main() {
         'no_agent': true,
         'script': 'server-owned.sh',
       });
-      await tester.tap(find.text('Save changes'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       expect(fixture.mutations, 0);
       expect(
@@ -568,19 +568,22 @@ void main() {
       await tester.pump();
       expect(
         tester
-            .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Apply decisions'),
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton && widget.tooltip == 'Apply decisions',
+              ),
             )
             .onPressed,
         isNotNull,
       );
-      await tester.tap(find.text('Apply decisions'));
+      await tester.tap(find.byTooltip('Apply decisions'));
       await tester.pumpAndSettle();
       expect(find.text('Review task changes'), findsNothing);
       expect(fixture.mutations, 0);
       expect(tester.widget<TextFormField>(name).controller!.text, 'My name');
       expect(tester.widget<TextFormField>(prompt).enabled, false);
-      await tester.tap(find.text('Save changes'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       final write = fixture.admin.requests.singleWhere((r) => r.$1 == 'PUT');
       expect(write.$4!['updates'], {'name': 'My name'});
@@ -612,7 +615,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Discard your changes?'), findsOneWidget);
       expect(fixture.mutations, 0);
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.byTooltip('Cancel').last);
       await tester.pumpAndSettle();
       expect(find.byType(AdminScheduledTaskEditorPage), findsOneWidget);
       expect(
@@ -623,7 +626,7 @@ void main() {
       expect(fixture.mutations, 0);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Discard changes'));
+      await tester.tap(find.byTooltip('Discard changes'));
       await tester.pumpAndSettle();
       expect(find.byType(AdminScheduledTaskEditorPage), findsNothing);
       expect(find.text('Open task editor'), findsOneWidget);
@@ -648,7 +651,7 @@ void main() {
           await tester.ensureVisible(name);
           await tester.enterText(name, 'My draft');
           fixture.jobs['morning']!['name'] = 'Remote name';
-          await tester.tap(find.text('Save changes'));
+          await tester.tap(find.byTooltip('Save changes'));
           await tester.pumpAndSettle();
           final review = find.text('Review changes').hitTestable();
           expect(review, findsOneWidget);
@@ -662,7 +665,7 @@ void main() {
           expect(tester.getSize(mine).height, greaterThanOrEqualTo(48));
           await tester.tap(mine);
           await tester.pumpAndSettle();
-          final apply = find.text('Apply decisions').hitTestable();
+          final apply = find.byTooltip('Apply decisions').hitTestable();
           expect(apply, findsOneWidget);
           expect(tester.takeException(), isNull);
           await screenshot(tester, 'conflict-${brightness.name}-${scale}x');
@@ -704,7 +707,7 @@ void main() {
       await tester.pumpAndSettle();
       final name = find.widgetWithText(TextFormField, 'Name (optional)');
       await tester.enterText(name, 'My unsaved name');
-      await tester.tap(find.text('Save changes'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
 
       expect(fixture.mutations, 0);
@@ -738,7 +741,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Name (optional)'),
         'New title',
       );
-      await tester.tap(find.text('Save changes'));
+      await tester.tap(find.byTooltip('Save changes'));
       await tester.pumpAndSettle();
       final changes =
           fixture.admin.requests.firstWhere((r) => r.$1 == 'PUT').$4!['updates']
@@ -763,12 +766,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Resume and run?'), findsOneWidget);
     expect(fixture.mutations, 0);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byTooltip('Cancel').last);
     await tester.pumpAndSettle();
     expect(fixture.mutations, 0);
     await tester.tap(find.text('Resume and run'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Resume and run').last);
+    await tester.tap(find.byTooltip('Resume and run'));
     await tester.pumpAndSettle();
     expect(fixture.mutations, 1);
   });
@@ -807,7 +810,7 @@ void main() {
       await tester.tap(find.text('Morning briefing').last);
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField).first, '09:00');
-      await tester.tap(find.text('Create task'));
+      await tester.tap(find.byTooltip('Create task'));
       await tester.pumpAndSettle();
       final request = fixture.admin.requests.firstWhere(
         (r) => r.$2 == 'cron/blueprints/instantiate',
@@ -991,7 +994,7 @@ void main() {
         400,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.tap(find.text('Create task'));
+      await tester.tap(find.byTooltip('Create task'));
       await tester.pumpAndSettle();
       expect(fixture.mutations, 0);
       expect(
@@ -1017,7 +1020,7 @@ void main() {
       find.widgetWithText(TextFormField, 'Name (optional)'),
       'Renamed once',
     );
-    await tester.tap(find.text('Save changes'));
+    await tester.tap(find.byTooltip('Save changes'));
     await tester.pumpAndSettle();
     final write = fixture.admin.requests.firstWhere((r) => r.$1 == 'PUT');
     expect(write.$4!['updates'], {'name': 'Renamed once'});
@@ -1067,7 +1070,7 @@ void main() {
             await tester.pumpAndSettle();
             expect(find.byType(TimePickerDialog), findsOneWidget);
           }
-          await tester.tap(find.text('Cancel'));
+          await tester.tap(find.byTooltip('Cancel').last);
           await tester.pumpAndSettle();
           expect(fixture.mutations, 0);
           expect(
@@ -1094,7 +1097,7 @@ void main() {
             find.widgetWithText(TextFormField, 'Name (optional)'),
             'After cancel',
           );
-          await tester.tap(find.text('Save changes'));
+          await tester.tap(find.byTooltip('Save changes'));
           await tester.pumpAndSettle();
           final write = fixture.admin.requests.singleWhere(
             (request) => request.$1 == 'PUT',
@@ -1147,7 +1150,7 @@ void main() {
         await tester.tap(find.text('OK'));
         await tester.pumpAndSettle();
         expect(fixture.mutations, 0);
-        await tester.tap(find.text('Save changes'));
+        await tester.tap(find.byTooltip('Save changes'));
         await tester.pumpAndSettle();
         final write = fixture.admin.requests.singleWhere(
           (request) => request.$1 == 'PUT',

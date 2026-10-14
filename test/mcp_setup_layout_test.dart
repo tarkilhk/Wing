@@ -118,8 +118,8 @@ void main() {
             await tester.tap(find.text('Start sign-in'));
           } else if (page == 'program') {
             await select(find.byType(StudioSelect<bool>), 'Program on Hermes');
-            await reveal(find.text('Add environment variable'));
-            await tester.tap(find.text('Add environment variable'));
+            await reveal(find.byTooltip('Add environment variable'));
+            await tester.tap(find.byTooltip('Add environment variable'));
           } else if (['headers', 'bearer', 'none'].contains(page)) {
             await select(
               find.byType(StudioSelect<McpAuthentication>),
@@ -130,8 +130,8 @@ void main() {
               },
             );
             if (page == 'headers') {
-              await reveal(find.text('Add header'));
-              await tester.tap(find.text('Add header'));
+              await reveal(find.byTooltip('Add header'));
+              await tester.tap(find.byTooltip('Add header'));
             }
           } else if (page == 'advanced') {
             await reveal(find.text('Advanced'));
@@ -164,17 +164,15 @@ void main() {
             await captureScreen('-callback-field');
           }
 
-          await tester.scrollUntilVisible(
-            find.text(
-              page == 'callback'
-                  ? 'Complete sign-in'
-                  : ['setup', 'advanced'].contains(page)
-                  ? 'Add and sign in'
-                  : 'Add connector',
-            ),
-            200,
-            scrollable: find.byType(Scrollable).first,
-          );
+          final commit = page == 'callback'
+              ? find.text('Complete sign-in')
+              : find.byTooltip(
+                  ['setup', 'advanced'].contains(page)
+                      ? 'Add connector and sign in'
+                      : 'Add connector',
+                );
+          if (page == 'callback') await reveal(commit);
+          expect(commit.hitTestable(), findsOneWidget);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           await captureScreen('-action');

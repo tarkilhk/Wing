@@ -1,3 +1,7 @@
+import 'support/form_family_capture.dart';
+import 'package:flutter/material.dart';
+import 'package:wing/core/screens/administration/admin_profiles_page.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -125,6 +129,7 @@ class _Rig {
 }
 
 void main() {
+  setUpAll(loadFormFamilyFonts);
   late _Rig rig;
   late ProfilesManagementSession session;
   setUp(() {
@@ -133,6 +138,135 @@ void main() {
   });
   tearDown(() => session.dispose());
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'profile form retains failed name and held save ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: formFamilyCapture,
+              child: MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: AdminProfilesPage(createSession: () => session),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Create profile'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField), 'studio');
+          await tester.pump();
+          await captureFormFamily(
+            tester,
+            'profile-${brightness.name}-$scale-normal',
+          );
+          tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+          await tester.pumpAndSettle();
+          await captureFormFamily(
+            tester,
+            'profile-${brightness.name}-$scale-keyboard',
+          );
+          final save = find.byKey(const ValueKey('profile-name-save'));
+          final gate = Completer<Map<String, dynamic>>();
+          var attempts = 0;
+          rig.mutation =
+              (method, path, query, body, canDispatch, onDispatched) async {
+                attempts++;
+                return gate.future;
+              };
+          await tester.tap(save);
+          await tester.pump();
+          expect(save.hitTestable(), findsOneWidget);
+          expect(tester.getSize(save), const Size(48, 48));
+          expect(tester.getRect(save).bottom, lessThanOrEqualTo(584));
+          expect(find.bySemanticsLabel('Saving profile'), findsOneWidget);
+          await tester.pump(const Duration(milliseconds: 200));
+          await captureFormFamily(
+            tester,
+            'profile-${brightness.name}-$scale-saving',
+          );
+          expect(tester.widget<IconButton>(save).onPressed, isNull);
+          await tester.binding.handlePopRoute();
+          await tester.pump();
+          expect(find.byType(AlertDialog), findsOneWidget);
+          expect(attempts, 1);
+          gate.completeError(
+            DashboardRequestNotSentException(StateError('Held write not sent')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<TextField>(find.byType(TextField)).controller!.text,
+            'studio',
+          );
+          expect(
+            find.descendant(
+              of: find.byType(AlertDialog),
+              matching: find.textContaining('Your profile name is kept'),
+            ),
+            findsOneWidget,
+          );
+          expect(tester.widget<IconButton>(save).onPressed, isNotNull);
+          await captureFormFamily(
+            tester,
+            'profile-${brightness.name}-$scale-failure',
+          );
+          rig.mutation = null;
+          await tester.tap(save);
+          await tester.pumpAndSettle();
+          expect(find.byType(AlertDialog), findsNothing);
+          expect(rig.writes, hasLength(1));
+          expect(rig.writes.single.$3['name'], 'studio');
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+  testWidgets(
+    'uncertain profile write keeps owner admission and can close editor for recovery',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: AdminProfilesPage(createSession: () => session)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Create profile'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'studio');
+      rig.mutation =
+          (method, path, query, body, canDispatch, onDispatched) async {
+            onDispatched();
+            rig.writes.add((method, path, Map.of(body)));
+            throw StateError('Unconfirmed response');
+          };
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('profile-name-save')));
+      await tester.pumpAndSettle();
+      expect(session.state.draft!.canSubmit, isFalse);
+      expect(session.state.draft!.canCancel, isFalse);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'studio',
+      );
+      expect(find.textContaining('Refresh the list'), findsWidgets);
+      await tester.tap(find.byTooltip('Close editor'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(session.pendingIntent, isNotNull);
+      await session.reload();
+      await tester.pumpAndSettle();
+      expect(rig.writes, hasLength(1));
+      expect(session.state.draft!.canSubmit, isFalse);
+    },
+  );
   test(
     'borrowed connection closes only after its one route lease releases',
     () async {

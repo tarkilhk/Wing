@@ -1,3 +1,4 @@
+import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
@@ -173,6 +174,9 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
           'Discard key?',
           'The new credential has not been confirmed as saved.',
           action: 'Discard',
+
+          actionIcon: Icons.delete_outline,
+          destructive: true,
         )) {
       return;
     }
@@ -189,6 +193,9 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
           'Remove saved key?',
           'This removes the saved key from ${session.profile.name}. Other credential sources may still be available. The key is not revoked at its provider.',
           action: 'Remove',
+
+          actionIcon: Icons.delete_outline,
+          destructive: true,
         )) {
       return;
     }
@@ -223,6 +230,19 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
       child: AdminPage(
         title: session.key,
         scope: session.profile.label,
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: StudioFormActions(
+              onCancel: session.busy ? null : _close,
+              onConfirm: session.canSave ? () => _save(remove: false) : null,
+              confirmLabel: 'Save credential',
+              busy: session.busy,
+              progressLabel: 'Saving credential',
+            ),
+          ),
+        ),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -248,12 +268,6 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
               onChanged: session.setDraft,
             ),
             const SizedBox(height: 16),
-            StudioButtonPress(
-              child: FilledButton(
-                onPressed: session.canSave ? () => _save(remove: false) : null,
-                child: StudioActionLabel('Save credential', busy: session.busy),
-              ),
-            ),
             if (session.isSet)
               StudioButtonPress(
                 child: TextButton(
@@ -389,9 +403,10 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
                 ],
               ],
               StudioButtonPress(
-                child: TextButton(
+                child: IconButton(
+                  tooltip: session.pending ? 'Cancel sign-in' : 'Close',
                   onPressed: session.canClose ? _close : null,
-                  child: Text(session.pending ? 'Cancel sign-in' : 'Close'),
+                  icon: const Icon(Icons.close),
                 ),
               ),
             ],

@@ -32,7 +32,7 @@ Future<void> filterChatsToProfile(WidgetTester tester, String name) async {
   final choice = find.byKey(ValueKey('chat-menu-$name'));
   await tester.tap(choice);
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Done'));
+  await tester.tap(find.byTooltip('Close filters'));
   await tester.pumpAndSettle();
 }
 

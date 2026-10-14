@@ -1,3 +1,4 @@
+import 'studio_form_actions.dart';
 import 'package:flutter/material.dart';
 import '../models/chat_intelligence.dart';
 import '../models/model_choice.dart';
@@ -446,17 +447,14 @@ class _ChatIntelligenceSheetState extends State<ChatIntelligenceSheet> {
                           ),
                         ],
                       ),
-                      StudioButtonPress(
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(64, 36),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.standard,
-                          ),
-                          onPressed: _applying ? null : _apply,
-                          child: Text(_applying ? 'Applying…' : 'Apply'),
-                        ),
+                      StudioFormActions(
+                        onCancel: _applying
+                            ? null
+                            : () => Navigator.pop(context),
+                        onConfirm: _applying ? null : _apply,
+                        confirmLabel: 'Apply model settings',
+                        busy: _applying,
+                        progressLabel: 'Applying model settings',
                       ),
                     ],
                   ),
@@ -544,33 +542,26 @@ class _ManualModelDialogState extends State<_ManualModelDialog> {
         ],
       ),
       actions: [
-        StudioButtonPress(
-          child: TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ),
-        StudioButtonPress(
-          child: FilledButton(
-            onPressed: !valid || _provider.isEmpty
-                ? null
-                : () => Navigator.pop(
-                    context,
-                    widget.choices
-                            .where(
-                              (c) =>
-                                  c.provider == _provider &&
-                                  c.model == _id.text.trim(),
-                            )
-                            .firstOrNull ??
-                        ModelChoice(
-                          provider: _provider,
-                          model: _id.text.trim(),
-                          providerLabel: _routes[_provider],
-                        ),
-                  ),
-            child: const Text('Use model'),
-          ),
+        StudioFormActions(
+          onCancel: () => Navigator.pop(context),
+          onConfirm: !valid || _provider.isEmpty
+              ? null
+              : () => Navigator.pop(
+                  context,
+                  widget.choices
+                          .where(
+                            (c) =>
+                                c.provider == _provider &&
+                                c.model == _id.text.trim(),
+                          )
+                          .firstOrNull ??
+                      ModelChoice(
+                        provider: _provider,
+                        model: _id.text.trim(),
+                        providerLabel: _routes[_provider],
+                      ),
+                ),
+          confirmLabel: 'Use model',
         ),
       ],
     );

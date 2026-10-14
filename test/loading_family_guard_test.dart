@@ -27,6 +27,24 @@ FixtureWorkspace fixture(
 });
 
 void main() {
+  test(
+    'shared form header owns its header slot but cannot put Wing in form controls',
+    () {
+      final accepted = fixture(
+        'studio.StudioLoadingSlot()',
+        path: 'lib/core/widgets/studio_form_actions.dart',
+      );
+      addTearDown(accepted.dispose);
+      expect(loading.check(accepted.snapshot), isEmpty);
+      final rejected = fixture(
+        'studio.StudioLoading()',
+        path: 'lib/core/widgets/studio_form_actions.dart',
+      );
+      addTearDown(rejected.dispose);
+      expect(loading.check(rejected.snapshot).single.id, loading.id);
+    },
+  );
+
   for (final expression in [
     'studio.StudioLoading()',
     'const studio.StudioLoading()',

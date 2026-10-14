@@ -1,4 +1,4 @@
-import 'studio_action_label.dart';
+import 'studio_form_actions.dart';
 import 'studio_error.dart';
 
 import 'package:flutter/material.dart';
@@ -209,55 +209,42 @@ class _GatewaySensitivePromptPanelState
             StudioError(_error!, key: const Key('sensitive-prompt-error')),
           ],
           const SizedBox(height: 12),
-          OverflowBar(
-            alignment: MainAxisAlignment.end,
-            overflowAlignment: OverflowBarAlignment.end,
-            spacing: 12,
-            overflowSpacing: 8,
-            children: [
-              StudioButtonPress(
-                child: TextButton(
-                  key: const Key('sensitive-prompt-cancel'),
-                  onPressed: _enabled ? () => _respond('') : null,
-                  child: Text(switch (request.kind) {
-                    GatewaySensitivePromptKind.vaultUnlock => 'Keep locked',
-                    GatewaySensitivePromptKind.vaultSaveLogin => 'Don\'t save',
-                    GatewaySensitivePromptKind.vaultCode => 'Skip',
-                    _ => 'Cancel',
-                  }),
-                ),
-              ),
-              ListenableBuilder(
-                listenable: Listenable.merge([
-                  _controller,
-                  _passwordController,
-                ]),
-                builder: (context, _) => StudioButtonPress(
-                  child: FilledButton(
-                    key: const Key('sensitive-prompt-submit'),
-                    onPressed:
-                        _enabled &&
-                            widget.request.canRespond(
-                              value: _controller.text,
-                              password: _passwordController.text,
-                            )
-                        ? () => _respond(
-                            widget.request.responseValue(
-                              value: _controller.text,
-                              password: _passwordController.text,
-                            ),
-                          )
-                        : null,
-                    child: StudioActionLabel(
-                      request.kind == GatewaySensitivePromptKind.vaultSaveLogin
-                          ? 'Save login'
-                          : 'Continue',
-                      busy: _submitting,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          ListenableBuilder(
+            listenable: Listenable.merge([_controller, _passwordController]),
+            builder: (context, _) => StudioFormActions(
+              cancelKey: const Key('sensitive-prompt-cancel'),
+              confirmKey: const Key('sensitive-prompt-submit'),
+              onCancel: _enabled ? () => _respond('') : null,
+              cancelLabel: switch (request.kind) {
+                GatewaySensitivePromptKind.vaultUnlock => 'Keep locked',
+                GatewaySensitivePromptKind.vaultSaveLogin => "Don't save login",
+                GatewaySensitivePromptKind.vaultCode => 'Skip code',
+                _ => 'Cancel',
+              },
+              onConfirm:
+                  _enabled &&
+                      widget.request.canRespond(
+                        value: _controller.text,
+                        password: _passwordController.text,
+                      )
+                  ? () => _respond(
+                      widget.request.responseValue(
+                        value: _controller.text,
+                        password: _passwordController.text,
+                      ),
+                    )
+                  : null,
+              confirmLabel:
+                  request.kind == GatewaySensitivePromptKind.vaultSaveLogin
+                  ? 'Save login'
+                  : 'Continue sign-in',
+              confirmIcon:
+                  request.kind == GatewaySensitivePromptKind.vaultSaveLogin
+                  ? Icons.save_outlined
+                  : Icons.lock_open_outlined,
+              busy: _submitting,
+              progressLabel: 'Sending secure response',
+            ),
           ),
         ],
       ),

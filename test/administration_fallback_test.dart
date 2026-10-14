@@ -44,7 +44,7 @@ Future<void> _selectSecond(WidgetTester tester, String action) async {
   await tester.ensureVisible(model);
   await tester.tap(model);
   await tester.pumpAndSettle();
-  await tester.tap(find.text(action).last);
+  await tester.tap(find.byTooltip(action).last);
   await tester.pumpAndSettle();
 }
 
@@ -63,7 +63,7 @@ void main() {
         fixture.configs['default']!['fallback_providers'] = [invalid, _entry];
         await _open(tester, fixture);
         expect(find.textContaining('Could not load'), findsOneWidget);
-        expect(find.text('Add fallback'), findsNothing);
+        expect(find.byTooltip('Add fallback'), findsNothing);
         expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
         expect(fixture.configs['default']!['fallback_providers'], [
           invalid,
@@ -108,7 +108,7 @@ void main() {
         {'provider': 'example', 'model': 'external-model'},
       ];
 
-      await tester.tap(find.text('Add fallback'));
+      await tester.tap(find.byTooltip('Add fallback'));
       await tester.pumpAndSettle();
       await _selectSecond(tester, 'Add fallback');
       expect(fixture.requests.where((request) => request.$1 == 'PUT'), isEmpty);
@@ -118,13 +118,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('external-model'), findsWidgets);
       expect(find.textContaining('second'), findsWidgets);
-      await tester.tap(find.text('Cancel').last);
+      await tester.tap(find.byTooltip('Cancel').last);
       await tester.pumpAndSettle();
       expect(fixture.requests.where((request) => request.$1 == 'PUT'), isEmpty);
 
       await tester.tap(find.text('Review pending fallback change'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Apply pending list'));
+      await tester.tap(find.byTooltip('Apply pending list'));
       await tester.pumpAndSettle();
       expect(
         fixture.requests.where((request) => request.$1 == 'PUT'),
@@ -194,9 +194,9 @@ void main() {
         );
         await tester.scrollUntilVisible(find.text('backup-model'), 100);
         expect(find.text('backup-model'), findsOneWidget);
-        await tester.scrollUntilVisible(find.text('Add fallback'), 100);
+        await tester.scrollUntilVisible(find.byTooltip('Add fallback'), 100);
         await tester.pumpAndSettle();
-        expect(find.text('Add fallback').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Add fallback').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
         if (capture) {
           await tester.drag(find.byType(ListView), const Offset(0, 1000));
@@ -231,7 +231,7 @@ void main() {
         fixture.configs['default']!['fallback_providers'] = value;
         await _open(tester, fixture);
         expect(find.text('No fallback models configured.'), findsNothing);
-        expect(find.text('Add fallback'), findsNothing);
+        expect(find.byTooltip('Add fallback'), findsNothing);
         expect(find.textContaining('Could not load'), findsOneWidget);
         expect(fixture.requests.where((r) => r.$1 == 'PUT'), isEmpty);
       },
@@ -246,7 +246,7 @@ void main() {
       final fixture = AdministrationFixture();
       fixture.configs['default']!['fallback_providers'] = value;
       await _open(tester, fixture);
-      expect(find.text('Add fallback'), findsOneWidget);
+      expect(find.byTooltip('Add fallback'), findsOneWidget);
       expect(find.textContaining('Could not load'), findsNothing);
     });
   }
@@ -257,7 +257,7 @@ void main() {
     final fixture = AdministrationFixture();
     fixture.configs['default']!['fallback_providers'] = [_entry];
     await _open(tester, fixture);
-    await tester.tap(find.text('Add fallback'));
+    await tester.tap(find.byTooltip('Add fallback'));
     await tester.pumpAndSettle();
     await _selectSecond(tester, 'Add fallback');
     expect(fixture.configs['default']!['fallback_providers'], [

@@ -1,3 +1,4 @@
+import 'studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'wing_app_bar.dart';
@@ -138,16 +139,19 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
         ),
         if (state.language.notice case final notice?) Text(notice),
         if (state.language.error case final error?) StudioError(error),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: StudioButtonPress(
-            child: TextButton(
-              onPressed: state.saveManualLanguage == null
-                  ? null
-                  : () => state.saveManualLanguage!(_language.text),
-              child: const Text('Save language'),
-            ),
-          ),
+        StudioFormActions(
+          onCancel: state.language.busy
+              ? null
+              : () => setState(
+                  () => _language.text = state.language.selected ?? '',
+                ),
+          cancelLabel: 'Cancel language change',
+          onConfirm: state.saveManualLanguage == null
+              ? null
+              : () => state.saveManualLanguage!(_language.text),
+          confirmLabel: 'Save recognition language',
+          busy: state.language.busy,
+          progressLabel: 'Saving recognition language',
         ),
       ],
     );

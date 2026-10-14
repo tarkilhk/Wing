@@ -6430,6 +6430,33 @@
       "source": "internal/docs/TESTING.md; test/profile_live_work_route_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-test/form_confirmation_guard_test.dart",
+      "kind": "host-test",
+      "path": "test/form_confirmation_guard_test.dart",
+      "selector": "main",
+      "purpose": "Form-footer literal-text migration and namespace/CLI regressions",
+      "source": "internal/docs/TESTING.md; internal/tools/architecture/README.md",
+      "status": "supported"
+    },
+    {
+      "id": "dart-main-tools/architecture/rules/form_confirmation_actions.dart",
+      "kind": "dart-main",
+      "path": "tools/architecture/rules/form_confirmation_actions.dart",
+      "selector": "main",
+      "purpose": "Independent explicit form confirmation presentation source gate",
+      "source": "internal/docs/TESTING.md; internal/tools/architecture/README.md",
+      "status": "supported"
+    },
+    {
+      "id": "host-test-test/studio_form_actions_test.dart",
+      "kind": "host-test",
+      "path": "test/studio_form_actions_test.dart",
+      "selector": "main",
+      "purpose": "Shared form action geometry/focus/content-fit sheet acceptance",
+      "source": "internal/docs/TESTING.md; internal/docs/DESIGN_SYSTEM.md",
+      "status": "supported"
     }
   ],
   "files": [
@@ -14782,6 +14809,31 @@
       "path": "website/workspaces.html",
       "area": "website",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/studio_form_actions.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/form_confirmation_guard_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "tools/architecture/rules/form_confirmation_actions.dart",
+      "area": "tools",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/studio_form_actions_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/support/form_family_capture.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

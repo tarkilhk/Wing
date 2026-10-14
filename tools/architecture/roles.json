@@ -2336,6 +2336,11 @@
       "feature": "ui-foundations",
       "library": "lib/core/widgets/studio_error.dart"
     },
+    "lib/core/widgets/studio_form_actions.dart": {
+      "role": "presentation",
+      "feature": "ui-foundations",
+      "library": "lib/core/widgets/studio_form_actions.dart"
+    },
     "lib/core/widgets/studio_loading.dart": {
       "role": "view",
       "feature": "ui-foundations",

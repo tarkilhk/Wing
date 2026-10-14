@@ -71,7 +71,7 @@ Future<void> testConnection(WidgetTester tester) async {
   await tester.scrollUntilVisible(find.text('Test connection'), 200);
   await tester.tap(find.text('Test connection'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Test'));
+  await tester.tap(find.byTooltip('Test'));
   await tester.pumpAndSettle();
 }
 
@@ -101,7 +101,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Test connection'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Test'));
+      await tester.tap(find.byTooltip('Test'));
       await tester.pump();
       expect(find.text('Testing connection…'), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
@@ -449,7 +449,7 @@ void main() {
             await tester.pumpAndSettle();
             await tester.tap(find.text('Reconnect MCP tools'));
             await tester.pumpAndSettle();
-            await tester.tap(find.text('Reconnect'));
+            await tester.tap(find.byTooltip('Reconnect tools'));
             await tester.pumpAndSettle();
           } else if (signIn) {
             await tester.scrollUntilVisible(find.text('Start sign-in'), 200);
@@ -509,12 +509,12 @@ void main() {
           }
           if (!reload && !reconnect) {
             await tester.scrollUntilVisible(
-              find.text(signIn ? 'Close' : 'Remove connector'),
+              signIn ? find.byTooltip('Close') : find.text('Remove connector'),
               200,
             );
           }
           if (operation == 'reconnect-confirm') {
-            await tester.tap(find.text('Reconnect'));
+            await tester.tap(find.byTooltip('Reconnect tools'));
             await tester.pumpAndSettle();
             expect(find.byType(AlertDialog), findsNothing);
             expect(fixture.rpcRequests, [('default', 'reload.mcp')]);

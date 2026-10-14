@@ -55,6 +55,9 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
       'Current list:\n${_summary(review.current)}\n\n'
           'Your pending list:\n${_summary(review.pending)}',
       action: 'Apply pending list',
+
+      actionIcon: Icons.check,
+      destructive: false,
     );
     if (!mounted || !accepted) return;
     await _edit.applyReviewed(review);
@@ -152,10 +155,10 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
                 ),
               ),
             StudioButtonPress(
-              child: FilledButton.icon(
+              child: IconButton.filled(
+                tooltip: 'Add fallback',
                 onPressed: _busy ? null : () => _pickFallback(),
                 icon: const Icon(Icons.add),
-                label: const Text('Add fallback'),
               ),
             ),
           ],

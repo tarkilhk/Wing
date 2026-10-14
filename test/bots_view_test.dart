@@ -1,3 +1,4 @@
+import 'support/form_family_capture.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -163,7 +164,68 @@ Future<void> _revealGroup(
 }
 
 void main() {
+  setUpAll(loadFormFamilyFonts);
   if (_export) _ReviewBinding();
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final duplicate in [false, true]) {
+        testWidgets(
+          'bot draft footer stays above keyboard ${brightness.name} $scale clone=$duplicate',
+          (tester) async {
+            tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            SharedPreferences.setMockInitialValues({});
+            final fixture = BotsFixture();
+            final session = BotsSession((_) async => [fixture.repository]);
+            addTearDown(session.dispose);
+            await session.refresh();
+            await tester.pumpWidget(
+              RepaintBoundary(
+                key: formFamilyCapture,
+                child: MaterialApp(
+                  theme: wingTheme(brightness),
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(textScaler: TextScaler.linear(scale)),
+                    child: child!,
+                  ),
+                  home: BotsCreateScreen(
+                    session: session,
+                    group: false,
+                    clone: duplicate ? session.state.bots.first : null,
+                  ),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            await tester.enterText(
+              find.widgetWithText(TextField, 'Profile name'),
+              'new-profile',
+            );
+            await captureFormFamily(
+              tester,
+              'bot-$duplicate-${brightness.name}-$scale-normal',
+            );
+            tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+            await tester.pumpAndSettle();
+            final footer = find.byTooltip('Create bot');
+            expect(footer.hitTestable(), findsOneWidget);
+            expect(tester.getRect(footer).bottom, lessThanOrEqualTo(584));
+            expect(tester.getSize(footer), const Size(48, 48));
+            await captureFormFamily(
+              tester,
+              'bot-$duplicate-${brightness.name}-$scale-keyboard',
+            );
+            expect(tester.takeException(), isNull);
+            expect(fixture.commands, isEmpty);
+          },
+        );
+      }
+    }
+  }
   for (final brightness in [Brightness.dark, Brightness.light]) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
@@ -738,7 +800,7 @@ void main() {
             frame,
             'group-editing-prompt-${brightness.name}-$scale',
           );
-          await tester.tap(find.byTooltip('Close'));
+          await tester.tap(find.byTooltip('Cancel picture generation'));
           await tester.pumpAndSettle();
           expect(fixture.commands, isEmpty);
           await _revealGroup(tester, name, delta: -120);
@@ -1147,7 +1209,10 @@ void main() {
               .fontSize,
           16,
         );
-        for (final tooltip in ['Close', 'Generate picture']) {
+        for (final tooltip in [
+          'Cancel picture generation',
+          'Generate picture',
+        ]) {
           final target = tester.getRect(find.byTooltip(tooltip));
           expect(target.width, greaterThanOrEqualTo(48));
           expect(target.height, greaterThanOrEqualTo(48));
@@ -1174,7 +1239,7 @@ void main() {
         );
         const editedPrompt = 'Two friendly robots beside a teal wing, no text.';
         await tester.enterText(find.byType(TextFormField), editedPrompt);
-        await tester.tap(find.byTooltip('Close'));
+        await tester.tap(find.byTooltip('Cancel picture generation'));
         await tester.pumpAndSettle();
         await tester.tap(find.byTooltip('Generate room picture'));
         await tester.pumpAndSettle();
@@ -1227,7 +1292,10 @@ void main() {
               .onPressed,
           isNotNull,
         );
-        for (final tooltip in ['Close', 'Generate picture']) {
+        for (final tooltip in [
+          'Cancel picture generation',
+          'Generate picture',
+        ]) {
           final target = tester.getRect(find.byTooltip(tooltip));
           expect(target.top, greaterThanOrEqualTo(0));
           expect(
@@ -1236,7 +1304,7 @@ void main() {
           );
           expect(find.byTooltip(tooltip).hitTestable(), findsOneWidget);
         }
-        await tester.tap(find.byTooltip('Close'));
+        await tester.tap(find.byTooltip('Cancel picture generation'));
         await tester.pumpAndSettle();
         tester.view.viewInsets = const FakeViewPadding();
         await tester.pumpAndSettle();
@@ -1265,7 +1333,7 @@ void main() {
           tester.widget<TextFormField>(find.byType(TextFormField)).initialValue,
           editedPrompt,
         );
-        await tester.tap(find.byTooltip('Close'));
+        await tester.tap(find.byTooltip('Cancel picture generation'));
         await tester.pumpAndSettle();
         await _revealGroup(tester, find.byTooltip('Remove Atlas'));
         await tester.tap(find.byTooltip('Remove Atlas'));
@@ -1477,7 +1545,7 @@ void main() {
           await tester.drag(find.byType(ListView), const Offset(0, 1400));
           await tester.pump();
           expect(find.byType(StudioLoading), findsNothing);
-          expect(find.byIcon(Icons.group_add_outlined), findsOneWidget);
+          expect(find.bySemanticsLabel('Creating group'), findsOneWidget);
           expect(
             tester
                 .widget<IconButton>(find.byKey(const ValueKey('group-create')))
@@ -2156,7 +2224,7 @@ void main() {
           await tester.tap(find.text('Rename profile'));
           await tester.pumpAndSettle();
           expect(find.byType(AlertDialog), findsOneWidget);
-          await tester.tap(find.text('Cancel').last);
+          await tester.tap(find.byTooltip('Cancel').last);
           await tester.pumpAndSettle();
           await tester.pageBack();
           await tester.pumpAndSettle();
@@ -2181,7 +2249,7 @@ void main() {
           await tester.tap(find.byTooltip('Delete bot'));
           await tester.pumpAndSettle();
           expect(find.byType(AlertDialog), findsOneWidget);
-          await tester.tap(find.text('Cancel').last);
+          await tester.tap(find.byTooltip('Cancel').last);
           await tester.pumpAndSettle();
           await tester.pageBack();
           await tester.pumpAndSettle();
@@ -2511,15 +2579,15 @@ void main() {
             await tester.pumpAndSettle();
             await tester.enterText(find.byType(TextFormField), 'renamed');
             await tester.pumpAndSettle();
-            await tester.tap(find.text('Continue'));
+            await tester.tap(find.byTooltip('Save profile name'));
             await tester.pumpAndSettle();
-            await tester.tap(find.text('Rename').last);
+            await tester.tap(find.byTooltip('Rename').last);
           } else {
             await tester.scrollUntilVisible(find.byTooltip('Delete bot'), 240);
             await tester.tap(find.byTooltip('Delete bot'));
             await tester.pumpAndSettle();
             expect(writes, 0);
-            await tester.tap(find.text('Delete profile'));
+            await tester.tap(find.byTooltip('Delete profile'));
           }
           await tester.pumpAndSettle();
           expect(writes, 1);

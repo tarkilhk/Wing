@@ -218,31 +218,34 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                                     alignment: WrapAlignment.center,
                                     children: [
                                       StudioButtonPress(
-                                        child: TextButton(
+                                        child: IconButton(
+                                          tooltip: 'Retry search',
                                           onPressed:
                                               state.loading || state.retired
                                               ? null
                                               : _session.retry,
-                                          child: const Text('Try again'),
+                                          icon: const Icon(Icons.refresh),
                                         ),
                                       ),
                                       StudioButtonPress(
-                                        child: TextButton(
+                                        child: IconButton(
+                                          tooltip: 'Close',
                                           onPressed: () =>
                                               Navigator.of(context).maybePop(),
-                                          child: const Text('Close'),
+                                          icon: const Icon(Icons.close),
                                         ),
                                       ),
                                     ],
                                   )
                                 else if (query.isNotEmpty && hasMore)
                                   StudioButtonPress(
-                                    child: TextButton(
+                                    child: IconButton(
+                                      tooltip: 'Search older messages',
                                       onPressed: state.loading || state.retired
                                           ? null
                                           : _session.loadOlder,
-                                      child: const Text(
-                                        'Search older messages',
+                                      icon: const Icon(
+                                        Icons.manage_search_outlined,
                                       ),
                                     ),
                                   ),

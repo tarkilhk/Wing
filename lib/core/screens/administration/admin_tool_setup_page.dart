@@ -1,3 +1,4 @@
+import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/read_recovery.dart';
@@ -57,6 +58,9 @@ class _AdminToolSetupPageState extends State<AdminToolSetupPage> {
       'Install setup requirements?',
       'Hermes may download and install dependencies on the server. Other profiles can share those dependencies.',
       action: 'Run setup',
+
+      actionIcon: Icons.build_outlined,
+      destructive: false,
     ),
     showResult: (operation) async {
       if (mounted) {
@@ -353,13 +357,16 @@ class _AdminToolModelsPageState extends State<AdminToolModelsPage> {
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     child: Align(
                       alignment: Alignment.centerRight,
-                      child: StudioButtonPress(
-                        child: FilledButton(
-                          onPressed: state.canSaveModel
-                              ? () => _session.saveModel(_editor)
-                              : null,
-                          child: const Text('Use model'),
-                        ),
+                      child: StudioFormActions(
+                        onCancel: state.saving
+                            ? null
+                            : () => Navigator.maybePop(context),
+                        onConfirm: state.canSaveModel
+                            ? () => _session.saveModel(_editor)
+                            : null,
+                        confirmLabel: 'Save tool model',
+                        busy: state.saving,
+                        progressLabel: 'Saving tool model',
                       ),
                     ),
                   ),

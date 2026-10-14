@@ -1,3 +1,4 @@
+import 'studio_form_actions.dart';
 import 'activity/activity_detail_actions.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
@@ -128,17 +129,12 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         title: Text('Remove criterion ${index + 1}?'),
         content: Text(text),
         actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Remove'),
-            ),
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context, false),
+            onConfirm: () => Navigator.pop(context, true),
+            confirmLabel: 'Remove criterion',
+            confirmIcon: Icons.delete_outline,
+            destructive: true,
           ),
         ],
       ),
@@ -169,17 +165,12 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         title: const Text('Clear all criteria?'),
         content: const Text('This removes every criterion from this goal.'),
         actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Clear criteria'),
-            ),
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context, false),
+            onConfirm: () => Navigator.pop(context, true),
+            confirmLabel: 'Clear criteria',
+            confirmIcon: Icons.delete_outline,
+            destructive: true,
           ),
         ],
       ),
@@ -209,9 +200,10 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
       ),
       actions: [
         StudioButtonPress(
-          child: TextButton(
+          child: IconButton(
+            tooltip: 'Close criteria notice',
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            icon: const Icon(Icons.close),
           ),
         ),
       ],
@@ -226,17 +218,12 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         title: const Text('Clear goal?'),
         content: const Text('This clears the goal on the Hermes server.'),
         actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Clear'),
-            ),
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context, false),
+            onConfirm: () => Navigator.pop(context, true),
+            confirmLabel: 'Clear goal',
+            confirmIcon: Icons.delete_outline,
+            destructive: true,
           ),
         ],
       ),
@@ -367,6 +354,7 @@ class _AddCriterionDialog extends StatefulWidget {
 
 class _AddCriterionDialogState extends State<_AddCriterionDialog> {
   late final TextEditingController _draft;
+  bool _adding = false;
 
   @override
   void initState() {
@@ -381,13 +369,17 @@ class _AddCriterionDialogState extends State<_AddCriterionDialog> {
   }
 
   Future<void> _add() async {
-    final accepted = await widget.editor.submit(_draft.text);
-    if (!mounted) return;
-    if (accepted) {
-      widget.onAccepted();
-      Navigator.pop(context);
-    } else {
-      setState(() {});
+    if (_adding) return;
+    setState(() => _adding = true);
+    try {
+      final accepted = await widget.editor.submit(_draft.text);
+      if (!mounted) return;
+      if (accepted) {
+        widget.onAccepted();
+        Navigator.pop(context);
+      }
+    } finally {
+      if (mounted) setState(() => _adding = false);
     }
   }
 
@@ -396,6 +388,7 @@ class _AddCriterionDialogState extends State<_AddCriterionDialog> {
     listenable: widget.session,
     builder: (context, _) {
       final working =
+          _adding ||
           widget.session.state.actionBusy ||
           widget.session.state.sessionControlLoading ||
           widget.session.state.sessionControlWorking;
@@ -427,19 +420,14 @@ class _AddCriterionDialogState extends State<_AddCriterionDialog> {
             },
           ),
           actions: [
-            StudioButtonPress(
-              child: TextButton(
-                onPressed: working ? null : () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-            ),
-            StudioButtonPress(
-              child: FilledButton(
-                onPressed: working || !widget.editor.canSubmit(_draft.text)
-                    ? null
-                    : _add,
-                child: const Text('Add'),
-              ),
+            StudioFormActions(
+              onCancel: working ? null : () => Navigator.pop(context),
+              onConfirm: working || !widget.editor.canSubmit(_draft.text)
+                  ? null
+                  : _add,
+              confirmLabel: 'Add criterion',
+              busy: _adding,
+              progressLabel: 'Adding criterion',
             ),
           ],
         ),

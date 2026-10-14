@@ -1,3 +1,5 @@
+import '../../widgets/studio_error.dart';
+import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
@@ -79,10 +81,8 @@ class _AdminProfilesPageState extends State<AdminProfilesPage> {
         builder: (_) => _ProfileNameDialog(session: _session, intent: intent),
       );
       if (!mounted) return;
-      if (continued != true) {
-        _session.cancel(intent);
-        return;
-      }
+      if (continued != true) _session.cancel(intent);
+      return;
     }
     draft = _session.state.draft;
     if (draft == null) return;
@@ -92,6 +92,9 @@ class _AdminProfilesPageState extends State<AdminProfilesPage> {
         draft.confirmationTitle,
         draft.confirmationDetail,
         action: draft.confirmationAction,
+
+        actionIcon: draft.needsName ? Icons.check : Icons.delete_outline,
+        destructive: !draft.needsName,
       );
       if (!mounted) return;
       if (!confirmed) {
@@ -143,9 +146,10 @@ class _AdminProfilesPageState extends State<AdminProfilesPage> {
                     ),
                   if (state.draft!.canCancel)
                     StudioButtonPress(
-                      child: TextButton(
+                      child: IconButton(
+                        tooltip: 'Cancel profile change',
                         onPressed: () => _session.cancel(pending),
-                        child: const Text('Cancel change'),
+                        icon: const Icon(Icons.close),
                       ),
                     ),
                 ],
@@ -153,12 +157,12 @@ class _AdminProfilesPageState extends State<AdminProfilesPage> {
             Align(
               alignment: Alignment.centerLeft,
               child: StudioButtonPress(
-                child: FilledButton.icon(
+                child: IconButton.filled(
+                  tooltip: 'Create profile',
                   onPressed: state.canCreate
                       ? () => unawaited(_edit(_session.beginCreate()))
                       : null,
                   icon: const Icon(Icons.add),
-                  label: const Text('Create profile'),
                 ),
               ),
             ),
@@ -233,42 +237,96 @@ class _ProfileNameDialog extends StatefulWidget {
 }
 
 class _ProfileNameDialogState extends State<_ProfileNameDialog> {
+  late final _openingTitle = widget.session.state.draft!.title;
+  late final _name = TextEditingController(
+    text: widget.session.state.draft!.initialName,
+  );
+  bool _pending = false;
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_pending) return;
+    final draft = widget.session.state.draft;
+    if (draft == null || !draft.canSubmit) return;
+    if (draft.needsConfirmation) {
+      final confirmed = await adminConfirm(
+        context,
+        draft.confirmationTitle,
+        draft.confirmationDetail,
+        action: draft.confirmationAction,
+        actionIcon: Icons.check,
+        destructive: false,
+      );
+      if (!mounted || !confirmed) return;
+    }
+    setState(() => _pending = true);
+    final outcome = await widget.session.submit(widget.intent);
+    if (!mounted) return;
+    setState(() => _pending = false);
+    if (outcome?.announcesSuccess == true) Navigator.pop(context, true);
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.session,
     builder: (context, _) {
-      final draft = widget.session.state.draft;
-      if (draft == null) return const SizedBox.shrink();
-      return AlertDialog(
-        scrollable: true,
-        title: Text(draft.title),
-        content: TextFormField(
-          initialValue: draft.initialName,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Name',
-            helperMaxLines: 4,
-            helperText: draft.help,
-            errorText: draft.validationError,
+      final state = widget.session.state;
+      final draft = state.draft;
+      final busy = _pending || state.busy;
+      return PopScope(
+        canPop: !busy,
+        child: AlertDialog(
+          scrollable: true,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
           ),
-          onChanged: (value) => widget.session.updateName(widget.intent, value),
+          title: Text(_openingTitle),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _name,
+                  enabled: !busy && draft?.canCancel == true,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Name',
+                    helperMaxLines: 4,
+                    helperText: draft?.help,
+                    errorText: draft?.validationError,
+                  ),
+                  onChanged: (value) =>
+                      widget.session.updateName(widget.intent, value),
+                ),
+                if (state.error case final error?) ...[
+                  const SizedBox(height: 12),
+                  StudioError(error),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            StudioFormActions(
+              confirmKey: const ValueKey('profile-name-save'),
+              onCancel: busy ? null : () => Navigator.pop(context, false),
+              cancelLabel: draft?.canCancel == false
+                  ? 'Close editor'
+                  : 'Cancel',
+              onConfirm: !busy && draft?.canSubmit == true ? _save : null,
+              confirmLabel: draft?.needsConfirmation == true
+                  ? 'Save profile name'
+                  : draft?.title ?? 'Save profile',
+              busy: busy,
+              progressLabel: 'Saving profile',
+            ),
+          ],
         ),
-        actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: FilledButton(
-              onPressed: draft.canContinue
-                  ? () => Navigator.pop(context, true)
-                  : null,
-              child: const Text('Continue'),
-            ),
-          ),
-        ],
       );
     },
   );

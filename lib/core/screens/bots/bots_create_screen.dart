@@ -1,3 +1,4 @@
+import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../models/bots.dart';
@@ -116,13 +117,6 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                           ),
                         ),
                       ),
-                      StudioButtonPress(
-                        child: IconButton(
-                          tooltip: 'Close',
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -157,14 +151,14 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                   ),
                   child: Align(
                     alignment: AlignmentDirectional.centerEnd,
-                    child: StudioButtonPress(
-                      child: IconButton.filled(
-                        tooltip: 'Generate picture',
-                        onPressed: draft.picturePrompt.trim().isEmpty
-                            ? null
-                            : () => Navigator.pop(context, true),
-                        icon: const Icon(Icons.auto_awesome_outlined),
-                      ),
+                    child: StudioFormActions(
+                      onCancel: () => Navigator.pop(context),
+                      cancelLabel: 'Cancel picture generation',
+                      onConfirm: draft.picturePrompt.trim().isEmpty
+                          ? null
+                          : () => Navigator.pop(context, true),
+                      confirmLabel: 'Generate picture',
+                      confirmIcon: Icons.auto_awesome_outlined,
                     ),
                   ),
                 ),
@@ -616,21 +610,21 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    StudioButtonPress(
-                      child: IconButton.filled(
-                        key: ValueKey(
-                          draft.editing ? 'group-save' : 'group-create',
-                        ),
-                        tooltip: draft.editing
-                            ? 'Save changes'
-                            : 'Create group',
-                        onPressed: draft.canSave ? _saveGroup : null,
-                        icon: Icon(
-                          draft.editing
-                              ? Icons.check
-                              : Icons.group_add_outlined,
-                        ),
+                    StudioFormActions(
+                      confirmKey: ValueKey(
+                        draft.editing ? 'group-save' : 'group-create',
                       ),
+                      onCancel: draft.saving
+                          ? null
+                          : () => Navigator.maybePop(context),
+                      onConfirm: draft.canSave ? _saveGroup : null,
+                      confirmLabel: draft.editing
+                          ? 'Save changes'
+                          : 'Create group',
+                      busy: draft.saving,
+                      progressLabel: draft.editing
+                          ? 'Saving group'
+                          : 'Creating group',
                     ),
                   ],
                 ),
@@ -679,75 +673,87 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
 
   Widget _buildWithAvatars(BuildContext context) => widget.group
       ? _buildGroup(context)
-      : Scaffold(
-          appBar: WingAppBar(
-            context: context,
-            title: Text(widget.clone == null ? 'New bot' : 'Duplicate bot'),
-            actions: [
-              StudioButtonPress(
-                child: IconButton(
-                  tooltip: 'Create bot',
-                  onPressed: _busy || _identity == null ? null : _save,
-                  icon: const Icon(Icons.check),
+      : PopScope(
+          canPop: !_busy,
+          child: Scaffold(
+            appBar: WingAppBar(
+              context: context,
+              title: Text(widget.clone == null ? 'New bot' : 'Duplicate bot'),
+            ),
+            bottomNavigationBar: SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  8,
+                  16,
+                  16 + MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: StudioFormActions(
+                  onCancel: _busy ? null : () => Navigator.maybePop(context),
+                  onConfirm: _busy || _identity == null ? null : _save,
+                  confirmLabel: 'Create bot',
+                  busy: _busy,
+                  progressLabel: 'Creating bot',
                 ),
               ),
-            ],
-          ),
-          body: StudioLoadingRegion(
-            available: !_busy,
-            busy: _busy,
-            label: 'Creating bot',
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: StudioError(_error!),
+            ),
+            body: StudioLoadingRegion(
+              available: !_busy,
+              busy: _busy,
+              label: 'Creating bot',
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: StudioError(_error!),
+                    ),
+                  if (_identity == null)
+                    const Text(
+                      'No instance is ready to create bots. Return to Bots and check your Hermes connection.',
+                    ),
+                  if (widget.clone == null && _identity != null)
+                    StudioSelect<String>(
+                      value: _identity,
+                      label: 'Hermes instance',
+                      options: [
+                        for (final instance in _opening.instances)
+                          (value: instance.identity, label: instance.label),
+                      ],
+                      onChanged: _busy
+                          ? null
+                          : (value) => setState(() {
+                              _identity = value;
+                            }),
+                    ),
+                  if (widget.clone != null)
+                    Text(
+                      'Copy ${widget.clone!.title} on ${widget.clone!.instance}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _name,
+                    enabled: !_busy,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'Profile name',
+                      helperText:
+                          'Lowercase letters, numbers, hyphens and underscores',
+                      helperMaxLines: 4,
+                    ),
+                    textCapitalization: TextCapitalization.none,
                   ),
-                if (_identity == null)
-                  const Text(
-                    'No instance is ready to create bots. Return to Bots and check your Hermes connection.',
-                  ),
-                if (widget.clone == null && _identity != null)
-                  StudioSelect<String>(
-                    value: _identity,
-                    label: 'Hermes instance',
-                    options: [
-                      for (final instance in _opening.instances)
-                        (value: instance.identity, label: instance.label),
-                    ],
-                    onChanged: _busy
-                        ? null
-                        : (value) => setState(() {
-                            _identity = value;
-                          }),
-                  ),
-                if (widget.clone != null)
+                  const SizedBox(height: 20),
                   Text(
-                    'Copy ${widget.clone!.title} on ${widget.clone!.instance}',
-                    style: Theme.of(context).textTheme.bodySmall,
+                    widget.clone == null
+                        ? 'The new profile inherits this instance’s launch credentials and model defaults. You can change its name, avatar and settings after creation.'
+                        : 'Copies profile settings, credentials and skills. Channel bindings are excluded, so the copy will not take over existing messaging channels.',
                   ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _name,
-                  enabled: !_busy,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: 'Profile name',
-                    helperText:
-                        'Lowercase letters, numbers, hyphens and underscores',
-                    helperMaxLines: 4,
-                  ),
-                  textCapitalization: TextCapitalization.none,
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  widget.clone == null
-                      ? 'The new profile inherits this instance’s launch credentials and model defaults. You can change its name, avatar and settings after creation.'
-                      : 'Copies profile settings, credentials and skills. Channel bindings are excluded, so the copy will not take over existing messaging channels.',
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

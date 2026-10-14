@@ -1,3 +1,4 @@
+import '../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
@@ -68,17 +69,11 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
             'This toolset still needs setup. Hermes may start its existing setup process on the server. Enabling it does not guarantee it is ready.',
           ),
           actions: [
-            StudioButtonPress(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-            ),
-            StudioButtonPress(
-              child: FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Enable'),
-              ),
+            StudioFormActions(
+              onCancel: () => Navigator.pop(context, false),
+              onConfirm: () => Navigator.pop(context, true),
+              confirmLabel: 'Enable capability',
+              confirmIcon: Icons.toggle_on_outlined,
             ),
           ],
         ),

@@ -109,7 +109,7 @@ void main() {
         find.byKey(const Key('export_passphrase_field')),
         'correct horse',
       );
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.byTooltip('Cancel'));
       await tester.pumpAndSettle();
 
       expect(await result.future, isNull);
@@ -174,7 +174,7 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('import_mode_replace')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.byTooltip('Cancel'));
       await tester.pumpAndSettle();
 
       expect(await result.future, isNull);

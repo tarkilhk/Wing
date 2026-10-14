@@ -45,7 +45,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Reconnect MCP tools'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Reconnect'));
+        await tester.tap(find.byTooltip('Reconnect tools'));
         await tester.pumpAndSettle();
         expect(find.textContaining('Your edits are kept'), findsNothing);
         expect(find.text('MCP tools reconnected.'), findsNothing);
@@ -90,7 +90,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Reconnect MCP tools'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byTooltip('Cancel'));
     await tester.pumpAndSettle();
     expect(requests, isEmpty);
     expect(find.text('MCP tools reconnected.'), findsNothing);
@@ -129,7 +129,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Reconnect MCP tools'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reconnect'));
+    await tester.tap(find.byTooltip('Reconnect tools'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.textContaining('Your edits are kept'), findsNothing);
@@ -162,12 +162,12 @@ void main() {
         findsOneWidget,
       );
       expect(fixture.rpcRequests, isEmpty);
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.byTooltip('Cancel'));
       await tester.pumpAndSettle();
       expect(fixture.rpcRequests, isEmpty);
       await tester.tap(find.text('Reconnect MCP tools'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Reconnect'));
+      await tester.tap(find.byTooltip('Reconnect tools'));
       await tester.pumpAndSettle();
       expect(fixture.rpcRequests, [('default', 'reload.mcp')]);
       expect(find.text('MCP tools reconnected.'), findsOneWidget);
@@ -219,7 +219,7 @@ void main() {
       expect(find.text('Server A / personal'), findsOneWidget);
       expect(find.text('Start sign-in'), findsNothing);
       expect(find.text('ABCD'), findsOneWidget);
-      await tester.tap(find.text('Cancel sign-in'));
+      await tester.tap(find.byTooltip('Cancel sign-in'));
       await tester.pumpAndSettle();
       final writes = f.requests.where((r) => r.$1 != 'GET').toList();
       expect(writes.length, 2);
@@ -263,13 +263,13 @@ void main() {
     );
     await tester.tap(find.text('Start sign-in'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel sign-in'));
+    await tester.tap(find.byTooltip('Cancel sign-in'));
     await tester.pumpAndSettle();
     expect(
       find.textContaining('Cancellation could not be confirmed'),
       findsOneWidget,
     );
-    expect(find.text('Cancel sign-in'), findsOneWidget);
+    expect(find.byTooltip('Cancel sign-in'), findsOneWidget);
     expect(find.text('Server A / default'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
@@ -350,9 +350,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField), 'My shared account');
       await tester.pump();
-      await tester.tap(find.text('Continue'));
+      await tester.tap(find.byTooltip('Save profile name'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Rename'));
+      await tester.tap(find.byTooltip('Rename'));
       await tester.pumpAndSettle();
       expect(find.text('Profile renamed.'), findsOneWidget);
       expect(find.text('My shared account'), findsOneWidget);
@@ -417,7 +417,7 @@ void main() {
         find.textContaining('credentials will be cleared'),
         findsOneWidget,
       );
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.byTooltip('Cancel'));
       await tester.pumpAndSettle();
       expect(f.requests.where((r) => r.$1 != 'GET'), isEmpty);
     },

@@ -1,3 +1,4 @@
+import '../../widgets/studio_form_actions.dart';
 import '../../widgets/wing_app_bar.dart';
 import 'dart:async';
 export 'admin_navigation.dart';
@@ -8,7 +9,6 @@ import '../../widgets/workspace_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../widgets/studio_error.dart';
-import '../../widgets/studio_action_label.dart';
 
 class AdminPage extends StatelessWidget {
   final String title;
@@ -110,40 +110,12 @@ class AdminEditorActions extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: StudioButtonPress(
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                    ),
-                    onPressed: saving ? null : onClose,
-                    child: const Text('Close'),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 3,
-                child: StudioButtonPress(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                    ),
-                    onPressed: saving ? null : onSave,
-                    child: StudioActionLabel('Save', busy: saving),
-                  ),
-                ),
-              ),
-            ],
+          StudioFormActions(
+            onCancel: saving ? null : onClose,
+            onConfirm: saving ? null : onSave,
+            confirmLabel: 'Save changes',
+            busy: saving,
+            progressLabel: 'Saving changes',
           ),
         ],
       ),
@@ -312,7 +284,9 @@ Future<bool> adminConfirm(
   BuildContext context,
   String title,
   String detail, {
-  String action = 'Continue',
+  required String action,
+  required IconData actionIcon,
+  required bool destructive,
 }) async =>
     await showDialog<bool>(
       context: context,
@@ -321,17 +295,12 @@ Future<bool> adminConfirm(
         title: Text(title),
         content: Text(detail),
         actions: [
-          StudioButtonPress(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-          ),
-          StudioButtonPress(
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(action),
-            ),
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context, false),
+            onConfirm: () => Navigator.pop(context, true),
+            confirmLabel: action,
+            confirmIcon: actionIcon,
+            destructive: destructive,
           ),
         ],
       ),

@@ -212,6 +212,11 @@ Future<void> performTaskAction(
         prompt.title,
         prompt.message,
         action: prompt.buttonLabel,
+
+        actionIcon: action == TaskAction.remove
+            ? Icons.delete_outline
+            : Icons.play_arrow_outlined,
+        destructive: action == TaskAction.remove,
       )) {
     return;
   }
@@ -308,6 +313,9 @@ class TaskUncertainty extends StatelessWidget {
               prompt.title,
               prompt.message,
               action: prompt.buttonLabel,
+
+              actionIcon: Icons.rule,
+              destructive: false,
             );
             if (acknowledged) {
               try {
