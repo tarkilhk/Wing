@@ -306,7 +306,12 @@ void main() {
     );
   }
 
-  for (final entry in ['direct', 'native tap', 'native startup']) {
+  for (final entry in [
+    'direct',
+    'native tap',
+    'native startup',
+    'covered group',
+  ]) {
     testWidgets(
       'group notification opens the shared discussion without resuming a worker: $entry',
       (tester) async {
@@ -416,7 +421,7 @@ void main() {
         final app = await _pumpApp(tester, harness);
         final opening = switch (entry) {
           'direct' => app.currentState!.openProfileNotification(payload),
-          'native tap' => messenger.handlePlatformMessage(
+          'native tap' || 'covered group' => messenger.handlePlatformMessage(
             _nativeNotifications.name,
             const StandardMethodCodec().encodeMethodCall(
               MethodCall('interaction', {'payload': payload}),
@@ -439,6 +444,41 @@ void main() {
           isEmpty,
         );
         expect(tester.takeException(), isNull);
+        if (entry == 'covered group') {
+          final context = tester.element(find.byType(BotGroupScreen));
+          unawaited(
+            Navigator.of(context, rootNavigator: true).push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => const Scaffold(body: Text('Covering editor')),
+              ),
+            ),
+          );
+          await _pumpNavigation(tester);
+          expect(find.text('Covering editor'), findsOneWidget);
+          await app.currentState!.openProfileNotification(payload);
+          await _pumpNavigation(tester);
+          await tester.settleMarkdown();
+          await _pumpNavigation(tester);
+          expect(find.byType(BotGroupScreen), findsOneWidget);
+          expect(
+            find.text('Shared group answer', findRichText: true),
+            findsOneWidget,
+          );
+          expect(find.text('Covering editor'), findsNothing);
+          expect(
+            find.text('Covering editor', skipOffstage: false),
+            findsOneWidget,
+          );
+          final groupContext = tester.element(find.byType(BotGroupScreen));
+          final groupRoute = ModalRoute.of(groupContext)!;
+          expect(groupRoute.isCurrent, isTrue);
+          await app.currentState!.openProfileNotification(payload);
+          await _pumpNavigation(tester);
+          expect(
+            ModalRoute.of(tester.element(find.byType(BotGroupScreen))),
+            same(groupRoute),
+          );
+        }
         await tester.pumpWidget(const SizedBox.shrink());
         await _pumpNavigation(tester);
       },

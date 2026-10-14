@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 
 PACKAGE = 'com.tarkilhk.wing.notificationqa'
 SERIAL = 'emulator-5556'
+_fixture_http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def adb(*args):
@@ -22,7 +23,7 @@ def state(path='/', data=None):
     request = urllib.request.Request('http://127.0.0.1:18766' + path,
         data=None if data is None else json.dumps(data).encode(),
         headers={'Content-Type': 'application/json'})
-    return json.load(urllib.request.urlopen(request, timeout=5))
+    return json.load(_fixture_http.open(request, timeout=5))
 
 
 def until(check, message, timeout=45):
@@ -39,7 +40,9 @@ def until(check, message, timeout=45):
 
 
 def nodes():
-    adb('shell', 'uiautomator', 'dump', '/sdcard/wing-notification-ui.xml')
+    captured = adb('shell', 'uiautomator', 'dump', '/sdcard/wing-notification-ui.xml')
+    if 'dumped to:' not in captured:
+        raise ValueError('Android UI hierarchy is unavailable; discard the previous capture')
     return list(ET.fromstring(adb('shell', 'cat', '/sdcard/wing-notification-ui.xml')).iter('node'))
 
 
@@ -119,7 +122,31 @@ def check_untrusted_main_intents():
     print('PASS: exported MainActivity rejects raw, forged and wrong-type notification inputs without decisions or crashes', flush=True)
 
 
-def run(output):
+def check_content_tap_clear():
+    """A body tap must clear Android's slot before history/network settlement."""
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    until(lambda: state()['lifecycle'] == 'paused', 'Fixture did not enter the background')
+    answer = 'Read this notification while history is held.'
+    current = state('/reply', {'text': answer})
+    notices = json.loads(current['notices'])
+    notice = next(value for key, value in notices.items()
+                  if json.loads(key).get('profile') == 'a' and value['result'])
+    notification_id = json.loads(notice['rendered'])['id']
+    state('/hold-history', {})
+    try:
+        shade()
+        tap(text=answer)
+        until(lambda: state()['history_held'], 'Tap did not start the captured chat history')
+        raw = adb('shell', 'dumpsys', 'notification', '--noredact')
+        assert not any(f'pkg={PACKAGE} ' in line and f'id={notification_id} ' in line
+                       for line in raw.splitlines() if 'NotificationRecord(' in line), \
+            'Body tap left its notification in the shade while history was loading'
+        print('PASS: body tap opens the captured chat and clears the shade before history completes', flush=True)
+    finally:
+        state('/release-history', {})
+
+
+def run(output, tap_only=False):
     assert SERIAL.startswith('emulator-'), 'Use a disposable emulator, never a phone'
     adb('forward', 'tcp:18766', 'tcp:18766')
     adb('shell', 'pm', 'clear', PACKAGE)
@@ -129,6 +156,9 @@ def run(output):
     adb('shell', 'am', 'start', '-n', PACKAGE + '/com.tarkilhk.wing.MainActivity')
     until(lambda: state()['ready'], 'Fixture did not start')
     state('/work', {})
+    if tap_only:
+        check_content_tap_clear()
+        return
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     state('/approval', {})
     state('/approval', {'command': 'npm run release'})
@@ -198,6 +228,7 @@ def run(output):
     tap(text=answer)
     until(lambda: all(v['result'] is None for k, v in json.loads(state()['notices']).items() if json.loads(k)['profile'] == 'a'), 'Reading the latest answer did not clear its notification')
     print('PASS: body tap opens latest reply and visibility clears its notification', flush=True)
+    check_content_tap_clear()
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     state('/error', {})
     shade()
@@ -369,14 +400,17 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path, default=Path('build/notification-review'))
     parser.add_argument('--recents-only', action='store_true',
                         help='Check real notification task visibility with absent/existing app tasks')
+    parser.add_argument('--tap-only', action='store_true',
+                        help='Check shade dismissal while the tapped chat history is held')
     args = parser.parse_args()
     SERIAL = args.serial
     try:
         if args.recents_only:
             check_recents_visibility(args.output)
         else:
-            run(args.output)
-            check_recents_visibility(args.output)
+            run(args.output, tap_only=args.tap_only)
+            if not args.tap_only:
+                check_recents_visibility(args.output)
     finally:
         if SERIAL.startswith('emulator-'):
             adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')

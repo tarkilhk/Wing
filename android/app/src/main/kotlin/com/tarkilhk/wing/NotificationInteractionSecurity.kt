@@ -137,12 +137,20 @@ internal class NotificationHandleStore(
         return if (write(JSONArray(entries).toString())) entry.getJSONObject("value") else null
     }
 
+    // Once the user has tapped, opening the captured conversation is independent
+    // of the notification's later read/replacement state. This grants no decision.
+    private fun acceptedNavigation(entry: JSONObject): Boolean =
+        entry.optString("purpose") == mainPurpose &&
+            entry.getJSONObject("value").optString("choice").isEmpty()
+
     @Synchronized fun invalidate(notification: Int): Boolean =
-        write(JSONArray(entries().filter { it.optInt("notification") != notification }).toString())
+        write(JSONArray(entries().filter {
+            it.optInt("notification") != notification || acceptedNavigation(it)
+        }).toString())
 
     @Synchronized fun replace(notification: Int, payload: String?, revision: String?): Boolean =
         write(JSONArray(entries().filter { entry ->
-            entry.optInt("notification") != notification ||
+            entry.optInt("notification") != notification || acceptedNavigation(entry) ||
                 // Startup/configuration can re-render the same alert while Main waits for unlock.
                 // Keep only its already-minted review handoff, with exactly the same target.
                 (entry.optString("purpose") == mainPurpose &&

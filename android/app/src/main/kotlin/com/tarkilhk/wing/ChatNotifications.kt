@@ -250,7 +250,7 @@ object ChatNotifications {
         val builder = NotificationCompat.Builder(context, data["channel"] as String)
             .setSmallIcon(icon).setContentTitle(data["title"] as String)
             .setContentText(body).setSubText(data["scope"] as? String)
-            .setAutoCancel(false).setOnlyAlertOnce(data["alert"] != true)
+            .setAutoCancel(true).setOnlyAlertOnce(data["alert"] != true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(NotificationCompat.Builder(context, data["channel"] as String)
                 .setSmallIcon(icon).setContentTitle("Wing").setContentText("Open Wing to review this chat").build())

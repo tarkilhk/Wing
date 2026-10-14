@@ -649,60 +649,65 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Future<void> _openRecentGroup(
     BotGroup group, {
     AppDestination origin = AppDestination.activity,
+    bool notification = false,
   }) {
     final fromRecents =
         origin == AppDestination.activity || _recentVisit?.modeEnabled == true;
-    return Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (groupContext) {
-          final status = _groupConnectionStatus(group);
-          final connection = _groupConnection(group);
-          final discussion = BotAvatarScope(
-            session: _bots,
-            child: GroupConversationSwitcher(
-              groupKey: RecentConversationKey.group(group.key),
-              onLeave: () => _leaveConversation(origin),
-              onLeaveRecents: () => _leaveConversation(AppDestination.activity),
-              createSession: () => controller.groupRecentConversationSession(
-                group: group,
-                fromRecents: fromRecents,
-                recents: _recents,
-                onOpenGroup: _openRecentGroup,
-                activity: () => ChatNoticeActivityScope.of(groupContext),
-                onOpenChat: (_) => _openGroupChatWindow(
-                  groupContext,
-                  origin: AppDestination.activity,
-                ),
-              ),
-              previewBuilder: _recentPreview,
-              child: BotGroupScreen(
-                voiceInputSettings: () =>
-                    controller.appPreferences.current.voiceInputSettings,
-                voiceDevice: widget.voiceDevice,
-                stopVoicePlayback: _voiceOutput.stop,
-                createSession: () => _bots.openGroup(group),
-                onEdit: (group) => openGroupEditor(groupContext, _bots, group),
-                onOpenBotChat: (bot) => _openGroupBotChat(groupContext, bot),
-                onOpenBotSettings: (bot) =>
-                    _openBotSettings(bot, routeContext: groupContext),
+    final route = MaterialPageRoute<void>(
+      builder: (groupContext) {
+        final status = _groupConnectionStatus(group);
+        final connection = _groupConnection(group);
+        final discussion = BotAvatarScope(
+          session: _bots,
+          child: GroupConversationSwitcher(
+            groupKey: RecentConversationKey.group(group.key),
+            onLeave: () => _leaveConversation(origin),
+            onLeaveRecents: () => _leaveConversation(AppDestination.activity),
+            createSession: () => controller.groupRecentConversationSession(
+              group: group,
+              fromRecents: fromRecents,
+              recents: _recents,
+              onOpenGroup: _openRecentGroup,
+              activity: () => ChatNoticeActivityScope.of(groupContext),
+              onOpenChat: (_) => _openGroupChatWindow(
+                groupContext,
+                origin: AppDestination.activity,
               ),
             ),
-          );
-          return status == null
-              ? discussion
-              : ServerConnectionScope(
-                  status: status,
-                  icon: connection?.icon,
-                  onPickWorkspace: (anchor, {required mode}) =>
-                      unawaited(_pickWorkspace(anchor, mode: mode)),
-                  child: discussion,
-                );
-        },
-      ),
+            previewBuilder: _recentPreview,
+            child: BotGroupScreen(
+              voiceInputSettings: () =>
+                  controller.appPreferences.current.voiceInputSettings,
+              voiceDevice: widget.voiceDevice,
+              stopVoicePlayback: _voiceOutput.stop,
+              createSession: () => _bots.openGroup(group),
+              onEdit: (group) => openGroupEditor(groupContext, _bots, group),
+              onOpenBotChat: (bot) => _openGroupBotChat(groupContext, bot),
+              onOpenBotSettings: (bot) =>
+                  _openBotSettings(bot, routeContext: groupContext),
+            ),
+          ),
+        );
+        return status == null
+            ? discussion
+            : ServerConnectionScope(
+                status: status,
+                icon: connection?.icon,
+                onPickWorkspace: (anchor, {required mode}) =>
+                    unawaited(_pickWorkspace(anchor, mode: mode)),
+                child: discussion,
+              );
+      },
     );
+    if (notification) _notificationGroup = (key: group.key, route: route);
+    return Navigator.of(context).push<void>(route).whenComplete(() {
+      if (identical(_notificationGroup?.route, route)) {
+        _notificationGroup = null;
+      }
+    });
   }
 
-  String? _notificationGroup;
+  ({String key, Route<void> route})? _notificationGroup;
   Future<void> showNotificationGroup(
     GroupNotificationTarget target,
     bool Function() canUse,
@@ -712,17 +717,15 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         target.scope.connectionId != controller.connection.id) {
       throw StateError('Group belongs to another connection');
     }
-    if (_notificationGroup == target.key) return;
+    if (_notificationGroup?.key == target.key &&
+        _notificationGroup!.route.isCurrent) {
+      return;
+    }
     await _bots.refresh();
     if (!mounted || !canUse()) return;
     final group = _bots.groupForKey(target.key);
     if (group == null) throw StateError('The shared group is unavailable');
-    _notificationGroup = target.key;
-    unawaited(
-      _openRecentGroup(group).whenComplete(() {
-        if (_notificationGroup == target.key) _notificationGroup = null;
-      }),
-    );
+    unawaited(_openRecentGroup(group, notification: true));
   }
 
   Future<void> _openRecentConversation(
