@@ -77,7 +77,12 @@ class _ButtonPressCoverage extends RecursiveAstVisitor<void> {
         final passiveRow =
             native.first.element.name == 'ListTile' &&
             callbacks.intersection({'onTap', 'onLongPress'}).isEmpty;
-        final argument = node.parent;
+        AstNode child = node;
+        while (child.parent is ConditionalExpression ||
+            child.parent is ParenthesizedExpression) {
+          child = child.parent!;
+        }
+        final argument = child.parent;
         final parent = argument?.parent?.parent;
         final wrapped =
             argument is NamedExpression &&
@@ -119,10 +124,19 @@ class IconButton {}
 class HiddenButton extends m.IconButton {
   const HiddenButton() : super(onPressed: null, icon: const m.Icon(m.Icons.close));
 }
-void examples() {
+void examples(bool choose) {
   AliasButton(onPressed: null, icon: const m.Icon(m.Icons.close));
   const HiddenButton();
   StudioButtonPress(child: m.IconButton(onPressed: null, icon: const m.Icon(m.Icons.close)));
+  StudioButtonPress(child: choose
+      ? AliasButton(onPressed: null, icon: const m.Icon(m.Icons.close))
+      : const HiddenButton());
+  StudioButtonPress(child: (choose
+      ? (m.IconButton.filled(onPressed: null, icon: const m.Icon(m.Icons.close)))
+      : m.IconButton.outlined(onPressed: null, icon: const m.Icon(m.Icons.close))));
+  choose
+      ? AliasButton(onPressed: null, icon: const m.Icon(m.Icons.close))
+      : const HiddenButton();
   IconButton();
 }
 ''');
@@ -140,9 +154,9 @@ void examples() {
         (probe as ResolvedUnitResult).unit.accept(proof);
         expect(
           proof.missing.length,
-          2,
+          4,
           reason:
-              'Detect aliases and subclasses; accept prefixed wrapped controls and unrelated names',
+              'Detect unwrapped aliases, subclasses and branches; accept wrapped conditional children and unrelated names',
         );
         final files = Directory('$root/lib')
             .listSync(recursive: true)

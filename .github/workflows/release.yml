@@ -26,7 +26,7 @@ jobs:
     name: Build and verify APK
     if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       PUB_CACHE: ${{ github.workspace }}/.pub-cache
       RELEASE_TOOLS: ${{ github.workspace }}/release-tools/scripts
@@ -57,7 +57,10 @@ jobs:
           java-version: '17'
 
       - name: Install pinned Android SDK and verification tools
-        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"'
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "emulator" "system-images;android-36;google_apis;x86_64"'
+
+      - name: Allow runner user to accelerate the Android emulator
+        run: sudo chmod a+rw /dev/kvm
 
       - name: Cache Gradle dependencies and task outputs
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
@@ -185,6 +188,22 @@ jobs:
 
       - name: Test native Android boundaries on the JVM
         run: ./android/gradlew -p android :app:testDebugUnitTest --no-daemon
+
+      - name: Test real Android notification taps with blocked history
+        id: notification_device
+        timeout-minutes: 15
+        run: python3 tools/qa/run_notification_gate.py
+
+      - name: Upload notification emulator diagnostics
+        if: failure() && steps.notification_device.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: notification-gate-release
+          path: |
+            source/build/notification-gate/*.log
+            source/build/notification-gate/*.txt
+            source/build/notification-gate/*.png
+          if-no-files-found: ignore
 
       - name: Check native share provider and queue boundaries
         run: python3 tools/architecture/native_share/provider_boundary.py
