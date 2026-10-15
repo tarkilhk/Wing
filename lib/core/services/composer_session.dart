@@ -350,6 +350,33 @@ class ComposerSession {
   List<DeletedDraftFile> deletionFiles() =>
       List.unmodifiable(_allFiles.map(DeletedDraftFile.capture));
 
+  bool get _queueAvailable =>
+      !_saving && !_draining && !_steering && !_runtime().switching;
+
+  ({bool canEdit, bool canSteer, bool canDelete}) queueActions(
+    ComposerQueueId id,
+  ) {
+    final item = _queue.where((entry) => identical(entry.id, id)).firstOrNull;
+    final available = item != null && _queueAvailable;
+    final selected = _editing == null || identical(_editing, item);
+    final text =
+        (identical(_editing, item) ? _editText : item?.value.text ?? '').trim();
+    final runtime = _runtime();
+    return (
+      canEdit: available && selected,
+      canDelete: available,
+      canSteer:
+          available &&
+          selected &&
+          runtime.connected &&
+          runtime.canSteer &&
+          item.value.attachments.isEmpty &&
+          text.isNotEmpty &&
+          !text.startsWith('/') &&
+          !(item.value.submissionUncertain && text == item.value.text.trim()),
+    );
+  }
+
   ComposerActions actions() {
     final runtime = _runtime(), text = _text.trim();
     final blocked =
@@ -422,36 +449,16 @@ class ComposerSession {
           _submissions.isEmpty &&
           runtime.connected &&
           !slash,
-      hasMessageActions:
-          _editing == null &&
-          !runtime.switching &&
-          !runtime.commandRunning &&
-          !runtime.changingAnswer &&
-          !runtime.changingIntelligence &&
-          !_saving &&
-          (_queue.isNotEmpty || (runtime.working && hasDraft && !slash)),
-      offered: {
-        if (text.isNotEmpty && !slash && runtime.working && _files.isEmpty)
-          ComposerAction.steer,
-        if (hasDraft && !slash && runtime.working) ComposerAction.queue,
-        if (runtime.working) ComposerAction.stop,
-      },
       canResumeQueue: !_draining && !_saving,
       editingBusy: _saving || _steering || runtime.switching,
       canEditText:
           !runtime.commandRunning &&
           !(_editing != null && (_saving || _steering)),
-      canEditQueue: !_saving && !_draining && !_steering && !runtime.switching,
+      canEditQueue: _queueAvailable,
       canSaveQueueEdit:
           validEdit && !_saving && !_steering && !runtime.switching,
       canSteerQueueEdit:
-          validEdit &&
-          editedText.isNotEmpty &&
-          item.attachments.isEmpty &&
-          runtime.canSteer &&
-          !_saving &&
-          !_steering &&
-          !runtime.switching,
+          _editing != null && queueActions(_editing!.id).canSteer,
     );
   }
 
@@ -1466,21 +1473,36 @@ class ComposerSession {
     }
   }
 
-  Future<bool> steerEdit(Future<bool> Function(String) send) async {
+  Future<bool> steerQueued(
+    ComposerQueueId id,
+    Future<bool> Function(String text, List<ComposerReference> references) send,
+  ) async {
     _ensure();
-    final item = _editing, text = _editText.trim();
-    if (item == null ||
-        (item.value.submissionUncertain && text == item.value.text.trim()) ||
-        _saving ||
-        _draining ||
-        _steering ||
-        item.value.attachments.isNotEmpty ||
-        text.isEmpty ||
-        text.startsWith('/') ||
-        !_runtime().canSteer) {
-      return false;
-    }
-    _entry(item.id);
+    if (!queueActions(id).canSteer) return false;
+    final item = _entry(id);
+    return _steerQueued(
+      item,
+      identical(_editing, item) ? _editText.trim() : item.value.text.trim(),
+      identical(_editing, item) ? _editReferences : item.value.references,
+      send,
+    );
+  }
+
+  Future<bool> steerEdit(
+    Future<bool> Function(String text, List<ComposerReference> references) send,
+  ) async {
+    _ensure();
+    final item = _editing;
+    if (item == null) return false;
+    return steerQueued(item.id, send);
+  }
+
+  Future<bool> _steerQueued(
+    _QueueEntry item,
+    String text,
+    Iterable<ComposerReference> references,
+    Future<bool> Function(String text, List<ComposerReference> references) send,
+  ) async {
     final original = item.value;
     _saving = true;
     var accepted = false, attempted = false;
@@ -1490,7 +1512,7 @@ class ComposerSession {
     // work on the next launch.
     item.value = QueuedPromptDraft(
       text: text,
-      references: retainComposerReferences(text, _editReferences),
+      references: retainComposerReferences(text, references),
       attachments: original.attachments,
       submissionUncertain: true,
     );
@@ -1500,11 +1522,14 @@ class ComposerSession {
       _ensure();
       attempted = true;
       _steering = true;
-      accepted = await send(text);
+      accepted = await send(text, List.unmodifiable(item.value.references));
       if (accepted) {
         _queue.remove(item);
-        _editing = null;
-        _editText = '';
+        if (identical(_editing, item)) {
+          _editing = null;
+          _editText = '';
+          _editReferences = const [];
+        }
       } else {
         // False is the runtime's positive rejection, not a missing receipt.
         item.value = original;

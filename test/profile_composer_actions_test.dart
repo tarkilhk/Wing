@@ -8,6 +8,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as raster;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +26,7 @@ import 'package:wing/core/widgets/composer_action_button.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 
 class _ComposerActionsFixture extends ProfileActionsFixture {
+  final steerRequests = <Map<String, dynamic>>[];
   Map<String, dynamic> steerResult = {'status': 'queued'};
   Completer<Map<String, dynamic>>? steerReply;
   List<Map<String, dynamic>> transcript = [];
@@ -41,7 +43,10 @@ class _ComposerActionsFixture extends ProfileActionsFixture {
       discover: base.discover,
       get: base.read,
       rpc: (method, params) => switch (method) {
-        'session.steer' => steerReply?.future ?? Future.value(steerResult),
+        'session.steer' => () {
+          steerRequests.add(Map.of(params));
+          return steerReply?.future ?? Future.value(steerResult);
+        }(),
         'commands.catalog' => Future.value({
           'pairs': [
             ['/steer', 'Steer the current turn'],
@@ -369,8 +374,8 @@ void main() {
     expect(chat.composer.observation.text, 'My draft');
     expect(chat.composer.observation.displayedText, 'Keep this queued');
     expect(find.byType(AlertDialog), findsNothing);
-    expect(find.text('Queue'), findsOneWidget);
-    expect(find.text('Steer'), findsOneWidget);
+    expect(find.byTooltip('Save queued message'), findsOneWidget);
+    expect(find.byTooltip('Steer queued message'), findsOneWidget);
     expect(find.byTooltip('Delete queued message'), findsOneWidget);
     expect(find.byTooltip('Message actions'), findsNothing);
     expect(
@@ -381,6 +386,123 @@ void main() {
       isTrue,
     );
   });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'tap offers actions for the selected queued message $brightness $scale',
+        (tester) async {
+          final chat = await show(
+            tester,
+            brightness: brightness,
+            scale: scale,
+            status: ChatExecution.running,
+            queued: ['First queued', 'Second queued'],
+            draft: 'Separate draft',
+            paused: true,
+          );
+          tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+          await pumpFrames(tester);
+          await tester.ensureVisible(find.text('Second queued'));
+          await pumpFrames(tester, count: 2);
+          await tester.tap(find.text('Second queued'));
+          await pumpFrames(tester);
+          expect(find.byTooltip('Edit queued message'), findsOneWidget);
+          expect(find.byTooltip('Steer queued message'), findsOneWidget);
+          expect(find.byTooltip('Delete queued message'), findsOneWidget);
+          expect(find.text('Steer this turn'), findsNothing);
+          await capture(tester, 'queued-actions-${brightness.name}-$scale');
+          await tester.tap(find.byTooltip('Edit queued message'));
+          await pumpFrames(tester);
+          expect(
+            chat.composer.observation.editing,
+            same(chat.composer.observation.queue.last.id),
+          );
+          expect(chat.composer.observation.displayedText, 'Second queued');
+          expect(chat.composer.observation.text, 'Separate draft');
+          await tester.ensureVisible(find.byTooltip('Save queued message'));
+          await pumpFrames(tester, count: 2);
+          await capture(tester, 'queued-edit-${brightness.name}-$scale');
+          expect(
+            find.byTooltip('Save queued message').hitTestable(),
+            findsOneWidget,
+          );
+          expect(
+            find.byTooltip('Cancel queued message editing').hitTestable(),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'tap Steer delivers the selected queue entry and preserves the draft',
+    (tester) async {
+      final chat = await show(
+        tester,
+        status: ChatExecution.running,
+        queued: ['First queued', 'Second queued'],
+        draft: 'Separate draft',
+        paused: true,
+      );
+      await tester.tap(find.text('Second queued'));
+      await pumpFrames(tester);
+      await tester.tap(find.byTooltip('Steer queued message'));
+      await pumpFrames(tester);
+      expect(fixture.steerRequests.single['text'], 'Second queued');
+      expect(chat.composer.observation.queue.single.text, 'First queued');
+      expect(chat.composer.observation.text, 'Separate draft');
+      expect(chat.composer.observation.editing, isNull);
+    },
+  );
+
+  testWidgets(
+    'queued steer shows progress, rejection and retry on the selected row',
+    (tester) async {
+      fixture.steerReply = Completer<Map<String, dynamic>>();
+      final chat = await show(
+        tester,
+        status: ChatExecution.running,
+        queued: ['First queued', 'Second queued'],
+        draft: 'Separate draft',
+        paused: true,
+      );
+      await tester.tap(find.text('Second queued'));
+      await pumpFrames(tester, count: 4);
+      await tester.tap(find.byTooltip('Steer queued message'));
+      await pumpFrames(tester, count: 4);
+      expect(fixture.steerRequests.single['text'], 'Second queued');
+      expect(find.text('Queued message'), findsNothing);
+      expect(find.text('Second queued'), findsOneWidget);
+      final loading = find.descendant(
+        of: find.byKey(const ValueKey('studio-loading-slot')),
+        matching: find.byTooltip('Steering message'),
+      );
+      expect(loading.hitTestable(), findsOneWidget);
+      await capture(tester, 'queued-steer-pending');
+      fixture.steerReply!.complete({'status': 'rejected'});
+      await pumpFrames(tester, count: 4);
+      expect(loading, findsNothing);
+      expect(
+        find.text('Hermes rejected the steering message.'),
+        findsOneWidget,
+      );
+      expect(chat.composer.observation.queue, hasLength(2));
+      expect(chat.composer.observation.text, 'Separate draft');
+      fixture.steerReply = null;
+      await tester.tap(find.text('Second queued'));
+      await pumpFrames(tester, count: 4);
+      await tester.tap(find.byTooltip('Steer queued message'));
+      await pumpFrames(tester, count: 4);
+      expect(fixture.steerRequests, hasLength(2));
+      expect(chat.composer.observation.queue.single.text, 'First queued');
+      expect(chat.composer.observation.text, 'Separate draft');
+      expect(loading, findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('configured Stop remains a normal tap action', (tester) async {
     await appPreferences.setRunningAction(ComposerAction.stop);
@@ -559,9 +681,127 @@ void main() {
 
     await tester.tap(find.text('report.pdf'));
     await pumpFrames(tester, count: 4);
-    expect(find.text('Queued: Attachment'), findsOneWidget);
-    expect(find.text('1 attachment: report.pdf'), findsOneWidget);
+    expect(find.text('Queued message'), findsOneWidget);
+    expect(find.text('report.pdf'), findsNWidgets(2));
+    expect(
+      tester
+          .widget<IconButton>(
+            find.widgetWithIcon(IconButton, Icons.explore_outlined),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(find.byTooltip('Edit queued message').hitTestable(), findsOneWidget);
   });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('image queue explains disabled Steer $brightness $scale', (
+        tester,
+      ) async {
+        const reason = 'Hermes only supports steering text-only messages.';
+        final bytes = raster.encodePng(
+          raster.Image(width: 3, height: 2)
+            ..clear(raster.ColorRgb8(39, 127, 137)),
+        );
+        final cache = await tester.runAsync(
+          () => Directory.systemTemp.createTemp('queued-steer-hint-'),
+        );
+        addTearDown(() => cache!.delete(recursive: true));
+        final file = File('${cache!.path}/photo.png');
+        await tester.runAsync(() => file.writeAsBytes(bytes));
+        final image = AttachmentDraft(
+          id: 'queued-image',
+          cachedPath: file.path,
+          name: 'photo.png',
+          byteLength: bytes.length,
+          mediaType: 'image/png',
+          kind: AttachmentDraftKind.image,
+        );
+        final caption = scale == 1 ? '' : 'Queued photo';
+        final chat = await show(
+          tester,
+          brightness: brightness,
+          scale: scale,
+          status: ChatExecution.running,
+          draft: caption,
+          attachments: [image],
+          paused: true,
+        );
+        tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+        await pumpFrames(tester);
+        await choose(tester, 'queue');
+        await controller.updateDraft(chat, 'Separate draft');
+        await pumpFrames(tester);
+        final selected = chat.composer.observation.queue.single.id;
+        final row = find.text(
+          caption.isEmpty ? 'photo.png' : '$caption · photo.png',
+        );
+        await tester.ensureVisible(row);
+        await pumpFrames(tester, count: 2);
+        await tester.tap(row);
+        await pumpFrames(tester);
+        final steer = find
+            .widgetWithIcon(IconButton, Icons.explore_outlined)
+            .last;
+        expect(tester.widget<IconButton>(steer).onPressed, isNull);
+        expect(find.text(reason), findsNothing);
+        await tester.tap(steer);
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(find.text(reason), findsOneWidget);
+        expect(
+          tester.getBottomLeft(find.text(reason)).dy,
+          lessThan(tester.getTopLeft(steer).dy),
+        );
+        await capture(
+          tester,
+          'queued-image-hint-menu-${brightness.name}-$scale',
+        );
+        expect(fixture.steerRequests, isEmpty);
+        expect(chat.composer.observation.queue.single.id, same(selected));
+        expect(chat.composer.observation.text, 'Separate draft');
+        expect(find.text('Queued message'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(find.text(reason), findsNothing);
+        await tester.tap(steer);
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(find.text(reason), findsOneWidget);
+        await tester.tap(find.byTooltip('Edit queued message'));
+        await pumpFrames(tester);
+        expect(find.text(reason), findsNothing);
+        expect(chat.composer.observation.editing, same(selected));
+        await tester.ensureVisible(steer);
+        await pumpFrames(tester, count: 2);
+        expect(tester.widget<IconButton>(steer).onPressed, isNull);
+        await tester.tap(steer);
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(find.text(reason), findsOneWidget);
+        expect(
+          tester.getBottomLeft(find.text(reason)).dy,
+          lessThan(tester.getTopLeft(steer).dy),
+        );
+        await capture(
+          tester,
+          'queued-image-hint-edit-${brightness.name}-$scale',
+        );
+        expect(fixture.steerRequests, isEmpty);
+        expect(
+          chat.composer.observation.queue.single.attachments.single.id,
+          image.id,
+        );
+        expect(chat.composer.observation.text, 'Separate draft');
+        await tester.tap(find.byTooltip('Cancel queued message editing'));
+        await pumpFrames(tester);
+        expect(find.text(reason), findsNothing);
+        expect(chat.composer.observation.displayedText, 'Separate draft');
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
 
   testWidgets('delete cross confirms deletion and restores the draft', (
     tester,
@@ -628,13 +868,18 @@ void main() {
     await tester.pump();
     expect(
       tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Queue'))
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byTooltip('Save queued message'),
+              matching: find.byType(IconButton),
+            ),
+          )
           .onPressed,
       isNull,
     );
     await tester.enterText(editor, 'Updated');
     await tester.pump();
-    await tester.tap(find.text('Queue'));
+    await tester.tap(find.byTooltip('Save queued message'));
     await pumpFrames(tester, count: 4);
     expect(chat.composer.observation.queue.map((prompt) => prompt.text), [
       'Updated',
@@ -666,7 +911,7 @@ void main() {
       'Changed direction',
     );
     await pumpFrames(tester, count: 4);
-    await tester.tap(find.text('Steer'));
+    await tester.tap(find.byTooltip('Steer queued message'));
     await pumpFrames(tester, count: 4);
     expect(chat.composer.observation.queue.map((prompt) => prompt.text), [
       'Second',
@@ -698,7 +943,7 @@ void main() {
       'Try this',
     );
     await pumpFrames(tester, count: 4);
-    await tester.tap(find.text('Steer'));
+    await tester.tap(find.byTooltip('Steer queued message'));
     await pumpFrames(tester, count: 4);
     expect(chat.composer.observation.queue.single.text, 'Original');
     expect(chat.composer.observation.displayedText, 'Try this');
@@ -707,7 +952,7 @@ void main() {
     expect(find.text('Hermes rejected the steering message.'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
     fixture.steerResult = {'status': 'queued'};
-    await tester.tap(find.text('Steer'));
+    await tester.tap(find.byTooltip('Steer queued message'));
     await pumpFrames(tester, count: 4);
     expect(chat.composer.observation.queue, isEmpty);
     expect(chat.composer.observation.displayedText, 'Separate draft');
@@ -728,8 +973,8 @@ void main() {
     await pumpFrames(tester, count: 4);
     tester.view.viewInsets = const FakeViewPadding(bottom: 280);
     await pumpFrames(tester, count: 4);
-    expect(find.text('Queue'), findsOneWidget);
-    expect(find.text('Steer'), findsOneWidget);
+    expect(find.byTooltip('Save queued message'), findsOneWidget);
+    expect(find.byTooltip('Steer queued message'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -853,14 +1098,17 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('First follow-up'));
       await pumpFrames(tester, count: 4);
-      expect(find.text('Queued messages are paused'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('Queued: First follow-up'),
-        180,
-        scrollable: find.byType(Scrollable).last,
+      expect(
+        find.byTooltip('Resume queued messages').hitTestable(),
+        findsOneWidget,
       );
+      expect(
+        find.byTooltip('Edit queued message').hitTestable(),
+        findsOneWidget,
+      );
+      await tester.tap(find.byTooltip('Edit queued message'));
       await pumpFrames(tester, count: 4);
-      expect(find.text('Queued: First follow-up'), findsOneWidget);
+      expect(chat.composer.observation.displayedText, 'First follow-up');
       expect(tester.takeException(), isNull);
     },
   );

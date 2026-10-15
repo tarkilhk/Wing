@@ -7202,13 +7202,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     });
   }
 
-  Future<bool> _steerRuntime(ProfileChat chat, String text) async {
+  Future<bool> _steerRuntime(
+    ProfileChat chat,
+    String text, {
+    required Iterable<ComposerReference> selected,
+  }) async {
     final runtime = chat.runtime.runtimeId;
-    final prepared = await _prepareReferences(
-      chat,
-      text,
-      selected: chat.composer.observation.references,
-    );
+    final prepared = await _prepareReferences(chat, text, selected: selected);
     if (chat.runtime.runtimeId != runtime) {
       throw StateError('The conversation changed before steering.');
     }
@@ -7235,7 +7235,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     // Consumption belongs to the captured composer revision, including ABA edits.
     return chat.composer.steerText(
       rawText,
-      (text) => _steerRuntime(chat, text),
+      (text) => _steerRuntime(
+        chat,
+        text,
+        selected: chat.composer.observation.references,
+      ),
     );
   }
 
@@ -7332,7 +7336,17 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<bool> steerQueuedPromptEdit(ProfileChat chat) async {
     _commandOwner(chat);
     final accepted = await chat.composer.steerEdit(
-      (text) => _steerRuntime(chat, text),
+      (text, references) => _steerRuntime(chat, text, selected: references),
+    );
+    await _drainQueuedPrompts(chat);
+    return accepted;
+  }
+
+  Future<bool> steerQueuedPrompt(ProfileChat chat, ComposerQueueId id) async {
+    _commandOwner(chat);
+    final accepted = await chat.composer.steerQueued(
+      id,
+      (text, references) => _steerRuntime(chat, text, selected: references),
     );
     await _drainQueuedPrompts(chat);
     return accepted;

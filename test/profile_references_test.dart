@@ -419,6 +419,44 @@ void main() {
   });
 
   test(
+    'queued steering prepares the selected references independently of the draft',
+    () async {
+      host.event('a', 'message.start');
+      const queued = ComposerReference(
+        kind: ComposerReferenceKind.file,
+        token: '@file:note.md',
+        target: '/work/note.md',
+      );
+      const draft = ComposerReference(
+        kind: ComposerReferenceKind.file,
+        token: '@file:note.md',
+        target: '/other/note.md',
+      );
+      host.references.files[draft.target] = 'Separate draft context';
+      await controller.updateDraft(
+        chat,
+        'Read ${queued.token}',
+        reference: queued,
+      );
+      await controller.queuePrompt(chat, chat.composer.observation.text);
+      final selected = chat.composer.observation.queue.single.id;
+      await controller.updateDraft(
+        chat,
+        'Later ${draft.token}',
+        reference: draft,
+      );
+      expect(await controller.steerQueuedPrompt(chat, selected), isTrue);
+      final prepared = PreparedComposerMessage.parse(
+        lastCall('session.steer')['text'],
+      )!;
+      expect(prepared.references.single.target, queued.target);
+      expect(chat.composer.observation.queue, isEmpty);
+      expect(chat.composer.observation.text, 'Later ${draft.token}');
+      expect(chat.composer.observation.references.single.target, draft.target);
+    },
+  );
+
+  test(
     'saved restore uses the captured canonical target before cutting history',
     () async {
       const selected = ComposerReference(

@@ -6,11 +6,17 @@ Queue moves composer text and attachments into an unsent entry for that chat.
 Attachment-only entries are supported; Steer accepts text only. The separate
 composer draft remains available.
 
-Hold a queued row to edit it in the composer. Queue saves the edit in its
-original position. Steer sends the edited text into the active turn and removes
-it after acknowledgement. Cancel restores your separate draft; deletion requires
-confirmation. Back hides the keyboard first, then cancels editing. Sending the
-queue pauses while an edit is open.
+Tap a queued row to open actions for that message: Edit, Steer and Delete.
+Steer needs a connected active turn and a text-only message. For messages with
+images or other attachments, Steer is dimmed; tap it to see why. The entry stays in
+the outbox until Hermes acknowledges it; rejection keeps it available to retry.
+A paused queue also offers Resume.
+
+Edit, or hold the row, to change the message in the composer. The checkmark saves
+it in its original position. Steer sends the edited text into the active turn.
+Cancel restores your separate draft; deletion requires confirmation. Back hides
+the keyboard first, then cancels editing. Sending the queue pauses while an edit
+is open.
 
 When connected, Wing sends one entry at a time after a completed turn. Restored
 work waits for a server-state check. Stop, upload or send failure, and uncertain

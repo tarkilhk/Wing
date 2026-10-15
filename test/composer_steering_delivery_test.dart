@@ -98,6 +98,84 @@ void main() {
   });
   tearDown(() => composer.dispose());
 
+  test(
+    'direct steering captures the selected entry and its references',
+    () async {
+      await composer.enqueue('Same');
+      final text = 'Same ${reference.token}';
+      await composer.editText(text, reference: reference);
+      await composer.enqueue(text);
+      await composer.editText('Separate draft');
+      final first = composer.observation.queue.first.id;
+      final selected = composer.observation.queue.last.id;
+      final entered = Completer<void>();
+      final receipt = Completer<bool>();
+      final steering = composer.steerQueued(selected, (
+        value,
+        references,
+      ) async {
+        expect(value, text);
+        expect(references, [reference]);
+        final persisted = await saved();
+        expect(persisted.queuedPrompts.last.submissionUncertain, isTrue);
+        expect(persisted.text, 'Separate draft');
+        entered.complete();
+        return receipt.future;
+      });
+      await entered.future;
+      expect(composer.observation.queue, hasLength(2));
+      expect(composer.queueActions(selected).canSteer, isFalse);
+      await composer.editText('Newer draft');
+      receipt.complete(true);
+      expect(await steering, isTrue);
+      expect(composer.observation.queue.single.id, same(first));
+      expect(composer.observation.text, 'Newer draft');
+      expect(composer.observation.editing, isNull);
+      var dispatches = 0;
+      expect(
+        await composer.steerQueued(selected, (_, _) async {
+          dispatches++;
+          return true;
+        }),
+        isFalse,
+      );
+      expect(dispatches, 0);
+    },
+  );
+
+  test(
+    'direct steering shares rejection and uncertain-delivery recovery',
+    () async {
+      await composer.enqueue('Selected');
+      await composer.editText('Separate draft');
+      final selected = composer.observation.queue.single.id;
+      expect(
+        await composer.steerQueued(selected, (_, _) async => false),
+        isFalse,
+      );
+      expect(composer.queueActions(selected).canSteer, isTrue);
+      expect(composer.observation.queue.single.submissionUncertain, isFalse);
+      await expectLater(
+        composer.steerQueued(selected, (_, _) async {
+          throw TimeoutException('Receipt lost');
+        }),
+        throwsA(isA<TimeoutException>()),
+      );
+      expect(composer.observation.paused, isTrue);
+      expect(composer.observation.queue.single.submissionUncertain, isTrue);
+      expect(composer.queueActions(selected).canSteer, isFalse);
+      expect(composer.observation.text, 'Separate draft');
+      composer.dispose();
+      composer = create();
+      await composer.restore();
+      expect(composer.observation.queue.single.submissionUncertain, isTrue);
+      expect(
+        composer.queueActions(composer.observation.queue.single.id).canSteer,
+        isFalse,
+      );
+    },
+  );
+
   test('edited steering is durable and uncertain before delivery', () async {
     await composer.enqueue('Original');
     await composer.editText('Separate draft');
@@ -108,8 +186,9 @@ void main() {
     final receipt = Completer<bool>();
     late String offeredText;
     late ComposerDraftSnapshot offered;
-    final steering = composer.steerEdit((value) async {
+    final steering = composer.steerEdit((value, references) async {
       offeredText = value;
+      expect(references.single, reference);
       offered = await saved();
       dispatched.complete();
       return receipt.future;
@@ -141,7 +220,7 @@ void main() {
       composer.editQueuedText('Attempted edited direction');
       var dispatches = 0;
       await expectLater(
-        composer.steerEdit((_) async {
+        composer.steerEdit((_, _) async {
           dispatches++;
           throw TimeoutException('Steering receipt lost.');
         }),
@@ -186,7 +265,7 @@ void main() {
       composer.editQueuedText('Attempted direction');
       final entered = Completer<void>();
       final receipt = Completer<bool>();
-      final steering = composer.steerEdit((_) {
+      final steering = composer.steerEdit((_, _) {
         entered.complete();
         return receipt.future;
       });
@@ -218,7 +297,7 @@ void main() {
       await composer.editText('Separate draft');
       await composer.beginEdit(composer.observation.queue.single.id);
       composer.editQueuedText('Edited direction');
-      expect(await composer.steerEdit((_) async => false), isFalse);
+      expect(await composer.steerEdit((_, _) async => false), isFalse);
       expect(composer.observation.queue.single.text, original);
       expect(composer.observation.queue.single.references.single, reference);
       expect(composer.observation.queue.single.submissionUncertain, isFalse);
@@ -247,7 +326,7 @@ void main() {
       final first = composer.observation.queue.first.id;
       final accepted = composer.observation.queue.last.id;
       await composer.beginEdit(accepted);
-      expect(await composer.steerEdit((_) async => true), isTrue);
+      expect(await composer.steerEdit((_, _) async => true), isTrue);
       expect(composer.observation.queue.single.id, same(first));
       expect(composer.observation.queue.single.submissionUncertain, isFalse);
       expect((await saved()).queuedPrompts.single.text, 'Same');
@@ -264,7 +343,7 @@ void main() {
       store.failNextWrite = true;
       var dispatches = 0;
       await expectLater(
-        composer.steerEdit((_) async {
+        composer.steerEdit((_, _) async {
           dispatches++;
           return true;
         }),

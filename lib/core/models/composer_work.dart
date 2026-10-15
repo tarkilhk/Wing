@@ -213,13 +213,10 @@ final class ComposerActions {
     required this.canSteerQueueEdit,
     required this.prefersRunningAction,
     required this.prefersStopAction,
-    required this.hasMessageActions,
-    required Iterable<ComposerAction> offered,
     required this.canResumeQueue,
     required this.editingBusy,
     required this.canEditText,
-  }) : unavailable = Map.unmodifiable(reasons),
-       offered = Set.unmodifiable(offered);
+  }) : unavailable = Map.unmodifiable(reasons);
 
   final Map<ComposerAction, ComposerUnavailableReason?> unavailable;
   final bool canEditQueue;
@@ -227,8 +224,6 @@ final class ComposerActions {
   final bool canSteerQueueEdit;
   final bool prefersRunningAction;
   final bool prefersStopAction;
-  final bool hasMessageActions;
-  final Set<ComposerAction> offered;
   final bool canResumeQueue;
   final bool editingBusy;
   final bool canEditText;

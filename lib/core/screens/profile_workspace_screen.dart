@@ -1613,11 +1613,17 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               controller.refreshingWorkspace ||
               chat.branchingAnswer ||
               chat.changingIntelligence ||
-              _loadingIntelligence == chat.key,
+              _loadingIntelligence == chat.key ||
+              chat.composer.observation.saving ||
+              chat.composer.observation.steering,
           label: controller.refreshingWorkspace
               ? 'Refreshing workspace'
               : chat.branchingAnswer
               ? 'Preparing answer'
+              : chat.composer.observation.steering
+              ? 'Steering message'
+              : chat.composer.observation.saving
+              ? 'Saving message'
               : 'Updating model settings',
           child: StudioLoadingRegion(
             busy: controller.switching || chat.refreshingConversation,
@@ -2726,9 +2732,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       ProfileQueuedMessages(
                         key: ValueKey(('queued-messages', chat.key)),
                         work: chat.composer.observation,
-                        onOpenActions: _hasMessageActions(chat)
-                            ? () => _showBusyActions(chat, context)
-                            : null,
+                        onOpenActions: (prompt) =>
+                            _showQueuedActions(chat, prompt),
                         onEdit: !chat.composer.actions().canEditQueue
                             ? null
                             : (prompt) => _beginQueuedEdit(chat, prompt),
@@ -2787,31 +2792,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                                   ),
                                                 ),
                                                 _composerContextRing(chat),
-                                                StudioButtonPress(
-                                                  child: IconButton(
-                                                    tooltip:
-                                                        'Cancel queued message editing',
-                                                    onPressed:
-                                                        chat
-                                                                .composer
-                                                                .observation
-                                                                .saving ||
-                                                            chat
-                                                                .composer
-                                                                .observation
-                                                                .steering
-                                                        ? null
-                                                        : () => _run(
-                                                            () => controller
-                                                                .cancelQueuedPromptEdit(
-                                                                  chat,
-                                                                ),
-                                                          ),
-                                                    icon: const Icon(
-                                                      Icons.close,
-                                                    ),
-                                                  ),
-                                                ),
                                               ],
                                             ),
                                           if (composerAttachments.isNotEmpty ||
@@ -3313,9 +3293,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
-  bool _hasMessageActions(ProfileChat chat) =>
-      chat.composer.actions().hasMessageActions;
-
   Future<void> _beginQueuedEdit(
     ProfileChat chat,
     ComposerQueueObservation prompt,
@@ -3347,6 +3324,30 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
+  Widget _queuedSteerButton({
+    required bool hasAttachments,
+    required VoidCallback? onPressed,
+  }) {
+    final button = IconButton(
+      tooltip: hasAttachments ? null : 'Steer queued message',
+      onPressed: onPressed,
+      icon: const Icon(Icons.explore_outlined),
+    );
+    if (!hasAttachments) return button;
+    return Semantics(
+      label: 'Steer queued message',
+      enabled: false,
+      child: Tooltip(
+        message: 'Hermes only supports steering text-only messages.',
+        triggerMode: TooltipTriggerMode.tap,
+        preferBelow: false,
+        showDuration: const Duration(seconds: 3),
+        margin: const EdgeInsets.symmetric(horizontal: WingSpacing.md),
+        child: button,
+      ),
+    );
+  }
+
   Widget _queuedEditActions(ProfileChat chat) {
     final prompt = chat.composer.observation.editingEntry!;
     final saving = chat.composer.actions().editingBusy;
@@ -3363,50 +3364,36 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               padding: const EdgeInsets.only(bottom: 6),
               child: StudioError(error),
             ),
-          if (prompt.attachments.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                'Steer supports text only.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          Row(
-            children: [
-              Expanded(
-                child: StudioButtonPress(
-                  child: OutlinedButton.icon(
-                    onPressed: saving || !canSteer
-                        ? null
-                        : () => _runQueuedEdit(chat, () async {
-                            final accepted = await controller
-                                .steerQueuedPromptEdit(chat);
-                            if (!accepted) {
-                              throw StateError(
-                                'Hermes rejected the steering message.',
-                              );
-                            }
-                          }),
-                    icon: const Icon(Icons.explore_outlined, size: 18),
-                    label: const Text('Steer'),
+          StudioFormActions(
+            busy: saving,
+            onCancel: () => _run(() => controller.cancelQueuedPromptEdit(chat)),
+            cancelLabel: 'Cancel queued message editing',
+            onConfirm: !valid
+                ? null
+                : () => _runQueuedEdit(
+                    chat,
+                    () => controller.saveQueuedPromptEdit(chat),
                   ),
+            confirmLabel: 'Save queued message',
+            progressLabel: 'Saving queued message',
+            leadingActions: [
+              StudioButtonPress(
+                child: _queuedSteerButton(
+                  hasAttachments: prompt.attachments.isNotEmpty,
+                  onPressed: saving || !canSteer
+                      ? null
+                      : () => _runQueuedEdit(chat, () async {
+                          final accepted = await controller
+                              .steerQueuedPromptEdit(chat);
+                          if (!accepted) {
+                            throw StateError(
+                              'Hermes rejected the steering message.',
+                            );
+                          }
+                        }),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: StudioButtonPress(
-                  child: FilledButton.icon(
-                    onPressed: saving || !valid
-                        ? null
-                        : () => _runQueuedEdit(
-                            chat,
-                            () => controller.saveQueuedPromptEdit(chat),
-                          ),
-                    icon: const Icon(Icons.keyboard_return, size: 18),
-                    label: Text(saving ? 'Saving...' : 'Queue'),
-                  ),
-                ),
-              ),
+              const SizedBox(width: WingSpacing.sm),
             ],
           ),
         ],
@@ -3446,119 +3433,126 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
   }
 
-  Future<void> _showBusyActions(ProfileChat chat, BuildContext context) async {
-    if (!_hasMessageActions(chat)) return;
+  Future<void> _showQueuedActions(
+    ProfileChat chat,
+    ComposerQueueObservation prompt,
+  ) async {
     final action = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
+      requestFocus: false,
       builder: (sheetContext) => ListenableBuilder(
         listenable: controller,
-        builder: (context, _) => SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(sheetContext).height * .55,
-            child: ListView(
-              children: [
-                if (chat.composer.actions().offered.contains(
-                  ComposerAction.steer,
-                )) ...[
-                  StudioButtonPress(
-                    child: ListTile(
-                      leading: const Icon(Icons.explore_outlined),
-                      title: const Text('Steer this turn'),
-                      subtitle: const Text(
-                        'Send this text into the running turn',
+        builder: (context, _) {
+          final actions = chat.composer.queueActions(prompt.id);
+          final media = MediaQuery.of(context);
+          return Padding(
+            padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+            child: SafeArea(
+              top: false,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: (media.size.height - media.viewInsets.bottom - 24)
+                      .clamp(0.0, media.size.height),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Queued message',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Close queued message actions',
+                            onPressed: () => Navigator.pop(sheetContext),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
                       ),
-                      onTap:
-                          chat.composer
-                                  .actions()
-                                  .unavailable[ComposerAction.steer] ==
-                              null
-                          ? () => Navigator.pop(sheetContext, 'steer')
-                          : null,
-                    ),
-                  ),
-                ],
-                if (chat.composer.actions().offered.contains(
-                  ComposerAction.queue,
-                ))
-                  StudioButtonPress(
-                    child: ListTile(
-                      leading: const Icon(Icons.queue),
-                      title: const Text('Queue for the next turn'),
-                      subtitle: Text(
-                        chat.composer.observation.attachments.isEmpty
-                            ? 'Keep this message for when Hermes is idle'
-                            : 'Keep this message and ${chat.composer.observation.attachments.length} attachment${chat.composer.observation.attachments.length == 1 ? '' : 's'} for when Hermes is idle',
-                      ),
-                      onTap:
-                          chat.composer
-                                  .actions()
-                                  .unavailable[ComposerAction.queue] !=
-                              null
-                          ? null
-                          : () => Navigator.pop(sheetContext, 'queue'),
-                    ),
-                  ),
-                if (chat.composer.observation.paused)
-                  StudioButtonPress(
-                    child: ListTile(
-                      leading: const Icon(Icons.pause_circle_outline),
-                      title: const Text('Queued messages are paused'),
-                      subtitle: const Text(
-                        'Check history before resuming; a previous send may have reached Hermes.',
-                      ),
-                      onTap: !chat.composer.actions().canResumeQueue
-                          ? null
-                          : () async {
-                              await _run(() => controller.resumeQueue(chat));
-                              if (sheetContext.mounted) {
-                                Navigator.pop(sheetContext);
-                              }
-                            },
-                      trailing: const Icon(Icons.play_arrow),
-                    ),
-                  ),
-                if (chat.composer.observation.queue.isNotEmpty)
-                  ...chat.composer.observation.queue.asMap().entries.map(
-                    (entry) => StudioButtonPress(
-                      child: ListTile(
-                        leading: const Icon(Icons.keyboard_return),
-                        title: Text(
-                          'Queued: ${entry.value.text.isEmpty ? 'Attachment' : entry.value.text}',
+                      if (prompt.text.isNotEmpty)
+                        Text(
+                          prompt.text,
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: entry.value.attachments.isEmpty
-                            ? null
-                            : Text(
-                                '${entry.value.attachments.length} attachment${entry.value.attachments.length == 1 ? '' : 's'}: ${entry.value.attachments.map((draft) => draft.name).join(', ')}',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                        onTap: !chat.composer.actions().canEditQueue
-                            ? null
-                            : () async {
-                                Navigator.pop(sheetContext);
-                                await _beginQueuedEdit(chat, entry.value);
-                              },
+                      if (prompt.attachments.isNotEmpty)
+                        Text(
+                          prompt.attachments
+                              .map((file) => file.name)
+                              .join(', '),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          IconButton(
+                            tooltip: 'Edit queued message',
+                            onPressed: actions.canEdit
+                                ? () => Navigator.pop(sheetContext, 'edit')
+                                : null,
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                          _queuedSteerButton(
+                            hasAttachments: prompt.attachments.isNotEmpty,
+                            onPressed: actions.canSteer
+                                ? () => Navigator.pop(sheetContext, 'steer')
+                                : null,
+                          ),
+                          IconButton(
+                            tooltip: 'Delete queued message',
+                            onPressed: actions.canDelete
+                                ? () => Navigator.pop(sheetContext, 'delete')
+                                : null,
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                          if (chat.composer.observation.paused)
+                            IconButton(
+                              tooltip: 'Resume queued messages',
+                              onPressed: chat.composer.actions().canResumeQueue
+                                  ? () => Navigator.pop(sheetContext, 'resume')
+                                  : null,
+                              icon: const Icon(Icons.play_arrow),
+                            ),
+                        ],
                       ),
-                    ),
+                    ],
                   ),
-                if (chat.composer.actions().offered.contains(
-                  ComposerAction.stop,
-                ))
-                  StudioButtonPress(
-                    child: ListTile(
-                      leading: const Icon(Icons.stop),
-                      title: const Text('Stop'),
-                      onTap: () => Navigator.pop(sheetContext, 'stop'),
-                    ),
-                  ),
-              ],
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
-    if (!mounted || action == null) return;
-    await _performComposerAction(chat, ComposerAction.values.byName(action));
+    if (!mounted || action == null || controller.current?.chat != chat) return;
+    switch (action) {
+      case 'edit':
+        await _beginQueuedEdit(chat, prompt);
+      case 'steer':
+        final accepted = await _runValue(
+          () => controller.steerQueuedPrompt(chat, prompt.id),
+        );
+        if (accepted == false && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: StudioError('Hermes rejected the steering message.'),
+            ),
+          );
+        }
+      case 'delete':
+        await _deleteQueuedPrompt(chat, prompt);
+      case 'resume':
+        await _run(() => controller.resumeQueue(chat));
+    }
   }
 
   Future<T?> _runValue<T>(Future<T> Function() action) async {

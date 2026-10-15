@@ -14,7 +14,7 @@ class ProfileQueuedMessages extends StatelessWidget {
   });
 
   final ComposerObservation work;
-  final VoidCallback? onOpenActions;
+  final ValueChanged<ComposerQueueObservation> onOpenActions;
   final ValueChanged<ComposerQueueObservation>? onEdit;
   final ValueChanged<ComposerQueueObservation>? onDelete;
 
@@ -57,7 +57,7 @@ class ProfileQueuedMessages extends StatelessWidget {
                     borderRadius: WingRadius.card,
                     child: StudioButtonPress(
                       child: InkWell(
-                        onTap: onOpenActions,
+                        onTap: () => onOpenActions(prompt),
                         onLongPress: onEdit == null
                             ? null
                             : () => onEdit!(prompt),

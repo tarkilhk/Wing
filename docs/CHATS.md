@@ -46,8 +46,9 @@ Your draft stays in place. Past answers keep their existing Activity layout.
 
 While Hermes is working, the composer can **Steer**, **Queue** or **Stop**. The default action is your choice in App settings; hold and slide the arrow for a one-time alternative. Queued follow-ups can be edited before they send and need Wing to be running and connected to drain.
 
-The queue preview above the composer appears only while disconnected from the
-server. While connected, Send uses the Wing pulse without a return-arrow preview.
+The outbox above the composer appears whenever it contains queued messages.
+Tap a message for Edit, Steer and Delete; hold it to edit directly. Steer accepts
+text only and needs a connected active turn. Your separate draft stays in place.
 
 ## Revisit the result
 

@@ -21,9 +21,11 @@ Accepted steering appears in the conversation as a compact compass row. Rejected
 The outbox appears above the composer whenever it contains messages, whether
 connected or offline. Messages added through Send or Queue appear in the same
 list, with their text and attachment names. A message remains there until Hermes
-acknowledges it or you delete it. Tap an entry for queue actions or hold it to
-edit. The outbox disappears when empty. Connected queues send after the current
-turn; a failed save restores the draft, and uncertain delivery pauses the queue
+acknowledges it or you delete it. Tap an entry for its Edit, Steer and Delete
+actions, or hold it to edit. These actions apply to the selected queued message
+and preserve your separate draft. The outbox disappears when empty. Connected
+queues send after the current turn; a failed save restores the draft, and
+uncertain delivery pauses the queue
 for review. See
 [Queues and pending input](SUPERVISION_AND_QUEUES.md) and
 [Drafts and outgoing messages](DRAFTS_OUTBOX.md).
