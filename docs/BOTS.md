@@ -43,6 +43,8 @@ In Chats, long press a profile icon beside the connection name to open that
 profile’s Bot Chat. A normal tap filters the list. Back returns to Chats with
 the existing filters.
 
+Bot Chats have no projects; their header shows only the instance below the title.
+
 ## Profile options
 
 The row menu offers View screen, Pin/Unpin, Hide bot/Show bot and **Bot settings**. The roster menu offers Show hidden bots. Bot pins and appearance synchronize through Hermes; group pins are saved on this device.
