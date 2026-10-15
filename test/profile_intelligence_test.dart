@@ -899,16 +899,18 @@ void main() {
         await screenshot('');
         await tester.tap(thinking);
         await tester.pumpAndSettle();
-        expect(find.text('Medium').hitTestable(), findsOneWidget);
-        expect(
-          find.byKey(const Key('composer-reasoning-selector')),
-          findsNothing,
+        final selector = find.byKey(const Key('composer-reasoning-selector'));
+        final medium = find.byKey(
+          const Key('composer-reasoning-choice-medium'),
         );
+        expect(medium.hitTestable(), findsOneWidget);
+        final tapBounds = tester.getRect(selector);
+        final tapMaterial = tester.widget<Material>(selector);
         expect(host.writes, isEmpty);
         await screenshot('-reasoning-tap');
         await tester.tapAt(const Offset(2, 2));
         await tester.pumpAndSettle();
-        expect(find.text('Medium'), findsNothing);
+        expect(selector, findsNothing);
         expect(host.writes, isEmpty);
         final cancel = await tester.startGesture(tester.getCenter(thinking));
         await tester.pump(const Duration(milliseconds: 600));
@@ -916,6 +918,10 @@ void main() {
           find.byKey(const Key('composer-reasoning-selector')),
           findsOneWidget,
         );
+        expect(tester.getRect(selector), tapBounds);
+        expect(tester.widget<Material>(selector).color, tapMaterial.color);
+        expect(tester.widget<Material>(selector).shape, tapMaterial.shape);
+        await screenshot('-reasoning-held');
         await cancel.moveTo(const Offset(2, 2));
         await cancel.up();
         await tester.pumpAndSettle();
@@ -937,7 +943,9 @@ void main() {
         expect(controller.current!.chat!.reasoningEffort, 'low');
         await tester.tap(thinking);
         await tester.pumpAndSettle();
-        await tester.tap(find.text('High'));
+        await tester.tap(
+          find.byKey(const Key('composer-reasoning-choice-high')),
+        );
         await tester.pumpAndSettle();
         expect(host.writes, hasLength(2));
         expect(host.writes.last['key'], 'reasoning');
@@ -958,6 +966,40 @@ void main() {
         await tester.pumpAndSettle();
         expect(host.writes, hasLength(3));
         expect(controller.current!.chat!.fastMode, ChatFastMode.fast);
+        final chat = controller.current!.chat!;
+        // Keep the existing enlarged composer fully above the simulated IME.
+        if (scale == 2) tester.view.physicalSize = Size(size.width, 844);
+        final draft = find.byType(TextField).first;
+        await tester.enterText(draft, 'Draft');
+        tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+        await tester.pumpAndSettle();
+        final input = tester.widget<TextField>(draft);
+        final composerBounds = tester.getRect(draft);
+        expect(input.focusNode!.hasFocus, isTrue);
+        await screenshot('-reasoning-keyboard-before');
+        expect(thinking.hitTestable(), findsOneWidget);
+        await tester.tap(thinking);
+        await tester.pumpAndSettle();
+        expect(selector, findsOneWidget);
+        expect(input.focusNode!.hasFocus, isTrue);
+        expect(tester.view.viewInsets.bottom, 260);
+        expect(tester.getRect(draft), composerBounds);
+        expect(host.writes, hasLength(3));
+        await screenshot('-reasoning-keyboard');
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(selector, findsNothing);
+        expect(input.focusNode!.hasFocus, isTrue);
+        await tester.tap(thinking);
+        await tester.pumpAndSettle();
+        expect(selector, findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(selector, findsNothing);
+        expect(controller.current!.chat, same(chat));
+        expect(chat.composer.observation.text, 'Draft');
+        expect(host.writes, hasLength(3));
+        expect(tester.takeException(), isNull);
       });
     }
   }

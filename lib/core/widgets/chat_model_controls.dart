@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import '../models/chat_intelligence.dart';
 import '../presentation/chat_model_labels.dart';
@@ -281,7 +282,8 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
   Rect _anchor = Rect.zero;
   Rect _choices = Rect.zero;
   String? _selected;
-  int _revision = 0;
+  RawDialogRoute<void>? _menuRoute;
+  VoidCallback? _rebuildMenu;
 
   List<String> get _efforts => [
     for (final value in _shortEfforts.keys)
@@ -320,45 +322,46 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
   }
 
   void _close() {
-    _revision++;
     _overlay?.remove();
     _overlay?.dispose();
     _overlay = null;
     _selected = null;
-  }
+    final route = _menuRoute;
+    _menuRoute = null;
+    _rebuildMenu = null;
+    if (route != null) {
+      HardwareKeyboard.instance.removeHandler(_dismissKey);
+      void dismiss() {
+        if (route.isActive) route.navigator?.removeRoute(route);
+      }
 
-  Future<void> _openMenu() async {
-    if (widget.onChanged == null) return;
-    _close();
-    final revision = _revision;
-    final overlayBox =
-        Overlay.of(context).context.findRenderObject()! as RenderBox;
-    final box = _anchorKey.currentContext!.findRenderObject()! as RenderBox;
-    final anchor =
-        box.localToGlobal(Offset.zero, ancestor: overlayBox) & box.size;
-    final value = await showMenu<String>(
-      context: context,
-      requestFocus: true,
-      semanticLabel: 'Reasoning level',
-      position: RelativeRect.fromRect(anchor, Offset.zero & overlayBox.size),
-      items: [
-        for (final effort in _efforts)
-          StudioPopupMenuItem(
-            value: effort,
-            child: Text(chatReasoningEffortLabel(effort)),
-          ),
-      ],
-    );
-    if (mounted &&
-        revision == _revision &&
-        value != null &&
-        _efforts.contains(value)) {
-      widget.onChanged?.call(value);
+      if (SchedulerBinding.instance.schedulerPhase ==
+          SchedulerPhase.persistentCallbacks) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => dismiss());
+      } else {
+        dismiss();
+      }
     }
   }
 
-  void _open(LongPressStartDetails _) {
-    if (_overlay != null || widget.onChanged == null) return;
+  bool _dismissKey(KeyEvent event) {
+    if (_menuRoute == null ||
+        event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.escape) {
+      return false;
+    }
+    _close();
+    return true;
+  }
+
+  void _openMenu() => _open(interactive: true);
+
+  void _openHeld(LongPressStartDetails _) => _open();
+
+  void _open({bool interactive = false, bool keyboard = false}) {
+    if (_overlay != null || _menuRoute != null || widget.onChanged == null) {
+      return;
+    }
     final overlay = Overlay.of(context);
     final overlayBox = overlay.context.findRenderObject()! as RenderBox;
     final box = _anchorKey.currentContext!.findRenderObject()! as RenderBox;
@@ -380,17 +383,84 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
     if (height <= 0) return;
     _choices = Rect.fromLTWH(left.toDouble(), bottom - height, width, height);
     _selected = widget.effort;
-    _overlay = OverlayEntry(
-      builder: (_) =>
-          InheritedTheme.captureAll(context, Builder(builder: _buildSelector)),
-    );
-    overlay.insert(_overlay!);
+    if (interactive) {
+      final themes = InheritedTheme.capture(from: context, to: overlay.context);
+      final route = RawDialogRoute<void>(
+        pageBuilder: (context, _, _) => themes.wrap(
+          StatefulBuilder(
+            builder: (context, setState) {
+              _rebuildMenu = () => setState(() {});
+              return Focus(
+                autofocus: keyboard,
+                onKeyEvent: _menuKey,
+                child: _buildSelector(context, interactive: true),
+              );
+            },
+          ),
+        ),
+        barrierColor: Colors.transparent,
+        barrierLabel: MaterialLocalizations.of(
+          context,
+        ).modalBarrierDismissLabel,
+        requestFocus: keyboard,
+        transitionDuration: Duration.zero,
+      );
+      _menuRoute = route;
+      HardwareKeyboard.instance.addHandler(_dismissKey);
+      Navigator.of(context).push(route).then((_) {
+        if (identical(_menuRoute, route)) {
+          HardwareKeyboard.instance.removeHandler(_dismissKey);
+          _menuRoute = null;
+          _rebuildMenu = null;
+          _selected = null;
+        }
+      });
+    } else {
+      _overlay = OverlayEntry(
+        builder: (_) => InheritedTheme.captureAll(
+          context,
+          Builder(builder: _buildSelector),
+        ),
+      );
+      overlay.insert(_overlay!);
+    }
     HapticFeedback.selectionClick();
   }
 
-  Widget _buildSelector(BuildContext context) {
+  void _choose(String? selected) {
+    final canApply = _overlay != null || _menuRoute != null;
+    _close();
+    if (canApply &&
+        selected != null &&
+        selected != widget.effort &&
+        _efforts.contains(selected)) {
+      widget.onChanged?.call(selected);
+    }
+  }
+
+  KeyEventResult _menuKey(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _close();
+    } else if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.space) {
+      _choose(_selected);
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowDown ||
+        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      final index = _efforts.indexOf(_selected ?? widget.effort);
+      final delta = event.logicalKey == LogicalKeyboardKey.arrowDown ? 1 : -1;
+      _selected = _efforts[(index + delta).clamp(0, _efforts.length - 1)];
+      _rebuildMenu?.call();
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
+  }
+
+  Widget _buildSelector(BuildContext context, {bool interactive = false}) {
     final tokens = WingTokens.of(context);
     return IgnorePointer(
+      ignoring: !interactive,
       child: Stack(
         children: [
           Positioned(
@@ -410,23 +480,35 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
                 children: [
                   for (final effort in _efforts)
                     Expanded(
-                      child: Container(
-                        key: Key('composer-reasoning-choice-$effort'),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: _selected == effort
-                              ? tokens.accent.withValues(alpha: .12)
-                              : Colors.transparent,
-                          borderRadius: WingRadius.control,
-                        ),
-                        child: Text(
-                          _shortEfforts[effort]!,
-                          style: tokens.typography.label.copyWith(
-                            color: _selected == effort
-                                ? tokens.accent
-                                : tokens.onSurface,
+                      child: Semantics(
+                        button: interactive,
+                        selected: _selected == effort,
+                        child: StudioButtonPress(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: interactive ? () => _choose(effort) : null,
+                            child: Container(
+                              key: Key('composer-reasoning-choice-$effort'),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: _selected == effort
+                                    ? tokens.accent.withValues(alpha: .12)
+                                    : Colors.transparent,
+                                borderRadius: WingRadius.control,
+                              ),
+                              child: Text(
+                                _shortEfforts[effort]!,
+                                style: tokens.typography.label.copyWith(
+                                  color: _selected == effort
+                                      ? tokens.accent
+                                      : tokens.onSurface,
+                                ),
+                                semanticsLabel: chatReasoningEffortLabel(
+                                  effort,
+                                ),
+                              ),
+                            ),
                           ),
-                          semanticsLabel: chatReasoningEffortLabel(effort),
                         ),
                       ),
                     ),
@@ -466,15 +548,7 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
     }
   }
 
-  void _release(LongPressEndDetails _) {
-    final selected = _selected;
-    _close();
-    if (selected != null &&
-        selected != widget.effort &&
-        _efforts.contains(selected)) {
-      widget.onChanged?.call(selected);
-    }
-  }
+  void _release(LongPressEndDetails _) => _choose(_selected);
 
   @override
   Widget build(BuildContext context) {
@@ -506,7 +580,7 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
                 LogicalKeyboardKey.enter,
                 LogicalKeyboardKey.space,
               ].contains(event.logicalKey)) {
-            _openMenu();
+            _open(interactive: true, keyboard: true);
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
@@ -516,7 +590,7 @@ class _ChatReasoningScrubControlState extends State<ChatReasoningScrubControl>
             key: const Key('composer-reasoning-control'),
             behavior: HitTestBehavior.opaque,
             onTap: widget.onChanged == null ? null : _openMenu,
-            onLongPressStart: widget.onChanged == null ? null : _open,
+            onLongPressStart: widget.onChanged == null ? null : _openHeld,
             onLongPressMoveUpdate: _move,
             onLongPressEnd: _release,
             onLongPressCancel: _close,
