@@ -24,6 +24,7 @@ final class ConversationActivity {
     required this.live,
     required this.taskCount,
     required this.agentCount,
+    this.beforeMessagePresentationId,
   });
   final ChatRuntimeObservation runtime;
   final List<ChatActivityEntry> entries;
@@ -31,6 +32,11 @@ final class ConversationActivity {
   final SubagentInspectionSession inspection;
   final Widget Function() agentsBuilder;
   final bool live;
+  // A received native suffix receipt establishes this conversation boundary
+  // while the earlier tool history is still being backfilled.
+  final Object? beforeMessagePresentationId;
+  bool get hasPositionedExecution =>
+      live || beforeMessagePresentationId != null;
   // Null means the source has not observed this category yet.
   final int? taskCount;
   final int? agentCount;
@@ -53,7 +59,7 @@ final class ConversationActivity {
     Future<Uint8List> Function(String)? loadImage,
     Future<void> Function(ChatOutput)? onOpenResource,
     Future<void> Function(ChatOutput)? onShareResource,
-  }) => !live || (entries.isEmpty && savedActivity == null)
+  }) => !hasPositionedExecution || (entries.isEmpty && savedActivity == null)
       ? null
       : ProfileLiveExecution(
           entries: entries,
@@ -67,7 +73,7 @@ final class ConversationActivity {
     Future<Uint8List> Function(String)? loadImage,
     Future<void> Function(ChatOutput)? onOpenResource,
     Future<void> Function(ChatOutput)? onShareResource,
-  }) => live
+  }) => hasPositionedExecution
       ? const []
       : [
           if (preparingTool) preparing,

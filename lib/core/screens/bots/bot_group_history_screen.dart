@@ -116,6 +116,7 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
     final runtime = _session.runtime;
     final projection = ChatTranscriptProjection(
       savedRows: reader.messages,
+      requestActivities: reader.requestActivities,
       streamingMessage: _session.streamingMessage,
       runtime: runtime,
       presentationId: reader.messagePresentationId,
@@ -125,6 +126,8 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
     final activity = ConversationActivity(
       runtime: runtime,
       entries: projection.activity,
+      beforeMessagePresentationId:
+          projection.retainedActivityBeforePresentationId,
       todos: _session.todos,
       inspection: _session,
       agentsBuilder: () =>

@@ -1,3 +1,4 @@
+import '../models/hermes_question.dart';
 import 'chat_transcript_events.dart';
 import 'conversation_reading_memory.dart';
 import 'subagent_timeline_session.dart';
@@ -709,6 +710,9 @@ final class _BotGroupHistoryReading implements TranscriptReader {
   @override
   Object messagePresentationId(Map<String, dynamic> row) =>
       _reading.messagePresentationId(row);
+  @override
+  Iterable<PositionedHermesQuestion> get requestActivities =>
+      _reading.requestActivities;
   @override
   List<Map<String, dynamic>> get messages => _reading.messages;
 }

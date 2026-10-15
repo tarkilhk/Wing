@@ -1,3 +1,5 @@
+import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/models/hermes_question.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/bots_session.dart';
@@ -133,8 +135,18 @@ void main() {
           expect(expired.timestamp, pending.timestamp);
           expect(expired.description, pending.description);
           expect(expired.status, HermesQuestionStatus.expired);
+          expect(find.text('Asked a question'), findsNothing);
+          await tester.tap(find.text('Activity'));
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(
+              of: find.byType(ProfileActivityTimeline),
+              matching: find.byType(ProfileToolCall),
+            ),
+            findsOneWidget,
+          );
           expect(find.text('Asked a question'), findsOneWidget);
-          expect(find.text('Expired'), findsOneWidget);
+          expect(find.textContaining('Expired'), findsOneWidget);
           expect(chat.runtime.error, isNull);
         } else {
           final button = find.byKey(

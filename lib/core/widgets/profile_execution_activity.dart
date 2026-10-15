@@ -48,6 +48,10 @@ class ProfileExecutionActivity extends StatelessWidget {
             onOpenResource: onOpenResource,
             onShareResource: onShareResource,
           ),
+          ChatRequestEntry(:final question) => ProfileToolCall(
+            key: ValueKey(('activity-request', entry.identity)),
+            call: ToolCallPresentation.question(question),
+          ),
           ChatReasoningEntry() => ProfileReasoningDisclosure(
             key: ValueKey(('activity-reasoning', entry.identity)),
             text: entry.text,

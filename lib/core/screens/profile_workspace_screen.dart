@@ -2200,6 +2200,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final liveAnswering = nearby == null && _liveAnswering(chat);
     final projection = ChatTranscriptProjection(
       savedRows: nearby ?? chat.reading.messages,
+      requestActivities: chat.reading.requestActivities,
+      readingWindow: nearby != null,
       streamingMessage: live,
       runtime: chat.runtime,
       presentationId: chat.reading.messagePresentationId,
@@ -2232,7 +2234,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         },
       );
     }
-    final activity = _conversationActivity(chat, entries: projection.activity);
+    final activity = _conversationActivity(
+      chat,
+      entries: projection.activity,
+      beforeMessagePresentationId:
+          projection.retainedActivityBeforePresentationId,
+    );
     final focus = _readingFocus(chat);
     return SkillReaderScope(
       createReader: (document) => controller.skillReader(
@@ -2493,9 +2500,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   ConversationActivity _conversationActivity(
     ProfileChat chat, {
     List<ChatActivityEntry>? entries,
+    Object? beforeMessagePresentationId,
   }) => ConversationActivity(
     runtime: chat.runtime,
     entries: entries ?? chat.runtime.activityEntries,
+    beforeMessagePresentationId: beforeMessagePresentationId,
     todos: chat.todos,
     inspection: _supervisionFor(chat),
     agentsBuilder: () =>

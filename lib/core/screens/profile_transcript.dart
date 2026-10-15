@@ -654,7 +654,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   Widget? get _liveExecution {
     final activity = widget.activity;
     if (activity == null ||
-        !activity.live ||
+        !activity.hasPositionedExecution ||
         (activity.entries.isEmpty && _joinedLiveActivity == null)) {
       _liveExecutionInputs = null;
       _liveExecutionEntries = null;
@@ -664,6 +664,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final inputs = (
       widget.presentation.identity,
       _joinedLiveActivity,
+      activity.beforeMessagePresentationId,
       widget.loadImage != null,
       widget.onOpenResource != null,
       widget.onShareResource != null,
@@ -752,8 +753,16 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     // Live answers occupy their ordinary keyed transcript row from the first
     // chunk. Keep work in its own sibling row so completion never reparents the
     // answer, and first-token arrival never reparents the live work controls.
+    final beforeMessage = widget.activity?.beforeMessagePresentationId;
+    final anchoredAnswerIndex = beforeMessage == null
+        ? -1
+        : rows.indexWhere(
+            (section) => section.presentationIds.contains(beforeMessage),
+          );
     final executionIndex = _liveExecution == null
         ? null
+        : beforeMessage != null
+        ? (anchoredAnswerIndex < 0 ? null : anchoredAnswerIndex + 1)
         : liveAnswerIndex < 0
         ? 0
         : liveAnswerIndex + 1;

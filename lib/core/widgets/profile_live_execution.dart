@@ -65,7 +65,10 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
       runIdentities.addAll(live.map((entry) => entry.identity));
       final count = saved
           .where((group) => group.isTool)
-          .fold(live.length, (count, group) => count + group.messages.length);
+          .fold(
+            live.whereType<ChatToolEntry>().length,
+            (count, group) => count + group.messages.length,
+          );
       children.add(
         ProfileActivitySection(
           key: ValueKey(('live-tool-run', identity)),
@@ -116,7 +119,7 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
     }
     for (final entry in widget.entries) {
       switch (entry) {
-        case ChatToolEntry():
+        case ChatToolEntry() || ChatRequestEntry():
           liveTools.add(entry);
         case ChatReasoningEntry():
           if (entry.text.trim().isEmpty) continue;

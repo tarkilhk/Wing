@@ -5593,7 +5593,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
       ]),
     );
     chat.reading.questionHistory = questions;
-    runtime.onQuestion = chat.reading.observeQuestion;
+    runtime.onQuestion = (question) => chat.reading.observeQuestion(
+      question,
+      afterTool: runtime.observation.activityEntries
+          .whereType<ChatToolEntry>()
+          .lastOrNull
+          ?.activity
+          .toolId,
+    );
     runtime.onQuestionReconciliation = (kind, active) =>
         questions.reconcile(active, kind: kind);
     runtime.publishQuestionHistory();
@@ -7810,7 +7817,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
     if (!capture.current) return;
     if (result['status'] == 'expired') {
-      chat._runtime.expireQuestion(question.requestId);
+      chat._runtime.closeQuestion(question.requestId);
       await reconnect(resource.scope);
       chat._runtime.reportQuestionExpiry(capture);
     } else {
@@ -7843,9 +7850,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       });
       accepted = result['status'] == 'ok';
       if (result['status'] == 'expired' && capture.current) {
-        chat._runtime.expireQuestion(expectedRequest.requestId);
+        chat._runtime.closeQuestion(expectedRequest.requestId);
         accepted =
-            true; // A definite expired receipt retires this exact local card.
+            true; // A missing request retires this exact local input surface.
       }
     } finally {
       chat._runtime.finishSecureAnswer(capture, accepted: accepted);

@@ -1,6 +1,8 @@
 import 'package:wing/core/widgets/bot_group_conversation.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
-import 'package:wing/core/models/hermes_question.dart';
+import 'package:wing/core/models/transcript_timeline.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/bots_preferences.dart';
 import 'package:wing/core/models/bots.dart';
@@ -280,12 +282,44 @@ void main() {
           ]);
           await session.refresh();
           await _settleGroupMarkdown(tester);
-          final rows = session.reading.messages;
-          final position = rows.indexWhere(
-            (row) => row['_hermes_question'] is HermesQuestion,
+          final timeline = TranscriptTimeline.project(
+            session.reading.messages,
+            presentationId: session.reading.messagePresentationId,
+            requestActivities: session.reading.requestActivities,
           );
-          expect(rows[position - 1]['id'], 2);
-          expect(rows[position + 1]['id'], 3);
+          final position = timeline.sections.indexWhere((s) => s.isActivity);
+          expect(timeline.sections[position - 1].messages.last.id, 2);
+          expect(timeline.sections[position + 1].messages.first.id, 3);
+          expect(timeline.sections[position].toolCount, 0);
+          final outerActivity = find.text('Activity');
+          await tester.scrollUntilVisible(
+            outerActivity,
+            160,
+            scrollable: find
+                .descendant(
+                  of: find.byKey(const ValueKey('profile-transcript')),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+            maxScrolls: 20,
+          );
+          await tester.ensureVisible(outerActivity);
+          await _settleGroupMarkdown(tester);
+          expect(find.text('Asked a question'), findsNothing);
+          await _render(
+            tester,
+            frame,
+            'question-history-collapsed-${brightness.name}-$scale',
+          );
+          await tester.tap(outerActivity);
+          await _settleGroupMarkdown(tester);
+          expect(
+            find.descendant(
+              of: find.byType(ProfileActivityTimeline),
+              matching: find.byType(ProfileToolCall),
+            ),
+            findsOneWidget,
+          );
           expect(_decisionButton('Approve once'), findsNothing);
           expect(_decisionButton('Reject'), findsNothing);
           final closed = find.text('Asked a question');
@@ -329,7 +363,7 @@ void main() {
           await tester.pumpWidget(route());
           await _settleGroupMarkdown(tester);
           await tester.scrollUntilVisible(
-            find.text('Asked a question'),
+            find.text('Activity'),
             160,
             scrollable: find
                 .descendant(
@@ -341,11 +375,19 @@ void main() {
           );
           await _settleGroupMarkdown(tester);
           expect(find.byType(SourceCodeText), findsNothing);
-          final reopened = session.reading.messages;
-          final restored = reopened.indexWhere(
-            (row) => row['_hermes_question'] is HermesQuestion,
+          expect(find.text('Asked a question'), findsNothing);
+          expect(session.reading.messages.map((row) => row['id']), [
+            1,
+            2,
+            3,
+            4,
+          ]);
+          final restored = TranscriptTimeline.project(
+            session.reading.messages,
+            presentationId: session.reading.messagePresentationId,
+            requestActivities: session.reading.requestActivities,
           );
-          expect(reopened[restored + 1]['id'], 3);
+          expect(restored.sections.where((s) => s.isActivity), hasLength(1));
           expect(_decisionButton('Approve once'), findsNothing);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());

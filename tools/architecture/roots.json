@@ -6511,11 +6511,11 @@
       "selector": "main"
     },
     {
-      "id": "host-test-test/hermes_question_card_test.dart",
+      "id": "host-test-test/question_activity_test.dart",
       "kind": "host-test",
-      "path": "test/hermes_question_card_test.dart",
+      "path": "test/question_activity_test.dart",
       "purpose": "Passive question history outcomes, disclosure and command rendering",
-      "source": "test/hermes_question_card_test.dart",
+      "source": "test/question_activity_test.dart",
       "status": "supported",
       "selector": "main"
     },
@@ -6525,6 +6525,15 @@
       "path": "test/selection_viewport_test.dart",
       "purpose": "Native handle clipping and restoration preserve selection and Copy",
       "source": "test/selection_viewport_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/question_activity_projection_test.dart",
+      "kind": "host-test",
+      "path": "test/question_activity_projection_test.dart",
+      "purpose": "Request chronology, native Activity handoff and bounded reading windows",
+      "source": "test/question_activity_projection_test.dart",
       "status": "supported",
       "selector": "main"
     }
@@ -15006,12 +15015,7 @@
       "provenance": "tracked"
     },
     {
-      "path": "lib/core/widgets/hermes_question_card.dart",
-      "area": "lib",
-      "provenance": "tracked"
-    },
-    {
-      "path": "test/hermes_question_card_test.dart",
+      "path": "test/question_activity_test.dart",
       "area": "test",
       "provenance": "tracked"
     },
@@ -15029,6 +15033,11 @@
       "path": "test/selection_viewport_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/question_activity_projection_test.dart",
+      "area": "test",
+      "provenance": "tracked"
     }
   ],
   "direct_dependencies": {

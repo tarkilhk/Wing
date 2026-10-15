@@ -828,7 +828,10 @@ final class BotGroupTranscriptReading implements TranscriptReader {
     _session.group.key,
   );
   @override
-  List<Map<String, dynamic>> get messages => _session.questionHistory.project([
+  Iterable<PositionedHermesQuestion> get requestActivities =>
+      _session.questionHistory.activities;
+  @override
+  List<Map<String, dynamic>> get messages => [
     for (final event in _session.events.where(
       (event) => event.isTranscriptEntry,
     ))
@@ -840,19 +843,15 @@ final class BotGroupTranscriptReading implements TranscriptReader {
         'content': event.isPass ? 'Passed' : event.text,
         '_discussion_event': event,
       }),
-  ]);
+  ];
   TranscriptMessage messageForRow(Map<String, dynamic> row) =>
-      row['_hermes_question'] is HermesQuestion
-      ? TranscriptMessage.fromRow(row)
-      : TranscriptMessage.discussion(
-          group: _session.group,
-          event: row['_discussion_event'] as BotGroupEvent,
-        );
+      TranscriptMessage.discussion(
+        group: _session.group,
+        event: row['_discussion_event'] as BotGroupEvent,
+      );
   @override
   Object messagePresentationId(Map<String, dynamic> row) =>
-      row['_hermes_question'] is HermesQuestion
-      ? row['id'] as String
-      : ('group-message', (row['_discussion_event'] as BotGroupEvent).sequence);
+      ('group-message', (row['_discussion_event'] as BotGroupEvent).sequence);
   @override
   String? get historySessionId =>
       _session.loading && messages.isEmpty ? null : _session.group.id;

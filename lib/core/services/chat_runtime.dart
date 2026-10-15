@@ -110,8 +110,8 @@ class ChatRuntime {
     }
   }
 
-  void expireQuestion(String requestId) =>
-      _settleQuestionRequest(requestId, HermesQuestionStatus.expired);
+  void closeQuestion(String requestId) =>
+      _settleQuestionRequest(requestId, HermesQuestionStatus.closed);
 
   bool _closed = false;
   bool _liveSessionConfirmed = true;
@@ -575,6 +575,8 @@ class ChatRuntime {
       (entry) => switch (entry) {
         ChatToolEntry(:final activity) => activity.isTerminal,
         ChatReasoningEntry(:final running) => !running,
+        ChatRequestEntry(:final question) =>
+          question.status != HermesQuestionStatus.pending,
       },
     );
   }
@@ -1041,11 +1043,6 @@ class ChatRuntime {
     if (continuation != null &&
         identical(continuation._preflight, capture._request)) {
       if (accepted) {
-        final request = _secure!;
-        final id = 'secure/${request.kind.name}/${request.requestId}';
-        if (_questionHistory[id]?.status == HermesQuestionStatus.pending) {
-          _settleQuestion(id, HermesQuestionStatus.answered);
-        }
         continuation._accepted = true;
       } else {
         continuation._revoked = true;
@@ -1054,6 +1051,11 @@ class ChatRuntime {
     if (!identical(_secure, capture._request)) return;
     _secureResponding = false;
     if (accepted) {
+      final request = capture._request as GatewaySensitivePromptRequest;
+      final id = 'secure/${request.kind.name}/${request.requestId}';
+      if (_questionHistory[id]?.status == HermesQuestionStatus.pending) {
+        _settleQuestion(id, HermesQuestionStatus.answered);
+      }
       if (_recovery == ChatRecovery.reconnecting) {
         _recovery = ChatRecovery.ready;
       }
@@ -1212,6 +1214,17 @@ extension _RuntimeQuestions on ChatRuntime {
       );
     }
     _questionHistory[question.id] = question;
+    if (question.kind != HermesQuestionKind.clarification) {
+      final index = _activity.indexWhere(
+        (entry) =>
+            entry is ChatRequestEntry && entry.question.id == question.id,
+      );
+      if (index >= 0) {
+        _activity[index] = ChatRequestEntry(question);
+      } else if (old == null) {
+        _activity.add(ChatRequestEntry(question));
+      }
+    }
     onQuestion?.call(question);
   }
 

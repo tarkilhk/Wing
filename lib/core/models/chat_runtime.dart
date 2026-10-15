@@ -1,3 +1,4 @@
+import 'hermes_question.dart';
 import 'gateway_activity.dart';
 import 'gateway_approval.dart';
 import 'gateway_clarify.dart';
@@ -21,6 +22,14 @@ final class ChatToolEntry extends ChatActivityEntry {
   final GatewayToolActivity activity;
   @override
   Object get identity => activity.toolId!;
+}
+
+/// Passive request lifecycle, never a native tool execution observation.
+final class ChatRequestEntry extends ChatActivityEntry {
+  const ChatRequestEntry(this.question);
+  final HermesQuestion question;
+  @override
+  Object get identity => ('request', question.id);
 }
 
 final class ChatReasoningEntry extends ChatActivityEntry {

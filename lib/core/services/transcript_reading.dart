@@ -38,10 +38,16 @@ final class TranscriptReading implements TranscriptReader {
 
   HermesQuestionHistory? questionHistory;
 
-  void observeQuestion(HermesQuestion question) => questionHistory?.observe(
-    question,
-    afterMessage: _messages.lastOrNull?['id'],
-  );
+  @override
+  Iterable<PositionedHermesQuestion> get requestActivities =>
+      questionHistory?.activities ?? const [];
+
+  void observeQuestion(HermesQuestion question, {String? afterTool}) =>
+      questionHistory?.observe(
+        question,
+        afterMessage: _messages.lastOrNull?['id'],
+        afterTool: afterTool,
+      );
 
   final ProfileGateway? _gateway;
   final WorkspaceScope scope;
@@ -201,8 +207,7 @@ final class TranscriptReading implements TranscriptReader {
   }
 
   @override
-  List<Map<String, dynamic>> get messages =>
-      questionHistory?.project(_messages) ?? _messages;
+  List<Map<String, dynamic>> get messages => _messages;
   @override
   String? get historySessionId => _historySessionId;
   @override
@@ -227,9 +232,7 @@ final class TranscriptReading implements TranscriptReader {
 
   @override
   Object messagePresentationId(Map<String, dynamic> row) =>
-      row['_hermes_question'] is HermesQuestion
-      ? row['id'] as String
-      : _messagePresentations[row] ??= Object();
+      _messagePresentations[row] ??= Object();
 
   @override
   void recordReading(TranscriptBookmark? resume, {int? readThrough}) {

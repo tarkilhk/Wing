@@ -92,7 +92,8 @@ confirmation popup. Android may show its own clipboard confirmation.
 
 ## Questions and approvals
 
-Questions and approvals use Wing's usual **Asked a question** Activity row.
+Completed questions and approvals appear inside the conversation's usual
+**Activity** section as **Asked a question**. Both disclosures start collapsed.
 Details start collapsed and show the question, any command, and its outcome in
 the shared Activity card. Commands retain their exact source in the standard
 code viewer with Copy, wrap and full-view controls. Approvals report Approved

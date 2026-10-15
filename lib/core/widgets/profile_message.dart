@@ -1,5 +1,4 @@
 import 'selection_viewport.dart';
-import 'hermes_question_card.dart';
 import 'dart:async';
 import 'bot_mention_scope.dart';
 import 'dart:math' as math;
@@ -545,9 +544,7 @@ class ProfileMessage extends StatelessWidget {
     if (message.kind == TranscriptMessageKind.hidden) {
       return const SizedBox.shrink();
     }
-    if (message.question case final question?) {
-      return HermesQuestionCard(key: ValueKey(question.id), question: question);
-    }
+
     final theme = Theme.of(context);
     final role = message.role;
     if (usesBotFrame(context, message)) {
