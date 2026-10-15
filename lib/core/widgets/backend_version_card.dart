@@ -339,7 +339,7 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                           onPressed: busy || controller.requestOutstanding
                               ? null
                               : controller.checkForUpdate,
-                          icon: const Icon(Icons.search, size: 18),
+                          icon: const Icon(Icons.sync, size: 18),
                         ),
                       ),
                       if (check?.updateAvailable == true)
