@@ -1,3 +1,4 @@
+import 'package:wing/core/models/hermes_question.dart';
 import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/services/bots_preferences.dart';
 import 'package:wing/core/services/bot_group_read_state.dart';
@@ -883,14 +884,14 @@ void main() {
       final restored = create();
       addTearDown(restored.dispose);
       expect(restored.pendingApprovals, isEmpty);
-      expect(restored.approvalAvailabilityKnown, false);
+      expect(restored.runtime, isNull);
       expect(
-        restored.settledApprovals.single.action.command,
+        restored.questionHistory.questions.single.command,
         'write AGENTS.md',
       );
       await restored.refresh();
       expect(restored.pendingApprovals, isEmpty);
-      expect(restored.approvalAvailabilityKnown, true);
+      expect(restored.runtime, isNotNull);
     },
   );
 
@@ -937,7 +938,13 @@ void main() {
       fixture.pending.removeWhere((a) => a['request_id'] == 'first');
       await session.refresh();
       expect(session.pendingApprovals.single.request, 'second');
-      expect(session.settledApprovals.single.action.request, 'first');
+      expect(
+        session.questionHistory.questions
+            .where((q) => q.status == HermesQuestionStatus.closed)
+            .single
+            .requestId,
+        'first',
+      );
     },
   );
 
@@ -4058,7 +4065,7 @@ void main() {
         groupMessages: null,
       )).first;
       final runtime = await fixture.repository.groupRuntime(group);
-      final action = runtime.actions.single;
+      final action = runtime.runtime.actions.single;
       await expectLater(
         fixture.repository.resolveGroup(
           group,

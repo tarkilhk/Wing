@@ -12,6 +12,8 @@ import '../models/reading_snapshot_message.dart';
 import '../models/transcript_reading.dart';
 import '../models/user_message_content.dart';
 import 'completion_diagnostics.dart';
+import 'hermes_question_history.dart';
+import '../models/hermes_question.dart';
 import 'profile_gateway.dart';
 import 'workspace_connection_failure.dart';
 
@@ -33,6 +35,13 @@ final class TranscriptReading implements TranscriptReader {
   ConversationReadingMemory readingMemory;
 
   static const _observedToolLimit = 256;
+
+  HermesQuestionHistory? questionHistory;
+
+  void observeQuestion(HermesQuestion question) => questionHistory?.observe(
+    question,
+    afterMessage: _messages.lastOrNull?['id'],
+  );
 
   final ProfileGateway? _gateway;
   final WorkspaceScope scope;
@@ -192,7 +201,8 @@ final class TranscriptReading implements TranscriptReader {
   }
 
   @override
-  List<Map<String, dynamic>> get messages => _messages;
+  List<Map<String, dynamic>> get messages =>
+      questionHistory?.project(_messages) ?? _messages;
   @override
   String? get historySessionId => _historySessionId;
   @override
@@ -217,7 +227,9 @@ final class TranscriptReading implements TranscriptReader {
 
   @override
   Object messagePresentationId(Map<String, dynamic> row) =>
-      _messagePresentations[row] ??= Object();
+      row['_hermes_question'] is HermesQuestion
+      ? row['id'] as String
+      : _messagePresentations[row] ??= Object();
 
   @override
   void recordReading(TranscriptBookmark? resume, {int? readThrough}) {

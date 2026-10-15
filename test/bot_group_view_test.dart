@@ -1,4 +1,6 @@
 import 'package:wing/core/widgets/bot_group_conversation.dart';
+import 'package:wing/core/widgets/source_code_block.dart';
+import 'package:wing/core/models/hermes_question.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/bots_preferences.dart';
 import 'package:wing/core/models/bots.dart';
@@ -106,7 +108,27 @@ Future<void> _render(WidgetTester tester, GlobalKey key, String name) async {
   }
 }
 
+Finder _decisionButton(String label) => find.byWidgetPredicate(
+  (widget) => widget is IconButton && widget.tooltip == label,
+);
+
 void main() {
+  setUpAll(() async {
+    if (!_capture) return;
+    const directory = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final entry in {
+      WingTypography.sans: 'Roboto-Regular.ttf',
+      'monospace': 'RobotoMono-Regular.ttf',
+      'MaterialIcons': 'MaterialIcons-Regular.otf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            File(
+              '$directory/${entry.value}',
+            ).readAsBytes().then(ByteData.sublistView),
+          ))
+          .load();
+    }
+  });
   late BotsPreferences groupPreferences;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -115,27 +137,17 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
-        'group command selection stays inside preview ${brightness.name} $scale',
+        'group question history stays chronological and collapsed ${brightness.name} $scale',
         (tester) async {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
           final fixture = BotsFixture();
           fixture.events.addAll([
-            for (var i = 1; i <= 10; i++)
-              _event(
-                i,
-                'message.user',
-                'you',
-                'Review the changes and continue.',
-              ),
+            _event(1, 'message.user', 'you', 'Review the changes.'),
+            _event(2, 'message.member', 'atlas', 'I will inspect the source.'),
           ]);
-          final command = List.generate(
-            60,
-            (i) => i == 30
-                ? 'verify("café 🦋", ${'source; ' * 80})'
-                : 'line $i: verify exact source',
-          ).join('\n');
+          final command = "python -c '${'print("café 🦋"); ' * 80}'";
           fixture.pending.add({
             'kind': 'approval',
             'task_id': 'task-1',
@@ -144,8 +156,7 @@ void main() {
             'execution_generation': 1,
             'approval': {
               'command': command,
-              'description':
-                  'Write to protected agent-instruction file(s): AGENTS.md. These files steer future agent behavior; approval is always required (not bypassed by auto-approve).',
+              'description': 'Inspect the source.',
               'choices': ['once', 'deny'],
             },
           });
@@ -164,15 +175,11 @@ void main() {
                 data: MediaQuery.of(
                   context,
                 ).copyWith(textScaler: TextScaler.linear(scale)),
-                child: DefaultTextStyle(
-                  style: const TextStyle(fontFamily: WingTypography.sans),
-                  child: child!,
-                ),
+                child: child!,
               ),
               home: BotGroupScreen(
                 stopVoicePlayback: () async {},
-                voiceInputSettings: () =>
-                    const LocalVoiceInputSettings(language: ''),
+                voiceInputSettings: () => null,
                 createSession: () => session = BotGroupSession(
                   fixture.repository,
                   group,
@@ -186,292 +193,154 @@ void main() {
           );
           await tester.pumpWidget(route());
           await _settleGroupMarkdown(tester);
-          final approvalKey = session.pendingApprovals.single.key;
-          String? copied;
-          final messenger =
-              TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-          messenger.setMockMethodCallHandler(SystemChannels.platform, (
-            call,
-          ) async {
-            if (call.method == 'Clipboard.setData') {
-              copied = (call.arguments as Map)['text'] as String;
-            }
-            if (call.method == 'Clipboard.getData') return {'text': copied};
-            return null;
-          });
-          addTearDown(
-            () => messenger.setMockMethodCallHandler(
-              SystemChannels.platform,
-              null,
-            ),
+          expect(find.text('Hermes question - Pending'), findsOneWidget);
+          expect(find.byType(SourceCodeBlock), findsNothing);
+          await _render(
+            tester,
+            frame,
+            'question-pending-${brightness.name}-$scale',
           );
-
-          Future<void> selectAndCheck(String stage) async {
-            final preview = find.byKey(
-              ValueKey(('group-approval-command', approvalKey)),
-            );
-            final editable = find.descendant(
-              of: preview,
-              matching: find.byType(EditableText),
-            );
-            final state = tester.state<EditableTextState>(editable);
-            final internalScroll = tester.state<ScrollableState>(
-              find.descendant(of: editable, matching: find.byType(Scrollable)),
-            );
-            internalScroll.position.jumpTo(
-              internalScroll.position.maxScrollExtent / 2,
-            );
-            await tester.pump();
-            final composer = tester.getRect(
-              find.byKey(const ValueKey('group-message-composer')),
-            );
-            await tester.longPressAt(tester.getRect(preview).center);
-            await tester.pump();
-            state.contextMenuButtonItems
-                .firstWhere(
-                  (item) => item.type == ContextMenuButtonType.selectAll,
-                )
-                .onPressed!();
-            await tester.pump();
-
-            void checkHandles() {
-              final render = state.renderEditable;
-              final viewport = tester.getRect(preview).deflate(8);
-              expect(
-                render.size.height,
-                lessThanOrEqualTo(viewport.height + 1),
-              );
-              final endpoints = render.getEndpointsForSelection(
-                render.selection!,
-              );
-              for (final entry in [
-                (endpoints.first, render.selectionStartInViewport.value),
-                (endpoints.last, render.selectionEndInViewport.value),
-              ]) {
-                if (entry.$2) {
-                  final point = render.localToGlobal(entry.$1.point);
-                  expect(
-                    point.dy,
-                    inInclusiveRange(viewport.top - 1, viewport.bottom + 1),
-                    reason:
-                        'A visible selection handle must stay inside the command preview',
-                  );
-                }
-              }
-              expect(
-                tester.getRect(
-                  find.byKey(const ValueKey('group-message-composer')),
-                ),
-                composer,
-              );
-            }
-
-            checkHandles();
-            for (final fraction in [0.0, 0.5, 1.0]) {
-              internalScroll.position.jumpTo(
-                internalScroll.position.maxScrollExtent * fraction,
-              );
-              await tester.pump();
-              checkHandles();
-              await _render(
-                tester,
-                frame,
-                'selection-$stage-${brightness.name}-$scale-$fraction',
-              );
-            }
-            final card = find.byKey(ValueKey(('group-approval', approvalKey)));
-            for (final details in tester.widgetList<SingleChildScrollView>(
-              find.descendant(
-                of: card,
-                matching: find.byType(SingleChildScrollView),
-              ),
-            )) {
-              details.controller!.jumpTo(
-                details.controller!.position.maxScrollExtent,
-              );
-              await tester.pump();
-              checkHandles();
-            }
-            expect(
-              state.widget.controller.selection,
-              TextSelection(baseOffset: 0, extentOffset: command.length),
-            );
-            state.contextMenuButtonItems
-                .firstWhere((item) => item.type == ContextMenuButtonType.copy)
-                .onPressed!();
-            await tester.pump();
-            expect(copied, command);
-            expect(tester.takeException(), isNull);
-          }
-
-          await selectAndCheck('pending');
-          fixture.pending.clear();
-          await session.refresh();
-          final transcript = tester
-              .widget<ListView>(
-                find.byKey(const ValueKey('profile-transcript')),
-              )
-              .controller!;
-          transcript.jumpTo(0);
+          await tester.tap(find.text('Hermes question - Pending'));
           await _settleGroupMarkdown(tester);
-          expect(find.text('No longer pending'), findsOneWidget);
-          await selectAndCheck('settled');
+          expect(
+            tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
+            command,
+          );
+          await _render(
+            tester,
+            frame,
+            'question-expanded-${brightness.name}-$scale',
+          );
+          await tester.tap(find.text('Hermes question - Pending'));
+          await _settleGroupMarkdown(tester);
+          tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+          await tester.pump();
+          await tester.tap(find.text('Hermes question - Pending'));
+          await _settleGroupMarkdown(tester);
+          final approve = _decisionButton('Approve once');
+          final keyboardTop =
+              (tester.view.physicalSize.height -
+                  tester.view.viewInsets.bottom) /
+              tester.view.devicePixelRatio;
+          expect(
+            tester.getRect(approve).bottom,
+            lessThanOrEqualTo(keyboardTop),
+          );
+          expect(approve.hitTestable(), findsOneWidget);
+          expect(
+            tester.getSize(approve).shortestSide,
+            greaterThanOrEqualTo(48),
+          );
+          await _render(
+            tester,
+            frame,
+            'question-keyboard-${brightness.name}-$scale',
+          );
+          expect(tester.takeException(), isNull);
+          await tester.tap(find.text('Hermes question - Pending'));
+          await _settleGroupMarkdown(tester);
+          tester.view.viewInsets = FakeViewPadding.zero;
+          final held = Completer<void>();
+          addTearDown(() {
+            if (!held.isCompleted) held.complete();
+          });
+          fixture.beforeCommand = () => held.future;
+          fixture.commandHook = (_, method, params) async {
+            if (method == 'groups.approve') throw StateError('Offline');
+            return null;
+          };
+          await tester.tap(approve);
+          await tester.pump();
+          expect(tester.widget<IconButton>(approve).onPressed, isNull);
+          await tester.pump();
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.bySemanticsLabel('Updating group work'), findsOneWidget);
+          expect(find.text('Submitting decision'), findsNothing);
+          await _render(
+            tester,
+            frame,
+            'question-held-${brightness.name}-$scale',
+          );
+          held.complete();
+          await _settleGroupMarkdown(tester);
+          expect(
+            session.approvalError(session.pendingApprovals.single),
+            isNotNull,
+          );
+          expect(tester.widget<IconButton>(approve).onPressed, isNotNull);
+          await _render(
+            tester,
+            frame,
+            'question-failed-${brightness.name}-$scale',
+          );
+          fixture.pending.clear();
+          fixture.events.addAll([
+            _event(3, 'message.user', 'you', 'Continue with other work.'),
+            _event(4, 'message.member', 'atlas', 'A later reply.'),
+          ]);
+          await session.refresh();
+          await _settleGroupMarkdown(tester);
+          final rows = session.reading.messages;
+          final position = rows.indexWhere(
+            (row) => row['_hermes_question'] is HermesQuestion,
+          );
+          expect(rows[position - 1]['id'], 2);
+          expect(rows[position + 1]['id'], 3);
+          expect(_decisionButton('Approve once'), findsNothing);
+          expect(_decisionButton('Reject'), findsNothing);
+          final closed = find.text('Hermes question - Closed');
+          await tester.scrollUntilVisible(
+            closed,
+            160,
+            scrollable: find
+                .descendant(
+                  of: find.byKey(const ValueKey('profile-transcript')),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+            maxScrolls: 20,
+          );
+          await _settleGroupMarkdown(tester);
+          expect(find.byType(SourceCodeBlock), findsNothing);
+          await _render(
+            tester,
+            frame,
+            'question-closed-${brightness.name}-$scale',
+          );
+          await tester.tap(closed);
+          await _settleGroupMarkdown(tester);
+          expect(
+            tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
+            command,
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+          groupPreferences = await BotsPreferences.load();
+          await tester.pumpWidget(route());
+          await _settleGroupMarkdown(tester);
+          await tester.scrollUntilVisible(
+            find.text('Hermes question - Closed'),
+            160,
+            scrollable: find
+                .descendant(
+                  of: find.byKey(const ValueKey('profile-transcript')),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+            maxScrolls: 20,
+          );
+          await _settleGroupMarkdown(tester);
+          expect(find.byType(SourceCodeBlock), findsNothing);
+          final reopened = session.reading.messages;
+          final restored = reopened.indexWhere(
+            (row) => row['_hermes_question'] is HermesQuestion,
+          );
+          expect(reopened[restored + 1]['id'], 3);
+          expect(_decisionButton('Approve once'), findsNothing);
+          expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
         },
       );
-      testWidgets('group approval remains visible ${brightness.name} $scale', (
-        tester,
-      ) async {
-        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
-        final fixture = BotsFixture();
-        fixture.events.addAll([
-          for (var i = 1; i <= 10; i++)
-            _event(
-              i,
-              'message.user',
-              'you',
-              'Review the changes and continue.',
-            ),
-        ]);
-        fixture.pending.add({
-          'kind': 'approval',
-          'task_id': 'task-1',
-          'member_id': 'atlas',
-          'request_id': 'approval-1',
-          'execution_generation': 1,
-          'approval': {
-            'command': '<write to AGENTS.md>',
-            'description':
-                'Write to protected agent-instruction file(s): AGENTS.md. These files steer future agent behavior; approval is always required (not bypassed by auto-approve).',
-            'choices': ['once', 'deny'],
-          },
-        });
-        final group = (await readFixtureGroups(
-          fixture.repository,
-          groupMessages: null,
-        )).first;
-        late BotGroupSession session;
-        final frame = GlobalKey();
-        Widget route() => RepaintBoundary(
-          key: frame,
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: wingTheme(brightness),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: TextScaler.linear(scale)),
-              child: child!,
-            ),
-            home: BotGroupScreen(
-              stopVoicePlayback: () async {},
-              voiceInputSettings: () =>
-                  const LocalVoiceInputSettings(language: ''),
-              createSession: () => session = BotGroupSession(
-                fixture.repository,
-                group,
-                reads: BotGroupReadState(),
-                preferences: groupPreferences,
-                groupMessages: null,
-                appearances: FixedGroupAppearances(const []),
-              ),
-            ),
-          ),
-        );
-        await tester.pumpWidget(route());
-        await _settleGroupMarkdown(tester);
-        expect(find.text('<write to AGENTS.md>'), findsOneWidget);
-        final allow = find.byWidgetPredicate(
-          (w) => w is IconButton && w.tooltip == 'Allow once',
-        );
-        final deny = find.byWidgetPredicate(
-          (w) => w is IconButton && w.tooltip == 'Deny',
-        );
-        expect(tester.getSize(allow), const Size(48, 48));
-        final transcript = tester
-            .widget<ListView>(find.byKey(const ValueKey('profile-transcript')))
-            .controller!;
-        transcript.jumpTo(transcript.position.maxScrollExtent);
-        await tester.pump();
-        final allowRect = tester.getRect(allow);
-        expect(
-          allowRect.bottom,
-          lessThan(
-            tester
-                .getRect(find.byKey(const ValueKey('group-message-composer')))
-                .top,
-          ),
-        );
-        await _render(
-          tester,
-          frame,
-          'approval-pinned-${brightness.name}-$scale',
-        );
-        tester.view.viewInsets = const FakeViewPadding(bottom: 260);
-        await tester.pump();
-        expect(tester.getRect(allow).bottom, lessThan(844 - 260));
-        expect(tester.takeException(), isNull);
-        await _render(
-          tester,
-          frame,
-          'approval-keyboard-${brightness.name}-$scale',
-        );
-        tester.view.viewInsets = FakeViewPadding.zero;
-        await tester.pump();
-        final command = Completer<void>();
-        fixture.beforeCommand = () => command.future;
-        var fail = true;
-        fixture.commandHook = (_, method, params) async {
-          if (method == 'groups.approve' && fail) throw StateError('Offline');
-          return null;
-        };
-        await tester.tap(allow);
-        await tester.pump();
-        expect(tester.widget<IconButton>(allow).onPressed, isNull);
-        await tester.pump();
-        expect(find.byType(StudioLoading), findsOneWidget);
-        await _render(tester, frame, 'approval-held-${brightness.name}-$scale');
-        command.complete();
-        await _settleGroupMarkdown(tester);
-        expect(
-          session.approvalError(session.pendingApprovals.single),
-          isNotNull,
-        );
-        expect(tester.widget<IconButton>(deny).onPressed, isNotNull);
-        await _render(
-          tester,
-          frame,
-          'approval-failed-${brightness.name}-$scale',
-        );
-        fail = false;
-        fixture.pending.clear();
-        await session.refresh();
-        transcript.jumpTo(0);
-        await _settleGroupMarkdown(tester);
-        expect(find.text('<write to AGENTS.md>'), findsOneWidget);
-        expect(session.error, isNull);
-        await tester.pump(const Duration(milliseconds: 300));
-        expect(find.text('No longer pending'), findsOneWidget);
-        expect(find.text('Group needs attention'), findsNothing);
-        expect(find.byTooltip('Allow once'), findsNothing);
-        expect(tester.takeException(), isNull);
-        await _render(
-          tester,
-          frame,
-          'approval-withdrawn-${brightness.name}-$scale',
-        );
-        await tester.pumpWidget(const SizedBox());
-        // Reopening borrows saved explanation only; the server grants authority.
-        groupPreferences = await BotsPreferences.load();
-        await tester.pumpWidget(route());
-        await _settleGroupMarkdown(tester);
-        expect(find.text('<write to AGENTS.md>'), findsOneWidget);
-        expect(find.text('No longer pending'), findsOneWidget);
-        expect(find.byTooltip('Allow once'), findsNothing);
-        await tester.pumpWidget(const SizedBox());
-      });
     }
   }
   for (final brightness in Brightness.values) {
@@ -3068,8 +2937,7 @@ void main() {
         await session.refresh();
         await tester.pump(const Duration(milliseconds: 300));
         expect(tester.getRect(readingAnchor).top, closeTo(readingTop, 1));
-        expect(find.text('Atlas needs approval'), findsOneWidget);
-        expect(find.text('Waiting for your approval'), findsNothing);
+        expect(find.text('Hermes question - Pending'), findsOneWidget);
         expect(find.byType(ShaderMask), findsNothing);
         expect(find.byType(StudioLoading), findsNothing);
         await _render(tester, frame, 'approval-${brightness.name}-$scale');

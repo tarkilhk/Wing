@@ -7,6 +7,7 @@ import '../models/transcript_reader.dart';
 import '../models/transcript_message.dart';
 import 'bots_repository.dart';
 import 'bots_preferences.dart';
+import '../models/hermes_question.dart';
 import 'bot_group_read_state.dart';
 import '../models/composer_reference.dart';
 import '../models/recent_conversation.dart';
@@ -64,16 +65,6 @@ class BotGroupSession extends ChangeNotifier {
       }
     } catch (_) {
       _draftError = 'The saved group draft could not be read on this device.';
-    }
-    try {
-      for (final receipt in preferences.approvalReceipts(
-        group.scope.connectionIdentity,
-        group.id,
-      )) {
-        _approvalReceipts[receipt.action.key] = receipt;
-      }
-    } catch (_) {
-      _actionError = 'Saved approval details could not be read on this device.';
     }
     // Discovery already obtained this exact room's bounded message tail.
     // It is passive reading, never runtime/action authority or a log cursor.
@@ -326,38 +317,25 @@ class BotGroupSession extends ChangeNotifier {
     );
   }
 
-  // A withdrawn request loses action authority, never its visible explanation.
-  final _approvalReceipts =
-      <String, ({BotGroupAction action, String? decision})>{};
-  List<({BotGroupAction action, String? decision})> get settledApprovals =>
-      List.unmodifiable(
-        _approvalReceipts.values.where(
-          (receipt) =>
-              receipt.decision != null ||
-              _runtime?.actions.any(
-                    (action) => action.key == receipt.action.key,
-                  ) !=
-                  true,
-        ),
-      );
-  String? approvalError(BotGroupAction action) => _approvalErrors[action.key];
-  final _approvalErrors = <String, String>{};
-  Future<void> _saveApprovalReceipts() => preferences.writeApprovalReceipts(
+  late final questionHistory = preferences.questions(
     group.scope.connectionIdentity,
     group.id,
-    _approvalReceipts.values,
   );
-  bool get approvalAvailabilityKnown => _runtime != null;
+  String? approvalError(BotGroupAction action) => _approvalErrors[action.key];
+  final _approvalErrors = <String, String>{};
 
   List<BotGroupAction> get pendingApprovals {
     final current = {
       for (final action in runtime?.actions ?? const <BotGroupAction>[])
         if (action.kind == 'approval' &&
-            _approvalReceipts[action.key]?.decision == null)
+            !{
+              HermesQuestionStatus.approved,
+              HermesQuestionStatus.rejected,
+            }.contains(questionHistory.question(action.key)?.status))
           action.key: action,
     };
     return List.unmodifiable([
-      for (final key in _approvalReceipts.keys) ?current[key],
+      for (final question in questionHistory.questions) ?current[question.id],
     ]);
   }
 
@@ -477,18 +455,11 @@ class BotGroupSession extends ChangeNotifier {
     final revision = _recoveryRevision;
     notifyListeners();
     try {
-      final nextRuntime = await repository.groupRuntime(group);
+      final observed = await repository.groupRuntime(group);
+      final nextRuntime = observed.runtime;
       if (_closed || _capturing || revision != _recoveryRevision) return;
       _runtime = nextRuntime;
-      var receiptsChanged = false;
-      for (final action in nextRuntime.actions.where(
-        (a) => a.kind == 'approval',
-      )) {
-        if (!_approvalReceipts.containsKey(action.key)) {
-          _approvalReceipts[action.key] = (action: action, decision: null);
-          receiptsChanged = true;
-        }
-      }
+      preferences.observeQuestions(group, nextRuntime, observed.sequence);
       final pendingKeys = nextRuntime.actions
           .map((action) => action.key)
           .toSet();
@@ -501,9 +472,9 @@ class BotGroupSession extends ChangeNotifier {
       _approvalErrors.removeWhere((key, _) => !pendingKeys.contains(key));
       // Approval visibility must not wait on replay or device persistence.
       notifyListeners();
-      if (receiptsChanged) {
+      {
         try {
-          await _saveApprovalReceipts();
+          await questionHistory.flush();
         } catch (_) {
           if (!_closed) {
             _actionError =
@@ -662,7 +633,10 @@ class BotGroupSession extends ChangeNotifier {
     if (_closed ||
         _acting ||
         _sending ||
-        _approvalReceipts[action.key]?.decision != null ||
+        {
+          HermesQuestionStatus.approved,
+          HermesQuestionStatus.rejected,
+        }.contains(questionHistory.question(action.key)?.status) ||
         runtime?.actions.any((a) => a.key == action.key) != true) {
       return;
     }
@@ -680,10 +654,13 @@ class BotGroupSession extends ChangeNotifier {
         () => !_closed,
         () {},
       );
-      _approvalReceipts[action.key] = (action: action, decision: choice);
+      questionHistory.settle(
+        action.key,
+        HermesQuestionStatus.decision(choice!),
+      );
       if (!_closed) notifyListeners();
       try {
-        await _saveApprovalReceipts();
+        await questionHistory.flush();
       } catch (_) {
         if (!_closed) {
           _actionError =
@@ -851,25 +828,31 @@ final class BotGroupTranscriptReading implements TranscriptReader {
     _session.group.key,
   );
   @override
-  List<Map<String, dynamic>> get messages => List.unmodifiable([
+  List<Map<String, dynamic>> get messages => _session.questionHistory.project([
     for (final event in _session.events.where(
       (event) => event.isTranscriptEntry,
     ))
       Map<String, dynamic>.unmodifiable({
         'id': event.sequence,
+        'sequence': event.sequence,
+        'timestamp': event.timestamp.millisecondsSinceEpoch / 1000,
         'role': event.kind == 'message.user' ? 'user' : 'assistant',
         'content': event.isPass ? 'Passed' : event.text,
         '_discussion_event': event,
       }),
   ]);
   TranscriptMessage messageForRow(Map<String, dynamic> row) =>
-      TranscriptMessage.discussion(
-        group: _session.group,
-        event: row['_discussion_event'] as BotGroupEvent,
-      );
+      row['_hermes_question'] is HermesQuestion
+      ? TranscriptMessage.fromRow(row)
+      : TranscriptMessage.discussion(
+          group: _session.group,
+          event: row['_discussion_event'] as BotGroupEvent,
+        );
   @override
   Object messagePresentationId(Map<String, dynamic> row) =>
-      ('group-message', (row['_discussion_event'] as BotGroupEvent).sequence);
+      row['_hermes_question'] is HermesQuestion
+      ? row['id'] as String
+      : ('group-message', (row['_discussion_event'] as BotGroupEvent).sequence);
   @override
   String? get historySessionId =>
       _session.loading && messages.isEmpty ? null : _session.group.id;

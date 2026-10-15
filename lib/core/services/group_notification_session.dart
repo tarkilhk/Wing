@@ -1,4 +1,5 @@
 import 'bots_preferences.dart';
+import '../models/hermes_question.dart';
 import '../models/notification_input.dart';
 import '../models/notification_focus.dart';
 import '../models/chat_notification_content.dart';
@@ -366,17 +367,16 @@ class GroupNotificationSession extends ChangeNotifier {
         ],
       ),
     );
-    if (group.approvals.isNotEmpty) {
-      await BotsPreferences(
-        preferences,
-      ).writeApprovalReceipts(scope.connectionIdentity, id, [
-        for (final action in group.approvals)
-          (
-            action: action,
-            decision: group.accepted[groupApprovalFocusId(action)],
-          ),
-      ]);
+    final history = BotsPreferences(
+      preferences,
+    ).questions(scope.connectionIdentity, id);
+    for (final action in group.approvals) {
+      final decision = group.accepted[groupApprovalFocusId(action)];
+      if (decision != null) {
+        history.settle(action.key, HermesQuestionStatus.decision(decision));
+      }
     }
+    await history.flush();
   }
 
   /// Re-read the exact stock runtime before a native decision. A notification
@@ -414,6 +414,9 @@ class GroupNotificationSession extends ChangeNotifier {
         throw StateError('Group approval could not be checked');
       }
       observed = true;
+      BotsPreferences(
+        preferences,
+      ).observeQuestions(decoded.room!, runtime, decoded.latestSequence);
       group.title = decoded.room!.name;
       group.approvals = runtime.actions
           .where((a) => a.kind == 'approval')
@@ -484,6 +487,9 @@ class GroupNotificationSession extends ChangeNotifier {
     if (runtime == null) {
       throw const FormatException('Invalid shared group state');
     }
+    BotsPreferences(
+      preferences,
+    ).observeQuestions(room, runtime, decoded.latestSequence);
     group.approvals = runtime.actions
         .where((a) => a.kind == 'approval')
         .toList();

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../models/hermes_question.dart';
 import '../models/chat_runtime.dart';
 import '../models/gateway_activity.dart';
 import '../models/gateway_approval.dart';
@@ -90,6 +91,7 @@ class ChatRuntimeAnswer {
   final String runtimeId;
   final Object _request;
   final int _turn, _events;
+  String? _approvalChoice;
   bool get current => _owner._ownsAnswer(this);
 }
 
@@ -98,6 +100,19 @@ class ChatRuntimeAnswer {
 class ChatRuntime {
   ChatRuntime({required this._runtimeId});
   String _runtimeId;
+  final _questionHistory = <String, HermesQuestion>{};
+  void Function(HermesQuestion)? onQuestion;
+  void Function(HermesQuestionKind, Set<String>)? onQuestionReconciliation;
+
+  void publishQuestionHistory() {
+    for (final question in _questionHistory.values) {
+      onQuestion?.call(question);
+    }
+  }
+
+  void expireQuestion(String requestId) =>
+      _settleQuestionRequest(requestId, HermesQuestionStatus.expired);
+
   bool _closed = false;
   bool _liveSessionConfirmed = true;
   ChatExecution _execution = ChatExecution.idle;
@@ -741,6 +756,11 @@ class ChatRuntime {
 
   void replaceRuntime(String runtimeId) {
     if (_closed) return;
+    for (final question in _questionHistory.values.toList()) {
+      if (question.status == HermesQuestionStatus.pending) {
+        _settleQuestion(question.id, HermesQuestionStatus.cancelled);
+      }
+    }
     _runtimeId = runtimeId;
     _liveSessionConfirmed = true;
     _read++;
@@ -766,6 +786,7 @@ class ChatRuntime {
     if (_closed) return false;
     _revokeCommandPrompt();
     final wire = _approvalWire(request);
+    _rememberApproval(wire);
     final previous = _approvals.requests
         .where((r) => r['request_id'] == wire['request_id'])
         .firstOrNull;
@@ -801,6 +822,13 @@ class ChatRuntime {
     final wire = requests.map(_approvalWire).toList();
     if (wire.isNotEmpty) _revokeCommandPrompt();
     _approvals.reconcile(wire);
+    for (final request in wire) {
+      _rememberApproval(request);
+    }
+    _reconcileQuestionHistory(
+      HermesQuestionKind.approval,
+      wire.map((request) => 'approval/${request['request_id']}').toSet(),
+    );
     final ids = _approvals.requests.map((r) => r['request_id']).toSet();
     _approvalCorrelations.removeWhere((id, _) => !ids.contains(id));
     for (final raw in _approvals.requests) {
@@ -833,7 +861,7 @@ class ChatRuntime {
       request.correlation,
       _turn,
       _events,
-    );
+    ).._approvalChoice = choice;
   }
 
   bool _ownsAnswer(ChatRuntimeAnswer capture) =>
@@ -854,6 +882,12 @@ class ChatRuntime {
     String? error,
   }) {
     if (!_answerCurrent(capture)) return;
+    if (accepted && capture._approvalChoice != null) {
+      _settleQuestion(
+        'approval/$id',
+        HermesQuestionStatus.decision(capture._approvalChoice!),
+      );
+    }
     if (identical(_approvalCorrelations[id], capture._request) && accepted) {
       _approvals.remove(id);
       _approvalCorrelations.remove(id);
@@ -879,6 +913,7 @@ class ChatRuntime {
   void receiveQuestions(Map<String, dynamic> data) {
     if (_closed) return;
     final parsed = GatewayClarifyRequest.fromEventDataList(data);
+    _rememberQuestions(parsed);
     if (parsed.isNotEmpty) _revokeCommandPrompt();
     _questions = parsed.isEmpty
         ? null
@@ -896,6 +931,18 @@ class ChatRuntime {
                   }
                 : const {},
           );
+    for (final question in parsed) {
+      if (_questions?.answeredIds.contains(question.questionId) == true) {
+        _settleQuestion(
+          'clarify/${question.requestId}/${question.questionId ?? ''}',
+          HermesQuestionStatus.answered,
+        );
+      }
+    }
+    _reconcileQuestionHistory(HermesQuestionKind.clarification, {
+      for (final question in parsed)
+        'clarify/${question.requestId}/${question.questionId ?? ''}',
+    });
   }
 
   ChatRuntimeAnswer? beginQuestionAnswer(ChatQuestions? expected) {
@@ -924,6 +971,13 @@ class ChatRuntime {
       return;
     }
     final questions = _questions!;
+    final pending = questions.pending;
+    if (pending != null) {
+      _settleQuestion(
+        'clarify/${pending.requestId}/${pending.questionId ?? ''}',
+        HermesQuestionStatus.answered,
+      );
+    }
     if (remaining == null || remaining.isEmpty) {
       _questions = null;
     } else {
@@ -949,11 +1003,12 @@ class ChatRuntime {
         (!capture.current && observation.needsInput)) {
       return;
     }
-    _error = 'This input request expired. Your answer was not submitted again.';
+    // The anchored history entry owns expiry feedback.
   }
 
   void receiveSecure(GatewaySensitivePromptRequest request) {
     if (_closed) return;
+    _rememberSecure(request);
     _revokeCommandPrompt();
     _secure = GatewaySensitivePromptRequest(
       kind: request.kind,
@@ -964,6 +1019,9 @@ class ChatRuntime {
     );
     _secureResponding = false;
     _commandPreflight = _commandDispatchPending ? _secure : null;
+    _reconcileQuestionHistory(HermesQuestionKind.secureInput, {
+      'secure/${request.kind.name}/${request.requestId}',
+    });
   }
 
   ChatRuntimeAnswer beginSecureAnswer(GatewaySensitivePromptRequest expected) {
@@ -983,6 +1041,11 @@ class ChatRuntime {
     if (continuation != null &&
         identical(continuation._preflight, capture._request)) {
       if (accepted) {
+        final request = _secure!;
+        final id = 'secure/${request.kind.name}/${request.requestId}';
+        if (_questionHistory[id]?.status == HermesQuestionStatus.pending) {
+          _settleQuestion(id, HermesQuestionStatus.answered);
+        }
         continuation._accepted = true;
       } else {
         continuation._revoked = true;
@@ -1004,6 +1067,10 @@ class ChatRuntime {
     final id = data['id'];
     final method = data['method'];
     if (id is! String) return;
+    _settleQuestionRequest(
+      id,
+      HermesQuestionStatus.cancellation(data['reason']),
+    );
     if (method == 'approval') {
       for (final raw
           in _approvals.requests
@@ -1012,9 +1079,6 @@ class ChatRuntime {
         final rid = raw['request_id'] as String;
         _approvals.remove(rid);
         _approvalCorrelations.remove(rid);
-      }
-      if (data['reason'] == 'timeout') {
-        _error = 'An approval expired before you responded.';
       }
     }
     if (method == 'clarify' && _questions?.pending?.requestId == id) {
@@ -1028,10 +1092,6 @@ class ChatRuntime {
       _secure = null;
       _secureResponding = false;
       _commandPreflight = null;
-      if (data['reason'] == 'timeout') {
-        _error =
-            'This secure input request expired. Ask Hermes to request it again.';
-      }
     }
   }
 
@@ -1052,6 +1112,7 @@ class ChatRuntime {
         next?.requestId == _secure?.requestId && next?.kind == _secure?.kind;
     if (!sameSecure && next != null) _revokeCommandPrompt();
     if (!sameSecure || !_secureResponding) _secure = next;
+    if (next != null) _rememberSecure(next);
     if (!sameSecure) {
       _secureResponding = false;
       _commandPreflight = null;
@@ -1067,6 +1128,13 @@ class ChatRuntime {
         'request_id': questionFrame['id'],
       });
     }
+    _reconcileQuestionHistory(HermesQuestionKind.clarification, {
+      for (final q in _questions?.questions ?? const <GatewayClarifyRequest>[])
+        'clarify/${q.requestId}/${q.questionId ?? ''}',
+    });
+    _reconcileQuestionHistory(HermesQuestionKind.secureInput, {
+      if (next != null) 'secure/${next.kind.name}/${next.requestId}',
+    });
   }
 
   /// Called only after the coordinator accepts a captured current resume read.
@@ -1122,5 +1190,97 @@ class ChatRuntime {
     _revokeCommandPrompt();
     _read++;
     _approvalRead++;
+  }
+}
+
+/// Request lifecycle observations stay with the execution owner. The observer
+/// receives display metadata only; persistence and placement belong to reading.
+extension _RuntimeQuestions on ChatRuntime {
+  void _publishQuestion(HermesQuestion question) {
+    final old = _questionHistory[question.id];
+    if (old != null) {
+      if (question.status.certainty < old.status.certainty) return;
+      question = HermesQuestion(
+        id: old.id,
+        requestId: question.requestId,
+        kind: old.kind,
+        status: question.status,
+        timestamp: old.timestamp,
+        description: question.description,
+        command: question.command,
+        sender: old.sender,
+      );
+    }
+    _questionHistory[question.id] = question;
+    onQuestion?.call(question);
+  }
+
+  void _rememberApproval(Map<String, dynamic> raw) {
+    final id = raw['request_id'];
+    if (id is! String || id.isEmpty) return;
+    final request = GatewayApprovalRequest.fromEventData(raw);
+    _publishQuestion(
+      HermesQuestion(
+        id: 'approval/$id',
+        requestId: raw['server_request_id'] is String
+            ? raw['server_request_id'] as String
+            : id,
+        kind: HermesQuestionKind.approval,
+        status: HermesQuestionStatus.pending,
+        timestamp: DateTime.now(),
+        description: request.description,
+        command: request.command,
+      ),
+    );
+  }
+
+  void _rememberQuestions(Iterable<GatewayClarifyRequest> questions) {
+    for (final question in questions) {
+      _publishQuestion(
+        HermesQuestion(
+          id: 'clarify/${question.requestId}/${question.questionId ?? ''}',
+          requestId: question.requestId,
+          kind: HermesQuestionKind.clarification,
+          status: HermesQuestionStatus.pending,
+          timestamp: DateTime.now(),
+          description: [question.question, ...question.choices].join('\n'),
+        ),
+      );
+    }
+  }
+
+  void _rememberSecure(GatewaySensitivePromptRequest request) {
+    _publishQuestion(
+      HermesQuestion(
+        id: 'secure/${request.kind.name}/${request.requestId}',
+        requestId: request.requestId,
+        kind: HermesQuestionKind.secureInput,
+        status: HermesQuestionStatus.pending,
+        timestamp: DateTime.now(),
+        description: '${request.title}\n${request.description}',
+      ),
+    );
+  }
+
+  void _settleQuestion(String id, HermesQuestionStatus status) {
+    final old = _questionHistory[id];
+    if (old != null) _publishQuestion(old.withStatus(status));
+  }
+
+  void _settleQuestionRequest(String requestId, HermesQuestionStatus status) {
+    for (final question in _questionHistory.values.toList()) {
+      if (question.requestId == requestId) _settleQuestion(question.id, status);
+    }
+  }
+
+  void _reconcileQuestionHistory(HermesQuestionKind kind, Set<String> active) {
+    for (final question in _questionHistory.values.toList()) {
+      if (question.kind == kind &&
+          question.status == HermesQuestionStatus.pending &&
+          !active.contains(question.id)) {
+        _settleQuestion(question.id, HermesQuestionStatus.closed);
+      }
+    }
+    onQuestionReconciliation?.call(kind, active);
   }
 }

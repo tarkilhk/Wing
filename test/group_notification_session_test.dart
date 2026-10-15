@@ -1,3 +1,4 @@
+import 'package:wing/core/models/hermes_question.dart';
 import 'package:wing/core/models/group_notification.dart';
 import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/services/bots_preferences.dart';
@@ -221,11 +222,9 @@ void main() {
       expect(notice.choices, ['once', 'deny']);
       expect(notice.expandedBody, '<write to AGENTS.md>');
       expect(
-        BotsPreferences(prefs)
-            .approvalReceipts(scope.connectionIdentity, 'one')
-            .single
-            .action
-            .command,
+        BotsPreferences(
+          prefs,
+        ).questions(scope.connectionIdentity, 'one').questions.single.command,
         notice.expandedBody,
       );
       expect(watch.hasActiveGroups, true);
@@ -244,7 +243,7 @@ void main() {
       expect(
         BotsPreferences(
           prefs,
-        ).approvalReceipts(scope.connectionIdentity, 'one'),
+        ).questions(scope.connectionIdentity, 'one').questions,
         hasLength(1),
       );
     },
@@ -291,8 +290,8 @@ void main() {
       expect(
         BotsPreferences(
           prefs,
-        ).approvalReceipts(scope.connectionIdentity, 'one').single.decision,
-        'once',
+        ).questions(scope.connectionIdentity, 'one').questions.single.status,
+        HermesQuestionStatus.approved,
       );
     },
   );

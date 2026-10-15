@@ -1,3 +1,5 @@
+import '../../widgets/gateway_approval_panel.dart';
+import '../../models/gateway_approval.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
 import '../profile_transcript.dart';
 import '../../models/transcript_timeline.dart';
@@ -196,7 +198,9 @@ class _BotGroupScreenState extends State<BotGroupScreen>
         .where((member) => member.handle == entry.message.senderHandle)
         .firstOrNull;
     return BotGroupMessage(
-      key: ValueKey<(String, int)>(entry.presentationId as (String, int)),
+      key: entry.message.question != null
+          ? ValueKey<String>(entry.presentationId as String)
+          : ValueKey<(String, int)>(entry.presentationId as (String, int)),
       group: _session.group,
       message: entry.message,
       appearance: user || member == null
@@ -299,160 +303,31 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     if (mounted) _acknowledgeReading();
   }
 
-  Widget _approvalCard(
-    BotGroupAction action, {
-    String? status,
-    int pendingCount = 1,
-    double maxBodyHeight = 160,
-  }) {
-    final theme = Theme.of(context);
-    final tokens = WingTokens.of(context);
-    final pending = status == null;
-    final member =
-        _session.group.members
-            .where((m) => m.id == action.member)
-            .firstOrNull
-            ?.name ??
-        'A bot';
-    return Container(
-      key: ValueKey(('group-approval', action.key)),
-      decoration: BoxDecoration(
-        color: tokens.raised,
-        border: Border.all(color: tokens.border),
-        borderRadius: WingRadius.card,
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
+  Widget _approvalCard(BotGroupAction action, {required int pendingCount}) =>
+      Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 2, right: 8),
-                child: Icon(
-                  pending ? Icons.shield_outlined : Icons.info_outline,
-                  size: 18,
-                  color: pending ? tokens.warning : tokens.muted,
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  pending ? '$member needs approval' : status,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall,
-                ),
-              ),
-              if (pendingCount > 1)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: Text(
-                    '1/$pendingCount',
-                    style: theme.textTheme.labelSmall,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
           Flexible(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: maxBodyHeight.clamp(24, 160),
-              ),
-              // Each selectable command owns its bounded native viewport.
-              // An outer scroll view would give its handles the hidden full
-              // document's geometry instead of the preview's geometry.
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if ((pending ? _session.approvalError(action) : null)
-                      case final error?)
-                    Flexible(
-                      child: _GroupApprovalDetails(child: StudioError(error)),
-                    ),
-                  if (action.command.isNotEmpty)
-                    Flexible(
-                      flex: 3,
-                      child: Container(
-                        key: ValueKey(('group-approval-command', action.key)),
-                        margin: const EdgeInsets.only(top: 8),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: tokens.surface,
-                          borderRadius: WingRadius.control,
-                        ),
-                        child: Scrollbar(
-                          interactive: false,
-                          child: SelectableText(
-                            action.command,
-                            style: tokens.typography.mono.copyWith(
-                              color: tokens.onSurface,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (action.description.isNotEmpty)
-                    Flexible(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: _GroupApprovalDetails(
-                          child: Text(
-                            action.description,
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+            child: GatewayApprovalPanel(
+              request: GatewayApprovalRequest.fromEventData({
+                'command': action.command,
+                'description': action.description,
+                'choices': action.choices,
+                'allow_session': false,
+                'allow_permanent': false,
+              }),
+              question: _session.questionHistory.question(action.key)!,
+              total: pendingCount,
+              enabled: !_session.acting && !_session.sending,
+              onRespond: (choice) =>
+                  _session.resolve(action, choice: choice.wireValue),
             ),
           ),
-          if (pending) ...[
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                for (final choice in action.choices.reversed) ...[
-                  StudioButtonPress(
-                    child: choice == 'once'
-                        ? IconButton.filled(
-                            tooltip: 'Allow once',
-                            constraints: const BoxConstraints(
-                              minWidth: 48,
-                              minHeight: 48,
-                            ),
-                            onPressed: _session.acting || _session.sending
-                                ? null
-                                : () =>
-                                      _session.resolve(action, choice: choice),
-                            icon: const Icon(Icons.check),
-                          )
-                        : IconButton.outlined(
-                            tooltip: 'Deny',
-                            constraints: const BoxConstraints(
-                              minWidth: 48,
-                              minHeight: 48,
-                            ),
-                            onPressed: _session.acting || _session.sending
-                                ? null
-                                : () =>
-                                      _session.resolve(action, choice: choice),
-                            icon: const Icon(Icons.close),
-                          ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ],
-            ),
-          ],
+          if (_session.approvalError(action) case final error?)
+            Flexible(child: SingleChildScrollView(child: StudioError(error))),
         ],
-      ),
-    );
-  }
+      );
 
   Widget _activityStatus(BuildContext context) {
     final runtime = _session.runtime;
@@ -879,21 +754,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: StudioError(_session.error!),
                 ),
-              for (final receipt in _session.settledApprovals)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _approvalCard(
-                    receipt.action,
-                    status: switch (receipt.decision) {
-                      'once' => 'Allowed once',
-                      'deny' => 'Denied',
-                      _ =>
-                        _session.approvalAvailabilityKnown
-                            ? 'No longer pending'
-                            : 'Reconnect to check approval',
-                    },
-                  ),
-                ),
               if (_session.runtime case final runtime?) ...[
                 if (runtime.blocked && runtime.actions.isEmpty)
                   const Text(
@@ -952,10 +812,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
               child: _approvalCard(
                 action,
                 pendingCount: _session.pendingApprovals.length,
-                maxBodyHeight:
-                    (MediaQuery.sizeOf(context).height -
-                        MediaQuery.viewInsetsOf(context).bottom) *
-                    .20,
               ),
             ),
           ),
@@ -1018,36 +874,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
 }
 
 // The body scrolls independently; the decision pair never leaves its panel.
-class _GroupApprovalDetails extends StatefulWidget {
-  const _GroupApprovalDetails({required this.child});
-  final Widget child;
-  @override
-  State<_GroupApprovalDetails> createState() => _GroupApprovalDetailsState();
-}
 
-class _GroupApprovalDetailsState extends State<_GroupApprovalDetails> {
-  final _scroll = ScrollController();
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Scrollbar(
-    controller: _scroll,
-    thumbVisibility: true,
-    thickness: 3,
-    child: SingleChildScrollView(
-      controller: _scroll,
-      primary: false,
-      padding: const EdgeInsets.only(right: 8),
-      child: widget.child,
-    ),
-  );
-}
-
-// Roster text and bot identity retain text semantics inside the native popup.
 class _GroupMenuEntry<T> extends PopupMenuEntry<T> {
   const _GroupMenuEntry({super.key, required this.child});
   final Widget child;

@@ -89,3 +89,15 @@ Copy actions throughout Wing write directly to the clipboard without a bottom
 confirmation popup. Android may show its own clipboard confirmation.
 
 [Explore Wing](FEATURES.md) · [Conversation details](CONVERSATION_ACTIONS_AND_READING.md)
+
+## Hermes questions
+
+After an approval, clarification or secure-input request ends, Wing retains a
+"Hermes question - <status>" entry where the request first appeared. Details are
+collapsed by default; commands use the standard code viewer with Copy and wrap
+controls. The entry moves up naturally as new messages arrive and has no dismiss
+control. Approvals report Approved or Rejected, ordinary responses report
+Answered, and confirmed timeouts report Expired. Cancelled means the request was
+withdrawn; Closed means the outcome is unknown. An approved request does not
+prove that the operation subsequently succeeded. Secret response values are
+never saved in these entries.

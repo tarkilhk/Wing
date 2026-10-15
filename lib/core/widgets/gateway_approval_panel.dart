@@ -1,13 +1,18 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/gateway_approval.dart';
+import '../models/hermes_question.dart';
 import '../theme/wing_theme.dart';
+import 'hermes_question_card.dart';
 
-/// The command scrolls independently so its decision controls stay reachable.
-class GatewayApprovalPanel extends StatefulWidget {
+/// Live decisions retain their exact server-owned scopes. Details use the same
+/// collapsed disclosure and code viewer as the eventual history entry.
+class GatewayApprovalPanel extends StatelessWidget {
   const GatewayApprovalPanel({
     super.key,
     required this.request,
+    required this.question,
     required this.onRespond,
     this.position = 1,
     this.total = 1,
@@ -15,104 +20,76 @@ class GatewayApprovalPanel extends StatefulWidget {
   });
 
   final GatewayApprovalRequest request;
+  final HermesQuestion question;
   final ValueChanged<GatewayApprovalChoice> onRespond;
   final int position;
   final int total;
   final bool enabled;
 
   @override
-  State<GatewayApprovalPanel> createState() => _GatewayApprovalPanelState();
-}
-
-class _GatewayApprovalPanelState extends State<GatewayApprovalPanel> {
-  final _scroll = ScrollController();
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final request = widget.request;
-    // Leave room for the larger decision controls when text is enlarged.
-    final commandHeight =
-        160 / MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.5);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(WingSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.total > 1
-                  ? 'Approval needed (${widget.position}/${widget.total})'
-                  : 'Approval needed',
-              style: theme.textTheme.titleMedium,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final preferred =
+          (MediaQuery.sizeOf(context).height -
+              MediaQuery.viewInsetsOf(context).bottom) *
+          .35;
+      final footerWidth = request.choices.length * 56.0 + (total > 1 ? 56 : 0);
+      final footerRows = math.max(
+        1,
+        (footerWidth / constraints.maxWidth).ceil(),
+      );
+      final detailsHeight = constraints.hasBoundedHeight
+          ? math.min(
+              preferred,
+              math.max(0.0, constraints.maxHeight - footerRows * 48),
+            )
+          : preferred;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: detailsHeight),
+            child: SingleChildScrollView(
+              child: HermesQuestionCard(question: question),
             ),
-            const SizedBox(height: WingSpacing.sm),
-            Container(
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerLow,
-                borderRadius: WingRadius.control,
-              ),
-              clipBehavior: Clip.antiAlias,
-              constraints: BoxConstraints(maxHeight: commandHeight),
-              child: Scrollbar(
-                controller: _scroll,
-                thumbVisibility: true,
-                child: SingleChildScrollView(
-                  key: const Key('approval-command-scroll'),
-                  controller: _scroll,
-                  primary: false,
-                  padding: const EdgeInsets.all(WingSpacing.sm),
-                  child: SelectableText(
-                    request.command.isEmpty
-                        ? request.description
-                        : request.command,
-                    style: WingTypography.ramp(
-                      theme.brightness,
-                    ).mono.copyWith(color: theme.colorScheme.onSurface),
-                  ),
+          ),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (total > 1) Text('$position/$total'),
+              for (final choice in request.choices.reversed)
+                StudioButtonPress(
+                  child: choice == GatewayApprovalChoice.deny
+                      ? IconButton.outlined(
+                          tooltip: 'Reject',
+                          onPressed: enabled ? () => onRespond(choice) : null,
+                          icon: const Icon(Icons.close),
+                        )
+                      : IconButton.filled(
+                          tooltip: switch (choice) {
+                            GatewayApprovalChoice.once => 'Approve once',
+                            GatewayApprovalChoice.session =>
+                              'Approve for session',
+                            GatewayApprovalChoice.always => 'Always approve',
+                            GatewayApprovalChoice.deny => 'Reject',
+                          },
+                          onPressed: enabled ? () => onRespond(choice) : null,
+                          icon: Icon(switch (choice) {
+                            GatewayApprovalChoice.once => Icons.check,
+                            GatewayApprovalChoice.session =>
+                              Icons.playlist_add_check,
+                            GatewayApprovalChoice.always => Icons.done_all,
+                            GatewayApprovalChoice.deny => Icons.close,
+                          }),
+                        ),
                 ),
-              ),
-            ),
-            const SizedBox(height: WingSpacing.sm),
-            Wrap(
-              spacing: WingSpacing.sm,
-              runSpacing: WingSpacing.xs,
-              children: [
-                for (final choice in request.choices)
-                  if (choice == GatewayApprovalChoice.deny)
-                    StudioButtonPress(
-                      child: OutlinedButton(
-                        onPressed: widget.enabled
-                            ? () => widget.onRespond(choice)
-                            : null,
-                        child: const Text('Deny'),
-                      ),
-                    )
-                  else
-                    StudioButtonPress(
-                      child: FilledButton(
-                        onPressed: widget.enabled
-                            ? () => widget.onRespond(choice)
-                            : null,
-                        child: Text(switch (choice) {
-                          GatewayApprovalChoice.once => 'Allow once',
-                          GatewayApprovalChoice.session => 'Allow for session',
-                          GatewayApprovalChoice.always => 'Always allow',
-                          GatewayApprovalChoice.deny => 'Deny',
-                        }),
-                      ),
-                    ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+            ],
+          ),
+        ],
+      );
+    },
+  );
 }

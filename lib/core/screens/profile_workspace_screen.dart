@@ -1661,7 +1661,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               chat.changingIntelligence ||
               _loadingIntelligence == chat.key ||
               chat.composer.observation.saving ||
-              chat.composer.observation.steering,
+              chat.composer.observation.steering ||
+              chat.runtime.approvalResponding,
           label: chat.refreshingConversation
               ? 'Refreshing conversation'
               : controller.refreshingWorkspace
@@ -1672,6 +1673,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               ? 'Steering message'
               : chat.composer.observation.saving
               ? 'Saving message'
+              : chat.runtime.approvalResponding
+              ? 'Sending approval decision'
               : 'Updating model settings',
           child: StudioLoadingRegion(
             busy: controller.switching || chat.refreshingConversation,
@@ -2356,6 +2359,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                             GatewayApprovalPanel(
                               key: ValueKey((chat.key, request.requestId)),
                               request: request.request,
+                              question: chat.reading.questionHistory!.question(
+                                'approval/${request.requestId}',
+                              )!,
                               position: chat.runtime.approvalPosition,
                               total: chat.runtime.approvalTotal,
                               enabled:

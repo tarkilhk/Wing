@@ -1,4 +1,5 @@
 import 'chat_transcript_events.dart';
+import 'hermes_question_history.dart';
 import 'subagent_timeline_session.dart';
 import 'group_observations.dart';
 import '../models/server_reference.dart';
@@ -5582,6 +5583,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
             ),
           ),
     );
+    final questions = HermesQuestionHistory(
+      preferences,
+      jsonEncode([
+        'chat',
+        key.workspace.connectionIdentity,
+        key.workspace.profileName,
+        key.sessionId,
+      ]),
+    );
+    chat.reading.questionHistory = questions;
+    runtime.onQuestion = chat.reading.observeQuestion;
+    runtime.onQuestionReconciliation = (kind, active) =>
+        questions.reconcile(active, kind: kind);
+    runtime.publishQuestionHistory();
     _savedToolDurationRevisions[chat] = (
       key,
       chat.reading.toolDurationRevision,
@@ -7748,6 +7763,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (!accepted) throw StateError('This approval is no longer pending.');
       chat._runtime.finishApprovalAnswer(capture, requestId, accepted: true);
       await _refreshApprovals(chat);
+      final next = chat.runtime.approval;
+      if (next != null) {
+        chat.reading.revealNotification(
+          NotificationFocus('approval', next.requestId),
+        );
+      }
     } catch (_) {
       decisionError = 'Decision not confirmed · review or retry';
       unawaited(_refreshApprovals(chat));
@@ -7789,6 +7810,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
     if (!capture.current) return;
     if (result['status'] == 'expired') {
+      chat._runtime.expireQuestion(question.requestId);
       await reconnect(resource.scope);
       chat._runtime.reportQuestionExpiry(capture);
     } else {
@@ -7821,9 +7843,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       });
       accepted = result['status'] == 'ok';
       if (result['status'] == 'expired' && capture.current) {
-        chat._runtime.reportError(
-          'This secure input request expired. Ask Hermes to request it again.',
-        );
+        chat._runtime.expireQuestion(expectedRequest.requestId);
         accepted =
             true; // A definite expired receipt retires this exact local card.
       }
