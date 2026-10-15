@@ -2,6 +2,7 @@ import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,6 +48,9 @@ void main() {
         expect(owner.notificationMonitoringChats.toList(), [
           (
             key: ProfileSessionKey(owner.current!.scope, 'outside'),
+            payload: jsonEncode(
+              ProfileSessionKey(owner.current!.scope, 'outside').toJson(),
+            ),
             title: 'Outside task',
             state: 'reconnecting',
           ),
@@ -157,6 +161,9 @@ void main() {
         expect(owner.notificationMonitoringChats.toList(), [
           (
             key: ProfileSessionKey(owner.current!.scope, 'outside'),
+            payload: jsonEncode(
+              ProfileSessionKey(owner.current!.scope, 'outside').toJson(),
+            ),
             title: 'Outside task',
             state: 'reconnecting',
           ),

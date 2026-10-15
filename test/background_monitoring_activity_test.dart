@@ -5,6 +5,7 @@ import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
@@ -137,6 +138,11 @@ void main() {
       reason: 'The shared room is working even when every bot session is idle',
     );
     expect(owner.notificationMonitoringChats.single.title, 'Shared discussion');
+    expect(jsonDecode(owner.notificationMonitoringChats.single.payload), {
+      'connection': owner.connection.id,
+      'connection_identity': owner.connectionIdentity,
+      'room': 'discussion',
+    });
   });
 
   for (final profile in ['a', 'b']) {
@@ -389,6 +395,11 @@ void main() {
     expect(service.state.value, BackgroundMonitoringState.active);
     expect(calls.last.method, 'start');
     expect(calls.last.arguments['text'], 'Shared discussion · working');
+    expect(jsonDecode(calls.last.arguments['payload'] as String), {
+      'connection': owner.connection.id,
+      'connection_identity': owner.connectionIdentity,
+      'room': 'discussion',
+    });
 
     host.groupFails = true;
     host.changed();
@@ -446,8 +457,17 @@ void main() {
 
       one.composer.editText('First task');
       await first.send(one);
+      expect(
+        jsonDecode(registry.monitoringSummary['payload']!),
+        one.key.toJson(),
+      );
       two.composer.editText('Second task');
       await second.send(two);
+      expect(
+        registry.monitoringSummary['payload'],
+        '',
+        reason: 'Multiple chats open Recents',
+      );
       expect(transitions, [true]);
       expect(
         registry.monitoringSummary['text'],
@@ -472,6 +492,10 @@ void main() {
       expect(one.runtime.needsInput, isTrue);
       expect(transitions, [true, false]);
       expect(registry.monitoringSummary['text'], 'First task · needs input');
+      expect(
+        jsonDecode(registry.monitoringSummary['payload']!),
+        one.key.toJson(),
+      );
 
       await first.clarify(one, 'Yes');
       expect(registry.hasActiveChats, isTrue);

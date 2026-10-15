@@ -30,11 +30,11 @@ When Wing confirms that a question or approval was answered, it clears that requ
 
 ## Answer approvals and open chats
 
-Approval actions require unlocking the phone. Depending on the request, an alert offers Once, Session, Always or Deny. Session applies to matching commands for that session. Permanent approval opens a confirmation in Wing. Long or incomplete commands, or hidden previews, require review in the app.
+Approval actions require unlocking the phone. Short complete commands offer Once and Deny. Review opens the request in Wing, including Session and Always choices when the server offers them. Session applies to matching commands for that session. Choose Always explicitly in Wing to allow matching commands permanently. Long or incomplete commands, or hidden previews, require review in the app.
 
 The alert stays visible while an answer is being sent. A failure keeps the request available; changed or expired requests require reopening the chat for review.
 
-Tap an individual alert to open its original chat. The ongoing monitoring notification opens Wing without selecting a chat; an Android group header is not an individual chat destination. Reading the latest answer in Wing clears that result's alert. Opening older history does not. If newer history has arrived, an older alert may open the latest available answer.
+Chat alerts use Android conversation notifications. Tap an alert to open its original chat or shared discussion. The ongoing monitoring notification opens the watched conversation when there is one, including a shared discussion. With two or more watched conversations, it opens Recents. Reading the latest answer in Wing clears that result's alert. Opening older history does not. If newer history has arrived, an older alert may open the latest available answer.
 
 ## Delivery limits
 

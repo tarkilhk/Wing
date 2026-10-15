@@ -109,6 +109,82 @@ class NotificationDismissalTest(unittest.TestCase):
             self.exercise('', selected_is_target=False)
 
 
+class DirectActionConfigurationTest(unittest.TestCase):
+    def test_restores_normal_text_before_posting_direct_action_request(self):
+        calls = []
+        def state(path='/', data=None):
+            if path == '/approval':
+                calls.append(('approval',))
+                raise RuntimeError('request reached')
+            return {'decisions': []}
+        with patch.object(driver, 'adb', side_effect=lambda *args: calls.append(args)), \
+             patch.object(driver, 'state', side_effect=state), \
+             patch.object(driver, 'until'), patch.object(driver.time, 'sleep'):
+            with self.assertRaisesRegex(RuntimeError, 'request reached'):
+                driver.check_direct_actions(Path('unused'))
+        self.assertLess(calls.index(('shell', 'settings', 'put', 'system', 'font_scale', '1.0')),
+                        calls.index(('approval',)))
+
+
+class ColdActionReceiptTest(unittest.TestCase):
+    def test_atomic_preference_write_is_retried_before_accepting_exact_receipt(self):
+        reads = 0
+
+        def adb(*args):
+            nonlocal reads
+            if args[-1] == 'shared_prefs/FlutterSharedPreferences.xml':
+                reads += 1
+                if reads == 1:
+                    raise subprocess.CalledProcessError(1, 'cat')
+                return ('<map><string name="flutter.notification_qa_decisions">'
+                        '[{"params":{"request_id":"cold-request"}}]'
+                        '</string></map>')
+            return ''
+
+        def until(check, message, **kwargs):
+            for _ in range(3):
+                if check():
+                    return
+            raise AssertionError(message)
+
+        with patch.object(driver, 'adb', side_effect=adb), \
+             patch.object(driver, 'state', return_value={
+                 'decisions': [], 'pending': [{'request_id': 'cold-request'}],
+             }), patch.object(driver, 'until', side_effect=until), \
+             patch.object(driver, 'shade'), patch.object(driver, 'tap'), \
+             patch.object(driver, 'screenshot'), patch.object(driver, 'nodes', return_value=[]):
+            driver.check_cold_action(Path('unused'))
+        self.assertEqual(reads, 3)
+
+
+class GroupBodyDestinationTest(unittest.TestCase):
+    def exercise(self, visible_answer):
+        def until(check, message, **kwargs):
+            if not check():
+                raise AssertionError(message)
+        def adb(*args):
+            return '' if 'pidof' not in args or len(args) == 2 else '123'
+        with tempfile.TemporaryDirectory() as output, \
+             patch.object(driver, 'adb', side_effect=adb), \
+             patch.object(driver, 'state', return_value={
+                 'lifecycle': 'paused', 'group_notification_id': 42, 'decisions': [],
+             }), patch.object(driver, 'until', side_effect=until), \
+             patch.object(driver, 'shade') as shade, patch.object(driver, 'tap'), \
+             patch.object(driver, 'screenshot'), \
+             patch.object(driver, 'nodes', return_value=[ET.Element('node', text=visible_answer)]):
+            driver.check_group_body_taps(Path(output))
+            self.assertEqual(shade.call_count, 3)
+            for call in shade.call_args_list:
+                self.assertEqual(call.kwargs, {'expand': False})
+
+    def test_a_running_app_or_an_unrelated_chat_is_not_group_tap_success(self):
+        with self.assertRaisesRegex(AssertionError, 'NATIVE_GROUP_BODY_TAP'):
+            self.exercise('Some other chat')
+
+    def test_default_shade_warm_approval_and_cold_taps_require_the_shared_answer(self):
+        self.exercise('The shared discussion reached its exact destination.')
+
+
 class NotificationGateTest(unittest.TestCase):
     def setUp(self):
         output = tempfile.TemporaryDirectory(prefix='wing-notification-unit-')
@@ -245,7 +321,8 @@ class OwnedAndroidBootTest(unittest.TestCase):
 
 class GroupApprovalControlsTest(unittest.TestCase):
     def controls(self, *names):
-        return [ET.Element('node', {'resource-id': driver.PACKAGE + ':id/' + name})
+        return [ET.Element('node', {'resource-id': 'android:id/action0',
+                                  'text': name.title()})
                 for name in names]
 
     def test_expands_the_exact_group_card_when_another_chat_is_first(self):
@@ -261,7 +338,7 @@ class GroupApprovalControlsTest(unittest.TestCase):
              patch.object(driver, 'screenshot'), \
              patch.object(driver.time, 'sleep'), patch.object(driver, 'adb') as adb, \
              patch.object(driver, 'nodes', side_effect=[shown, self.controls('once', 'deny'),
-                                                       shown, self.controls('review', 'review_deny')]):
+                                                       shown, self.controls('review', 'deny')]):
             driver.check_group_approval_rendering(Path(directory))
         taps = [call.args for call in adb.call_args_list
                 if call.args[:3] == ('shell', 'input', 'tap')]
@@ -269,7 +346,7 @@ class GroupApprovalControlsTest(unittest.TestCase):
 
     def test_supported_short_and_review_layouts_are_accepted(self):
         driver.assert_group_approval_controls(self.controls('once', 'deny'), False)
-        driver.assert_group_approval_controls(self.controls('review', 'review_deny'), True)
+        driver.assert_group_approval_controls(self.controls('review', 'deny'), True)
 
     def test_unsupported_session_and_always_are_rejected(self):
         with self.assertRaisesRegex(AssertionError, 'NATIVE_GROUP_APPROVAL_RENDER'):

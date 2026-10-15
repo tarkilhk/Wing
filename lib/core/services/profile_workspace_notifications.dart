@@ -16,10 +16,26 @@ class ProfileInputNotification {
 }
 
 extension ProfileNotificationState on ProfileWorkspaceController {
-  Iterable<({ProfileSessionKey? key, String title, String state})>
+  Iterable<
+    ({ProfileSessionKey? key, String payload, String title, String state})
+  >
   get notificationMonitoringChats sync* {
     for (final group in _groupNotifications.monitoringGroups) {
-      yield (key: null, title: group.title, state: group.state);
+      yield (
+        key: null,
+        payload: jsonEncode(
+          GroupNotificationTarget(
+            WorkspaceScope(
+              connectionId: connection.id,
+              connectionIdentity: connectionIdentity,
+              profileName: 'default',
+            ),
+            group.roomId,
+          ).toJson(),
+        ),
+        title: group.title,
+        state: group.state,
+      );
     }
     for (final chat in notificationChats) {
       if (chat.source == 'bot_room') {
@@ -42,7 +58,12 @@ extension ProfileNotificationState on ProfileWorkspaceController {
         state = null;
       }
       if (state != null) {
-        yield (key: chat.key, title: _monitoringChatTitle(chat), state: state);
+        yield (
+          key: chat.key,
+          payload: jsonEncode(chat.key.toJson()),
+          title: _monitoringChatTitle(chat),
+          state: state,
+        );
       }
     }
     for (final entry in _backgroundChats.entries) {
@@ -56,7 +77,12 @@ extension ProfileNotificationState on ProfileWorkspaceController {
       if (chat.source == 'bot_room') {
         continue;
       } else {
-        yield (key: chat.key, title: _monitoringChatTitle(chat), state: state);
+        yield (
+          key: chat.key,
+          payload: jsonEncode(chat.key.toJson()),
+          title: _monitoringChatTitle(chat),
+          state: state,
+        );
       }
     }
   }

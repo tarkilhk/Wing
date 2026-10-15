@@ -45,11 +45,12 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
   }
 
   Map<String, String> get monitoringSummary {
-    final chats = _controllers.values.expand(
-      (owner) => owner.notificationMonitoringChats,
-    );
+    final chats = _controllers.values
+        .expand((owner) => owner.notificationMonitoringChats)
+        .toList();
     return {
       'title': 'Watching chats',
+      'payload': chats.length == 1 ? chats.single.payload : '',
       'text': chats
           .map((chat) {
             final bot = _monitoringBots[chat.key?.workspace];

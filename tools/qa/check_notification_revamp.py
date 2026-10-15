@@ -58,7 +58,7 @@ def tap(resource=None, text=None):
     adb('shell', 'input', 'tap', str((x1 + x2)//2), str((y1 + y2)//2))
 
 
-def shade():
+def shade(*, expand=True):
     width, height = map(int, re.findall(r'(\d+)x(\d+)', adb('shell', 'wm', 'size'))[-1])
 
     def opened():
@@ -74,6 +74,8 @@ def shade():
         return shown if any(n.get('resource-id') == 'android:id/app_name_text' for n in shown) else None
 
     shown = until(opened, 'Notification shade did not open')
+    if not expand:
+        return
     button = next((n for n in shown if n.get('resource-id') == 'android:id/expand_button'), None)
     if button is not None and button.get('content-desc') == 'Expand':
         x1, y1, x2, y2 = map(int, re.findall(r'\d+', button.get('bounds')))
@@ -109,6 +111,9 @@ def check_untrusted_main_intents():
         ('--es', 'wing_notification_handle', '00000000-0000-0000-0000-000000000000'),
         ('--es', 'wing_notification_handle', interaction),
         ('--ei', 'wing_notification_handle', '7'),
+        ('--es', 'wing_conversation_navigation', '00000000-0000-0000-0000-000000000000'),
+        ('--es', 'wing_conversation_navigation', interaction),
+        ('--ei', 'wing_conversation_navigation', '7'),
     ]
     for kind, extra, value in attempts:
         command = ['am', 'start', '-W', '-n', PACKAGE + '/com.tarkilhk.wing.MainActivity',
@@ -159,11 +164,89 @@ def check_content_tap_clear():
     print('PASS: body tap opens the captured chat and clears the shade before history completes', flush=True)
 
 
+def check_group_body_taps(output):
+    """Tap what the shade actually displays, without expanding an OS summary."""
+    component = PACKAGE + '/com.tarkilhk.wing.MainActivity'
+    answer = 'The shared discussion reached its exact destination.'
+    for kind, cold in (('answer', False), ('approval', False), ('answer', True)):
+        adb('shell', 'am', 'start', '-W', '-n', component)
+        state('/list', {})
+        adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+        until(lambda: state()['lifecycle'] == 'paused', 'Fixture did not pause')
+        # Multiple conversations expose Android's automatic summary. Expanding
+        # that summary first bypasses the broken default tap target.
+        state('/reply', {'text': 'An independent chat also needs attention.'})
+        state('/stop', {})
+        current = state('/native-group-' + kind, {'long': False})
+        notification_id = current['group_notification_id']
+        if cold:
+            pid = adb('shell', 'pidof', PACKAGE).strip()
+            adb('shell', 'run-as', PACKAGE, 'kill', '-9', pid)
+            until(lambda: not adb('shell', f'pidof {PACKAGE} || true').strip(),
+                  'Fixture did not stop')
+        shade(expand=False)
+        stage = f'group-{kind}-{"cold" if cold else "warm"}'
+        screenshot(output / (stage + '-shade.png'))
+        tap(text='Research team' if kind == 'answer' else 'Native group approval')
+        until(lambda: any(answer in (node.get('text'), node.get('content-desc'))
+                          for node in nodes()),
+              f'NATIVE_GROUP_BODY_TAP: {stage} did not open the captured discussion')
+        raw = adb('shell', 'dumpsys', 'notification', '--noredact')
+        assert not any(f'pkg={PACKAGE} ' in line and f'id={notification_id} ' in line
+                       for line in raw.splitlines() if 'NotificationRecord(' in line), \
+            f'NATIVE_GROUP_BODY_TAP: {stage} left the tapped notification visible'
+        assert not state()['decisions'], 'Group body tap submitted an approval'
+        screenshot(output / (stage + '-discussion.png'))
+        print(f'PASS: {stage} default-shade tap opens the exact shared discussion and clears its alert', flush=True)
+
+
+def check_many_conversation_alerts(output):
+    state('/list', {})
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    for index in range(8):
+        state('/native-group-answer', {'room': f'other-room-{index}', 'title': f'Other group {index}'})
+    state('/native-group-answer', {})
+    # Let Android's delayed forced-grouping pass run before tapping.
+    time.sleep(10)
+    raw = adb('shell', 'dumpsys', 'notification', '--noredact')
+    records = [line for line in raw.splitlines() if 'NotificationRecord(' in line and f'pkg={PACKAGE} ' in line]
+    assert not any('AUTOGROUP_SUMMARY' in line for line in records), \
+        'NATIVE_CONVERSATION_GROUPING: Android replaced conversation taps with an automatic summary'
+    shade(expand=False)
+    screenshot(output / 'many-conversations-shade.png')
+    tap(text='Research team')
+    until(lambda: any('The shared discussion reached its exact destination.'
+                     in (n.get('text'), n.get('content-desc')) for n in nodes()),
+          'NATIVE_CONVERSATION_GROUPING: default tap opened the wrong conversation')
+    print('PASS: nine conversation alerts retain their own targets after Android grouping settles', flush=True)
+
+
+def check_cold_chat_body_tap(output):
+    state('/list', {})
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    answer = 'This exact individual answer must survive cold startup.'
+    state('/reply', {'text': answer})
+    pid = adb('shell', 'pidof', PACKAGE).strip()
+    adb('shell', 'run-as', PACKAGE, 'kill', '-9', pid)
+    until(lambda: not adb('shell', f'pidof {PACKAGE} || true').strip(),
+          'Fixture did not stop for individual cold tap')
+    shade(expand=False)
+    tap(text=answer)
+    until(lambda: state()['selected_profile'] == 'a'
+          and any(answer in (n.get('text'), n.get('content-desc')) for n in nodes()),
+          'NATIVE_COLD_CHAT_TAP: remembered workspace displaced the captured chat')
+    screenshot(output / 'individual-cold-chat.png')
+    print('PASS: cold individual tap opens its exact answer above remembered workspace startup', flush=True)
+
+
+def notification_actions(shown):
+    return {node.get('text', '').casefold() for node in shown
+            if node.get('resource-id') == 'android:id/action0'}
+
+
 def assert_group_approval_controls(shown, review):
-    names = {'once', 'session', 'always', 'deny', 'review', 'review_deny'}
-    visible = {node.get('resource-id', '').removeprefix(PACKAGE + ':id/')
-               for node in shown} & names
-    expected = {'review', 'review_deny'} if review else {'once', 'deny'}
+    visible = notification_actions(shown)
+    expected = {'review', 'deny'} if review else {'once', 'deny'}
     assert visible == expected, f'NATIVE_GROUP_APPROVAL_RENDER: expected {expected}, found {visible}'
 
 
@@ -207,7 +290,7 @@ def check_group_approval_rendering(output):
     print('PASS: group approvals render only Once/Deny or Review/Deny without hidden unsupported actions', flush=True)
 
 
-def run(output, tap_only=False):
+def reset_fixture():
     assert SERIAL.startswith('emulator-'), 'Use a disposable emulator, never a phone'
     adb('forward', 'tcp:18766', 'tcp:18766')
     adb('shell', 'pm', 'clear', PACKAGE)
@@ -220,12 +303,54 @@ def run(output, tap_only=False):
     adb('shell', 'am', 'start', '-n', PACKAGE + '/com.tarkilhk.wing.MainActivity')
     until(lambda: (current := state())['ready'] and current['lifecycle'] == 'resumed',
           'Fixture did not start in the foreground', timeout=120)
+
+def check_monitoring_taps(output):
+    reset_fixture()
+    state('/list', {})
+    state('/work', {})
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    shade(expand=False)
+    tap(text='Watching chats')
+    until(lambda: state()['selected_profile'] == 'b'
+          and any('b completed' in (n.get('text'), n.get('content-desc')) for n in nodes()),
+          'MONITORING_TAP_TARGET: one monitored chat did not open that chat')
+    screenshot(output / 'monitoring-single-chat.png')
+    print('PASS: monitoring tap opens the exact single profile chat', flush=True)
+    state('/list', {})
+    state('/work-primary', {})
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    shade(expand=False)
+    tap(text='Watching chats')
+    until(lambda: any('Recents' in (n.get('text'), n.get('content-desc')) for n in nodes()),
+          'MONITORING_TAP_TARGET: multiple monitored chats did not open Recents')
+    screenshot(output / 'monitoring-recents.png')
+    print('PASS: monitoring tap with two active chats opens Recents', flush=True)
+    state('/reply', {'text': 'First monitored task finished.'})
+    state('/stop', {})
+    state('/monitor-group', {})
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    shade(expand=False)
+    tap(text='Watching chats')
+    until(lambda: any('The shared discussion reached its exact destination.'
+                     in (n.get('text'), n.get('content-desc')) for n in nodes()),
+          'MONITORING_TAP_TARGET: one monitored group did not open its discussion')
+    screenshot(output / 'monitoring-single-group.png')
+    state('/stop-monitor-group', {})
+    print('PASS: monitoring taps open the single chat/group or Recents for multiple chats', flush=True)
+
+
+def run(output, tap_only=False):
+    reset_fixture()
     # Keep the production work lease alive while its loopback QA control
     # server is behind the notification shade.
     state('/work', {})
     if tap_only:
         check_content_tap_clear()
         check_group_approval_rendering(output)
+        check_group_body_taps(output)
+        check_cold_chat_body_tap(output)
+        check_many_conversation_alerts(output)
+        check_monitoring_taps(output)
         return
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     state('/approval', {})
@@ -233,14 +358,14 @@ def run(output, tap_only=False):
     check_untrusted_main_intents()
     shade()
     screenshot(output / 'light-normal.png')
-    tap(resource=PACKAGE + ':id/once')
+    tap(text='Once')
     until(lambda: len(state()['decisions']) == 1, 'Once did not submit')
     assert state()['decisions'][0]['params']['request_id'] == 'qa-1'
     assert state()['pending'][0]['request_id'] == 'qa-2'
     print('PASS: Once resolves the exact head and advances FIFO', flush=True)
     state('/fail', {'enabled': True})
     shade()
-    tap(resource=PACKAGE + ':id/once')
+    tap(text='Once')
     until(lambda: len(state()['decisions']) == 2, 'Failure fixture did not receive attempt')
     assert state()['pending'][0]['request_id'] == 'qa-2'
     shade()
@@ -248,19 +373,18 @@ def run(output, tap_only=False):
     screenshot(output / 'unconfirmed.png')
     print('PASS: failed submission retains notification and request', flush=True)
     state('/fail', {'enabled': False})
-    tap(resource=PACKAGE + ':id/always')
-    until(lambda: any('Always allow?' in (n.get('text'), n.get('content-desc')) for n in nodes()), 'Missing permanent-pattern confirmation')
-    assert len(state()['decisions']) == 2
-    screenshot(output / 'always-confirmation.png')
-    tap(text='Cancel')
-    assert len(state()['decisions']) == 2
-    print('PASS: Always requires confirmation for the owning request', flush=True)
+    tap(text='Review')
+    until(lambda: any('Always allow' in (n.get('text'), n.get('content-desc')) for n in nodes()), 'Review did not expose approval choices')
+    assert any('Allow for session' in (n.get('text'), n.get('content-desc')) for n in nodes())
+    assert len(state()['decisions']) == 2, 'Review submitted a decision'
+    screenshot(output / 'approval-review-choices.png')
+    print('PASS: Review opens the owning request with Session/Always choices without submitting', flush=True)
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     state('/preview', {'enabled': False})
     shade()
     shown = nodes()
-    assert not any(n.get('resource-id') == PACKAGE + ':id/once' for n in shown)
-    assert any(n.get('content-desc') == 'Review the full command' for n in shown)
+    assert 'once' not in notification_actions(shown)
+    assert notification_actions(shown) == {'review'}
     screenshot(output / 'private-preview.png')
     print('PASS: hidden previews expose Review only', flush=True)
     state('/preview', {'enabled': True})
@@ -271,15 +395,13 @@ def run(output, tap_only=False):
             time.sleep(.7)
             shade()
             shown = nodes()
-            for choice in ('once', 'session', 'always', 'deny'):
-                assert any(n.get('resource-id') == PACKAGE + ':id/' + choice for n in shown), choice
-            if scale == '2.0':
-                controls = {choice: next(n for n in shown if n.get('resource-id') == PACKAGE + ':id/' + choice) for choice in ('once', 'session', 'always', 'deny')}
-                bounds = {k: list(map(int, re.findall(r'\d+', n.get('bounds')))) for k, n in controls.items()}
-                assert bounds['always'][1] >= bounds['once'][3], 'Large-text choices did not switch to two rows'
-                assert all(b[3] - b[1] >= 120 for b in bounds.values()), 'Clipped approval target'
+            expected = {'review', 'deny'} if scale == '2.0' else {'once', 'review', 'deny'}
+            assert notification_actions(shown) == expected
+            controls = [n for n in shown if n.get('resource-id') == 'android:id/action0']
+            bounds = [list(map(int, re.findall(r'\d+', n.get('bounds')))) for n in controls]
+            assert all(b[3] - b[1] >= 100 for b in bounds), 'Clipped approval target'
             screenshot(output / f"{'dark' if night == 'yes' else 'light'}-{scale}.png")
-    print('PASS: all four controls remain available in both themes at 100%/200%', flush=True)
+    print('PASS: platform actions remain readable and reachable in both themes at 100%/200%', flush=True)
     state('/remote', {})
     until(lambda: all(not v['inputs'] for v in json.loads(state()['notices']).values()), 'Watcher did not clear remote decision')
     print('PASS: watcher reconciles a desktop decision without another notification tap', flush=True)
@@ -307,19 +429,24 @@ def run(output, tap_only=False):
 
 
 def check_direct_actions(output):
+    # The layout matrix ends at enlarged text, where Once intentionally requires
+    # Review. Direct-action acceptance starts in the short-command configuration.
+    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
+    adb('shell', 'cmd', 'uimode', 'night', 'no')
+    time.sleep(.7)
     state('/fail', {'enabled': False})
     state('/preview', {'enabled': True})
     state('/remote', {})
     until(lambda: all(not v['inputs'] for v in json.loads(state()['notices']).values()), 'Old requests did not clear')
-    for choice in ('session', 'deny'):
+    for choice in ('once', 'deny'):
         before = len(state()['decisions'])
         state('/approval', {'command': 'echo ok'})
         shade()
-        tap(resource=PACKAGE + ':id/' + choice)
+        tap(text=choice.title())
         until(lambda: len(state()['decisions']) == before + 1, f'{choice} did not submit directly')
         assert state()['decisions'][-1]['params']['choice'] == choice
         assert not any('Review command' in (n.get('text'), n.get('content-desc')) for n in nodes())
-    print('PASS: Session and Deny complete without another confirmation', flush=True)
+    print('PASS: Once and Deny complete without another confirmation', flush=True)
     long_command = 'echo ' + 'long-command-argument-' * 50
     state('/approval', {'command': long_command})
     before = len(state()['decisions'])
@@ -330,18 +457,15 @@ def check_direct_actions(output):
             time.sleep(.7)
             shade()
             shown = nodes()
-            assert any(n.get('resource-id') == PACKAGE + ':id/review' for n in shown)
-            assert any(n.get('resource-id') == PACKAGE + ':id/review_deny' for n in shown)
-            assert not any(n.get('resource-id') == PACKAGE + ':id/' + choice for n in shown
-                           for choice in ('once', 'session', 'always'))
+            assert notification_actions(shown) == {'review', 'deny'}
             screenshot(output / f"truncated-{'dark' if night == 'yes' else 'light'}-{scale}.png")
-    tap(resource=PACKAGE + ':id/review')
+    tap(text='Review')
     until(lambda: any('Allow once' in (n.get('text'), n.get('content-desc')) for n in nodes()), 'Review did not open command choices')
     assert len(state()['decisions']) == before, 'Review submitted a decision'
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     shade()
-    tap(resource=PACKAGE + ':id/review_deny')
+    tap(text='Deny')
     until(lambda: len(state()['decisions']) == before + 1, 'Truncated command Deny did not submit')
     assert state()['decisions'][-1]['params']['choice'] == 'deny'
     print('PASS: truncated commands expose Review and direct Deny in both themes and text sizes', flush=True)
@@ -356,8 +480,14 @@ def check_cold_action(output):
     def saved_decisions():
         # A settled action releases the fake HTTP server with its engine.
         # Read the fake server's acknowledgement persisted before its RPC reply.
-        root = ET.fromstring(adb('shell', 'run-as', PACKAGE, 'cat',
-                                 'shared_prefs/FlutterSharedPreferences.xml'))
+        try:
+            raw = adb('shell', 'run-as', PACKAGE, 'cat',
+                      'shared_prefs/FlutterSharedPreferences.xml')
+        except subprocess.CalledProcessError:
+            # SharedPreferences atomically replaces this file while persisting.
+            # The bounded poll must still observe the exact acknowledgement.
+            return []
+        root = ET.fromstring(raw)
         value = next(n.text for n in root if n.get('name') == 'flutter.notification_qa_decisions')
         return json.loads(value)
 
@@ -369,7 +499,7 @@ def check_cold_action(output):
     adb('shell', 'run-as', PACKAGE, 'kill', '-9', pid)
     until(lambda: not adb('shell', f'pidof {PACKAGE} || true').strip(), 'Fixture did not stop')
     shade()
-    tap(resource=PACKAGE + ':id/once')
+    tap(text='Once')
     until(lambda: len(saved_decisions()) == before + 1, 'Cold Once did not submit')
     assert saved_decisions()[-1]['params']['request_id'] == cold_request
     until(lambda: not any(PACKAGE in line for line in adb('shell', 'dumpsys', 'activity', 'activities').splitlines()
@@ -432,12 +562,7 @@ def check_recents_visibility(output):
                 adb('shell', 'am', 'stack', 'remove', task_id)
             assert not main_tasks(), 'Original fixture task was not removed'
         shade()
-        # Android's collapsed automatic group uses a launcher PendingIntent.
-        # Expand it and tap a child: only that reaches NotificationActionActivity.
         shown = nodes()
-        if any(n.get('resource-id') == 'android:id/expand_button_number' for n in shown):
-            tap(resource='android:id/expand_button')
-            shown = nodes()
         target = next((n for n in shown if n.get('resource-id') == 'android:id/title'
                        and n.get('text') in ('Website refresh', 'Weekly report', 'a chat', 'b chat')), None)
         assert target is not None, 'Missing native fixture reply notification'
