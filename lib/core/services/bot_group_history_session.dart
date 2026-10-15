@@ -1,4 +1,5 @@
 import 'chat_transcript_events.dart';
+import 'subagent_timeline_session.dart';
 import 'dart:async';
 import '../models/chat_runtime.dart';
 import '../models/gateway_insight.dart';
@@ -7,7 +8,6 @@ import '../models/hermes_profile.dart';
 import '../models/profile_session_key.dart';
 import '../models/profile_supervision.dart';
 import 'chat_runtime.dart';
-import 'profile_supervision_session.dart';
 import 'transcript_reading.dart';
 import 'package:flutter/foundation.dart';
 import '../models/bots.dart';
@@ -283,10 +283,35 @@ class BotGroupHistorySession extends ChangeNotifier
   );
 
   @override
-  SubagentInspectionDetail openSubagent(String id) => _WorkerSubagentDetail(
-    this,
-    subagents.firstWhere((agent) => agent.id == id),
-  );
+  SubagentInspectionDetail openSubagent(String id) {
+    final reading = _reading;
+    final member = _member!;
+    final initial = subagents.firstWhere((agent) => agent.id == id);
+    return ReadOnlySubagentDetail(
+      owner: this,
+      activity: () => reading._agents[id] ?? initial,
+      unconfirmed: () => reading._liveError != null,
+      createTimeline: (activity) {
+        final child = activity.childSessionId;
+        if (child == null) return null;
+        return SubagentTimelineSession(
+          scope: reading._reading.scope,
+          sessionId: child,
+          isCurrent: () => !_closed && identical(_reading, reading),
+          read: (method, params) => method == 'session.resume'
+              ? repository.watchSubagent(group, member, child)
+              : repository.groupMemberObservation(
+                  group,
+                  member,
+                  method,
+                  params,
+                ),
+          history: (session, offset) =>
+              repository.groupMemberHistory(group, member, session, offset),
+        );
+      },
+    );
+  }
 
   Future<void> select(BotGroupMember member) async {
     if (_closed) return;
@@ -671,51 +696,4 @@ final class _BotGroupHistoryReading implements TranscriptReader {
       _reading.messagePresentationId(row);
   @override
   List<Map<String, dynamic>> get messages => _reading.messages;
-}
-
-final class _WorkerSubagentDetail extends ChangeNotifier
-    implements SubagentInspectionDetail {
-  _WorkerSubagentDetail(this.owner, this.initial) {
-    owner.addListener(_changed);
-  }
-  final BotGroupHistorySession owner;
-  final GatewaySubagentActivity initial;
-  void _changed() => notifyListeners();
-  @override
-  bool get supportsTail => false;
-  @override
-  SubagentSupervisionObservation get state => SubagentSupervisionObservation(
-    activity:
-        owner.subagents.where((a) => a.id == initial.id).firstOrNull ?? initial,
-    unconfirmed: owner.liveError != null,
-    canControl: false,
-    acceptsSteer: false,
-    tail: null,
-    lastAvailableTail: null,
-    tailError: null,
-    tailFailures: 0,
-    loadingTail: false,
-    steering: false,
-    interrupting: false,
-    controlMessage: null,
-    controlFailed: false,
-  );
-  @override
-  void setActive(bool value) {}
-  @override
-  Future<void> refreshTail() async {
-    await owner.refreshLive();
-  }
-
-  @override
-  void retryTail() => unawaited(refreshTail());
-  @override
-  Future<bool> steer(String text) async => false;
-  @override
-  Future<void> interrupt() async {}
-  @override
-  void dispose() {
-    owner.removeListener(_changed);
-    super.dispose();
-  }
 }

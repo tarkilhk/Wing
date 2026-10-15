@@ -4,24 +4,7 @@ import '../models/gateway_insight.dart';
 import '../models/profile_supervision.dart';
 import '../models/session_control.dart';
 import 'profile_workspace_controller.dart';
-
-/// Inspection facts and reads; control eligibility remains in each observation.
-abstract interface class SubagentInspectionSession implements Listenable {
-  ProfileSupervisionObservation get state;
-  Future<void> refreshSubagents();
-  SubagentInspectionDetail openSubagent(String id);
-}
-
-abstract interface class SubagentInspectionDetail implements Listenable {
-  SubagentSupervisionObservation get state;
-  bool get supportsTail;
-  void setActive(bool value);
-  Future<void> refreshTail();
-  void retryTail();
-  Future<bool> steer(String text);
-  Future<void> interrupt();
-  void dispose();
-}
+import 'subagent_timeline_session.dart';
 
 /// Captured supervision workflow; borrows canonical live facts and transport.
 /// One instance is shared by the current chat's goal, work and subagent views.
@@ -338,7 +321,12 @@ final class SubagentSupervisionDetail extends ChangeNotifier
     implements SubagentInspectionDetail {
   SubagentSupervisionDetail._(this._owner, this._initial) {
     _owner.addListener(_changed);
+    timeline = _initial.childSessionId == null
+        ? null
+        : _owner._controller.openSubagentTimeline(_owner._chat, _initial.id);
   }
+  @override
+  late final SubagentTimelineSession? timeline;
   final ProfileSupervisionSession _owner;
   final GatewaySubagentActivity _initial;
   Timer? _timer;
@@ -399,6 +387,10 @@ final class SubagentSupervisionDetail extends ChangeNotifier
 
   @override
   void setActive(bool value) {
+    if (timeline case final child?) {
+      child.setActive(value);
+      return;
+    }
     _active = value;
     if (!value || !_current) {
       _timer?.cancel();
@@ -529,6 +521,7 @@ final class SubagentSupervisionDetail extends ChangeNotifier
     if (_closed) return;
     _closed = true;
     _timer?.cancel();
+    timeline?.dispose();
     _owner.removeListener(_changed);
     _owner._details.remove(this);
     if (_notificationDepth == 0 && !_notifierDisposed) {

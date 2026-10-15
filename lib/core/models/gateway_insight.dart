@@ -72,6 +72,7 @@ enum GatewaySubagentStatus { queued, running, completed, failed, interrupted }
 class GatewaySubagentActivity {
   static const maxRecentActivity = 40;
   final String id;
+  final String? childSessionId;
   final String? parentId;
   final int? depth;
   final String goal;
@@ -91,6 +92,7 @@ class GatewaySubagentActivity {
 
   const GatewaySubagentActivity({
     required this.id,
+    this.childSessionId,
     required this.goal,
     required this.phase,
     this.parentId,
@@ -131,6 +133,7 @@ class GatewaySubagentActivity {
     if (isTerminal) return this;
     return GatewaySubagentActivity(
       id: id,
+      childSessionId: next.childSessionId ?? childSessionId,
       goal: next.goal.isEmpty ? goal : next.goal,
       phase: next.phase,
       status: next.status,
@@ -159,6 +162,7 @@ class GatewaySubagentActivity {
     final status = _normalizeStatus(data['status']);
     return GatewaySubagentActivity(
       id: id,
+      childSessionId: _opaqueId(data['child_session_id']),
       parentId: GatewayNotice.safeLine(data['parent_id']?.toString(), 120),
       depth: _integer(data['depth']),
       goal: GatewayNotice.safeLine(data['goal']?.toString(), 500) ?? '',
@@ -206,6 +210,7 @@ class GatewaySubagentActivity {
         : _normalizeStatus(data['status']);
     return GatewaySubagentActivity(
       id: id,
+      childSessionId: _opaqueId(data['child_session_id']),
       parentId: GatewayNotice.safeLine(data['parent_id']?.toString(), 120),
       depth: _integer(data['depth']),
       goal: goal,

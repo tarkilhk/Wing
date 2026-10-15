@@ -1,3 +1,4 @@
+import '../../widgets/profile_subagent_panel.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
 import '../../widgets/conversation_activity.dart';
 import '../../widgets/profile_live_work_dock.dart';
@@ -126,6 +127,8 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
       entries: projection.activity,
       todos: _session.todos,
       inspection: _session,
+      agentsBuilder: () =>
+          ProfileSubagentPanel(session: _session, embedded: true),
       live: _session.liveAnswering,
       taskCount: _session.todos.length,
       agentCount: _session.subagents.length,

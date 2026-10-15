@@ -1,4 +1,5 @@
 import 'chat_transcript_events.dart';
+import 'subagent_timeline_session.dart';
 import 'group_observations.dart';
 import '../models/server_reference.dart';
 import '../models/composer_reference.dart';
@@ -3168,6 +3169,35 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     final tail = GatewaySubagentTail.fromJson(response);
     return tail?.subagentId == id ? tail : null;
+  }
+
+  SubagentTimelineSession openSubagentTimeline(ProfileChat chat, String id) {
+    final resource = _ownedSubagent(chat, id);
+    final child = chat.subagents
+        .firstWhere((item) => item.id == id)
+        .childSessionId;
+    if (child == null) {
+      throw StateError('Hermes did not provide a child session.');
+    }
+    final runtime = chat.runtime.runtimeId;
+    bool current() => _subagentTargetIsCurrent(resource, chat, runtime, id);
+    return SubagentTimelineSession(
+      scope: chat.key.workspace,
+      sessionId: child,
+      isCurrent: current,
+      read: (method, params) async {
+        if (!current()) throw StateError('Subagent inspection retired');
+        return resource.gateway.call(method, params);
+      },
+      history: (session, offset) async {
+        if (!current()) throw StateError('Subagent inspection retired');
+        return resource.gateway.history(
+          session,
+          offset: offset,
+          inlineImages: false,
+        );
+      },
+    );
   }
 
   Future<bool> steerSubagent(

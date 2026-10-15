@@ -1,3 +1,4 @@
+import '../widgets/profile_subagent_panel.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
 import '../widgets/conversation_activity.dart';
 import '../widgets/studio_form_actions.dart';
@@ -2464,6 +2465,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     entries: entries ?? chat.runtime.activityEntries,
     todos: chat.todos,
     inspection: _supervisionFor(chat),
+    agentsBuilder: () =>
+        ProfileSubagentPanel(session: _supervisionFor(chat), embedded: true),
     live: _liveAnswering(chat),
     taskCount: chat.todoRevision == null ? null : chat.todos.length,
     agentCount: chat.subagentsAvailable ? chat.subagents.length : null,

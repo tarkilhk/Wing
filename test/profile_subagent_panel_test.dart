@@ -1,4 +1,5 @@
 import 'package:wing/core/widgets/source_code_text.dart';
+import 'package:wing/core/widgets/subagent_timeline.dart';
 import 'package:wing/core/services/profile_supervision_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -38,9 +39,47 @@ class _SubagentFixture extends ProfileActionsFixture {
     return ProfileGateway(
       scope: scope,
       discover: base.discover,
-      get: base.read,
+      get: (path, query) async {
+        if (path == 'sessions/child-session/messages') {
+          return {
+            'session_id': 'child-session',
+            'messages': [
+              {
+                'id': 101,
+                'role': 'assistant',
+                'content': 'Child saved evidence',
+              },
+            ],
+            'pagination': {
+              'offset': int.parse(query['offset']!),
+              'limit': int.parse(query['limit']!),
+              'returned': 1,
+              'order': 'latest',
+            },
+          };
+        }
+        return base.read(path, query);
+      },
       rpc: (method, params) async {
         requests.add((method, params));
+        if (method == 'session.resume' &&
+            params['session_id'] == 'child-session') {
+          expect(params['lazy'], isTrue);
+          return {
+            'session_id': 'child-watch',
+            'resumed': 'child-session',
+            'running': true,
+          };
+        }
+        if (method == 'session.events.since' &&
+            params['session_id'] == 'child-watch') {
+          return {
+            'epoch': 'child-epoch',
+            'events': <Map<String, dynamic>>[],
+            'latest_seq': 0,
+            'truncated': false,
+          };
+        }
         switch (method) {
           case 'subagent.list':
             listCalls += 1;
@@ -166,6 +205,65 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
   }
+
+  testWidgets(
+    'normal chat opens child timeline without selecting or controlling it',
+    (tester) async {
+      await showPanel(tester, scale: 1);
+      final selected = controller.current!.chat;
+      emitChatEvent(controller, chat, 'subagent.start', {
+        'subagent_id': 'child-1',
+        'child_session_id': 'child-session',
+        'goal': 'Inspect the release',
+      });
+      await tester.pump();
+      await tester.tap(find.text('Inspect the release'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 30));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+      }
+      expect(find.byType(SubagentTimeline), findsOneWidget);
+      final child = tester
+          .widget<SubagentTimeline>(find.byType(SubagentTimeline))
+          .session;
+      expect(child.messages.single['content'], 'Child saved evidence');
+      expect(child.historyError, isNull);
+      expect(child.liveError, isNull);
+      expect(controller.current!.chat, same(selected));
+      await tester.tap(find.text('Task'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      final steerField = find.byType(TextField);
+      await tester.ensureVisible(steerField);
+      await tester.showKeyboard(steerField);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.ensureVisible(steerField);
+      expect(tester.takeException(), isNull);
+      expect(find.byTooltip('Steer'), findsOneWidget);
+      tester.view.viewInsets = const FakeViewPadding();
+      tester.testTextInput.hide();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(fixture.tailCalls, 0);
+      expect(
+        fixture.requests.where(
+          (call) => call.$1 == 'prompt.submit' || call.$1 == 'session.close',
+        ),
+        isEmpty,
+      );
+      await tester.tap(find.byTooltip('Close subagent activity'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(SubagentTimeline), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets(
     'agent timing is backend-derived and stops on completion or uncertainty',

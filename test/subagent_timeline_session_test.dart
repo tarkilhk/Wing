@@ -1,0 +1,367 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/models/gateway_insight.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/models/profile_supervision.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/subagent_timeline_session.dart';
+
+void main() {
+  final scope = WorkspaceScope(
+    connectionId: 'host',
+    connectionIdentity: 'server',
+    profileName: 'atlas',
+  );
+  late SubagentTimelineSession session;
+  late List<(String, Map<String, dynamic>)> calls;
+  late List<Map<String, dynamic>> events, rows;
+  late List<int> offsets;
+  late String epoch, resumedId;
+  late bool current, failRead, failHistory, truncated;
+  Future<void>? held;
+  Map<String, dynamic> event(String type, Map<String, dynamic> payload) => {
+    'session_id': 'watch-child',
+    'seq': events.length + 1,
+    'type': type,
+    'payload': payload,
+  };
+
+  setUp(() {
+    calls = [];
+    events = [];
+    rows = [];
+    offsets = [];
+    epoch = 'epoch-1';
+    resumedId = 'child-session';
+    current = true;
+    failRead = false;
+    failHistory = false;
+    truncated = false;
+    held = null;
+    session = SubagentTimelineSession(
+      scope: scope,
+      sessionId: 'child-session',
+      isCurrent: () => current,
+      read: (method, params) async {
+        calls.add((method, Map.of(params)));
+        if (held != null) await held;
+        if (failRead) throw StateError('offline');
+        if (method == 'session.resume') {
+          return {
+            'session_id': 'watch-child',
+            'resumed': resumedId,
+            'running': true,
+          };
+        }
+        expect(method, 'session.events.since');
+        return {
+          'epoch': epoch,
+          'latest_seq': events.length,
+          'truncated': truncated,
+          'events': List.of(events),
+        };
+      },
+      history: (id, offset) async {
+        offsets.add(offset);
+        if (failHistory) throw StateError('Not persisted yet');
+        if (held != null) await held;
+        return ProfileHistoryPage(
+          id,
+          List.of(rows),
+          offset,
+          20,
+          isComplete: true,
+        );
+      },
+    );
+  });
+  tearDown(() => session.dispose());
+
+  test(
+    'child identity survives events, snapshots and detached observations',
+    () {
+      final child = GatewaySubagentActivity.fromGatewayEvent('subagent.start', {
+        'subagent_id': 'child',
+        'child_session_id': 'child-session',
+        'goal': 'Inspect',
+      })!;
+      final snapshot = GatewaySubagentActivity.fromSnapshot({
+        'subagent_id': 'child',
+        'status': 'running',
+        'tool_count': 3,
+      })!;
+      expect(
+        copySupervisedSubagent(
+          child.merge(snapshot, snapshot: true),
+        ).childSessionId,
+        'child-session',
+      );
+    },
+  );
+
+  test(
+    'mounts exact lazy child and renders saved tool inputs and results',
+    () async {
+      rows.addAll([
+        {
+          'id': 1,
+          'role': 'assistant',
+          'content': '',
+          'tool_calls': [
+            {
+              'id': 'call-1',
+              'function': {
+                'name': 'terminal',
+                'arguments': '{"command":"pytest"}',
+              },
+            },
+          ],
+        },
+        {
+          'id': 2,
+          'role': 'tool',
+          'tool_call_id': 'call-1',
+          'content': '17 passed',
+        },
+      ]);
+      await session.refresh();
+      expect(calls.first.$1, 'session.resume');
+      expect(calls.first.$2, {
+        'session_id': 'child-session',
+        'lazy': true,
+        'omit_messages': true,
+      });
+      expect(session.messages.last['content'], '17 passed');
+      expect(session.historyAvailable, isTrue);
+      expect(session.runtime.executionActive, isTrue);
+      expect(offsets, [0]);
+    },
+  );
+
+  test(
+    'replay keeps reasoning, previews and reply without invented timing',
+    () async {
+      events.add(event('message.start', {}));
+      events.add(
+        event('reasoning.delta', {'text': 'Checking the predecessor'}),
+      );
+      events.add(
+        event('tool.start', {
+          'name': 'terminal',
+          'tool_id': 'submirror:child:1',
+          'args': {},
+          'preview': 'pytest -q',
+        }),
+      );
+      events.add(event('message.delta', {'text': 'Found the missing row.'}));
+      await session.refresh();
+      final tool = session.runtime.toolActivities.single;
+      expect(tool.context, 'pytest -q');
+      expect(tool.arguments, isNull);
+      expect(tool.result, isNull);
+      expect(tool.startedAt, isNull);
+      expect(tool.durationSeconds, isNull);
+      expect(session.streaming, 'Found the missing row.');
+      final count = session.runtime.activityEntries.length;
+      await session.refresh();
+      expect(session.streaming, 'Found the missing row.');
+      expect(session.runtime.activityEntries, hasLength(count));
+      expect(session.state.subagents, isEmpty);
+    },
+  );
+
+  test('completion replaces mirror with saved history', () async {
+    events.add(event('message.start', {}));
+    events.add(event('message.delta', {'text': 'Working'}));
+    await session.refresh();
+    rows.add({'id': 10, 'role': 'assistant', 'content': 'Verified the fix.'});
+    events.add(event('message.complete', {'text': 'Verified the fix.'}));
+    await session.refresh();
+    expect(session.runtime.executionActive, isFalse);
+    expect(session.streaming, isEmpty);
+    expect(session.messages.single['content'], 'Verified the fix.');
+  });
+
+  test(
+    'completion retains received reply while persistence catches up',
+    () async {
+      events.add(event('message.start', {}));
+      events.add(event('message.complete', {'text': 'New final answer'}));
+      await session.refresh();
+      expect(session.streaming, 'New final answer');
+      expect(session.runtime.executionActive, isFalse);
+      rows.add({'id': 5, 'role': 'assistant', 'content': 'New final answer'});
+      await session.refresh();
+      expect(session.streaming, isEmpty);
+      expect(session.messages.single['content'], 'New final answer');
+    },
+  );
+
+  test('saved history remains readable when live mount fails', () async {
+    rows.add({'id': 1, 'role': 'assistant', 'content': 'Saved only'});
+    failRead = true;
+    await session.refresh();
+    expect(session.messages.single['content'], 'Saved only');
+    expect(session.liveError, isNotNull);
+    failRead = false;
+    await session.refresh();
+    expect(session.liveError, isNull);
+  });
+
+  test('failed refresh retains content and retry clears the error', () async {
+    rows.add({'id': 1, 'role': 'assistant', 'content': 'Saved evidence'});
+    await session.refresh();
+    failRead = true;
+    await session.refresh();
+    expect(session.messages.single['content'], 'Saved evidence');
+    expect(session.liveError, contains('Retry'));
+    expect(session.historyLoading, isFalse);
+    failRead = false;
+    await session.refresh();
+    expect(session.liveError, isNull);
+  });
+
+  test('held read publishes loading and coalesces explicit refresh', () async {
+    final gate = Completer<void>();
+    held = gate.future;
+    final first = session.refresh();
+    final second = session.refresh();
+    expect(session.historyLoading, isTrue);
+    expect(calls, hasLength(1));
+    gate.complete();
+    await Future.wait([first, second]);
+    expect(calls.where((call) => call.$1 == 'session.resume'), hasLength(1));
+    expect(session.historyLoading, isFalse);
+  });
+
+  test('retired visit does not publish or issue dependent reads', () async {
+    final gate = Completer<void>();
+    held = gate.future;
+    final pending = session.refresh();
+    current = false;
+    gate.complete();
+    await pending;
+    expect(session.historyAvailable, isFalse);
+    expect(calls, hasLength(1));
+    expect(offsets, isEmpty);
+  });
+
+  test('dispose during held mount suppresses late publication', () async {
+    final gate = Completer<void>();
+    held = gate.future;
+    final pending = session.refresh();
+    session.dispose();
+    gate.complete();
+    await pending;
+    expect(calls, hasLength(1));
+    expect(offsets, isEmpty);
+  });
+
+  test('epoch replacement replays from zero without duplicated text', () async {
+    events.add(event('message.start', {}));
+    events.add(event('message.delta', {'text': 'First epoch'}));
+    await session.refresh();
+    epoch = 'epoch-2';
+    events.clear();
+    events.add(event('message.start', {}));
+    events.add(event('message.delta', {'text': 'Second epoch'}));
+    await session.refresh();
+    expect(session.streaming, 'Second epoch');
+    expect(calls.last.$2['last_seen'], 0);
+  });
+
+  test('watch identity mismatch cannot supply another child replay', () async {
+    resumedId = 'different-child';
+    rows.add({'id': 1, 'role': 'assistant', 'content': 'Exact saved child'});
+    await session.refresh();
+    expect(session.liveError, isNotNull);
+    expect(session.messages.single['content'], 'Exact saved child');
+    expect(calls.map((call) => call.$1), ['session.resume']);
+  });
+
+  test('replay rejects a foreign child before applying any event', () async {
+    events.add(event('message.start', {}));
+    events.add({
+      ...event('message.delta', {'text': 'Foreign'}),
+      'session_id': 'different-child',
+    });
+    await session.refresh();
+    expect(session.liveError, isNotNull);
+    expect(session.streaming, isEmpty);
+  });
+  test(
+    'live replay remains readable before saved history is available',
+    () async {
+      failHistory = true;
+      events.add(event('message.start', {}));
+      events.add(event('message.delta', {'text': 'Live child reply'}));
+      await session.refresh();
+      expect(session.streaming, 'Live child reply');
+      expect(session.historyError, isNotNull);
+      expect(session.liveError, isNull);
+    },
+  );
+
+  test('truncated replay explicitly qualifies earlier live activity', () async {
+    truncated = true;
+    await session.refresh();
+    expect(
+      session.qualification,
+      contains('Earlier live activity is unavailable'),
+    );
+  });
+
+  test(
+    'paging retains order and a complete prefix across latest refresh',
+    () async {
+      session.dispose();
+      final reads = <int>[];
+      session = SubagentTimelineSession(
+        scope: scope,
+        sessionId: 'child-session',
+        isCurrent: () => true,
+        read: (method, params) async => method == 'session.resume'
+            ? {
+                'session_id': 'watch-child',
+                'resumed': 'child-session',
+                'running': false,
+              }
+            : {
+                'epoch': 'epoch',
+                'events': <Map<String, dynamic>>[],
+                'latest_seq': 0,
+                'truncated': false,
+              },
+        history: (id, offset) async {
+          reads.add(offset);
+          return ProfileHistoryPage(
+            id,
+            [
+              for (
+                var n = offset == 0 ? 21 : 1;
+                n <= (offset == 0 ? 40 : 20);
+                n++
+              )
+                {'id': n, 'role': 'assistant', 'content': 'Message $n'},
+            ],
+            offset,
+            20,
+            isComplete: offset != 0,
+          );
+        },
+      );
+      await session.refresh();
+      expect(session.nextHistoryOffset, 20);
+      await session.loadOlder();
+      expect(session.messages, hasLength(40));
+      expect(session.messages.first['id'], 1);
+      expect(session.messages.last['id'], 40);
+      expect(session.nextHistoryOffset, isNull);
+      await session.refresh();
+      expect(session.messages, hasLength(40));
+      expect(session.nextHistoryOffset, isNull);
+      expect(reads, [0, 20, 0]);
+    },
+  );
+}
