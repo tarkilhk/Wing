@@ -8,9 +8,10 @@ The required final journey force-stops Android and restores the durable outbox.
 from __future__ import annotations
 
 import argparse
-from contextlib import nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -84,6 +85,37 @@ def verdict(lines: list[str], returncode: int, expected: frozenset[str]) -> dict
             'process_exit': returncode, 'test_run_completed': done, 'summary_count': summaries}
 
 
+
+@contextmanager
+def completed_onboarding(device: str, evidence: dict):
+    """Scope established permission/battery prerequisites to the owned QA app."""
+    package = 'com.tarkilhk.wing.notificationqa'
+    def shell(*args):
+        return android.device(device, 'shell', *args)
+    if not shell('pm', 'path', package).strip().startswith('package:'):
+        raise RuntimeError('Critical journey did not leave the owned QA package installed')
+    state = shell('dumpsys', 'package', package)
+    permissions = {
+        permission: bool(re.search(re.escape(permission) + r': granted=true', state))
+        for permission in ('android.permission.POST_NOTIFICATIONS', 'android.permission.RECORD_AUDIO')
+    }
+    exempt = package in shell('dumpsys', 'deviceidle', 'whitelist')
+    evidence.update(package=package, permissions_before=permissions, battery_exempt_before=exempt,
+                    scope='completed onboarding; permission prompts and default battery policy are separate acceptance')
+    with ExitStack() as cleanup:
+        if not exempt:
+            cleanup.callback(shell, 'dumpsys', 'deviceidle', 'whitelist', '-' + package)
+            shell('dumpsys', 'deviceidle', 'whitelist', '+' + package)
+        for permission, granted in permissions.items():
+            if not granted:
+                cleanup.callback(shell, 'pm', 'revoke', package, permission)
+                shell('pm', 'grant', package, permission)
+        cleanup.callback(shell, 'am', 'force-stop', package)
+        shell('am', 'force-stop', package)
+        yield
+    evidence['restored'] = True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--device', help='Reuse a disposable emulator; physical devices are rejected')
@@ -104,11 +136,12 @@ def main() -> int:
             android.device(device, 'shell', 'wm', 'dismiss-keyguard')
             result['device'] = device
             for name, target, expected in SUITES:
-                command = ['flutter', 'test', '--no-pub', '-d', device,
+                command = ['flutter', 'test', '--no-pub', '--no-uninstall', '-d', device,
                            '--reporter=json', target]
                 suite = result['suites'][name] = {'passed': False, 'command': command}
                 log_path = output / f'{name}.jsonl'
-                with log_path.open('w') as log:
+                setup = completed_onboarding(device, suite.setdefault('onboarding', {})) if name == 'roadmap' else nullcontext()
+                with setup, log_path.open('w') as log:
                     process = subprocess.Popen(command, cwd=ROOT, stdout=log,
                                                stderr=subprocess.STDOUT, start_new_session=True,
                                                env={**os.environ,

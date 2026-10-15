@@ -23,6 +23,45 @@ def events(expected=CRITICAL, *, skipped=None, failed=None, omitted=None):
     return [json.dumps(item) for item in result]
 
 
+class CompletedOnboardingOwnership(unittest.TestCase):
+    package = 'com.tarkilhk.wing.notificationqa'
+
+    def device(self, granted=False):
+        def run(serial, *args):
+            if args[:3] == ('shell', 'pm', 'path'):
+                return 'package:/fixture/base.apk'
+            if args[:3] == ('shell', 'dumpsys', 'package'):
+                return ('android.permission.POST_NOTIFICATIONS: granted=true\n'
+                        'android.permission.RECORD_AUDIO: granted=true') if granted else ''
+            if args == ('shell', 'dumpsys', 'deviceidle', 'whitelist'):
+                return self.package if granted else ''
+            return ''
+        return run
+
+    def test_failure_restores_only_prerequisites_this_attempt_added(self):
+        evidence = {}
+        with patch.object(test_journeys.android, 'device', side_effect=self.device()) as device:
+            with self.assertRaisesRegex(RuntimeError, 'journey failed'):
+                with test_journeys.completed_onboarding('emulator-5562', evidence):
+                    raise RuntimeError('journey failed')
+        actions = [call.args[1:] for call in device.call_args_list]
+        for permission in ('android.permission.POST_NOTIFICATIONS', 'android.permission.RECORD_AUDIO'):
+            self.assertIn(('shell', 'pm', 'grant', self.package, permission), actions)
+            self.assertIn(('shell', 'pm', 'revoke', self.package, permission), actions)
+        self.assertIn(('shell', 'dumpsys', 'deviceidle', 'whitelist', '-' + self.package), actions)
+        self.assertNotIn('restored', evidence)
+
+    def test_existing_grants_and_exemption_survive_the_attempt(self):
+        evidence = {}
+        with patch.object(test_journeys.android, 'device', side_effect=self.device(granted=True)) as device:
+            with test_journeys.completed_onboarding('emulator-5562', evidence):
+                pass
+        actions = [call.args[1:] for call in device.call_args_list]
+        self.assertFalse(any('grant' in action or 'revoke' in action for action in actions))
+        self.assertFalse(any('-' + self.package in action or '+' + self.package in action for action in actions))
+        self.assertTrue(evidence['restored'])
+
+
 class AndroidJourneyVerdict(unittest.TestCase):
     def test_all_required_journeys_must_complete(self):
         self.assertTrue(verdict(events(), 0, CRITICAL)['passed'])
@@ -91,7 +130,7 @@ class RequiredProcessRecovery(unittest.TestCase):
                  patch.object(test_journeys, 'fingerprint', return_value={'source': 'fixed'}), \
                  patch.object(test_journeys.android, 'OUTPUT', output), \
                  patch.object(test_journeys.android, 'require_emulator'), \
-                 patch.object(test_journeys.android, 'device'), \
+                 patch.object(test_journeys.android, 'device', side_effect=lambda serial, *args: 'package:/fixture/base.apk' if args[:2] == ('shell', 'pm') and args[2] == 'path' else ''), \
                  patch.object(test_journeys.subprocess, 'Popen', side_effect=run_flutter), \
                  patch.object(test_journeys, 'stop_process_group'), \
                  patch.object(test_journeys.process_recovery, 'run', return_value=recovery,

@@ -851,6 +851,7 @@ Future<void> _revealRecent(
 class _NativeChats extends ProfileBrowserFixture {
   final patched = <ProfileSessionKey>[];
   ProfileSessionKey? failedResume;
+  int rejectedResumes = 0;
   bool deepHistory = false, showCode = false;
   @override
   List<Map<String, dynamic>> sessions(String profile) => [
@@ -922,6 +923,7 @@ class _NativeChats extends ProfileBrowserFixture {
         if (method == 'session.resume' &&
             scope == failedResume?.workspace &&
             params['session_id'] == failedResume?.sessionId) {
+          rejectedResumes++;
           throw StateError('Owned QA resume rejection');
         }
         return base.call(method, params);
@@ -1291,7 +1293,36 @@ void main() {
             await pinch('momentum-stack');
             final resumes = host.resumes;
             final flingEvents = <Map<String, Object?>>[];
+            final visibleChoices = {
+              for (var i = 0; i < ring.length; i++)
+                '${ring[i].title}, conversation ${i + 1} of ${ring.length}':
+                    ring[i].key.chat!,
+            };
+            String? focusedChoice() => tester
+                .widgetList<Semantics>(find.byType(Semantics))
+                .map((widget) => widget.properties.label)
+                .where(visibleChoices.containsKey)
+                .firstOrNull;
+            final afterRelease = <String>[];
+            var released = false, recording = true;
+            void observeFocus(Duration _) {
+              if (!recording) return;
+              final label = focusedChoice();
+              if (released &&
+                  label != null &&
+                  (afterRelease.isEmpty || afterRelease.last != label)) {
+                afterRelease.add(label);
+              }
+              tester.binding.addPostFrameCallback(observeFocus);
+            }
+
+            tester.binding.addPostFrameCallback(observeFocus);
             void recordFling(PointerEvent event) {
+              if (event is PointerUpEvent) {
+                released = true;
+                final label = focusedChoice();
+                if (label != null) afterRelease.add(label);
+              }
               if (flingEvents.length >= 100) return;
               flingEvents.add({
                 'kind': event.runtimeType.toString(),
@@ -1314,24 +1345,20 @@ void main() {
                 ],
               );
             } finally {
+              recording = false;
               tester.binding.pointerRouter.removeGlobalRoute(recordFling);
             }
-            final indices = tester
-                .widgetList<Positioned>(find.byType(Positioned))
-                .where((item) => item.key is ValueKey<int>)
-                .map((item) => (item.key! as ValueKey<int>).value)
-                .toList();
+            expect(released, isTrue);
             expect(
-              indices.reduce((a, b) => a > b ? a : b) - origin,
-              greaterThan(2),
+              afterRelease.toSet().length,
+              greaterThanOrEqualTo(3),
               reason:
-                  'One flick must cross several circular cards. '
-                  '${jsonEncode({'origin': origin, 'paintedIndices': indices, 'events': flingEvents})}',
+                  'After finger release, one flick must continue through multiple visible conversation choices. '
+                  '${jsonEncode({'focusedAfterRelease': afterRelease, 'events': flingEvents})}',
             );
             expect(host.resumes, resumes);
             expect(controller.current!.chat!.key, first.key);
-            var center = indices.reduce((a, b) => a < b ? a : b) + 1;
-            if (visit.entryAt(center).key.chat == first.key) {
+            if (visibleChoices[focusedChoice()] == first.key) {
               await _native(
                 tester,
                 '$prefix-momentum-slow-browse',
@@ -1341,16 +1368,17 @@ void main() {
                   ]),
                 ],
               );
-              final currentIndices = tester
-                  .widgetList<Positioned>(find.byType(Positioned))
-                  .where((item) => item.key is ValueKey<int>)
-                  .map((item) => (item.key! as ValueKey<int>).value);
-              center = currentIndices.reduce((a, b) => a < b ? a : b) + 1;
             }
-            final chosen = visit.entryAt(center).key.chat;
+            final chosen = visibleChoices[focusedChoice()];
+            expect(chosen, isNotNull);
+            expect(chosen, isNot(first.key));
             await _native(
               tester,
               '$prefix-momentum-select',
+              observation: {
+                'focusedAfterRelease': afterRelease,
+                'chosen': focusedChoice(),
+              },
               actions: [
                 {'type': 'tap', 'x': mid.dx, 'y': mid.dy},
               ],
@@ -1512,9 +1540,19 @@ void main() {
           expect(readReceipts, ['answer:3']);
           expect(host.patched.skip(readsBeforeStackReturn), [first.key]);
           expect(first.markReadFailed, isFalse);
-          host.failedResume = ring[(origin + 1) % ring.length].key.chat!;
+          // The neighbor was already opened above and needs no resume RPC.
+          // Move to it, then reject admission of the next unopened chat.
+          await swipe('prepare-unopened-selection');
+          final beforeRejectedSelection = controller.current!.chat!.key;
+          expect(
+            beforeRejectedSelection,
+            ring[(origin + 1) % ring.length].key.chat,
+          );
+          host.failedResume = ring[(origin + 2) % ring.length].key.chat!;
+          final rejectedBefore = host.rejectedResumes;
           await swipe('failed-selection');
-          expect(controller.current!.chat!.key, first.key);
+          expect(host.rejectedResumes, rejectedBefore + 1);
+          expect(controller.current!.chat!.key, beforeRejectedSelection);
           expect(
             find.text('Could not open this conversation. Try again.'),
             findsOneWidget,
@@ -1524,6 +1562,8 @@ void main() {
             tester.element(find.byType(ProfileWorkspaceScreen)),
           ).hideCurrentSnackBar();
           await tester.pumpAndSettle();
+          await swipe('return-after-failed-selection', right: true);
+          expect(controller.current!.chat!.key, first.key);
           var sequence = 0;
           for (final kind in ConversationActivityKind.values) {
             activity.value = ChatNoticeActivity(

@@ -35,6 +35,7 @@ class NotificationCoverageHost {
   final resumeDelays = <int, Completer<void>>{};
   final resumeSnapshots = <int, Map<String, dynamic>>{};
   List<Map<String, dynamic>> history = [];
+  final historyByProfile = <String, List<Map<String, dynamic>>>{};
   bool activeFails = false;
   bool groupFails = false;
   bool historyFails = false;
@@ -104,13 +105,14 @@ class NotificationCoverageHost {
           if (path == 'logs') return {'entries': <Map<String, dynamic>>[]};
           await historyDelay?.future;
           if (historyFails) throw StateError('history unavailable');
+          final savedHistory = historyByProfile[scope.profileName] ?? history;
           return {
             'session_id': path.split('/')[1],
-            'messages': history,
+            'messages': savedHistory,
             'pagination': {
               'offset': 0,
               'limit': 50,
-              'returned': history.length,
+              'returned': savedHistory.length,
               'order': 'latest',
             },
           };

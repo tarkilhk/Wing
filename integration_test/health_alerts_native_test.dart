@@ -730,6 +730,7 @@ void main() {
       await tester.ensureVisible(find.byKey(const ValueKey('nav-analytics')));
       await tester.tap(find.byKey(const ValueKey('nav-analytics')));
       await _settleScreen(tester);
+      await _waitFor(tester, find.text('Unavailable'));
       expect(find.text('Unavailable'), findsWidgets);
       final analyticsScroll = find
           .descendant(
@@ -753,8 +754,16 @@ void main() {
         250,
         scrollable: analyticsScroll,
       );
+      final readsBeforeRefresh = observations.analyticsReads.length;
       await tester.tap(refresh);
-      await _settleScreen(tester);
+      await _waitUntil(
+        tester,
+        () =>
+            observations.analyticsReads.length > readsBeforeRefresh &&
+            unavailable.evaluate().isEmpty &&
+            tester.widget<IconButton>(refresh).onPressed != null,
+        'New analytics reads complete and clear the visible error',
+      );
       expect(unavailable, findsNothing);
       await tester.scrollUntilVisible(
         find.text('639K'),

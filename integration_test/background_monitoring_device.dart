@@ -108,6 +108,7 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
   );
   await sink.initialize();
   var alerts = 0;
+  var nextReplyId = 1;
   final generation = DateTime.now().microsecondsSinceEpoch.toString();
   final appPreferences = AppPreferences(preferences);
   final registry = ProfileWorkspaceRegistry(
@@ -168,10 +169,10 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
         final state = event['state'] as String;
         final reply = '**Reply ready.** ${'More readable context. ' * 20}';
         if (state == 'idle') {
-          // Both synthetic chats have the same saved reply. A preference-driven
-          // reconnect may recover it through history before the live event.
-          host.history = [
-            {'id': 1, 'role': 'assistant', 'content': reply},
+          // Recovery reads the completed reply from its actual profile owner.
+          // Each completed turn has a distinct durable message identity.
+          host.historyByProfile[profile] = [
+            {'id': nextReplyId++, 'role': 'assistant', 'content': reply},
           ];
         }
         host.workingProfiles.remove(profile);
