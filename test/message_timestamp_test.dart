@@ -756,6 +756,8 @@ void main() {
             .onPressed,
         isNull,
       );
+      await tester.tap(copy);
+      await tester.pump();
       expect(calls, 1);
       pending.complete();
       await tester.pumpAndSettle();
@@ -835,48 +837,57 @@ void main() {
     'full local date is accessible, long press reveals it, copy stays text only',
     (tester) async {
       final semantics = tester.ensureSemantics();
-      String? copied;
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (call) async {
-          if (call.method == 'Clipboard.setData') {
-            copied = (call.arguments as Map)['text'] as String;
-          }
-          return null;
-        },
-      );
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      try {
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           SystemChannels.platform,
-          null,
-        ),
-      );
-      for (final role in ['user', 'assistant']) {
-        await pump(
-          tester,
-          role: role,
-          timestamp: _date.millisecondsSinceEpoch / 1000,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          },
         );
-        const full = 'Tuesday, September 15, 2026, 2:07 PM';
-        expect(find.bySemanticsLabel(RegExp(full)), findsWidgets);
-        await tester.longPress(find.text('15 Sep, 14:07'));
-        await tester.pumpAndSettle();
-        expect(find.text(full), findsOneWidget);
-        await tester.tap(find.byIcon(Icons.copy_outlined));
-        await tester.pumpAndSettle();
-        expect(copied, 'A short message.');
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        for (final role in ['user', 'assistant']) {
+          await pump(
+            tester,
+            role: role,
+            timestamp: _date.millisecondsSinceEpoch / 1000,
+          );
+          const full = 'Tuesday, September 15, 2026, 2:07 PM';
+          expect(find.bySemanticsLabel(RegExp(full)), findsWidgets);
+          await tester.longPress(find.text('15 Sep, 14:07'));
+          await tester.pumpAndSettle();
+          expect(find.text(full), findsOneWidget);
+          await tester.tap(find.byIcon(Icons.copy_outlined));
+          await tester.pumpAndSettle();
+          expect(copied, 'A short message.');
+        }
+      } finally {
+        semantics.dispose();
       }
-      semantics.dispose();
     },
   );
 
-  testWidgets('missing and invalid timestamps do not invent a time', (
-    tester,
-  ) async {
-    for (final value in [null, 'unknown', double.nan, double.infinity, 1e20]) {
-      await pump(tester, role: 'user', timestamp: value);
+  for (final entry in <String, Object?>{
+    'missing': null,
+    'unrecognized': 'unknown',
+    'NaN': double.nan,
+    'infinity': double.infinity,
+    'out of range': 1e20,
+  }.entries) {
+    testWidgets('${entry.key} timestamp does not invent a time', (
+      tester,
+    ) async {
+      await pump(tester, role: 'user', timestamp: entry.value);
       expect(find.text('15 Sep, 14:07'), findsNothing);
       expect(find.byType(Tooltip), findsOneWidget); // Copy only.
-    }
-  });
+    });
+  }
 }

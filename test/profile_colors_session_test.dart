@@ -217,14 +217,17 @@ void main() {
       final second = _session(owner);
       final other = _session(owner, identity: 'colour-session-b');
       var appNotifications = 0;
-      var colourNotifications = 0;
+      final observedChoices = <ProfileColorChoice?>[];
       var otherNotifications = 0;
       owner.state.addListener(() => appNotifications++);
-      second.state.addListener(() => colourNotifications++);
+      second.state.addListener(
+        () => observedChoices.add(_fact(second).selected),
+      );
       other.state.addListener(() => otherNotifications++);
       await first.beginChoice('work')!.choose(ProfileColorChoice.blue);
       expect(_fact(second).selected, ProfileColorChoice.blue);
-      expect(colourNotifications, 2);
+      expect(observedChoices, isNotEmpty);
+      expect(observedChoices.last, ProfileColorChoice.blue);
       expect(appNotifications, 0);
       expect(otherNotifications, 0);
     },

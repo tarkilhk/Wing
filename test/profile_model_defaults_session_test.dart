@@ -44,33 +44,43 @@ void main() {
     },
   );
 
-  test(
-    'canonical helper parser rejects coercion, missing fields and duplicate IDs',
-    () {
-      final valid = fixture.copy({'tasks': fixture.helpers});
-      expect(HelperModelAssignment.fromResponse(valid), hasLength(11));
-      for (final key in ['provider', 'model', 'base_url', 'reasoning_effort']) {
-        final missing = fixture.copy(valid);
-        (missing['tasks'] as List).first.remove(key);
-        expect(
-          () => HelperModelAssignment.fromResponse(missing),
-          throwsFormatException,
-        );
-      }
-      final malformed = fixture.copy(valid);
-      (malformed['tasks'] as List).first['model'] = 9;
+  test('canonical helper parser accepts complete assignments', () {
+    expect(
+      HelperModelAssignment.fromResponse(
+        fixture.copy({'tasks': fixture.helpers}),
+      ),
+      hasLength(fixture.helpers.length),
+    );
+  });
+
+  for (final key in ['provider', 'model', 'base_url', 'reasoning_effort']) {
+    test('canonical helper parser rejects missing $key', () {
+      final missing = fixture.copy({'tasks': fixture.helpers});
+      (missing['tasks'] as List).first.remove(key);
       expect(
-        () => HelperModelAssignment.fromResponse(malformed),
+        () => HelperModelAssignment.fromResponse(missing),
         throwsFormatException,
       );
-      final duplicate = fixture.copy(valid);
-      (duplicate['tasks'] as List).add((duplicate['tasks'] as List).first);
-      expect(
-        () => HelperModelAssignment.fromResponse(duplicate),
-        throwsFormatException,
-      );
-    },
-  );
+    });
+  }
+
+  test('canonical helper parser refuses a non-string model', () {
+    final malformed = fixture.copy({'tasks': fixture.helpers});
+    (malformed['tasks'] as List).first['model'] = 9;
+    expect(
+      () => HelperModelAssignment.fromResponse(malformed),
+      throwsFormatException,
+    );
+  });
+
+  test('canonical helper parser rejects duplicate task identities', () {
+    final duplicate = fixture.copy({'tasks': fixture.helpers});
+    (duplicate['tasks'] as List).add((duplicate['tasks'] as List).first);
+    expect(
+      () => HelperModelAssignment.fromResponse(duplicate),
+      throwsFormatException,
+    );
+  });
 
   for (final change in <String, Object?>{
     'provider': 'external',

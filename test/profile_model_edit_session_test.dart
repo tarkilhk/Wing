@@ -13,6 +13,7 @@ void main() {
   late ProfileModelEditSession edit;
   Completer<ProfileDiscovery>? discovery;
   Completer<Map<String, dynamic>>? readback;
+  Completer<void>? readbackEntered;
   Completer<Map<String, dynamic>>? preflightRead;
   late bool profileAvailable;
   Completer<void>? optionsRead;
@@ -34,6 +35,7 @@ void main() {
     mismatch = false;
     discovery = null;
     readback = null;
+    readbackEntered = null;
     preflightRead = null;
     profileAvailable = true;
     optionsRead = null;
@@ -50,7 +52,10 @@ void main() {
           expect(query['profile'], 'work');
           if (path == 'model/info') {
             if (preflightRead != null) return preflightRead!.future;
-            if (posts.isNotEmpty && readback != null) return readback!.future;
+            if (posts.isNotEmpty && readback != null) {
+              readbackEntered?.complete();
+              return readback!.future;
+            }
             return {'provider': provider, 'model': model};
           }
           if (path == 'model/options') {
@@ -510,11 +515,9 @@ void main() {
     () async {
       await choose();
       readback = Completer<Map<String, dynamic>>();
+      readbackEntered = Completer<void>();
       final result = edit.save(confirm: (_) async => true);
-      while (posts.isEmpty) {
-        await Future<void>.delayed(Duration.zero);
-      }
-      await Future<void>.delayed(Duration.zero);
+      await readbackEntered!.future;
       edit.dispose();
       readback!.complete({'provider': 'p', 'model': 'after'});
       expect(await result, ProfileModelSaveOutcome.retired);

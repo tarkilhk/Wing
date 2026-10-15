@@ -4,7 +4,7 @@
     "root": ".",
     "revision": "a5650fa675209b6a782a5adf3f39ff12c53efb4c",
     "tracked_count": 908,
-    "intentional_untracked_count": 602,
+    "intentional_untracked_count": 603,
     "exclude": [
       ".git/**",
       "build/**",
@@ -11359,6 +11359,11 @@
     },
     {
       "path": "test/fixtures/images/bounded-lossless.webp",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/fixtures/markdown_fence_prefixes.json",
       "area": "test",
       "provenance": "intentional-untracked"
     },

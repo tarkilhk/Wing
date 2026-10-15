@@ -372,91 +372,122 @@ void main() {
       expect(runs.every((r) => r.started?.isUtc == true), isTrue);
     },
   );
-  test(
-    'current schedules serialize without re-anchoring unchanged schedules',
-    () {
-      final task = ScheduledTask.fromJson(
-        taskJson()..['schedule'] = {'kind': 'interval', 'minutes': 30},
-      );
-      expect(task.scheduleInput, 'every 30m');
-      expect(
-        task.changes({'name': 'Changed', 'schedule': task.scheduleInput}),
-        {'name': 'Changed'},
-      );
-      final once = ScheduledTask.fromJson(
-        taskJson()
-          ..['schedule'] = {
-            'kind': 'once',
-            'run_at': '2026-11-01T01:30:00-04:00',
-          },
-      );
-      expect(once.scheduleInput, '2026-11-01T01:30:00-04:00');
-      expect(once.changes({'schedule': once.scheduleInput}), isEmpty);
+  test('unchanged interval schedules are omitted from edits', () {
+    final task = ScheduledTask.fromJson(
+      taskJson()..['schedule'] = {'kind': 'interval', 'minutes': 30},
+    );
+    expect(task.scheduleInput, 'every 30m');
+    expect(task.changes({'name': 'Changed', 'schedule': task.scheduleInput}), {
+      'name': 'Changed',
+    });
+  });
+
+  test('unchanged one-shot schedule retains its offset spelling', () {
+    final once = ScheduledTask.fromJson(
+      taskJson()
+        ..['schedule'] = {
+          'kind': 'once',
+          'run_at': '2026-11-01T01:30:00-04:00',
+        },
+    );
+    expect(once.scheduleInput, '2026-11-01T01:30:00-04:00');
+    expect(once.changes({'schedule': once.scheduleInput}), isEmpty);
+  });
+
+  test('one-shot input serializes the same instant in UTC', () {
+    expect(
+      taskScheduleExpression(
+        TaskScheduleKind.once,
+        once: DateTime.parse('2026-11-01T01:30:00-04:00'),
+      ),
+      '2026-11-01T05:30:00.000Z',
+    );
+  });
+
+  for (final (kind, expected) in [
+    (TaskScheduleKind.weekdays, '30 17 * * 1-5'),
+    (TaskScheduleKind.weekly, '30 17 * * 0'),
+    (TaskScheduleKind.monthly, '30 17 31 * *'),
+    (TaskScheduleKind.delay, 'in 90m'),
+    (TaskScheduleKind.interval, 'every 90m'),
+  ]) {
+    test('$kind serializes its requested schedule', () {
       expect(
         taskScheduleExpression(
-          TaskScheduleKind.once,
-          once: DateTime.parse(once.scheduleInput),
+          kind,
+          hour: 17,
+          minute: 30,
+          weekday: 0,
+          monthDay: 31,
+          minutes: 90,
         ),
-        '2026-11-01T05:30:00.000Z',
+        expected,
       );
-      expect(
-        taskScheduleExpression(TaskScheduleKind.weekdays, hour: 17, minute: 30),
-        '30 17 * * 1-5',
-      );
-      expect(
-        taskScheduleExpression(TaskScheduleKind.weekly, weekday: 0),
-        '0 9 * * 0',
-      );
-      expect(
-        taskScheduleExpression(TaskScheduleKind.monthly, monthDay: 31),
-        '0 9 31 * *',
-      );
-      expect(
-        taskScheduleExpression(TaskScheduleKind.delay, minutes: 90),
-        'in 90m',
-      );
-      expect(
-        taskScheduleExpression(TaskScheduleKind.interval, minutes: 90),
-        'every 90m',
-      );
-    },
-  );
+    });
+  }
   test('unknown state is unavailable, never inferred from enabled', () {
     final t = ScheduledTask.fromJson(taskJson()..remove('state'));
     expect(t.statusLabel, 'Status unavailable');
     expect(t.canRun, false);
     expect(t.canPause, false);
+  });
+  test('incomplete task record is rejected', () {
     expect(() => ScheduledTask.fromJson({'id': 'x'}), throwsFormatException);
   });
-  test('all task operations encode ID and retain canonical profile', () async {
-    final f = ScheduledTasksFixture(samples: false);
-    f.jobs['a/b +'] = taskJson(id: 'a/b +');
-    final repo = ScheduledTasksRepository(f.profile);
-    expect((await repo.list()).single.id, 'a/b +');
-    await repo.get('a/b +');
-    await repo.runs('a/b +', limit: 1000);
-    await repo.update(
-      TaskEditIntent(
-        baseline: await repo.get('a/b +'),
-        values: {'name': 'Renamed'},
-      ),
+  for (final operation in [
+    'get',
+    'runs',
+    'update',
+    'pause',
+    'resume',
+    'trigger',
+    'delete',
+  ]) {
+    test(
+      '$operation encodes its task ID and retains canonical profile',
+      () async {
+        final f = ScheduledTasksFixture(samples: false);
+        f.jobs['a/b +'] = taskJson(id: 'a/b +');
+        final repo = ScheduledTasksRepository(f.profile);
+        switch (operation) {
+          case 'get':
+            expect((await repo.get('a/b +')).id, 'a/b +');
+          case 'runs':
+            await repo.runs('a/b +', limit: 1000);
+          case 'update':
+            await repo.update(
+              TaskEditIntent(
+                baseline: ScheduledTask.fromJson(taskJson(id: 'a/b +')),
+                values: {'name': 'Renamed'},
+              ),
+            );
+          case 'delete':
+            await repo.delete('a/b +');
+          default:
+            await repo.action('a/b +', operation);
+        }
+        final endpoint =
+            'cron/jobs/a%2Fb%20%2B${['runs', 'pause', 'resume', 'trigger'].contains(operation) ? '/$operation' : ''}';
+        final method = switch (operation) {
+          'get' || 'runs' => 'GET',
+          'update' => 'PUT',
+          'delete' => 'DELETE',
+          _ => 'POST',
+        };
+        final request = f.admin.requests.singleWhere(
+          (r) => r.$1 == method && r.$2 == endpoint,
+        );
+        expect(request.$3['profile'], 'personal');
+        if (operation == 'runs') expect(request.$3['limit'], '100');
+        if (operation == 'update') {
+          expect(request.$4, {
+            'updates': {'name': 'Renamed'},
+            'profile': 'personal',
+          });
+        }
+      },
     );
-    await repo.action('a/b +', 'pause');
-    await repo.action('a/b +', 'resume');
-    await repo.action('a/b +', 'trigger');
-    await repo.delete('a/b +');
-    final requests = f.admin.requests.where((r) => r.$2.startsWith('cron/'));
-    expect(requests.every((r) => r.$3['profile'] == 'personal'), true);
-    expect(requests.any((r) => r.$2 == 'cron/jobs/a%2Fb%20%2B'), true);
-    expect(
-      requests.firstWhere((r) => r.$2.endsWith('/runs')).$3['limit'],
-      '100',
-    );
-    expect(requests.firstWhere((r) => r.$1 == 'PUT').$4, {
-      'updates': {'name': 'Renamed'},
-      'profile': 'personal',
-    });
-  });
+  }
   test(
     'missing profile prevents writes and template targets are explicit',
     () async {

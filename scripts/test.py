@@ -166,6 +166,8 @@ def main():
     }
     (archive / 'toolchain.json').write_text(json.dumps(toolchain, indent=2) + '\n')
     counts = Counter()
+    skipped_tests = []
+    reported_errors = 0
     done = None
     result = 2
     interrupted = False
@@ -234,10 +236,13 @@ def main():
                                                     + event.get('message', '') + '\n')[-65536:]
                         elif event.get('type') == 'testDone' and not event.get('hidden'):
                             counts['skipped' if event.get('skipped') else event['result']] += 1
+                            if event.get('skipped'):
+                                skipped_tests.append(tests.get(event.get('testID'), 'Unknown skipped test'))
                             diagnostics.pop(event.get('testID'), None)
                         elif event.get('type') == 'done':
                             done = event
                         elif event.get('type') == 'error':
+                            reported_errors += 1
                             print(tests.get(event.get('testID'), 'Test loading failure'),
                                   file=sys.stderr, flush=True)
                             detail = diagnostics.pop(event.get('testID'), '')
@@ -267,12 +272,20 @@ def main():
             result = result or 1
         if done is None or not done.get('success'):
             result = result or 1
+        if reported_errors or counts['error'] or counts['failure']:
+            result = result or 1
+        if not counts['success']:
+            print('No non-skipped tests passed; an empty or skipped run cannot certify behavior.',
+                  file=sys.stderr)
+            result = result or 1
         summary = {'elapsed_seconds': time.monotonic() - started, 'counts': dict(counts),
                    'done': done, 'exit_code': result, 'source_before': before,
                    'source_after': after, 'concurrency': args.concurrency}
         summary['suite'] = 'full' if full else 'routine'
         summary['linters'] = 'external' if args.skip_linters else 'local'
         summary['scheduled_suites'] = plan['scheduled']
+        summary['skipped_tests'] = skipped_tests
+        summary['reported_errors'] = reported_errors
         (archive / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
         print(f'{summary["elapsed_seconds"]:.2f}s: {dict(counts)}; evidence {archive}', flush=True)
         return result
