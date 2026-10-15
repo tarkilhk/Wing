@@ -1,17 +1,30 @@
 # Subagent supervision
 
-While Hermes works, tap **Subagents** in the compact bar above your draft to
-inspect known children. Swipe horizontally to switch between subagents and tasks.
-Past answers retain **Activity → Agents**. Saved delegation results show received
-tasks, status, and output; they do not offer controls for past work.
+While Hermes works, tap **Subagents** above your draft to inspect known children.
+Only populated categories appear; swipe between Subagents and Tasks when both
+are available. The drawer keeps its summary visible while longer lists scroll.
+Swipe its top handle up to expand near full screen and down to return to compact
+height; tapping the handle also toggles its height. Tap the selected tab, outside
+or Back to close it without leaving the conversation.
+
+The header shows completed out of total, then running and queued counts. Failed,
+interrupted and unconfirmed agents are counted separately when present. Zero
+status counts are omitted; unconfirmed agents are not also counted as running
+or queued.
+
+Received events update progress automatically. Close and reopen Subagents to
+fetch a fresh snapshot or retry a failed read. Past answers retain
+**Activity → Agents** with received goals, status, output and available timings.
+Historical results do not offer live controls.
 
 Open a child's details to read its own conversation when Hermes supplies its
 session identity. It uses the same message and Activity timeline as the main
 chat, including saved tool results, available reasoning and live tool previews.
-Expand **Task** for its goal, metadata and available controls. Working history
-keeps this viewer read only.
+Expand **Task** for its goal and metadata. Eligible guidance and Send controls
+stay below the conversation, with Interrupt in the status row. Working history
+and nested read-only viewers do not offer those controls.
 
-Use Refresh to reread the child. Updates continue while the viewer is open and
+Use Refresh in the header to reread the child. Updates continue while the viewer is open and
 Wing is active. After three consecutive failures, automatic refresh stops; use
 Retry. Closing the sheet stops its reads. The parent chat and draft stay selected.
 

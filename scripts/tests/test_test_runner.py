@@ -83,7 +83,7 @@ class TestCadence(unittest.TestCase):
         self.assertTrue(runner.full_for_changes(self.root, self.reference))
 
     def run_verification(self, lint_exit, test_exit, mutate_source=False, skip_linters=False,
-                         full=False):
+                         full=False, events=None):
         self.write('.gitignore', 'build/\n')
         self.write('test/example_test.dart', 'void main() {}')
         self.write('scripts/check_commit_linters.py', '''
@@ -115,6 +115,11 @@ if '--version' in sys.argv:
     print('{}')
 else:
     Path('build/test-started').touch()
+    events = ''' + repr(events) + '''
+    if events is not None:
+        for event in events:
+            print(json.dumps(event))
+        sys.exit(''' + str(test_exit) + ''')
     if ''' + str(mutate_source) + ''':
         Path('lib/value.dart').write_text('class ChangedDuringTests {}')
     print(json.dumps(dict(type='testStart', test=dict(id=1, name='fixture behavior'))))
@@ -139,7 +144,44 @@ else:
               contextlib.redirect_stdout(output), contextlib.redirect_stderr(error)):
             result = runner.main()
         self.assertTrue((self.root / 'build/test-started').exists())
+        if 'evidence ' in output.getvalue():
+            archive = Path(output.getvalue().rsplit('evidence ', 1)[-1].strip())
+            self.addCleanup(shutil.rmtree, archive)
         return result, output.getvalue(), error.getvalue()
+
+    def test_empty_success_event_cannot_certify_a_test_run(self):
+        result, _, error = self.run_verification(
+            0, 0, events=[dict(type='done', success=True)])
+        self.assertEqual(result, 1)
+        self.assertIn('empty or skipped run', error)
+
+    def test_all_skipped_tests_cannot_certify_behavior(self):
+        result, output, _ = self.run_verification(0, 0, events=[
+            dict(type='testStart', test=dict(id=1, name='requires live backend')),
+            dict(type='testDone', testID=1, result='success', skipped=True),
+            dict(type='done', success=True),
+        ])
+        self.assertEqual(result, 1)
+        archive = Path(output.rsplit('evidence ', 1)[-1].strip())
+        summary = json.loads((archive / 'summary.json').read_text())
+        self.assertEqual(summary['skipped_tests'], ['requires live backend'])
+
+    def test_test_failure_is_not_overruled_by_successful_process_exit(self):
+        result, _, _ = self.run_verification(0, 0, events=[
+            dict(type='testDone', testID=1, result='failure'),
+            dict(type='testDone', testID=2, result='success'),
+            dict(type='done', success=True),
+        ])
+        self.assertEqual(result, 1)
+
+    def test_reported_error_is_not_overruled_by_success_summary(self):
+        result, _, error = self.run_verification(0, 0, events=[
+            dict(type='error', error='Loading failed'),
+            dict(type='testDone', testID=1, result='success'),
+            dict(type='done', success=True),
+        ])
+        self.assertEqual(result, 1)
+        self.assertIn('Loading failed', error)
 
     def test_linter_failure_fails_even_when_product_tests_pass(self):
         result, output, error = self.run_verification(lint_exit=23, test_exit=0)
@@ -236,7 +278,6 @@ time.sleep(30)
             leader.wait()
 
 
-@unittest.skipUnless(shutil.which('dart'), 'activate the project Dart SDK')
 class TestProofCompilation(unittest.TestCase):
     def test_compilation_failure_is_visible_and_retains_evidence(self):
         with tempfile.TemporaryDirectory(prefix='wing-proof-error-') as scratch:
@@ -253,6 +294,7 @@ class TestProofCompilation(unittest.TestCase):
             self.assertEqual((directory / 'proof-compilation.stdout').read_text(), 'compiler output\n')
             self.assertEqual((directory / 'proof-compilation.stderr').read_text(), 'specific compiler error\n')
 
+    @unittest.skipUnless(shutil.which('dart'), 'activate the project Dart SDK')
     def test_current_dispatcher_compiles_and_runs_task_intent_probe(self):
         with tempfile.TemporaryDirectory(prefix='wing-proof-compilation-') as scratch:
             directory = Path(scratch)

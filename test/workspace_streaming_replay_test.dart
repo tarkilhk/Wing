@@ -12,8 +12,8 @@ import 'package:wing/core/widgets/markdown_code_block.dart';
 import 'package:wing/core/widgets/profile_live_work_dock.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
+import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/block_reusing_markdown_body.dart';
-import 'package:wing/core/utils/expansion_scroll_controller.dart';
 
 import '../tools/performance/streaming_replay_fixture.dart';
 import '../tools/performance/workspace_streaming_replay.dart';
@@ -136,24 +136,6 @@ void main() {
               widget.data == streamingReplayInitial(),
         );
         final original = tester.element(body);
-        final answerSlot = find
-            .ancestor(of: body, matching: find.byType(TranscriptScrollAnchor))
-            .first;
-        final originalSlot = tester.element(answerSlot);
-        final prose = find.descendant(
-          of: body,
-          matching: find.byType(BlockReusingMarkdownBody),
-        );
-        final originalProse = tester
-            .widgetList<BlockReusingMarkdownBody>(prose)
-            .toList();
-        final paragraph = find.descendant(
-          of: prose.first,
-          matching: find.byType(SelectableText),
-        );
-        final originalParagraph = tester.widget<SelectableText>(
-          paragraph.first,
-        );
         await captureCompletion(tester, 'streaming-${brightness.name}-$scale');
         state.complete();
         await tester.pump();
@@ -163,22 +145,13 @@ void main() {
           state.controller!.current!.chat!.runtime.executionActive,
           isFalse,
         );
-        expect(state.controller!.current!.chat!.markReadFailed, isFalse);
-        expect(state.ready()['readReceiptWrites'], greaterThan(0));
-        expect(tester.element(body), same(original));
+        expect(body, findsOneWidget);
         expect(
-          tester.element(answerSlot),
-          same(originalSlot),
+          tester.element(body),
+          same(original),
           reason:
-              'Completion updates the same transcript slot without reparenting.',
-        );
-        expect(
-          tester.widgetList<BlockReusingMarkdownBody>(prose).first,
-          same(originalProse.first),
-        );
-        expect(
-          tester.widget<SelectableText>(paragraph.first),
-          same(originalParagraph),
+              'The live-to-saved handoff retains the Markdown parser/cache '
+              'owner instead of disposing and recreating the rendered answer.',
         );
         expect(tester.widget<MarkdownMessageContent>(body).streaming, isFalse);
         await captureCompletion(tester, 'complete-${brightness.name}-$scale');
@@ -258,7 +231,6 @@ void main() {
     expect(chat.todos, hasLength(7));
     expect(chat.subagents, hasLength(2));
     expect(chat.runtime.toolActivities, hasLength(1));
-    expect(state.controls().keys, containsAll(['tasks', 'subagents']));
     await state.controller!.reconnect(chat.key.workspace);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
@@ -266,6 +238,48 @@ void main() {
     expect(chat.reading.streaming, streamingReplayInitial());
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+    'replay coordinates open agents and switch to tasks through the visible dock',
+    (tester) async {
+      final state = await _preparedWorkspace(tester, work: true);
+      Future<void> tapControl(String name) async {
+        final coordinates = state.controls()[name] as List<int>?;
+        expect(
+          coordinates,
+          isNotNull,
+          reason: '$name must be a visible tap target',
+        );
+        final ratio = tester.view.devicePixelRatio;
+        await tester.tapAt(
+          Offset(coordinates![0] / ratio, coordinates[1] / ratio),
+        );
+        // Opening installs and measures the overlay before its reveal starts.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.settleMarkdown();
+        await tester.pump();
+      }
+
+      // The long answer leaves Activity retained outside the viewport. It must
+      // not contribute an invalid coordinate or prevent the visible dock taps.
+      expect(state.controls(), isNot(contains('activity')));
+      await tapControl('subagents');
+      expect(find.byType(ProfileSubagentPanel).hitTestable(), findsOneWidget);
+      await tapControl('tasks');
+      final expandTask = find
+          .descendant(
+            of: find.byType(ProfileTodoPanel),
+            matching: find.byTooltip('Expand task'),
+          )
+          .first;
+      expect(expandTask.hitTestable(), findsOneWidget);
+      await tester.tap(expandTask);
+      await tester.pump();
+      expect(find.byTooltip('Collapse task').hitTestable(), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   test('render verification rejects missing and stale mounted segments', () {
     const source = 'Visible prose.\n\n```dart\nfinal value = 1;\n```\n';

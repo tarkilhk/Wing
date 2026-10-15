@@ -131,7 +131,7 @@ class ProfileToolActivitySection extends StatelessWidget {
               ),
             ),
       detailsBuilder: (_) => ProfileActivityContents(
-        section: section,
+        groups: section.groups,
         expandedMessageId: expandedMessageId,
         focusedMessageKey: focusedMessageKey,
         currentActivity: currentActivity,
@@ -145,11 +145,11 @@ class ProfileToolActivitySection extends StatelessWidget {
   }
 }
 
-/// Shared saved and live Activity body, independent of its disclosure lifetime.
+/// Historical Activity categories, independent of their disclosure lifetime.
 class ProfileActivityContents extends StatelessWidget {
   const ProfileActivityContents({
     super.key,
-    this.section,
+    required this.groups,
     this.expandedMessageId,
     this.focusedMessageKey,
     this.currentActivity = const [],
@@ -160,7 +160,7 @@ class ProfileActivityContents extends StatelessWidget {
     this.noticeBuilder,
   });
 
-  final TranscriptTimelineSection? section;
+  final List<TranscriptTimelineGroup> groups;
   final int? expandedMessageId;
   final GlobalKey? focusedMessageKey;
   final List<Widget> currentActivity;
@@ -172,7 +172,6 @@ class ProfileActivityContents extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groups = section?.groups ?? const <TranscriptTimelineGroup>[];
     final saved = SavedActivity(groups.expand((group) => group.toolResults));
     final supplied = tabs.map((tab) => tab.id).toSet();
     final noticeEntries = [
@@ -200,51 +199,14 @@ class ProfileActivityContents extends StatelessWidget {
           ProfileActivityTab(
             id: 'timeline',
             label: 'Timeline',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final group in groups)
-                  if (group.isReasoning)
-                    ProfileReasoningDisclosure(
-                      key:
-                          group.messages.first.emptyAssistant &&
-                              expandedMessageId != null &&
-                              group.containsMessage(expandedMessageId!)
-                          ? focusedMessageKey
-                          : ValueKey((
-                              'saved-reasoning',
-                              group.messages.first.presentationId,
-                            )),
-                      text: group.messages.first.reasoning,
-                      initiallyExpanded:
-                          group.messages.first.emptyAssistant &&
-                          expandedMessageId != null &&
-                          group.containsMessage(expandedMessageId!),
-                    )
-                  else if (group.reviewText case final review?)
-                    ProfileReviewNoticeRow(
-                      key: group.messages.last.id == expandedMessageId
-                          ? focusedMessageKey
-                          : null,
-                      text: review,
-                      initiallyExpanded:
-                          expandedMessageId != null &&
-                          group.containsMessage(expandedMessageId!),
-                    )
-                  else if (!group.isAgentNotice)
-                    ProfileToolActivity(
-                      results: group.toolResults,
-                      loadImage: loadImage,
-                      onOpenResource: onOpenResource,
-                      onShareResource: onShareResource,
-                      initiallyExpanded:
-                          expandedMessageId != null &&
-                          group.containsMessage(expandedMessageId!),
-                      focusedMessageId: expandedMessageId,
-                      focusedMessageKey: focusedMessageKey,
-                    ),
-                ...currentActivity,
-              ],
+            child: ProfileActivityTimeline(
+              groups: groups,
+              expandedMessageId: expandedMessageId,
+              focusedMessageKey: focusedMessageKey,
+              currentActivity: currentActivity,
+              loadImage: loadImage,
+              onOpenResource: onOpenResource,
+              onShareResource: onShareResource,
             ),
           ),
         for (final tab in tabs)
@@ -285,6 +247,77 @@ class ProfileActivityContents extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Shared timeline rows without reconstructing historical Tasks or Agents.
+/// Current work owns those categories in the dock, even after receipts save.
+class ProfileActivityTimeline extends StatelessWidget {
+  const ProfileActivityTimeline({
+    super.key,
+    required this.groups,
+    this.expandedMessageId,
+    this.focusedMessageKey,
+    this.currentActivity = const [],
+    this.loadImage,
+    this.onOpenResource,
+    this.onShareResource,
+  });
+
+  final List<TranscriptTimelineGroup> groups;
+  final int? expandedMessageId;
+  final GlobalKey? focusedMessageKey;
+  final List<Widget> currentActivity;
+  final Future<Uint8List> Function(String)? loadImage;
+  final Future<void> Function(ChatOutput)? onOpenResource;
+  final Future<void> Function(ChatOutput)? onShareResource;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final group in groups)
+        if (group.isReasoning)
+          ProfileReasoningDisclosure(
+            key:
+                group.messages.first.emptyAssistant &&
+                    expandedMessageId != null &&
+                    group.containsMessage(expandedMessageId!)
+                ? focusedMessageKey
+                : ValueKey((
+                    'saved-reasoning',
+                    group.messages.first.presentationId,
+                  )),
+            text: group.messages.first.reasoning,
+            initiallyExpanded:
+                group.messages.first.emptyAssistant &&
+                expandedMessageId != null &&
+                group.containsMessage(expandedMessageId!),
+          )
+        else if (group.reviewText case final review?)
+          ProfileReviewNoticeRow(
+            key: group.messages.last.id == expandedMessageId
+                ? focusedMessageKey
+                : null,
+            text: review,
+            initiallyExpanded:
+                expandedMessageId != null &&
+                group.containsMessage(expandedMessageId!),
+          )
+        else if (!group.isAgentNotice)
+          ProfileToolActivity(
+            results: group.toolResults,
+            loadImage: loadImage,
+            onOpenResource: onOpenResource,
+            onShareResource: onShareResource,
+            initiallyExpanded:
+                expandedMessageId != null &&
+                group.containsMessage(expandedMessageId!),
+            focusedMessageId: expandedMessageId,
+            focusedMessageKey: focusedMessageKey,
+          ),
+      ...currentActivity,
+    ],
+  );
 }
 
 /// Contiguous outputs retain their transcript grouping and focus identities;

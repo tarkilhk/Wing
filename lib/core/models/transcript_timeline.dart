@@ -140,20 +140,29 @@ final class TranscriptTimeline {
     );
   }
 
-  bool get joinsCurrentActivity =>
-      !hasLiveMessage &&
-      sections.isNotEmpty &&
-      sections.last.isActivity &&
-      !sections.last.hasLatestReview;
+  /// Retained execution can join the activity immediately before its received
+  /// final answer while saved history catches up. A durable answer, prompt or
+  /// completed review still closes the association.
+  TranscriptTimelineSection? get adjacentCurrentActivity =>
+      _adjacentActivity(includeReceivedAnswer: true);
 
-  /// Only the adjacent unfinished activity can join a live reply. A saved
-  /// answer, prompt, ordinary notice or completed review remains a boundary.
-  TranscriptTimelineSection? get adjacentLiveActivity {
+  /// Only adjacent unfinished activity joins a live reply. A saved answer,
+  /// prompt, ordinary notice or completed review remains a boundary.
+  TranscriptTimelineSection? get adjacentLiveActivity =>
+      _adjacentActivity(includeReceivedAnswer: false);
+
+  TranscriptTimelineSection? _adjacentActivity({
+    required bool includeReceivedAnswer,
+  }) {
     var index = sections.length - 1;
-    if (index >= 0 &&
-        !sections[index].isActivity &&
-        sections[index].messages.last.streaming) {
-      index--;
+    if (index >= 0 && !sections[index].isActivity) {
+      final last = sections[index].messages.last;
+      if (last.streaming ||
+          includeReceivedAnswer &&
+              last.role == 'assistant' &&
+              last.savedMessageId == null) {
+        index--;
+      }
     }
     if (index < 0 ||
         !sections[index].isActivity ||

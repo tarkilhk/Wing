@@ -11,6 +11,7 @@ import 'connection_access.dart';
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
+import 'package:uuid/uuid.dart';
 import '../models/session_visibility.dart';
 import '../models/deleted_draft_cleanup.dart';
 import '../models/hermes_profile.dart';
@@ -224,6 +225,7 @@ class ProfileGateway {
   final void Function() disconnect;
   final Future<ProfileDiscovery> Function() _discover;
   ServerConnectionStatus? connectionStatus;
+  bool _closed = false;
   // Administration RPC sockets do not carry chat updates and are not recovered
   // by the workspace. Their lifetime must not determine live chat availability.
   bool reportsLiveChat = true;
@@ -565,6 +567,8 @@ class ProfileGateway {
   }
 
   void close() {
+    if (_closed) return;
+    _closed = true;
     modelCatalog.close();
     _close();
     if (reportsLiveChat) connectionStatus?.forgetLive(scope.profileName);
@@ -1522,14 +1526,47 @@ class ProfileGateway {
         )) {
       throw ArgumentError('Invalid session update');
     }
+    final capturedChanges = Map<String, dynamic>.of(changes);
+    final requestId = const Uuid().v4();
+    void requireCurrent() {
+      if (_closed || !canDispatch()) {
+        throw DashboardRequestNotSentException(
+          StateError('Session update retired.'),
+        );
+      }
+    }
+
+    requireCurrent();
     await requireProfile();
     final patch = _ownedPatch;
     if (patch == null) {
       throw StateError('Session mutation transport unavailable');
     }
+    requireCurrent();
+    final endpoint = 'sessions/${Uri.encodeComponent(id)}';
+    // Stock Hermes fences sidebar writes with an owner-issued revision. A
+    // plain flags PATCH is rejected with mutation_identity_required (HTTP 409).
+    final snapshot = await read('$endpoint/mutation-snapshot');
+    final revision = snapshot['runtime_revision'];
+    final generation = snapshot['runtime_generation'];
+    if (snapshot['session_id'] != id ||
+        snapshot['exists'] != true ||
+        revision is! int ||
+        revision < 0 ||
+        generation is! int ||
+        generation < 0) {
+      throw const FormatException('Invalid session mutation snapshot');
+    }
+    requireCurrent();
     final result = await patch(
-      'sessions/${Uri.encodeComponent(id)}',
-      {...changes, 'profile': scope.profileName},
+      endpoint,
+      {
+        ...capturedChanges,
+        'profile': scope.profileName,
+        'request_id': requestId,
+        'expected_revision': revision,
+        'expected_generation': generation,
+      },
       canDispatch,
       () {},
     );

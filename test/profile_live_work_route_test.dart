@@ -16,6 +16,7 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'package:wing/core/widgets/profile_live_work_dock.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
@@ -164,7 +165,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(ProfileActivitySection), findsNWidgets(3));
+    expect(find.byType(ProfileActivitySection), findsNWidgets(2));
     expect(find.text('Activity · 1 tool'), findsNWidgets(2));
     expect(find.byType(ProfileReasoningDisclosure), findsNothing);
     await tester.openLiveActivity();
@@ -172,14 +173,10 @@ void main() {
       find.text('Later live reasoning', findRichText: true),
       findsOneWidget,
     );
-    expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
+    expect(find.byType(ProfileReasoningDisclosure), findsNothing);
     expect(
-      tester
-          .widget<ProfileReasoningDisclosure>(
-            find.byType(ProfileReasoningDisclosure),
-          )
-          .text,
-      'Earlier saved reasoning',
+      find.text('Earlier saved reasoning', findRichText: true),
+      findsOneWidget,
     );
     expect(chat.reading.messages.any((row) => row['id'] == 3), isTrue);
     expect(
@@ -191,6 +188,37 @@ void main() {
       same(currentTool),
     );
     expect(chat.reading.messages.where((row) => row['id'] == 2), hasLength(1));
+    final persistence = Completer<void>();
+    host.heldHistoryStarted = Completer<void>();
+    host.heldHistoryDelay = persistence;
+    host.heldHistoryFailure = StateError(
+      'Saved history temporarily unavailable',
+    );
+    addTearDown(() {
+      if (!persistence.isCompleted) persistence.complete();
+    });
+    host.event('a', 'message.complete', {
+      'text': 'Final answer before persistence',
+    });
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.settleMarkdown();
+    expect(host.heldHistoryStarted!.isCompleted, isTrue);
+    tester
+        .widget<ScrollView>(find.byKey(const ValueKey('profile-transcript')))
+        .controller!
+        .jumpTo(0);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.settleMarkdown();
+    expect(
+      find.byType(ProfileActivitySection),
+      findsOneWidget,
+      reason: 'Received final answer must not split saved and retained work',
+    );
+    persistence.complete();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.settleMarkdown();
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
+
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
@@ -374,10 +402,29 @@ void main() {
           findsOneWidget,
         );
         await picture('tasks');
+        final drawer = find.byKey(const ValueKey('live-work-panel'));
+        final handle = find.byKey(const ValueKey('live-work-handle'));
+        final compact = tester.getRect(drawer);
+        final taskSummary = tester.getRect(find.byType(ProfileTodoSummary));
+        await tester.drag(find.byType(PageView), const Offset(0, -100));
+        await settle();
+        expect(tester.getRect(find.byType(ProfileTodoSummary)), taskSummary);
+        await tester.fling(handle, const Offset(0, -500), 1000);
+        await settle();
+        expect(tester.getRect(drawer).top, closeTo(8, 1));
+        expect(tester.getRect(drawer).bottom, compact.bottom);
+        expect(tester.getRect(composer), rect);
+        await picture('tasks-expanded');
         await tester.tap(tab(0));
         await settle();
         expect(tester.getRect(composer), rect);
         expect(find.text('Inspect source mappings'), findsOneWidget);
+        expect(tester.getRect(drawer).top, closeTo(8, 1));
+        expect(find.text('0 of 2 completed · 2 running'), findsOneWidget);
+        await picture('subagents-expanded');
+        await tester.fling(handle, const Offset(0, 500), 1000);
+        await settle();
+        expect(tester.getSize(drawer).height, lessThanOrEqualTo(320));
         await picture('subagents');
 
         void expectNoReadButtons() {
@@ -445,6 +492,14 @@ void main() {
           greaterThanOrEqualTo(56),
         );
         await picture('keyboard');
+        await tester.tap(handle);
+        await settle();
+        expect(tester.getRect(drawer).top, closeTo(8, 1));
+        expect(
+          tester.getRect(drawer).bottom,
+          lessThan(tester.getRect(composer).top),
+        );
+        await picture('keyboard-expanded');
         await tester.binding.handlePopRoute();
         await settle();
         expect(find.byType(PageView), findsNothing);
@@ -520,6 +575,49 @@ void main() {
           },
           {'id': 6, 'role': 'assistant', 'content': 'The saved final answer.'},
         ];
+        // A completion receipt can save while its parent is still streaming.
+        // That must not move or duplicate the canonical agent into Activity.
+        final finalAnswer = host.historyMessages!.removeLast();
+        await controller.refreshHistory(chat);
+        await settle();
+        expect(chat.runtime.executionActive, isTrue);
+        expect(chat.reading.messages.any((row) => row['id'] == 4), isTrue);
+        // Reveal the lazy current row after the expanded drawer/keyboard visit.
+        for (
+          var attempt = 0;
+          attempt < 12 &&
+              find.byKey(const ValueKey('live-activity')).evaluate().isEmpty;
+          attempt++
+        ) {
+          await tester.drag(
+            find.byKey(const ValueKey('profile-transcript')),
+            const Offset(0, 160),
+          );
+          await settle();
+        }
+        await tester.openLiveActivity();
+        await settle();
+        final liveTabs = find.descendant(
+          of: find.byType(ProfileLiveExecution),
+          matching: find.byType(ProfileActivityTabs),
+        );
+        expect(liveTabs, findsWidgets);
+        for (final tabs in tester.widgetList<ProfileActivityTabs>(liveTabs)) {
+          expect(tabs.tabs.map((tab) => tab.id), ['timeline']);
+        }
+        expect(
+          find.text('Subagent Task Completed: Inspect source mappings'),
+          findsNothing,
+        );
+        await picture('current-receipt-timeline');
+        await tester.tap(tab(0, overlay: false));
+        await settle();
+        expect(find.text('Inspect source mappings'), findsOneWidget);
+        expect(chat.subagents.every((agent) => agent.isTerminal), isTrue);
+        await picture('current-receipt-drawer');
+        await tester.binding.handlePopRoute();
+        await settle();
+        host.historyMessages!.add(finalAnswer);
         host.event('a', 'message.complete', {
           'text': 'The saved final answer.',
         });
@@ -557,6 +655,10 @@ void main() {
         // Navigate through the actual viewport. Whole-row ensureVisible can
         // place a lazily resized row's header outside a short enlarged viewport.
         for (var i = 0; i < 20; i++) {
+          if (savedTitle.evaluate().isNotEmpty) {
+            await tester.ensureVisible(savedTitle);
+            await settle();
+          }
           if (savedTitle
               .hitTestable(at: Alignment.centerLeft)
               .evaluate()
@@ -863,7 +965,7 @@ void main() {
           ];
           await controller.refreshHistory(chat);
           await settle();
-          expect(find.byType(ProfileActivitySection), findsNWidgets(4));
+          expect(find.byType(ProfileActivitySection), findsNWidgets(3));
           expect(find.text('Activity · 12 tools'), findsOneWidget);
           expect(find.text('Activity · 4 tools'), findsOneWidget);
           expect(find.text(heading, findRichText: true), findsOneWidget);
@@ -881,40 +983,23 @@ void main() {
           );
           await settle();
           await picture('history-refreshed-readable');
-          // Live prose stays readable while newly reconciled saved Activity
-          // starts folded independently. Open it to inspect its saved reasoning.
+          // Saved current-turn reasoning uses the same readable body. Receipt
+          // persistence does not introduce another Activity or hide the prose.
           expect(find.byType(ProfileReasoningDisclosure), findsNothing);
           await tester.openLiveActivity();
           await settle();
-          expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
-          expect(find.text('Timeline'), findsNWidgets(4));
-          final reasoningLabel = find.descendant(
-            of: find.byType(ProfileReasoningDisclosure),
-            matching: find.text('Reasoning'),
+          expect(find.text('Timeline'), findsNWidgets(3));
+          final savedReasoning = find.text(
+            'Saved planning before the first tool.',
+            findRichText: true,
           );
-          await tester.ensureVisible(reasoningLabel);
-          await settle();
-          await picture('activity');
-          // The centered Latest overlay can cover the middle of an enlarged
-          // title. Its leading edge remains part of the same tappable row.
-          final reasoningTitle = tester.getRect(reasoningLabel);
-          await tester.tapAt(
-            Offset(reasoningTitle.left + 4, reasoningTitle.center.dy),
-          );
-          await settle();
-          expect(
-            find.text(
-              'Saved planning before the first tool.',
-              findRichText: true,
-            ),
-            findsWidgets,
-          );
-          expect(find.byTooltip('Copy Reasoning'), findsOneWidget);
-          await tester.ensureVisible(find.byTooltip('Copy Reasoning'));
-          await settle();
-          await tester.ensureVisible(find.text(heading, findRichText: true));
+          expect(savedReasoning, findsOneWidget);
+          await tester.ensureVisible(savedReasoning);
           await settle();
           await picture('reasoning');
+          await tester.ensureVisible(find.text(heading, findRichText: true));
+          await settle();
+          await picture('live-reasoning');
           expect(find.text(heading, findRichText: true), findsOneWidget);
           expect(chat.runtime.executionActive, isTrue);
           expect(tester.getRect(composer), bounds);

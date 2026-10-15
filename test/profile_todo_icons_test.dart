@@ -454,10 +454,16 @@ void main() {
               children: [
                 const Expanded(child: Text('Conversation')),
                 ProfileLiveWorkDock(
+                  taskSummary: const ProfileTodoSummary(todos: _todos),
+                  subagentSummary: const Text('Agent summary'),
                   taskCount: 4,
                   completedTasks: 1,
                   subagentCount: 1,
-                  tasks: const ProfileTodoPanel(embedded: true, todos: _todos),
+                  tasks: const ProfileTodoPanel(
+                    embedded: true,
+                    showSummary: false,
+                    todos: _todos,
+                  ),
                   subagents: const Text('Subagent review'),
                   onAgentsSelected: () async {},
                 ),

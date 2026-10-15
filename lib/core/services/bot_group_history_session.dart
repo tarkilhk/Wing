@@ -51,7 +51,10 @@ class BotGroupHistorySession extends ChangeNotifier
   ProfileSessionKey? get key => _reading._session == null
       ? null
       : ProfileSessionKey(_reading._reading.scope, _reading._session!);
-  bool get liveAnswering => runtime.executionActive || runtime.needsInput;
+  bool get liveAnswering =>
+      runtime.executionActive ||
+      runtime.needsInput ||
+      _reading._needsHistoryReconciliation;
 
   _BotGroupHistoryReading _newReading(BotGroupMember? member) =>
       _BotGroupHistoryReading(

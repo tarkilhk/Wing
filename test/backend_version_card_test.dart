@@ -987,7 +987,7 @@ void main() {
     expect(find.text('Checking for updates…'), findsNothing);
     expect(find.text('Checking…'), findsNothing);
     expect(find.byType(StudioLoading), findsNothing);
-    expect(find.byIcon(Icons.search), findsOneWidget);
+    expect(find.byIcon(Icons.sync), findsOneWidget);
     expect(
       tester
           .widget<IconButton>(

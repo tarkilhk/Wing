@@ -4,15 +4,24 @@ While a reply is streaming, reasoning appears as readable Markdown between tool
 runs. Each run has its own **Activity** disclosure, collapsed by default. Open a
 run to inspect its tools; later reasoning stays visible and starts a new tool run
 below it. Opened runs keep their expanded tool details as work arrives. Once the
-reply finishes, saved reasoning and tools use the ordinary collapsed Activity.
+reply finishes and saved history arrives, saved reasoning and tools use the
+ordinary collapsed Activity. Partial history updates keep current reasoning
+readable and merge consecutive saved/live tools into the same run.
 
 Use the compact **Subagents / Tasks** bar above your draft, or at the bottom of
 Working history. It remains available while Hermes waits for subagents and after
 the parent response finishes. Tap a side to open its drawer, swipe left/right to
 switch, and tap the selected side or outside to close. Tasks shows completed/total;
-cancelled tasks do not count as completed. Empty categories stay hidden.
+cancelled tasks do not count as completed. Empty categories stay hidden. During
+streaming, current Tasks and Subagents appear only in this drawer, including
+completed subagents whose parent is still answering.
 
-Past answers retain their received Activity and Work details. Activity shows the
+The summary stays fixed while the rows scroll. Swipe the top handle up to expand
+near full screen, or down to return to compact height; tapping it also toggles
+the height. Both Tasks and Subagents use this behavior.
+
+Past answers retain their received Activity and Work details. Tools and agent
+results share the Timeline and Agents tabs within the same Activity. Activity shows the
 available tool count. Expand a row to see what was requested and what Hermes
 returned. Controls use icons with accessible labels and tooltips. Long content
 can open in a fuller reader; reusable code, commands and output offer copying

@@ -5,9 +5,6 @@ import 'package:flutter/material.dart';
 import '../models/chat_output.dart';
 import '../models/chat_runtime.dart';
 import '../models/transcript_timeline.dart';
-import '../theme/wing_theme.dart';
-import 'chat_model_controls.dart';
-import 'markdown_message_content.dart';
 import 'profile_execution_activity.dart';
 import 'profile_activity_tabs.dart';
 import 'profile_tool_activity.dart';
@@ -18,7 +15,6 @@ class ProfileLiveExecution extends StatefulWidget {
     super.key,
     required this.entries,
     this.savedActivity,
-    this.noticeBuilder,
     this.loadImage,
     this.onOpenResource,
     this.onShareResource,
@@ -26,7 +22,6 @@ class ProfileLiveExecution extends StatefulWidget {
 
   final List<ChatActivityEntry> entries;
   final TranscriptTimelineSection? savedActivity;
-  final Widget Function(TranscriptTimelineEntry)? noticeBuilder;
   final Future<Uint8List> Function(String)? loadImage;
   final Future<void> Function(ChatOutput)? onOpenResource;
   final Future<void> Function(ChatOutput)? onShareResource;
@@ -55,95 +50,93 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final groups = <List<ChatActivityEntry>>[];
-    var tools = <ChatActivityEntry>[];
+    final children = <Widget>[];
+    var savedGroups = <TranscriptTimelineGroup>[];
+    var liveTools = <ChatActivityEntry>[];
+    final runIdentities = <Object>{};
+    Object boundary = 'initial';
     void flush() {
-      if (tools.isEmpty) return;
-      groups.add(List.unmodifiable(tools));
-      tools = [];
+      if (savedGroups.isEmpty && liveTools.isEmpty) return;
+      final saved = List<TranscriptTimelineGroup>.unmodifiable(savedGroups);
+      final live = List<ChatActivityEntry>.unmodifiable(liveTools);
+      // Paging an earlier receipt must not recreate an opened run. Reasoning
+      // defines its boundary; the first currently loaded tool does not.
+      final identity = boundary;
+      runIdentities.addAll(live.map((entry) => entry.identity));
+      final count = saved
+          .where((group) => group.isTool)
+          .fold(live.length, (count, group) => count + group.messages.length);
+      children.add(
+        ProfileActivitySection(
+          key: ValueKey(('live-tool-run', identity)),
+          label: count == 0
+              ? 'Activity'
+              : 'Activity · $count ${count == 1 ? 'tool' : 'tools'}',
+          detailsBuilder: (_) => ProfileActivityTabs(
+            tabs: [
+              ProfileActivityTab(
+                id: 'timeline',
+                label: 'Timeline',
+                child: ProfileActivityTimeline(
+                  groups: saved,
+                  currentActivity: [if (live.isNotEmpty) _run(live)],
+                  loadImage: widget.loadImage,
+                  onOpenResource: widget.onOpenResource,
+                  onShareResource: widget.onShareResource,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      savedGroups = [];
+      liveTools = [];
     }
 
+    // Saved current-turn observations and native events form one chronology.
+    // Only reasoning splits adjacent tools; receipt source is not a boundary.
+    for (final group
+        in widget.savedActivity?.groups ?? <TranscriptTimelineGroup>[]) {
+      if (group.isReasoning) {
+        final entry = group.messages.first;
+        if (entry.reasoning.trim().isEmpty) continue;
+        flush();
+        boundary = ('saved-reasoning', entry.presentationId);
+        children.add(
+          ProfileReasoningContent(
+            key: ValueKey(('saved-live-reasoning', entry.presentationId)),
+            text: entry.reasoning,
+          ),
+        );
+      } else if (!group.isAgentNotice) {
+        // Current subagents stay in the canonical dock. A saved completion
+        // notice is historical evidence, not another current agent surface.
+        savedGroups.add(group);
+      }
+    }
     for (final entry in widget.entries) {
       switch (entry) {
         case ChatToolEntry():
-          tools.add(entry);
+          liveTools.add(entry);
         case ChatReasoningEntry():
           if (entry.text.trim().isEmpty) continue;
           flush();
-          groups.add([entry]);
+          boundary = ('reasoning', entry.identity);
+          children.add(
+            ProfileReasoningContent(
+              key: ValueKey(('live-reasoning', entry.identity)),
+              text: entry.text,
+              running: entry.running,
+            ),
+          );
       }
     }
     flush();
-    final identities = groups.map((group) => group.first.identity).toSet();
-    _runKeys.removeWhere((identity, _) => !identities.contains(identity));
-
-    final saved = widget.savedActivity;
+    _runKeys.removeWhere((identity, _) => !runIdentities.contains(identity));
     return Column(
       key: const ValueKey('live-activity'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (saved != null)
-          ProfileToolActivitySection(
-            key: const ValueKey('live-saved-activity'),
-            section: saved,
-            noticeBuilder: widget.noticeBuilder,
-            loadImage: widget.loadImage,
-            onOpenResource: widget.onOpenResource,
-            onShareResource: widget.onShareResource,
-          ),
-        for (final group in groups)
-          if (group.first case final ChatReasoningEntry reasoning)
-            Padding(
-              key: ValueKey(('live-reasoning', reasoning.identity)),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      SizedBox.square(
-                        dimension: 16,
-                        child: FittedBox(
-                          child: CircuitBrainIcon(
-                            color: WingTokens.of(context).muted,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        reasoning.running ? 'Thinking' : 'Reasoning',
-                        style: WingTokens.of(context).typography.label.copyWith(
-                          fontSize: 11,
-                          color: WingTokens.of(context).muted,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  MarkdownMessageContent(
-                    data: reasoning.text,
-                    streaming: reasoning.running,
-                    loadImages: false,
-                  ),
-                ],
-              ),
-            )
-          else
-            ProfileActivitySection(
-              key: ValueKey(('live-tool-run', group.first.identity)),
-              label:
-                  'Activity · ${group.length} ${group.length == 1 ? 'tool' : 'tools'}',
-              detailsBuilder: (_) => ProfileActivityTabs(
-                tabs: [
-                  ProfileActivityTab(
-                    id: 'timeline',
-                    label: 'Timeline',
-                    child: _run(group),
-                  ),
-                ],
-              ),
-            ),
-      ],
+      children: children,
     );
   }
 }

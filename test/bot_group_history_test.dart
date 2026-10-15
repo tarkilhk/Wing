@@ -137,7 +137,8 @@ void main() {
       await session.refreshLive();
       expect(session.reader.streaming, 'Visible partial answer');
       expect(session.reader.historyError, isNotNull);
-      expect(session.liveAnswering, isFalse);
+      expect(session.runtime.executionActive, isFalse);
+      expect(session.liveAnswering, isTrue);
       fixture.historyHook = null;
       fixture.workerMessages['atlas'] = [_message(1, 'Saved completed answer')];
       await session.refreshLive();
@@ -147,6 +148,7 @@ void main() {
         'Saved completed answer',
       );
       expect(session.reader.historyError, isNull);
+      expect(session.liveAnswering, isFalse);
     },
   );
 

@@ -496,44 +496,43 @@ void main() {
   testWidgets('period totals, title switches and day selection stay local', (
     tester,
   ) async {
-    await show(tester);
-    expect(find.text('API-equivalent cost'), findsOneWidget);
-    expect(find.text('USD 5.44'), findsOneWidget);
-    expect(find.text('1.4M'), findsOneWidget);
-    expect(find.text('Breakdown per model'), findsOneWidget);
-    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
-    await reveal(tester, find.byType(UsageAreaChart));
-    expect(find.text('Trend per token type'), findsOneWidget);
-    expect(find.byType(UsageAreaChart), findsOneWidget);
-    expect(fixture.requests.length, 3);
-    expect(find.text('Cached input'), findsWidgets);
-    final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
-    await tap(tester, find.byKey(ValueKey('usage-day-$today')));
-    expect(find.text('12.0K'), findsOneWidget);
-    expect(find.text('35.0K'), findsOneWidget);
-    expect(
-      find.textContaining('51,000 tokens', findRichText: true),
-      findsOneWidget,
-    );
-    await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
-    expect(
-      find.text('Hermes does not provide a model breakdown by day.'),
-      findsOneWidget,
-    );
-    expect(
-      find.textContaining('51,000 tokens', findRichText: true),
-      findsNothing,
-    );
-    await tap(tester, find.text('Show daily tokens'));
-    expect(find.text('12.0K'), findsOneWidget);
-    await tap(tester, find.byKey(const ValueKey('usage-trend-group')));
-    await tap(tester, find.text('Show token trend'));
-    await reveal(tester, find.byType(UsageAreaChart));
-    expect(find.byType(UsageAreaChart), findsOneWidget);
-    expect(fixture.requests.length, 3);
-    await tap(tester, find.text('Selected period'));
-    expect(find.text('300K'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    final semantics = tester.ensureSemantics();
+    try {
+      await show(tester);
+      expect(find.text('API-equivalent cost'), findsOneWidget);
+      expect(find.text('USD 5.44'), findsOneWidget);
+      expect(find.text('1.4M'), findsOneWidget);
+      expect(find.text('Breakdown per model'), findsOneWidget);
+      await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
+      await reveal(tester, find.byType(UsageAreaChart));
+      expect(find.text('Trend per token type'), findsOneWidget);
+      expect(find.byType(UsageAreaChart), findsOneWidget);
+      expect(fixture.requests.length, 3);
+      expect(find.text('Cached input'), findsWidgets);
+      final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+      await tap(tester, find.byKey(ValueKey('usage-day-$today')));
+      expect(find.text('12.0K'), findsOneWidget);
+      expect(find.text('35.0K'), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('51,000 tokens')), findsOneWidget);
+      await tap(tester, find.byKey(const ValueKey('usage-breakdown-group')));
+      expect(
+        find.text('Hermes does not provide a model breakdown by day.'),
+        findsOneWidget,
+      );
+      expect(find.byType(UsageComposition), findsNothing);
+      await tap(tester, find.text('Show daily tokens'));
+      expect(find.text('12.0K'), findsOneWidget);
+      await tap(tester, find.byKey(const ValueKey('usage-trend-group')));
+      await tap(tester, find.text('Show token trend'));
+      await reveal(tester, find.byType(UsageAreaChart));
+      expect(find.byType(UsageAreaChart), findsOneWidget);
+      expect(fixture.requests.length, 3);
+      await tap(tester, find.text('Selected period'));
+      expect(find.text('300K'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('missing API rate catalog shows unavailable', (tester) async {

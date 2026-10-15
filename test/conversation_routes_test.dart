@@ -29,6 +29,7 @@ import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
+import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/chat_inline_image.dart';
@@ -600,6 +601,10 @@ void main() {
             findsNothing,
           );
           await _render(tester, frame, 'history-tasks-collapsed-$variant');
+          final summary = tester.getRect(find.byType(ProfileTodoSummary));
+          await tester.ensureVisible(expandTask);
+          await _frames(tester);
+          expect(tester.getRect(find.byType(ProfileTodoSummary)), summary);
           await tester.tap(expandTask);
           await _frames(tester);
           expect(
@@ -607,6 +612,17 @@ void main() {
             findsOneWidget,
           );
           await _render(tester, frame, 'history-tasks-expanded-$variant');
+          await tester.fling(
+            find.byKey(const ValueKey('live-work-handle')),
+            const Offset(0, -500),
+            1000,
+          );
+          await _frames(tester);
+          expect(
+            tester.getRect(find.byKey(const ValueKey('live-work-panel'))).top,
+            closeTo(8, 1),
+          );
+          await _render(tester, frame, 'history-drawer-expanded-$variant');
           await tester.tap(
             find.byKey(const ValueKey(('live-work-tab', 1, true))),
           );

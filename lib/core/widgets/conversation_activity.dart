@@ -10,6 +10,7 @@ import 'profile_execution_activity.dart';
 import 'profile_live_execution.dart';
 import 'profile_live_work_dock.dart';
 import 'profile_transcript_disclosure.dart';
+import 'tool_activity_details.dart';
 
 /// Shared conversation presentation. Transport owners supply facts and commands;
 /// this module owns activity placement, counts, viewers and working feedback.
@@ -49,16 +50,14 @@ final class ConversationActivity {
 
   Widget? liveExecution({
     TranscriptTimelineSection? savedActivity,
-    Widget Function(TranscriptTimelineEntry)? noticeBuilder,
     Future<Uint8List> Function(String)? loadImage,
     Future<void> Function(ChatOutput)? onOpenResource,
     Future<void> Function(ChatOutput)? onShareResource,
-  }) => !live || entries.isEmpty
+  }) => !live || (entries.isEmpty && savedActivity == null)
       ? null
       : ProfileLiveExecution(
           entries: entries,
           savedActivity: savedActivity,
-          noticeBuilder: noticeBuilder,
           loadImage: loadImage,
           onOpenResource: onOpenResource,
           onShareResource: onShareResource,
@@ -81,7 +80,8 @@ final class ConversationActivity {
             ),
         ];
 
-  Widget get tasks => ProfileTodoPanel(todos: todos, embedded: true);
+  Widget get tasks =>
+      ProfileTodoPanel(todos: todos, embedded: true, showSummary: false);
   Widget get agents => agentsBuilder();
 
   Widget status({Key? key, required bool saving}) => ProfileActivityStatus(
@@ -102,6 +102,12 @@ final class ConversationActivity {
           taskCount: taskCount,
           completedTasks: completedTasks,
           subagentCount: agentCount,
+          taskSummary: ProfileTodoSummary(todos: todos),
+          subagentSummary: ListenableBuilder(
+            listenable: inspection,
+            builder: (context, _) =>
+                ActivityDetailFacts(facts: [inspection.state.subagentSummary]),
+          ),
           tasks: tasks,
           subagents: agents,
           onAgentsSelected: inspection.refreshSubagents,

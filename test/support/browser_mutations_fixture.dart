@@ -138,7 +138,10 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
         onDispatched();
         return await base.updateSession(
           Uri.decodeComponent(path.split('/').last),
-          {...body}..remove('profile'),
+          {
+            for (final key in ['title', 'pinned', 'archived', 'unread'])
+              if (body.containsKey(key)) key: body[key],
+          },
           canDispatch: canDispatch,
         );
       },
