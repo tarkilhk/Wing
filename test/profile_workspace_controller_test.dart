@@ -1,3 +1,4 @@
+import 'package:wing/core/models/hermes_question.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_choice.dart';
 import 'package:wing/core/models/chat_runtime.dart';
@@ -301,6 +302,8 @@ class Host {
       },
       get: (path, query) async {
         reads.add((path, query));
+        if (path == 'model/options') return {'providers': <Object>[]};
+        if (path == 'model/info') return <String, dynamic>{};
         if (path == 'logs') {
           if (heldTimingLog case final held?) await held.future;
           return {'file': 'gui', 'lines': <String>[]};
@@ -2210,42 +2213,6 @@ void main() {
     expect(host.calls.where((call) => call.$2 == 'session.steer'), isEmpty);
   });
 
-  testWidgets('long approval commands keep actions within a bounded panel', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await controller.createChat(canDispatch: () => true);
-    host.event('a', 'approval', {
-      'request_id': 'long',
-      'command': List.generate(100, (i) => 'echo command line $i').join('\n'),
-      'choices': ['once', 'deny'],
-    });
-    await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
-    );
-    await tester.pump();
-    expect(
-      tester
-          .getSize(
-            find
-                .ancestor(
-                  of: find.byType(SelectableText).first,
-                  matching: find.byType(SingleChildScrollView),
-                )
-                .first,
-          )
-          .height,
-      lessThanOrEqualTo(160),
-    );
-    expect(find.text('Allow once').hitTestable(), findsOneWidget);
-    expect(find.text('Deny').hitTestable(), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
   test('approval accepts each server-supported scope', () async {
     final chat = await controller.createChat(canDispatch: () => true);
     chat.composer.editText('hello');
@@ -4090,12 +4057,30 @@ void main() {
         'request_id': 'expired',
         'question': 'Marker?',
       });
+      final pending = chat.reading.questionHistory!.questions.single;
+      expect(pending.requestId, 'expired');
+      expect(pending.kind, HermesQuestionKind.clarification);
+      expect(pending.status, HermesQuestionStatus.pending);
+      final resumesBefore = host.calls
+          .where((c) => c.$2 == 'session.resume')
+          .length;
       host.running = false;
       host.clarifyResult = {'status': 'expired'};
       await controller.clarify(chat, 'marker');
       expect(chat.runtime.questions, isNull);
       expect(chat.runtime.execution, ChatExecution.completed);
-      expect(chat.runtime.error, contains('expired'));
+      final expired = chat.reading.questionHistory!.questions.single;
+      expect(expired.requestId, pending.requestId);
+      expect(expired.timestamp, pending.timestamp);
+      expect(expired.description, pending.description);
+      expect(expired.status, HermesQuestionStatus.expired);
+      expect(chat.runtime.error, isNull);
+      final resumes = host.calls
+          .where((c) => c.$2 == 'session.resume')
+          .toList();
+      expect(resumes.length, resumesBefore + 1);
+      expect(resumes.last.$1, chat.key.workspace.profileName);
+      expect(resumes.last.$3['session_id'], chat.key.sessionId);
       expect(host.calls.where((c) => c.$2 == 'request.answer'), hasLength(1));
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
     },

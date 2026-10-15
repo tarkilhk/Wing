@@ -11,6 +11,7 @@ import 'dart:math' as math;
 import 'dart:ui' show FramePhase, FrameTiming, ViewPadding;
 
 import 'package:flutter/foundation.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/performance_instrumentation.dart';
 import 'package:wing/core/services/completion_diagnostics.dart';
 import 'package:flutter/material.dart';
@@ -552,8 +553,8 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     final result = <String, Object?>{};
     for (final element in _walk(context as Element)) {
       final name = switch (element.widget.key) {
-        ValueKey(value: ('live-work-tab', 0, false)) => 'subagents',
-        ValueKey(value: ('live-work-tab', 1, false)) => 'tasks',
+        ValueKey(value: ('live-work-tab', 0, _)) => 'subagents',
+        ValueKey(value: ('live-work-tab', 1, _)) => 'tasks',
         _ => switch (element.widget) {
           Text(data: 'Activity · 1 tool') => 'activity',
           _ => null,
@@ -563,8 +564,20 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       final render = element.findRenderObject();
       if (render is! RenderBox || !render.hasSize) continue;
       final center = render.localToGlobal(render.size.center(Offset.zero));
-      final ratio = View.of(context).devicePixelRatio;
-      result[name] = [(center.dx * ratio).round(), (center.dy * ratio).round()];
+      // Kept-alive sliver rows have no painted transform. Covered controls
+      // likewise must not be advertised as physical tap targets.
+      if (!center.dx.isFinite || !center.dy.isFinite) continue;
+      final view = View.of(context);
+      final ratio = view.devicePixelRatio;
+      final point = [(center.dx * ratio).round(), (center.dy * ratio).round()];
+      final hits = HitTestResult();
+      WidgetsBinding.instance.hitTestInView(
+        hits,
+        Offset(point[0] / ratio, point[1] / ratio),
+        view.viewId,
+      );
+      if (!hits.path.any((hit) => identical(hit.target, render))) continue;
+      result[name] = point;
     }
     return result;
   }
@@ -1096,6 +1109,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       : ProfileWorkspaceScreen(
           key: ObjectKey(controller),
           controller: controller!,
+          createBotsSession: () => BotsSession((_) async => const []),
         );
 
   @override
