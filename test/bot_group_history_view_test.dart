@@ -637,6 +637,44 @@ void main() {
           );
           expect(find.text('Activity'), findsOneWidget);
           expect(find.text('Thinking'), findsNothing);
+          final refreshGate = Completer<void>();
+          addTearDown(() {
+            if (!refreshGate.isCompleted) refreshGate.complete();
+          });
+          final liveRead = fixture.readHook!;
+          fixture.readHook = (profile, method, params) async {
+            if (method == 'session.list') await refreshGate.future;
+            return liveRead(profile, method, params);
+          };
+          await tester.tap(find.byTooltip('Refresh working history'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 50));
+          final headerPulse = find.descendant(
+            of: find.byType(StudioLoadingSlot),
+            matching: find.byType(StudioLoading),
+          );
+          expect(headerPulse, findsOneWidget);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byIcon(Icons.refresh), findsOneWidget);
+          expect(
+            tester.widget<StudioLoading>(headerPulse).label,
+            'Refreshing working history',
+          );
+          await _render(
+            tester,
+            frame,
+            'history-working-refresh-${brightness.name}-$scale',
+          );
+          refreshGate.complete();
+          for (var i = 0; i < 12; i++) {
+            await tester.pump(const Duration(milliseconds: 50));
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+          }
+          expect(headerPulse, findsNothing);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          fixture.readHook = liveRead;
           await tester.openLiveActivity();
           expect(
             find.textContaining('Inspecting the work', findRichText: true),

@@ -88,7 +88,7 @@ void main() {
   });
 
   testWidgets(
-    'conversation work keeps priority while header refresh stays visible',
+    'header refresh owns the Wing pulse until conversation work resumes',
     (tester) async {
       var refreshing = false;
       late StateSetter change;
@@ -133,10 +133,25 @@ void main() {
       expect(find.byType(StudioLoading), findsOneWidget);
       expect(
         tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
-        'Bots are working',
+        'Refreshing group',
       );
       expect(find.byTooltip('Refreshing group'), findsOneWidget);
-      expect(find.byIcon(Icons.refresh), findsOneWidget);
+      expect(find.byIcon(Icons.refresh), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(StudioLoadingSlot),
+          matching: find.byType(StudioLoading),
+        ),
+        findsOneWidget,
+      );
+      // Conversation status keeps its artwork while the header owns animation.
+      expect(
+        find.descendant(
+          of: find.byType(StudioWorkingIndicator),
+          matching: find.byType(CustomPaint),
+        ),
+        findsOneWidget,
+      );
       expect(find.byIcon(Icons.pending_outlined), findsNothing);
       expect(tester.getRect(find.text('Bots are working')), before);
       change(() => refreshing = false);
