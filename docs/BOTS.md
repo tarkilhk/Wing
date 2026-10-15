@@ -91,6 +91,9 @@ Leaving the discussion or backgrounding Wing cancels recording.
 
 Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Type `@` anywhere in your message to choose a frozen room member or `@everyone`. Search by the bot's name or Hermes handle; selecting Pace inserts `@Pace`, while Wing retains its canonical Hermes identity. Members show their saved bot avatars when available; Everyone uses a group icon. Tap a group’s icon in the Groups roster to open its editor directly; tap its name or message area to open the discussion. Tap the group’s icon or name in the discussion header, including discussions opened from Recents, or choose **Edit group** from its roster actions to change its name, icon color or picture. Upload, generate or remove the picture, then use the checkmark to save to Hermes. Membership and the Hermes instance are fixed when created. Rooms also offer stop and disband.
 
+Tap a member’s avatar or name in **Edit group** to open its Bot Chat. Back
+returns to the editor with your unsaved changes.
+
 In an ordinary chat, `@` anywhere in your message offers agents from the same Hermes server with their
 saved bot avatars when available. Search also matches saved bot titles; selection
 inserts the readable name. Names with spaces use quoted editable text. Duplicate

@@ -4,6 +4,8 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Open a member’s Bot Chat by tapping its avatar or name in Edit group; Back preserves unsaved group edits.
+
 - Show a separate Wing pulse while Refresh group reads messages and activity,
   including when it joins an automatic read. Keep automatic polling quiet,
   action icons unchanged and the discussion usable.

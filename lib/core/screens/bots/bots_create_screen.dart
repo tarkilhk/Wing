@@ -15,12 +15,17 @@ import '../../widgets/wing_app_bar.dart';
 Future<BotGroup?> openGroupEditor(
   BuildContext context,
   BotsSession session,
-  BotGroup group,
-) async {
+  BotGroup group, {
+  required Future<void> Function(BuildContext, BotRecord) onOpenMemberChat,
+}) async {
   final saved = await Navigator.of(context).push<bool>(
     MaterialPageRoute(
-      builder: (_) =>
-          BotsCreateScreen(session: session, group: true, editGroup: group),
+      builder: (_) => BotsCreateScreen(
+        session: session,
+        group: true,
+        editGroup: group,
+        onOpenMemberChat: onOpenMemberChat,
+      ),
     ),
   );
   if (!context.mounted || saved != true) return null;
@@ -38,12 +43,14 @@ class BotsCreateScreen extends StatefulWidget {
     this.clone,
     this.createGroupDraft,
     this.editGroup,
-  });
+    this.onOpenMemberChat,
+  }) : assert(editGroup == null || onOpenMemberChat != null);
   final BotsSession session;
   final bool group;
   final BotRecord? clone;
   final BotGroupDraftSession Function()? createGroupDraft;
   final BotGroup? editGroup;
+  final Future<void> Function(BuildContext, BotRecord)? onOpenMemberChat;
   @override
   State<BotsCreateScreen> createState() => _BotsCreateScreenState();
 }
@@ -411,6 +418,10 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                     _ExistingGroupMember(
                       member: member,
                       bot: draft.appearance(member),
+                      onOpenChat:
+                          !draft.saving && widget.onOpenMemberChat != null
+                          ? (bot) => widget.onOpenMemberChat!(context, bot)
+                          : null,
                     ),
                 ] else if (draft.identity == null)
                   const Text(
@@ -785,22 +796,30 @@ class _PickedGroupMembers extends StatelessWidget {
 }
 
 class _ExistingGroupMember extends StatelessWidget {
-  const _ExistingGroupMember({required this.member, required this.bot});
+  const _ExistingGroupMember({
+    required this.member,
+    required this.bot,
+    required this.onOpenChat,
+  });
   final BotGroupMember member;
   final BotRecord? bot;
+  final ValueChanged<BotRecord>? onOpenChat;
   @override
-  Widget build(BuildContext context) => ListTile(
-    contentPadding: EdgeInsets.zero,
-    leading: bot == null
-        ? const SizedBox.square(
-            dimension: 32,
-            child: Icon(Icons.smart_toy_outlined),
-          )
-        : BorrowedBotAvatar(bot: bot!, name: member.name, size: 32),
-    title: Text(member.name),
-    subtitle: Text(
-      '@${member.handle}',
-      style: Theme.of(context).textTheme.bodySmall,
+  Widget build(BuildContext context) => StudioButtonPress(
+    child: ListTile(
+      onTap: bot != null && onOpenChat != null ? () => onOpenChat!(bot!) : null,
+      contentPadding: EdgeInsets.zero,
+      leading: bot == null
+          ? const SizedBox.square(
+              dimension: 32,
+              child: Icon(Icons.smart_toy_outlined),
+            )
+          : BorrowedBotAvatar(bot: bot!, name: member.name, size: 32),
+      title: Text(member.name),
+      subtitle: Text(
+        '@${member.handle}',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
     ),
   );
 }

@@ -35,6 +35,7 @@ class BotsContent extends StatefulWidget {
     required this.onViewChanged,
     required this.onOpenMenu,
     required this.onOpenChat,
+    required this.onOpenGroupMemberChat,
     required this.onOpenGroup,
   });
   final BotsSession session;
@@ -43,6 +44,7 @@ class BotsContent extends StatefulWidget {
   final ValueChanged<BotsViewState> onViewChanged;
   final VoidCallback onOpenMenu;
   final Future<void> Function(BotRecord) onOpenChat;
+  final Future<void> Function(BuildContext, BotRecord) onOpenGroupMemberChat;
   final Future<void> Function(BotGroup) onOpenGroup;
   @override
   State<BotsContent> createState() => _BotsContentState();
@@ -203,11 +205,21 @@ class _BotsContentState extends State<BotsContent> {
     bool fromDiscussion = false,
   }) async {
     if (fromDiscussion) {
-      return openGroupEditor(context, widget.session, group);
+      return openGroupEditor(
+        context,
+        widget.session,
+        group,
+        onOpenMemberChat: widget.onOpenGroupMemberChat,
+      );
     }
     widget.session.setVisible(false);
     try {
-      return await openGroupEditor(context, widget.session, group);
+      return await openGroupEditor(
+        context,
+        widget.session,
+        group,
+        onOpenMemberChat: widget.onOpenGroupMemberChat,
+      );
     } finally {
       if (mounted) widget.session.setVisible(true);
     }

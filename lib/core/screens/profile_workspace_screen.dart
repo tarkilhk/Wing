@@ -592,13 +592,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Future<void> _openGroupChatWindow(
     BuildContext groupContext, {
     required AppDestination origin,
+    required ValueChanged<AppDestination> onLeave,
     BotRecord? bot,
   }) => Navigator.of(groupContext).push<void>(
     MaterialPageRoute(
       builder: (_) => RecentConversationRouteScope(
         recents: _recents,
         origin: origin,
-        onLeave: _leaveConversation,
+        onLeave: onLeave,
         child: ProfileWorkspaceScreen(
           controller: controller,
           initialBot: bot,
@@ -631,7 +632,33 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     await _openGroupChatWindow(
       groupContext,
       origin: AppDestination.bots,
+      onLeave: _leaveConversation,
       bot: bot,
+    );
+  }
+
+  Future<void> _openGroupEditorBotChat(
+    BuildContext editorContext,
+    BotRecord bot,
+  ) async {
+    if (!mounted ||
+        !editorContext.mounted ||
+        ModalRoute.isCurrentOf(editorContext) != true) {
+      return;
+    }
+    final editorRoute = ModalRoute.of(editorContext);
+    await _openGroupChatWindow(
+      editorContext,
+      origin: AppDestination.bots,
+      bot: bot,
+      onLeave: (destination) {
+        if (destination != AppDestination.bots) {
+          _leaveConversation(destination);
+          return;
+        }
+        controller.showList();
+        Navigator.of(editorContext).popUntil((route) => route == editorRoute);
+      },
     );
   }
 
@@ -661,6 +688,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               onOpenChat: (_) => _openGroupChatWindow(
                 groupContext,
                 origin: AppDestination.activity,
+                onLeave: _leaveConversation,
               ),
             ),
             previewBuilder: _recentPreview,
@@ -670,7 +698,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               voiceDevice: widget.voiceDevice,
               stopVoicePlayback: _voiceOutput.stop,
               createSession: () => _bots.openGroup(group),
-              onEdit: (group) => openGroupEditor(groupContext, _bots, group),
+              onEdit: (group) => openGroupEditor(
+                groupContext,
+                _bots,
+                group,
+                onOpenMemberChat: _openGroupEditorBotChat,
+              ),
               onOpenBotChat: (bot) => _openGroupBotChat(groupContext, bot),
               onOpenBotSettings: (bot) =>
                   _openBotSettings(bot, routeContext: groupContext),
@@ -3761,6 +3794,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   onViewChanged: (view) => setState(() => _botsView = view),
                   onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
                   onOpenChat: _openBot,
+                  onOpenGroupMemberChat: _openGroupEditorBotChat,
                   onOpenGroup: (group) =>
                       _openRecentGroup(group, origin: AppDestination.bots),
                 ),
